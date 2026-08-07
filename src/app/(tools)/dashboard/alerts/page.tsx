@@ -19,7 +19,7 @@ export default function AlertsPage() {
         {activeAlerts.map((alert) => (
           <article
             key={alert.id}
-            className="rounded-sm border border-danger/40 bg-danger/5 p-5"
+            className="border border-danger/40 bg-danger/5 p-5"
           >
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge tone="danger" pulse>
@@ -44,7 +44,7 @@ export default function AlertsPage() {
           </article>
         ))}
 
-        <article className="rounded-sm border border-border bg-surface p-5 opacity-70">
+        <article className="border border-border bg-surface p-5 opacity-70">
           <StatusBadge tone="success">Resolved</StatusBadge>
           <h2 className="mt-3 font-display text-lg text-text-muted">
             Voorbeeld: sync Weeztix hersteld

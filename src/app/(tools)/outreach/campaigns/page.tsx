@@ -21,7 +21,7 @@ export default function CampaignsPage() {
           return (
             <article
               key={c.id}
-              className="rounded-sm border border-border bg-surface p-5"
+              className="border border-border bg-surface p-5"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -65,7 +65,7 @@ function Stat({
   accent?: boolean;
 }) {
   return (
-    <div className="rounded-sm border border-border bg-bg px-3 py-3">
+    <div className="border border-border bg-bg px-3 py-3">
       <p className="text-[10px] uppercase tracking-wider text-text-dim">
         {label}
       </p>

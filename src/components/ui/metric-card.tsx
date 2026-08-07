@@ -18,16 +18,16 @@ export function MetricCard({
   return (
     <div
       className={cn(
-        "rounded-sm border border-border bg-surface p-4 transition-colors hover:bg-surface-hover",
-        accent && "border-accent/40 bg-accent-soft",
+        "border border-border bg-surface p-4 transition-colors hover:border-border-strong hover:bg-surface-hover",
+        accent && "border-accent bg-accent-soft",
       )}
     >
-      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-text-muted">
+      <p className="font-display text-sm tracking-[0.16em] text-text-muted">
         {label}
       </p>
       <p
         className={cn(
-          "mt-2 font-display text-3xl tracking-tight",
+          "mt-2 font-display text-4xl tracking-[0.02em]",
           accent ? "text-accent" : "text-text",
         )}
       >
@@ -35,7 +35,7 @@ export function MetricCard({
       </p>
       {(hint || trend) && (
         <div className="mt-2 flex items-center gap-2 text-xs text-text-muted">
-          {trend && <span className="text-success">{trend}</span>}
+          {trend && <span className="font-display tracking-wide text-accent">{trend}</span>}
           {hint && <span>{hint}</span>}
         </div>
       )}

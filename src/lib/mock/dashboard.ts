@@ -102,7 +102,7 @@ export const marketingPosts = [
     clicks: 890,
     ticketsAroundPublish: 186,
     visualFeatures: {
-      dominantColors: ["#c8f542", "#0c0c0b", "#ff5c35"],
+      dominantColors: ["#ffff00", "#000000", "#ff5a1f"],
       hasTextOverlay: true,
       format: "carousel",
       composition: "centered-subject",
@@ -119,7 +119,7 @@ export const marketingPosts = [
     clicks: 1420,
     ticketsAroundPublish: 248,
     visualFeatures: {
-      dominantColors: ["#1a1a17", "#ff8a3d", "#eceae3"],
+      dominantColors: ["#111111", "#ff6a00", "#ffffff"],
       hasTextOverlay: false,
       format: "vertical-video",
       composition: "motion-heavy",
@@ -136,7 +136,7 @@ export const marketingPosts = [
     clicks: 540,
     ticketsAroundPublish: 97,
     visualFeatures: {
-      dominantColors: ["#0c0c0b", "#6eb6ff", "#c8f542"],
+      dominantColors: ["#000000", "#7ec8ff", "#ffff00"],
       hasTextOverlay: true,
       format: "landscape-video",
       composition: "crowd-energy",
@@ -153,7 +153,7 @@ export const marketingPosts = [
     clicks: 980,
     ticketsAroundPublish: 312,
     visualFeatures: {
-      dominantColors: ["#c8f542", "#0c0c0b"],
+      dominantColors: ["#ffff00", "#000000"],
       hasTextOverlay: true,
       format: "email",
       composition: "text-led",

@@ -29,13 +29,13 @@ export default function TicketsPage() {
       />
 
       {primarySoldOut && secondaryActive && (
-        <div className="mb-6 rounded-sm border border-warn/40 bg-warn/10 px-4 py-3 text-sm text-warn">
+        <div className="mb-6 border border-warn/40 bg-warn/10 px-4 py-3 text-sm text-warn">
           Officieel kanaal (RA) is sold-out terwijl TicketSwap nog tickets toont.
           Zie Alerts voor notificatie-status.
         </div>
       )}
 
-      <div className="mb-6 overflow-x-auto rounded-sm border border-border">
+      <div className="mb-6 overflow-x-auto border border-border">
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
             <tr>
@@ -77,8 +77,8 @@ export default function TicketsPage() {
         </table>
       </div>
 
-      <section className="rounded-sm border border-border bg-surface p-4">
-        <h2 className="mb-4 font-display text-lg tracking-tight">
+      <section className="border border-border bg-surface p-4">
+        <h2 className="mb-4 font-display text-2xl tracking-[0.06em]">
           Trend · afgelopen week
         </h2>
         <TicketSalesChart />

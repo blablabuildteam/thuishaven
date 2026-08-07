@@ -1,23 +1,28 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #0c0c0b;
-  --bg-elevated: #141412;
-  --surface: #1a1a17;
-  --surface-hover: #22221e;
-  --border: #2e2e28;
-  --border-strong: #3f3f36;
-  --text: #eceae3;
-  --text-muted: #8f8c7d;
-  --text-dim: #5c5a4f;
-  --accent: #c8f542;
-  --accent-dim: #9bc41f;
-  --accent-soft: rgba(200, 245, 66, 0.12);
-  --warn: #ff8a3d;
-  --danger: #ff4d4d;
-  --info: #6eb6ff;
-  --success: #5ee09a;
-  --grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  /* Thuishaven brand — black / white / neon yellow / fire */
+  --bg: #000000;
+  --bg-elevated: #070707;
+  --surface: #111111;
+  --surface-hover: #1a1a1a;
+  --border: #2a2a2a;
+  --border-strong: #3d3d3d;
+  --text: #ffffff;
+  --text-muted: #a8a8a8;
+  --text-dim: #666666;
+  --accent: #ffff00;
+  --accent-dim: #d6d600;
+  --accent-soft: rgba(255, 255, 0, 0.1);
+  --warn: #ff6a00;
+  --danger: #e10600;
+  --info: #7ec8ff;
+  --success: #ffff00;
+  --fire-deep: #4a0008;
+  --fire-mid: #c41e12;
+  --fire-hot: #ff5a1f;
+  --cream: #f4f0e6;
+  --grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
 }
 
 @theme inline {
@@ -37,6 +42,10 @@
   --color-danger: var(--danger);
   --color-info: var(--info);
   --color-success: var(--success);
+  --color-fire-deep: var(--fire-deep);
+  --color-fire-mid: var(--fire-mid);
+  --color-fire-hot: var(--fire-hot);
+  --color-cream: var(--cream);
   --font-display: var(--font-display);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
@@ -63,20 +72,37 @@ body::before {
   position: fixed;
   inset: 0;
   background-image: var(--grain);
-  opacity: 0.4;
+  opacity: 0.035;
   z-index: 50;
   mix-blend-mode: overlay;
 }
 
 ::selection {
   background: var(--accent);
-  color: #0c0c0b;
+  color: #000000;
+}
+
+/* Brand display type — always caps, tight tracking */
+.font-display {
+  font-family: var(--font-display), Impact, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-weight: 400;
+}
+
+.rule-yellow {
+  border-bottom: 1px solid var(--accent);
+}
+
+.brand-panel {
+  border: 1px solid var(--border);
+  background: var(--surface);
 }
 
 @keyframes fade-up {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
@@ -90,16 +116,33 @@ body::before {
     opacity: 1;
   }
   50% {
-    opacity: 0.55;
+    opacity: 0.5;
+  }
+}
+
+@keyframes fire-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
   }
 }
 
 .animate-fade-up {
-  animation: fade-up 0.45s ease-out both;
+  animation: fade-up 0.5s ease-out both;
 }
 
 .animate-pulse-soft {
   animation: pulse-soft 2s ease-in-out infinite;
+}
+
+.animate-fire {
+  background-size: 200% 200%;
+  animation: fire-shift 14s ease-in-out infinite;
 }
 
 .stagger > * {
@@ -107,20 +150,20 @@ body::before {
 }
 
 .stagger > *:nth-child(1) {
-  animation-delay: 0.04s;
+  animation-delay: 0.05s;
 }
 .stagger > *:nth-child(2) {
-  animation-delay: 0.08s;
+  animation-delay: 0.1s;
 }
 .stagger > *:nth-child(3) {
-  animation-delay: 0.12s;
+  animation-delay: 0.15s;
 }
 .stagger > *:nth-child(4) {
-  animation-delay: 0.16s;
-}
-.stagger > *:nth-child(5) {
   animation-delay: 0.2s;
 }
+.stagger > *:nth-child(5) {
+  animation-delay: 0.25s;
+}
 .stagger > *:nth-child(6) {
-  animation-delay: 0.24s;
+  animation-delay: 0.3s;
 }

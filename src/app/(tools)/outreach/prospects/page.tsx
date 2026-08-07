@@ -21,7 +21,7 @@ export default function ProspectsPage() {
         description="KvK + LinkedIn + website-extractie. Bedrijven (jubilea) en event bureaus in één lijst — filterbaar per type."
       />
 
-      <div className="overflow-x-auto rounded-sm border border-border">
+      <div className="overflow-x-auto border border-border">
         <table className="w-full min-w-[720px] text-left text-sm">
           <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
             <tr>

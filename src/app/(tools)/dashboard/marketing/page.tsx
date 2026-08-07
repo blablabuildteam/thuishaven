@@ -35,8 +35,8 @@ export default function MarketingPage() {
         />
       </div>
 
-      <section className="mb-6 rounded-sm border border-border bg-surface p-4">
-        <h2 className="mb-4 font-display text-lg tracking-tight">Social posts</h2>
+      <section className="mb-6 border border-border bg-surface p-4">
+        <h2 className="mb-4 font-display text-2xl tracking-[0.06em]">Social posts</h2>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="border-b border-border text-[11px] uppercase tracking-wider text-text-muted">
@@ -82,15 +82,15 @@ export default function MarketingPage() {
         </div>
       </section>
 
-      <section className="rounded-sm border border-border bg-surface p-4">
-        <h2 className="mb-4 font-display text-lg tracking-tight">
+      <section className="border border-border bg-surface p-4">
+        <h2 className="mb-4 font-display text-2xl tracking-[0.06em]">
           Brevo e-mailcampagnes
         </h2>
         <div className="grid gap-3 sm:grid-cols-2">
           {emailCampaigns.map((c) => (
             <div
               key={c.id}
-              className="rounded-sm border border-border bg-bg p-4"
+              className="border border-border bg-bg p-4"
             >
               <p className="text-sm text-text">{c.name}</p>
               <div className="mt-3 grid grid-cols-3 gap-2 text-center">

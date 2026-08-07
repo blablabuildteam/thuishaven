@@ -19,7 +19,7 @@ export default function LeadsPage() {
         {leads.map((lead) => (
           <article
             key={lead.id}
-            className="rounded-sm border border-accent/30 bg-accent-soft/40 p-5"
+            className="border border-accent/30 bg-accent-soft/40 p-5"
           >
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge tone="accent">Lead</StatusBadge>

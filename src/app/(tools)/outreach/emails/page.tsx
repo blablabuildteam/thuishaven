@@ -17,7 +17,7 @@ export default function EmailsPage() {
         {sampleEmails.map((email) => (
           <article
             key={email.id}
-            className="flex flex-col rounded-sm border border-border bg-surface"
+            className="flex flex-col border border-border bg-surface"
           >
             <div className="border-b border-border px-4 py-3">
               <div className="flex flex-wrap items-center gap-2">

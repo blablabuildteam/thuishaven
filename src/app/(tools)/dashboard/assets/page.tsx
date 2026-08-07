@@ -16,19 +16,19 @@ export default function AssetsPage() {
         {marketingPosts.map((post) => (
           <article
             key={post.id}
-            className="overflow-hidden rounded-sm border border-border bg-surface"
+            className="overflow-hidden border border-border bg-surface"
           >
             <div
               className="flex h-36 items-end p-4"
               style={{
-                background: `linear-gradient(135deg, ${post.visualFeatures.dominantColors[0]}55, ${post.visualFeatures.dominantColors[1] ?? "#0c0c0b"} 70%)`,
+                background: `linear-gradient(135deg, ${post.visualFeatures.dominantColors[0]}55, ${post.visualFeatures.dominantColors[1] ?? "#000000"} 70%)`,
               }}
             >
               <div className="flex gap-1.5">
                 {post.visualFeatures.dominantColors.map((c) => (
                   <span
                     key={c}
-                    className="size-5 rounded-sm border border-white/20"
+                    className="size-5 border border-white/20"
                     style={{ background: c }}
                     title={c}
                   />

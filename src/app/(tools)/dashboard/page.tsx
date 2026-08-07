@@ -36,7 +36,7 @@ export default function DashboardPage() {
         <Link
           key={alert.id}
           href="/dashboard/alerts"
-          className="mb-6 flex items-start gap-3 rounded-sm border border-danger/40 bg-danger/10 px-4 py-3 transition-colors hover:bg-danger/15"
+          className="mb-6 flex items-start gap-3 border border-danger/40 bg-danger/10 px-4 py-3 transition-colors hover:bg-danger/15"
         >
           <StatusBadge tone="danger" pulse>
             Alert
@@ -73,9 +73,9 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-5">
-        <section className="rounded-sm border border-border bg-surface p-4 lg:col-span-3">
+        <section className="border border-border bg-surface p-4 lg:col-span-3">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-display text-lg tracking-tight">Verkoop per dag</h2>
+            <h2 className="font-display text-2xl tracking-[0.06em]">Verkoop per dag</h2>
             <Link
               href="/dashboard/tickets"
               className="text-xs text-accent hover:underline"
@@ -86,8 +86,8 @@ export default function DashboardPage() {
           <TicketSalesChart />
         </section>
 
-        <section className="rounded-sm border border-border bg-surface p-4 lg:col-span-2">
-          <h2 className="mb-4 font-display text-lg tracking-tight">
+        <section className="border border-border bg-surface p-4 lg:col-span-2">
+          <h2 className="mb-4 font-display text-2xl tracking-[0.06em]">
             Voorraad per platform
           </h2>
           <ul className="space-y-3">
@@ -118,9 +118,9 @@ export default function DashboardPage() {
         </section>
       </div>
 
-      <section className="mt-4 rounded-sm border border-border bg-surface p-4">
+      <section className="mt-4 border border-border bg-surface p-4">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-display text-lg tracking-tight">
+          <h2 className="font-display text-2xl tracking-[0.06em]">
             Top creatives → tickets
           </h2>
           <Link
@@ -134,7 +134,7 @@ export default function DashboardPage() {
           {marketingPosts.map((post) => (
             <div
               key={post.id}
-              className="rounded-sm border border-border bg-bg p-3 transition-colors hover:border-border-strong"
+              className="border border-border bg-bg p-3 transition-colors hover:border-border-strong"
             >
               <p className="text-[10px] uppercase tracking-wider text-text-dim">
                 {post.channel}

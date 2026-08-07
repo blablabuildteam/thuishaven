@@ -46,9 +46,9 @@ export default function OutreachPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded-sm border border-border bg-surface p-4">
+        <section className="border border-border bg-surface p-4">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-display text-lg tracking-tight">Campagnes</h2>
+            <h2 className="font-display text-2xl tracking-[0.06em]">Campagnes</h2>
             <Link
               href="/outreach/campaigns"
               className="text-xs text-accent hover:underline"
@@ -60,7 +60,7 @@ export default function OutreachPage() {
             {campaigns.map((c) => (
               <li
                 key={c.id}
-                className="rounded-sm border border-border bg-bg p-3"
+                className="border border-border bg-bg p-3"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -81,9 +81,9 @@ export default function OutreachPage() {
           </ul>
         </section>
 
-        <section className="rounded-sm border border-border bg-surface p-4">
+        <section className="border border-border bg-surface p-4">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-display text-lg tracking-tight">
+            <h2 className="font-display text-2xl tracking-[0.06em]">
               Warme leads
             </h2>
             <Link

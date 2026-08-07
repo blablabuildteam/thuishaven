@@ -2,11 +2,11 @@ import { cn } from "@/lib/utils";
 
 const tones = {
   neutral: "bg-surface-hover text-text-muted border-border",
-  accent: "bg-accent-soft text-accent border-accent/30",
-  success: "bg-success/10 text-success border-success/30",
-  warn: "bg-warn/10 text-warn border-warn/30",
-  danger: "bg-danger/10 text-danger border-danger/30",
-  info: "bg-info/10 text-info border-info/30",
+  accent: "bg-accent text-bg border-accent",
+  success: "bg-accent text-bg border-accent",
+  warn: "bg-warn text-bg border-warn",
+  danger: "bg-danger text-text border-danger",
+  info: "bg-info/15 text-info border-info/40",
 } as const;
 
 type StatusBadgeProps = {
@@ -23,7 +23,7 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide",
+        "inline-flex items-center gap-1.5 border px-2 py-0.5 font-display text-xs tracking-[0.12em]",
         tones[tone],
       )}
     >
