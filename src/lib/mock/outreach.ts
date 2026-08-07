@@ -128,7 +128,10 @@ Gefeliciteerd met 10 jaar. Dat verdient meer dan een taart op kantoor.
 
 Thuishaven — outdoor warehouse aan het water in Amsterdam — is doordeweeks beschikbaar voor bedrijfsevents tot ~1.500 gasten. Denk: private line-up, food courts, en een setting die jullie cultuur écht raakt.
 
-Zin in een korte tour of beschikbare data in september?
+Bekijk live welke data nog open zijn (incl. actuele prijzen):
+https://tools.thuishaven.nl/beschikbaar
+
+Zin in een korte tour?
 
 Groet,
 Thuishaven Events`,
@@ -141,13 +144,11 @@ Thuishaven Events`,
     subject: "Open data Thuishaven · week 33–36",
     body: `Hoi Fresh Cotton,
 
-Even een update van onze open doordeweekse slots:
+Even een update van onze open doordeweekse slots — altijd actueel:
 
-• di 19 aug — outdoor + indoor warehouse
-• wo 27 aug — volledige locatie
-• do 4 sep — half-day / avond
+https://tools.thuishaven.nl/beschikbaar
 
-Handig voor client pitches die deze week lopen. Stuur ik meer detail of floorplans?
+Handig voor client pitches die deze week lopen. Floorplans of capacity? Stuur ik meteen mee.
 
 Groet,
 Thuishaven Partnerships`,

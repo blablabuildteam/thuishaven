@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Bell,
+  CalendarDays,
   LayoutDashboard,
   Mail,
   MessageSquare,
@@ -15,7 +16,10 @@ import {
   ImageIcon,
   Sparkles,
   Home,
+  LineChart,
+  Layers,
 } from "lucide-react";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -37,7 +41,14 @@ const outreachNav: NavItem[] = [
   { href: "/outreach", label: "Overzicht", icon: Send },
   { href: "/outreach/prospects", label: "Prospects", icon: Users },
   { href: "/outreach/campaigns", label: "Campagnes", icon: Sparkles },
+  { href: "/outreach/varianten", label: "Mailvarianten", icon: Layers },
   { href: "/outreach/emails", label: "E-mails", icon: Mail },
+  { href: "/outreach/analytics", label: "Wat werkt", icon: LineChart },
+  {
+    href: "/outreach/beschikbaarheid",
+    label: "Beschikbaarheid",
+    icon: CalendarDays,
+  },
   { href: "/outreach/leads", label: "Leads", icon: Bell },
 ];
 
@@ -92,7 +103,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <p className="mb-2 px-2 font-display text-[11px] tracking-[0.16em] text-text-dim">
             {toolLabel}
           </p>
-          <div className="mb-3 ml-2 h-px w-8 bg-accent" />
+          <div className="mb-3 ml-2 h-px w-8 bg-highlight" />
           <nav className="space-y-0.5">
             {nav.map((item) => {
               const active =
@@ -108,7 +119,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   className={cn(
                     "flex items-center gap-2.5 px-2.5 py-2 text-sm transition-colors",
                     active
-                      ? "bg-accent text-bg"
+                      ? "bg-accent text-accent-contrast"
                       : "text-text-muted hover:bg-surface hover:text-text",
                   )}
                 >
@@ -122,7 +133,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
 
-        <div className="border-t border-border px-4 py-4">
+        <div className="space-y-3 border-t border-border px-4 py-4">
+          <ThemeToggle className="w-full justify-center" />
           <Link
             href="/"
             className="flex items-center gap-2 font-display text-xs tracking-[0.12em] text-text-muted transition-colors hover:text-accent"
@@ -130,14 +142,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Home className="size-3.5" />
             Hub
           </Link>
-          <p className="mt-2 text-[10px] uppercase tracking-wider text-text-dim">
+          <p className="text-[10px] uppercase tracking-wider text-text-dim">
             Mockdata · v0
           </p>
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-bg/95 px-4 py-3 backdrop-blur-md lg:hidden">
+        <header className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border bg-bg/95 px-4 py-3 backdrop-blur-md lg:hidden">
           <Link href="/" className="flex items-center gap-2">
             <Image
               src="/brand/logo-mark.png"
@@ -150,9 +162,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               Thuishaven
             </span>
           </Link>
-          <div className="flex gap-1 bg-surface p-1">
-            <ToolSwitch href="/dashboard" active={!isOutreach} label="Dash" />
-            <ToolSwitch href="/outreach" active={isOutreach} label="Out" />
+          <div className="flex items-center gap-1">
+            <ThemeToggle compact />
+            <div className="flex gap-1 bg-surface p-1">
+              <ToolSwitch href="/dashboard" active={!isOutreach} label="Dash" />
+              <ToolSwitch href="/outreach" active={isOutreach} label="Out" />
+            </div>
           </div>
         </header>
 
@@ -166,7 +181,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 className={cn(
                   "shrink-0 px-3 py-1.5 font-display text-sm tracking-[0.08em] transition-colors",
                   active
-                    ? "bg-accent text-bg"
+                    ? "bg-accent text-accent-contrast"
                     : "text-text-muted hover:text-text",
                 )}
               >
@@ -196,7 +211,9 @@ function ToolSwitch({
       href={href}
       className={cn(
         "px-2 py-1.5 text-center font-display text-sm tracking-[0.1em] transition-colors",
-        active ? "bg-accent text-bg" : "text-text-muted hover:text-text",
+        active
+          ? "bg-accent text-accent-contrast"
+          : "text-text-muted hover:text-text",
       )}
     >
       {label}

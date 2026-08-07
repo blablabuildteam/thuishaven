@@ -90,6 +90,43 @@ export const outreachEmailStatusEnum = pgEnum("outreach_email_status", [
   "opted_out",
 ]);
 
+export const mailVariantStatusEnum = pgEnum("mail_variant_status", [
+  "draft",
+  "testing",
+  "active",
+  "paused",
+]);
+
+export const mailVariants = pgTable("mail_variants", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  campaignId: uuid("campaign_id").references(() => campaigns.id),
+  groupKey: text("group_key").notNull(),
+  name: text("name").notNull(),
+  audience: prospectTypeEnum("audience").notNull(),
+  bodyTemplate: text("body_template").notNull(),
+  includeAvailabilityLink: boolean("include_availability_link")
+    .notNull()
+    .default(true),
+  status: mailVariantStatusEnum("status").notNull().default("draft"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const mailSubjects = pgTable("mail_subjects", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  variantId: uuid("variant_id")
+    .notNull()
+    .references(() => mailVariants.id),
+  subjectTemplate: text("subject_template").notNull(),
+  sentCount: integer("sent_count").notNull().default(0),
+  openCount: integer("open_count").notNull().default(0),
+  clickCount: integer("click_count").notNull().default(0),
+  replyCount: integer("reply_count").notNull().default(0),
+  leadCount: integer("lead_count").notNull().default(0),
+  availabilityClickCount: integer("availability_click_count")
+    .notNull()
+    .default(0),
+});
+
 export const outreachEmails = pgTable("outreach_emails", {
   id: uuid("id").defaultRandom().primaryKey(),
   campaignId: uuid("campaign_id")
@@ -98,14 +135,29 @@ export const outreachEmails = pgTable("outreach_emails", {
   prospectId: uuid("prospect_id")
     .notNull()
     .references(() => prospects.id),
+  variantId: uuid("variant_id").references(() => mailVariants.id),
+  subjectId: uuid("subject_id").references(() => mailSubjects.id),
   subject: text("subject").notNull(),
   body: text("body").notNull(),
   status: outreachEmailStatusEnum("status").notNull().default("draft"),
   brevoMessageId: text("brevo_message_id"),
+  availabilityLinkToken: text("availability_link_token"),
   sentAt: timestamp("sent_at", { withTimezone: true }),
   openedAt: timestamp("opened_at", { withTimezone: true }),
+  clickedAt: timestamp("clicked_at", { withTimezone: true }),
   repliedAt: timestamp("replied_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const inboundReplies = pgTable("inbound_replies", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  outreachEmailId: uuid("outreach_email_id").references(() => outreachEmails.id),
+  prospectId: uuid("prospect_id").references(() => prospects.id),
+  fromEmail: text("from_email").notNull(),
+  subject: text("subject"),
+  bodyPreview: text("body_preview"),
+  sentiment: text("sentiment"),
+  receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const leads = pgTable("leads", {
@@ -134,6 +186,27 @@ export const availabilitySlots = pgTable("availability_slots", {
   slotType: text("slot_type").notNull(),
   label: text("label").notNull(),
   isOpen: boolean("is_open").notNull().default(true),
+  notes: text("notes"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const venueDayStatusEnum = pgEnum("venue_day_status", [
+  "available",
+  "booked_external",
+  "own_event",
+  "closed",
+  "hold",
+]);
+
+export const venueDays = pgTable("venue_days", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  date: timestamp("date", { withTimezone: true }).notNull(),
+  status: venueDayStatusEnum("status").notNull().default("available"),
+  dayPart: text("day_part").notNull().default("full"),
+  label: text("label"),
+  priceFrom: numeric("price_from", { precision: 10, scale: 2 }),
+  priceNote: text("price_note"),
+  areas: jsonb("areas").$type<string[]>().default([]),
   notes: text("notes"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

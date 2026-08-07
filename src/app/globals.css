@@ -1,28 +1,79 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  /* Thuishaven brand — black / white / neon yellow / fire */
-  --bg: #000000;
-  --bg-elevated: #070707;
-  --surface: #111111;
-  --surface-hover: #1a1a1a;
-  --border: #2a2a2a;
-  --border-strong: #3d3d3d;
-  --text: #ffffff;
-  --text-muted: #a8a8a8;
-  --text-dim: #666666;
-  --accent: #ffff00;
-  --accent-dim: #d6d600;
-  --accent-soft: rgba(255, 255, 0, 0.1);
-  --warn: #ff6a00;
-  --danger: #e10600;
-  --info: #7ec8ff;
-  --success: #ffff00;
-  --fire-deep: #4a0008;
-  --fire-mid: #c41e12;
-  --fire-hot: #ff5a1f;
-  --cream: #f4f0e6;
+  /* Light (default) — thuishaven.nl agenda / cream */
+  --bg: #f1eee7;
+  --bg-elevated: #e8e4db;
+  --surface: #ffffff;
+  --surface-hover: #f7f5f0;
+  --border: #d2cdc2;
+  --border-strong: #000000;
+  --text: #000000;
+  --text-muted: #555555;
+  --text-dim: #8a867c;
+  --accent: #000000;
+  --accent-dim: #333333;
+  --accent-soft: rgba(0, 0, 0, 0.06);
+  --accent-contrast: #ffffff;
+  --highlight: #fff201;
+  --warn: #f1c40f;
+  --danger: #d22624;
+  --info: #79cae5;
+  --success: #000000;
+  --cream: #f1eee7;
+  --hub-glow: radial-gradient(
+      ellipse 80% 55% at 50% -10%,
+      rgba(121, 202, 229, 0.28),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 45% 35% at 90% 5%,
+      rgba(255, 242, 1, 0.22),
+      transparent 50%
+    ),
+    linear-gradient(180deg, #f7f5f0 0%, #f1eee7 60%);
+  --chart-grid: #d2cdc2;
+  --chart-tick: #8a867c;
+  --chart-tooltip-bg: #ffffff;
+  --chart-tooltip-fg: #000000;
+  --chart-primary: #000000;
   --grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+  color-scheme: light;
+}
+
+.dark {
+  /* Dark — zwart / wit / geel (logo-huisstijl), geen ADE-fire */
+  --bg: #000000;
+  --bg-elevated: #0a0a0a;
+  --surface: #141414;
+  --surface-hover: #1c1c1c;
+  --border: #2a2a2a;
+  --border-strong: #ffffff;
+  --text: #ffffff;
+  --text-muted: #b0b0b0;
+  --text-dim: #6e6e6e;
+  --accent: #fff201;
+  --accent-dim: #d6cb00;
+  --accent-soft: rgba(255, 242, 1, 0.12);
+  --accent-contrast: #000000;
+  --highlight: #fff201;
+  --warn: #f1c40f;
+  --danger: #d22624;
+  --info: #79cae5;
+  --success: #fff201;
+  --hub-glow: radial-gradient(
+      ellipse 60% 40% at 50% -5%,
+      rgba(255, 242, 1, 0.12),
+      transparent 55%
+    ),
+    linear-gradient(180deg, #0a0a0a 0%, #000000 55%);
+  --chart-grid: #2a2a2a;
+  --chart-tick: #b0b0b0;
+  --chart-tooltip-bg: #141414;
+  --chart-tooltip-fg: #ffffff;
+  --chart-primary: #fff201;
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -38,13 +89,12 @@
   --color-accent: var(--accent);
   --color-accent-dim: var(--accent-dim);
   --color-accent-soft: var(--accent-soft);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-highlight: var(--highlight);
   --color-warn: var(--warn);
   --color-danger: var(--danger);
   --color-info: var(--info);
   --color-success: var(--success);
-  --color-fire-deep: var(--fire-deep);
-  --color-fire-mid: var(--fire-mid);
-  --color-fire-hot: var(--fire-hot);
   --color-cream: var(--cream);
   --font-display: var(--font-display);
   --font-sans: var(--font-sans);
@@ -56,6 +106,10 @@
 }
 
 html {
+  color-scheme: light;
+}
+
+html.dark {
   color-scheme: dark;
 }
 
@@ -64,6 +118,9 @@ body {
   color: var(--text);
   font-family: var(--font-sans), system-ui, sans-serif;
   min-height: 100vh;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
 }
 
 body::before {
@@ -72,31 +129,39 @@ body::before {
   position: fixed;
   inset: 0;
   background-image: var(--grain);
-  opacity: 0.035;
+  opacity: 0.03;
   z-index: 50;
+  mix-blend-mode: multiply;
+}
+
+html.dark body::before {
+  opacity: 0.04;
   mix-blend-mode: overlay;
 }
 
 ::selection {
-  background: var(--accent);
+  background: var(--highlight);
   color: #000000;
 }
 
-/* Brand display type — always caps, tight tracking */
 .font-display {
-  font-family: var(--font-display), Impact, sans-serif;
+  font-family: var(--font-display), "Arial Narrow", sans-serif;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
-  font-weight: 400;
+  letter-spacing: 0.04em;
+  font-weight: 600;
 }
 
 .rule-yellow {
-  border-bottom: 1px solid var(--accent);
+  border-bottom: 2px solid var(--highlight);
 }
 
 .brand-panel {
   border: 1px solid var(--border);
   background: var(--surface);
+}
+
+.hub-glow {
+  background: var(--hub-glow);
 }
 
 @keyframes fade-up {
@@ -120,29 +185,12 @@ body::before {
   }
 }
 
-@keyframes fire-shift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
 .animate-fade-up {
   animation: fade-up 0.5s ease-out both;
 }
 
 .animate-pulse-soft {
   animation: pulse-soft 2s ease-in-out infinite;
-}
-
-.animate-fire {
-  background-size: 200% 200%;
-  animation: fire-shift 14s ease-in-out infinite;
 }
 
 .stagger > * {

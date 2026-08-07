@@ -43,7 +43,7 @@ export function AiChatPanel() {
             key={`${msg.role}-${i}`}
             className={
               msg.role === "user"
-                ? "ml-8 border border-accent bg-accent px-3 py-2 text-sm text-bg"
+                ? "ml-8 border border-accent bg-accent px-3 py-2 text-sm text-accent-contrast"
                 : "mr-8 border border-border bg-bg px-3 py-2 text-sm leading-relaxed text-text-muted"
             }
           >
@@ -86,7 +86,7 @@ export function AiChatPanel() {
           <button
             type="submit"
             disabled={pending}
-            className="inline-flex items-center gap-1.5 bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-bg transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             <Send className="size-3.5" />
             Stuur

@@ -1,17 +1,23 @@
 import type { Metadata } from "next";
-import { Bebas_Neue, Archivo, IBM_Plex_Mono } from "next/font/google";
+import {
+  Barlow_Condensed,
+  Raleway,
+  IBM_Plex_Mono,
+} from "next/font/google";
+import { ThemeProvider } from "@/components/theme/theme-provider";
 import "./globals.css";
 
-const display = Bebas_Neue({
+/** Match thuishaven.nl: Barlow Condensed (display) + Raleway (body) */
+const display = Barlow_Condensed({
   variable: "--font-display",
   subsets: ["latin"],
-  weight: "400",
+  weight: ["500", "600", "700"],
 });
 
-const sans = Archivo({
+const sans = Raleway({
   variable: "--font-sans",
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  weight: ["400", "500", "600", "700"],
 });
 
 const mono = IBM_Plex_Mono({
@@ -29,13 +35,29 @@ export const metadata: Metadata = {
     "Marketing- & Kaartverkoop Dashboard en Bedrijfsevent Outreach voor Thuishaven.",
 };
 
+const themeInitScript = `
+(function () {
+  try {
+    var t = localStorage.getItem('th-theme');
+    if (t === 'dark') document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+  } catch (e) {}
+})();
+`;
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="nl"
       className={`${display.variable} ${sans.variable} ${mono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full bg-bg font-sans text-text">{children}</body>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
+      <body className="min-h-full bg-bg font-sans text-text">
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   );
 }

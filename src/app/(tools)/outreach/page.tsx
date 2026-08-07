@@ -23,8 +23,23 @@ export default function OutreachPage() {
       <SectionHeader
         eyebrow="Bedrijfsevent Outreach"
         title="Outbound overzicht"
-        description="Twee stromen: jubileum-triggers voor bedrijven, doorlopende open-data updates voor event bureaus."
-        action={<StatusBadge tone="accent" pulse>Campagnes actief</StatusBadge>}
+        description="Mailvarianten per groep, A/B onderwerpregels, live beschikbaarheidsagenda en lead routing."
+        action={
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/outreach/analytics"
+              className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
+            >
+              Wat werkt →
+            </Link>
+            <Link
+              href="/outreach/beschikbaarheid"
+              className="bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast"
+            >
+              Agenda
+            </Link>
+          </div>
+        }
       />
 
       <div className="stagger mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -121,6 +136,12 @@ export default function OutreachPage() {
               </li>
             ))}
           </ul>
+          <Link
+            href="/beschikbaar"
+            className="mt-4 inline-block font-display text-sm tracking-[0.1em] text-accent hover:underline"
+          >
+            Live agenda voor prospects →
+          </Link>
         </section>
       </div>
     </div>

@@ -2,10 +2,10 @@ import { cn } from "@/lib/utils";
 
 const tones = {
   neutral: "bg-surface-hover text-text-muted border-border",
-  accent: "bg-accent text-bg border-accent",
-  success: "bg-accent text-bg border-accent",
-  warn: "bg-warn text-bg border-warn",
-  danger: "bg-danger text-text border-danger",
+  accent: "bg-accent text-accent-contrast border-accent",
+  success: "bg-accent text-accent-contrast border-accent",
+  warn: "bg-warn text-white border-warn",
+  danger: "bg-danger text-white border-danger",
   info: "bg-info/15 text-info border-info/40",
 } as const;
 

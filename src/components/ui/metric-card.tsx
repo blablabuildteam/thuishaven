@@ -35,7 +35,11 @@ export function MetricCard({
       </p>
       {(hint || trend) && (
         <div className="mt-2 flex items-center gap-2 text-xs text-text-muted">
-          {trend && <span className="font-display tracking-wide text-accent">{trend}</span>}
+          {trend && (
+            <span className="font-display tracking-wide text-accent">
+              {trend}
+            </span>
+          )}
           {hint && <span>{hint}</span>}
         </div>
       )}
