@@ -181,8 +181,8 @@ function presenceCheck(
     name,
     "configured",
     optional.length && opt.missing.length
-      ? `Keys gezet · optioneel nog: ${opt.missing.join(", ")}`
-      : "Keys gezet · klaar om live endpoint te wire’en",
+      ? `Sleutels gezet · optioneel nog: ${opt.missing.join(", ")}`
+      : "Sleutels gezet · klaar om live endpoint te koppelen",
   );
 }
 
@@ -198,6 +198,8 @@ const presenceIds = [
   "sales_notify",
   "alert_notify",
   "linkedin",
+  "google_places",
+  "enrichment",
 ] as const;
 
 export async function verifyIntegration(id: string): Promise<VerifyResult> {
@@ -216,7 +218,12 @@ export async function verifyIntegration(id: string): Promise<VerifyResult> {
         return base(id, id, "error", "Onbekende integratie");
       }
       if (def.priority === "later" && !process.env[def.envKeys[0] ?? ""]) {
-        return base(id, def.name, "manual", "Nog te kiezen in gesprek (pad TBD)");
+        return base(
+          id,
+          def.name,
+          "manual",
+          "Nog te kiezen — pad bespreken met Thuishaven",
+        );
       }
       return presenceCheck(
         def.id,
@@ -231,15 +238,7 @@ export async function verifyIntegration(id: string): Promise<VerifyResult> {
 export async function verifyAllIntegrations(): Promise<VerifyResult[]> {
   const results: VerifyResult[] = [];
   for (const def of INTEGRATIONS) {
-    if (
-      def.id === "brevo" ||
-      def.id === "ai" ||
-      def.id === "database" ||
-      def.id === "kvk" ||
-      presenceIds.includes(def.id as (typeof presenceIds)[number])
-    ) {
-      results.push(await verifyIntegration(def.id));
-    }
+    results.push(await verifyIntegration(def.id));
   }
   return results;
 }
@@ -256,7 +255,15 @@ export function listIntegrationStatusSnapshot(): Array<{
   return INTEGRATIONS.map((def) => {
     const { missing } = getEnvPresence(def.envKeys);
     let status: IntegrationStatus = missing.length ? "missing" : "configured";
-    if (def.id === "linkedin" && missing.length) status = "manual";
+    if (
+      missing.length &&
+      (def.priority === "later" ||
+        def.id === "linkedin" ||
+        def.id === "google_places" ||
+        def.id === "enrichment")
+    ) {
+      status = "manual";
+    }
     return {
       id: def.id,
       name: def.name,

@@ -26,6 +26,25 @@ export type IntegrationDef = {
 
 export const INTEGRATIONS: IntegrationDef[] = [
   {
+    id: "auth",
+    name: "Medewerker-login",
+    tool: "shared",
+    description:
+      "Auth.js sessies voor Thuishaven-medewerkers. Publiek blijft alleen /beschikbaar.",
+    envKeys: ["AUTH_SECRET"],
+    optionalEnvKeys: [
+      "AUTH_ALLOWED_EMAILS",
+      "AUTH_PASSWORD",
+      "AUTH_PASSWORD_HASH",
+      "AUTH_USERS_JSON",
+    ],
+    askFromClient: [
+      "Lijst e-mailadressen van medewerkers die toegang nodig hebben",
+    ],
+    verifyHint: "AUTH_SECRET + users gezet; test /login",
+    priority: "critical",
+  },
+  {
     id: "database",
     name: "PostgreSQL",
     tool: "shared",
@@ -216,76 +235,25 @@ export const INTEGRATIONS: IntegrationDef[] = [
     verifyHint: "Afhankelijk van gekozen pad",
     priority: "later",
   },
-];
-
-export type MeetingInput = {
-  id: string;
-  tool: IntegrationTool | "both";
-  title: string;
-  detail: string;
-  ownerHint: string;
-};
-
-/** Non-credential inputs to collect in the Thuishaven meeting */
-export const MEETING_INPUTS: MeetingInput[] = [
   {
-    id: "edition-mapping",
-    tool: "dashboard",
-    title: "Editie-mapping",
-    detail:
-      "Lijst van edities/evenementen en hoe ze heten in Weeztix, RA, Appic, TicketSwap en intern.",
-    ownerHint: "Marketing / ticketing",
-  },
-  {
-    id: "agency-list",
+    id: "google_places",
+    name: "Google Places",
     tool: "outreach",
-    title: "Event bureau-lijst",
-    detail: "Partners met naam + contact-e-mail voor de open-data campagne.",
-    ownerHint: "Sales / partnerships",
+    description: "Aanvullende bedrijven op locatie/categorie in de regio AMS.",
+    envKeys: ["GOOGLE_PLACES_API_KEY"],
+    askFromClient: ["Akkoord Google Places als aanvullende bron"],
+    verifyHint: "Places Text (textsearch)",
+    priority: "later",
   },
   {
-    id: "exclusions",
+    id: "enrichment",
+    name: "Enrichment API",
     tool: "outreach",
-    title: "Uitsluitingslijst",
-    detail: "Bestaande klanten, no-go’s, eerdere contacten.",
-    ownerHint: "Sales",
-  },
-  {
-    id: "tone",
-    tool: "outreach",
-    title: "Tone of voice voorbeelden",
-    detail: "Eerdere pitches / outbound mails om AI te calibreren.",
-    ownerHint: "Sales",
-  },
-  {
-    id: "availability-source",
-    tool: "outreach",
-    title: "Bron beschikbaarheid",
-    detail:
-      "Wie beheert open B2B-data? Spreadsheet, intern systeem, of handmatig in onze tool?",
-    ownerHint: "Events / sales",
-  },
-  {
-    id: "pricing-rules",
-    tool: "outreach",
-    title: "Dynamic pricing regels",
-    detail:
-      "Basisprijzen per dagdeel/area, toeslagen, last-minute, wat mag publiek getoond worden.",
-    ownerHint: "Sales / management",
-  },
-  {
-    id: "creatives",
-    tool: "dashboard",
-    title: "Voorbeeld creatives",
-    detail: "Assets per editie voor visual recognition calibratie.",
-    ownerHint: "Marketing",
-  },
-  {
-    id: "contacts",
-    tool: "both",
-    title: "Contactpersonen",
-    detail: "Acceptatie-contact marketing + management + sales.",
-    ownerHint: "Thuishaven",
+    description: "Apollo/Hunter/Clearbit-achtige verrijking naast KvK.",
+    envKeys: ["ENRICHMENT_API_KEY"],
+    askFromClient: ["Voorkeurspartner + budget"],
+    verifyHint: "Account/ping endpoint van gekozen vendor",
+    priority: "later",
   },
 ];
 

@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { PROSPECT_SOURCES, mockMultiSourceDiscover } from "@/lib/outreach/sources";
 import { cn } from "@/lib/utils";
 
 type CatalogItem = {
@@ -25,15 +27,6 @@ type StatusRow = {
   priority: string;
   status: "missing" | "configured" | "verified" | "error" | "manual";
   missing: string[];
-  askFromClient: string[];
-};
-
-type MeetingInput = {
-  id: string;
-  tool: string;
-  title: string;
-  detail: string;
-  ownerHint: string;
 };
 
 type VerifyResult = {
@@ -41,7 +34,28 @@ type VerifyResult = {
   name: string;
   status: StatusRow["status"];
   message: string;
-  checkedAt: string;
+};
+
+const statusLabel: Record<StatusRow["status"], string> = {
+  missing: "Ontbreekt",
+  configured: "Geconfigureerd",
+  verified: "Geverifieerd",
+  error: "Fout",
+  manual: "Handmatig",
+};
+
+const priorityLabel: Record<string, string> = {
+  critical: "Kritiek",
+  high: "Hoog",
+  medium: "Middel",
+  later: "Later",
+};
+
+const toolLabel: Record<string, string> = {
+  all: "Alles",
+  shared: "Gedeeld",
+  dashboard: "Dashboard",
+  outreach: "Outreach",
 };
 
 const toneMap = {
@@ -55,13 +69,13 @@ const toneMap = {
 export function IntegrationsHub() {
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [rows, setRows] = useState<StatusRow[]>([]);
-  const [meeting, setMeeting] = useState<MeetingInput[]>([]);
   const [verifyMap, setVerifyMap] = useState<Record<string, VerifyResult>>({});
   const [filter, setFilter] = useState<"all" | "dashboard" | "outreach" | "shared">(
     "all",
   );
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const multi = mockMultiSourceDiscover();
 
   const load = useCallback(async () => {
     const res = await fetch("/api/integrations/status");
@@ -69,11 +83,12 @@ export function IntegrationsHub() {
     const data = await res.json();
     setCatalog(data.catalog);
     setRows(data.integrations);
-    setMeeting(data.meetingInputs);
   }, []);
 
   useEffect(() => {
-    load().catch((e) => setError(e instanceof Error ? e.message : "Error"));
+    load().catch((e) =>
+      setError(e instanceof Error ? e.message : "Onbekende fout"),
+    );
   }, [load]);
 
   function runVerify(id?: string) {
@@ -93,15 +108,12 @@ export function IntegrationsHub() {
         setVerifyMap(next);
         await load();
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Verify mislukt");
+        setError(e instanceof Error ? e.message : "Verificatie mislukt");
       }
     });
   }
 
-  const visible = rows.filter(
-    (r) => filter === "all" || r.tool === filter,
-  );
-
+  const visible = rows.filter((r) => filter === "all" || r.tool === filter);
   const counts = {
     missing: rows.filter((r) => r.status === "missing").length,
     configured: rows.filter((r) => r.status === "configured").length,
@@ -112,9 +124,9 @@ export function IntegrationsHub() {
   return (
     <div>
       <SectionHeader
-        eyebrow="Meeting-ready"
+        eyebrow="Backend"
         title="Koppelingen"
-        description="Overzicht van alle API’s en inputs. Zet keys in .env.local en verifieer hier — klaar voor het gesprek morgen."
+        description="Zet API-keys in .env.local. Met Verifiëren testen we of de key werkt (Brevo, AI, KvK, database) of of hij in ieder geval aanwezig is."
         action={
           <button
             type="button"
@@ -127,10 +139,22 @@ export function IntegrationsHub() {
         }
       />
 
+      <div className="mb-4 border border-border bg-surface px-4 py-3 text-sm text-text-muted">
+        <strong className="text-text">Hoe werkt Verifiëren?</strong> De knop
+        roept onze backend aan. Die checkt of de benodigde omgevingsvariabelen
+        gezet zijn. Voor Brevo, OpenAI, KvK en de database doen we daarna een
+        echte API-/connectietest. Andere bronnen markeren we als
+        “geconfigureerd” zodra de keys er zijn — de live endpoint-wire volgt
+        zodra documentatie binnen is.
+      </div>
+
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
         <Stat label="Ontbreekt" value={String(counts.missing)} />
         <Stat label="Geconfigureerd" value={String(counts.configured)} />
-        <Stat label="Geverifieerd (deze sessie)" value={String(counts.verified)} />
+        <Stat
+          label="Geverifieerd (deze sessie)"
+          value={String(counts.verified)}
+        />
       </div>
 
       {error && (
@@ -152,7 +176,7 @@ export function IntegrationsHub() {
                 : "border border-border text-text-muted hover:text-text",
             )}
           >
-            {f === "all" ? "Alles" : f}
+            {toolLabel[f]}
           </button>
         ))}
       </div>
@@ -173,8 +197,12 @@ export function IntegrationsHub() {
                     <h2 className="font-display text-xl tracking-[0.06em]">
                       {row.name}
                     </h2>
-                    <StatusBadge tone={toneMap[status]}>{status}</StatusBadge>
-                    <StatusBadge tone="neutral">{row.tool}</StatusBadge>
+                    <StatusBadge tone={toneMap[status]}>
+                      {statusLabel[status]}
+                    </StatusBadge>
+                    <StatusBadge tone="neutral">
+                      {toolLabel[row.tool] ?? row.tool}
+                    </StatusBadge>
                     <StatusBadge
                       tone={
                         row.priority === "critical"
@@ -184,7 +212,7 @@ export function IntegrationsHub() {
                             : "neutral"
                       }
                     >
-                      {row.priority}
+                      {priorityLabel[row.priority] ?? row.priority}
                     </StatusBadge>
                   </div>
                   <p className="mt-2 text-sm text-text-muted">
@@ -192,12 +220,12 @@ export function IntegrationsHub() {
                   </p>
                   {verified && (
                     <p className="mt-2 text-xs text-text-dim">
-                      Verify: {verified.message}
+                      Resultaat: {verified.message}
                     </p>
                   )}
                   {row.missing.length > 0 && (
                     <p className="mt-1 font-mono text-xs text-danger">
-                      Env: {row.missing.join(", ")}
+                      Ontbrekende env: {row.missing.join(", ")}
                     </p>
                   )}
                 </div>
@@ -207,7 +235,7 @@ export function IntegrationsHub() {
                   onClick={() => runVerify(row.id)}
                   className="border border-border px-3 py-1.5 font-display text-sm tracking-[0.1em] hover:border-accent disabled:opacity-50"
                 >
-                  Verify
+                  Verifiëren
                 </button>
               </div>
 
@@ -215,7 +243,7 @@ export function IntegrationsHub() {
                 <div className="mt-4 grid gap-3 border-t border-border pt-3 lg:grid-cols-2">
                   <div>
                     <p className="font-display text-xs tracking-[0.14em] text-text-dim">
-                      Vragen aan Thuishaven
+                      Nodig van Thuishaven
                     </p>
                     <ul className="mt-1 list-inside list-disc text-sm text-text-muted">
                       {meta.askFromClient.map((item) => (
@@ -225,7 +253,7 @@ export function IntegrationsHub() {
                   </div>
                   <div>
                     <p className="font-display text-xs tracking-[0.14em] text-text-dim">
-                      Verify pad
+                      Verificatiepad
                     </p>
                     <p className="mt-1 text-sm text-text-muted">
                       {meta.verifyHint}
@@ -233,7 +261,7 @@ export function IntegrationsHub() {
                     <p className="mt-2 font-mono text-[11px] text-text-dim">
                       {meta.envKeys.join(" · ")}
                       {meta.optionalEnvKeys.length
-                        ? ` · (opt) ${meta.optionalEnvKeys.join(", ")}`
+                        ? ` · (optioneel) ${meta.optionalEnvKeys.join(", ")}`
                         : ""}
                     </p>
                     {meta.docsUrl && (
@@ -243,7 +271,7 @@ export function IntegrationsHub() {
                         rel="noreferrer"
                         className="mt-2 inline-block text-xs text-accent hover:underline"
                       >
-                        Docs →
+                        Documentatie →
                       </a>
                     )}
                   </div>
@@ -255,29 +283,60 @@ export function IntegrationsHub() {
       </div>
 
       <section className="mt-10 border border-border bg-surface p-4">
-        <h2 className="font-display text-2xl tracking-[0.06em]">
-          Extra inputs voor morgen
-        </h2>
-        <p className="mt-1 text-sm text-text-muted">
-          Geen API-keys, wel nodig om pipelines goed te zetten.
-        </p>
-        <ul className="mt-4 space-y-3">
-          {meeting.map((item) => (
-            <li
-              key={item.id}
-              className="border border-border bg-bg px-3 py-3"
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="font-display text-2xl tracking-[0.06em]">
+              Prospectbronnen (naast KvK)
+            </h2>
+            <p className="mt-1 text-sm text-text-muted">
+              Multi-source ontdekking + dedupe. Dry-run merge:{" "}
+              {multi.merged.length} unieke bedrijven,{" "}
+              {multi.duplicatesRemoved} duplicaten samengevoegd.
+            </p>
+          </div>
+          <Link
+            href="/outreach/pipeline"
+            className="border border-border px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
+          >
+            Pipeline →
+          </Link>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          {PROSPECT_SOURCES.map((src) => (
+            <article
+              key={src.id}
+              className="border border-border bg-bg p-4"
             >
               <div className="flex flex-wrap items-center gap-2">
-                <p className="font-display text-lg tracking-[0.06em]">
-                  {item.title}
-                </p>
-                <StatusBadge tone="neutral">{item.tool}</StatusBadge>
-                <span className="text-xs text-text-dim">{item.ownerHint}</span>
+                <h3 className="font-display text-lg tracking-[0.06em]">
+                  {src.name}
+                </h3>
+                <StatusBadge
+                  tone={
+                    src.status === "ingebouwd"
+                      ? "success"
+                      : src.status === "gepland"
+                        ? "warn"
+                        : "neutral"
+                  }
+                >
+                  {src.status}
+                </StatusBadge>
+                <StatusBadge tone="neutral">kosten {src.cost}</StatusBadge>
               </div>
-              <p className="mt-1 text-sm text-text-muted">{item.detail}</p>
-            </li>
+              <p className="mt-2 text-sm text-text-muted">{src.description}</p>
+              <p className="mt-2 text-xs text-text-dim">{src.legalNote}</p>
+              <p className="mt-3 font-display text-xs tracking-[0.14em] text-text-dim">
+                Vragen voor het gesprek
+              </p>
+              <ul className="mt-1 list-inside list-disc text-sm text-text-muted">
+                {src.meetingQuestions.map((q) => (
+                  <li key={q}>{q}</li>
+                ))}
+              </ul>
+            </article>
           ))}
-        </ul>
+        </div>
       </section>
     </div>
   );

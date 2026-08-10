@@ -10,6 +10,22 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+/* ─── Auth / medewerkers ───────────────────────────────────────────────── */
+
+export const userRoleEnum = pgEnum("user_role", ["admin", "member"]);
+
+export const appUsers = pgTable("app_users", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  email: text("email").notNull().unique(),
+  name: text("name").notNull(),
+  passwordHash: text("password_hash").notNull(),
+  role: userRoleEnum("role").notNull().default("member"),
+  active: boolean("active").notNull().default(true),
+  createdByEmail: text("created_by_email"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 /** Shared: editions / events that link marketing + tickets (+ later outreach). */
 export const editions = pgTable("editions", {
   id: uuid("id").defaultRandom().primaryKey(),

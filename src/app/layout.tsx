@@ -5,6 +5,7 @@ import {
   IBM_Plex_Mono,
 } from "next/font/google";
 import { ThemeProvider } from "@/components/theme/theme-provider";
+import { AuthSessionProvider } from "@/components/auth/session-provider";
 import "./globals.css";
 
 /** Match thuishaven.nl: Barlow Condensed (display) + Raleway (body) */
@@ -56,7 +57,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="min-h-full bg-bg font-sans text-text">
-        <ThemeProvider>{children}</ThemeProvider>
+        <AuthSessionProvider>
+          <ThemeProvider>{children}</ThemeProvider>
+        </AuthSessionProvider>
       </body>
     </html>
   );

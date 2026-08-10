@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
-import {
-  listIntegrationStatusSnapshot,
-} from "@/lib/integrations/verify";
-import { INTEGRATIONS, MEETING_INPUTS } from "@/lib/integrations/registry";
+import { listIntegrationStatusSnapshot } from "@/lib/integrations/verify";
+import { INTEGRATIONS } from "@/lib/integrations/registry";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +20,5 @@ export async function GET() {
       envKeys: i.envKeys,
       optionalEnvKeys: i.optionalEnvKeys ?? [],
     })),
-    meetingInputs: MEETING_INPUTS,
   });
 }

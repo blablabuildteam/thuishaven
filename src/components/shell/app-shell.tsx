@@ -22,6 +22,7 @@ import {
   Workflow,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { UserMenu } from "@/components/auth/user-menu";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -34,6 +35,7 @@ const dashboardNav: NavItem[] = [
   { href: "/dashboard", label: "Overzicht", icon: LayoutDashboard },
   { href: "/dashboard/tickets", label: "Kaartverkoop", icon: Ticket },
   { href: "/dashboard/marketing", label: "Marketing", icon: BarChart3 },
+  { href: "/dashboard/edities", label: "Edities", icon: Layers },
   { href: "/dashboard/assets", label: "Creatives", icon: ImageIcon },
   { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
   { href: "/dashboard/chat", label: "AI Chat", icon: MessageSquare },
@@ -142,6 +144,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="space-y-3 border-t border-border px-4 py-4">
           <ThemeToggle className="w-full justify-center" />
+          <UserMenu />
           <Link
             href="/"
             className="flex items-center gap-2 font-display text-xs tracking-[0.12em] text-text-muted transition-colors hover:text-accent"

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { PipelineStage } from "@/lib/outreach/pipeline";
+import { PROSPECT_SOURCES } from "@/lib/outreach/sources";
 
 type DryRunResult = {
   ranAt: string;
@@ -22,6 +23,12 @@ const statusTone = {
   partial: "warn" as const,
 };
 
+const statusLabel = {
+  ready_mock: "Mock klaar",
+  needs_credentials: "Credentials nodig",
+  partial: "Gedeeltelijk",
+};
+
 export function OutreachPipelinePanel() {
   const [stages, setStages] = useState<PipelineStage[]>([]);
   const [dryRun, setDryRun] = useState<DryRunResult | null>(null);
@@ -32,7 +39,7 @@ export function OutreachPipelinePanel() {
     fetch("/api/outreach/pipeline/dry-run")
       .then((r) => r.json())
       .then((d) => setStages(d.stages))
-      .catch(() => setError("Pipeline stages laden mislukt"));
+      .catch(() => setError("Pipeline-stappen laden mislukt"));
   }, []);
 
   function runDryRun() {
@@ -55,7 +62,7 @@ export function OutreachPipelinePanel() {
       <SectionHeader
         eyebrow="Volgende stap"
         title="Data-pipeline"
-        description="Zo komt outreach-data binnen: ontdekken → verrijken → filteren → genereren → versturen → meten → lead routen. Dry-run werkt nu op mockdata."
+        description="Zo komt outreach-data binnen: ontdekken (meerdere bronnen) → verrijken → filteren → genereren → versturen → meten → lead routen."
         action={
           <div className="flex flex-wrap gap-2">
             <Link
@@ -90,13 +97,11 @@ export function OutreachPipelinePanel() {
                 {stage.name}
               </h2>
               <StatusBadge tone={statusTone[stage.status]}>
-                {stage.status.replace("_", " ")}
+                {statusLabel[stage.status]}
               </StatusBadge>
             </div>
             <p className="mt-2 text-sm text-text-muted">{stage.description}</p>
-            <p className="mt-2 text-xs text-text-dim">
-              Bron: {stage.dataSource}
-            </p>
+            <p className="mt-2 text-xs text-text-dim">Bron: {stage.dataSource}</p>
             {stage.missing && stage.missing.length > 0 && (
               <p className="mt-1 font-mono text-xs text-danger">
                 Nog nodig: {stage.missing.join(" · ")}
@@ -137,33 +142,27 @@ export function OutreachPipelinePanel() {
         </section>
       )}
 
-      <section className="mt-8 border border-highlight bg-highlight/15 p-4 dark:bg-accent-soft">
+      <section className="mt-8 border border-border bg-surface p-4">
         <h2 className="font-display text-xl tracking-[0.06em]">
-          Voorstel datastroom (morgen bespreken)
+          Bronnen in scope
         </h2>
-        <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-text-muted">
-          <li>
-            <strong className="text-text">KvK</strong> als bron voor bedrijven
-            (jubilea + size + regio).
-          </li>
-          <li>
-            <strong className="text-text">Bureau-lijst</strong> als CSV/import in
-            de tool (jullie leveren, wij syncen periodiek).
-          </li>
-          <li>
-            <strong className="text-text">Beschikbaarheid</strong> beheerd in
-            onze agenda (of gekoppeld aan hun sheet) → publieke{" "}
-            <code className="text-accent">/beschikbaar</code> link in elke mail.
-          </li>
-          <li>
-            <strong className="text-text">Brevo</strong> voor send + webhooks
-            (opens/clicks/replies) → Wat werkt / A/B.
-          </li>
-          <li>
-            Start met <strong className="text-text">testbatch 10–20</strong> per
-            groep vóór volledige automatisering.
-          </li>
-        </ol>
+        <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+          {PROSPECT_SOURCES.map((s) => (
+            <li
+              key={s.id}
+              className="border border-border bg-bg px-3 py-2 text-sm text-text-muted"
+            >
+              <span className="font-display tracking-[0.06em] text-text">
+                {s.name}
+              </span>
+              <span className="text-text-dim"> · {s.status}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-4 text-sm text-text-muted">
+          Voorstel: starten met <strong className="text-text">bureau-import + CRM-uitsluitingen + website-scrape</strong>,
+          parallel KvK aanvragen. Enrichment/Places alleen als KvK te traag of te duur blijkt.
+        </p>
       </section>
     </div>
   );
