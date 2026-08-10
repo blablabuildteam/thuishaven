@@ -66,6 +66,21 @@ export default function HubPage() {
           />
         </div>
 
+        <div className="stagger mt-3 grid gap-3 sm:grid-cols-2">
+          <ToolCard
+            href="/koppelingen"
+            eyebrow="Meeting"
+            title="Koppelingen"
+            description="API-status, verify-knoppen en checklist van wat we morgen bij Thuishaven ophalen."
+          />
+          <ToolCard
+            href="/outreach/pipeline"
+            eyebrow="Outreach"
+            title="Data-pipeline"
+            description="Ontdekken → verrijken → versturen → meten. Dry-run op mockdata, klaar om live te zetten."
+          />
+        </div>
+
         <p
           className="animate-fade-up mt-10 font-display text-sm tracking-[0.14em] text-text-dim"
           style={{ animationDelay: "0.35s" }}

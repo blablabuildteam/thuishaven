@@ -18,6 +18,8 @@ import {
   Home,
   LineChart,
   Layers,
+  Plug,
+  Workflow,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { cn } from "@/lib/utils";
@@ -35,6 +37,7 @@ const dashboardNav: NavItem[] = [
   { href: "/dashboard/assets", label: "Creatives", icon: ImageIcon },
   { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
   { href: "/dashboard/chat", label: "AI Chat", icon: MessageSquare },
+  { href: "/koppelingen", label: "Koppelingen", icon: Plug },
 ];
 
 const outreachNav: NavItem[] = [
@@ -49,7 +52,9 @@ const outreachNav: NavItem[] = [
     label: "Beschikbaarheid",
     icon: CalendarDays,
   },
+  { href: "/outreach/pipeline", label: "Pipeline", icon: Workflow },
   { href: "/outreach/leads", label: "Leads", icon: Bell },
+  { href: "/koppelingen", label: "Koppelingen", icon: Plug },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -58,7 +63,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const nav = isOutreach ? outreachNav : dashboardNav;
   const toolLabel = isOutreach
     ? "Bedrijfsevent Outreach"
-    : "Marketing & Kaartverkoop";
+    : pathname.startsWith("/koppelingen")
+      ? "Koppelingen"
+      : "Marketing & Kaartverkoop";
 
   return (
     <div className="relative z-0 flex min-h-screen bg-bg">
