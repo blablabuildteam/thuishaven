@@ -202,6 +202,17 @@ const presenceIds = [
   "enrichment",
 ] as const;
 
+async function verifyOpenMeteo(): Promise<VerifyResult> {
+  const { pingOpenMeteo } = await import("@/lib/weather/open-meteo");
+  const ping = await pingOpenMeteo();
+  return base(
+    "open_meteo",
+    "Open-Meteo (weer)",
+    ping.ok ? "verified" : "error",
+    ping.message,
+  );
+}
+
 export async function verifyIntegration(id: string): Promise<VerifyResult> {
   switch (id) {
     case "brevo":
@@ -212,10 +223,15 @@ export async function verifyIntegration(id: string): Promise<VerifyResult> {
       return verifyDatabase();
     case "kvk":
       return verifyKvk();
+    case "open_meteo":
+      return verifyOpenMeteo();
     default: {
       const def = INTEGRATIONS.find((i) => i.id === id);
       if (!def) {
         return base(id, id, "error", "Onbekende integratie");
+      }
+      if (def.envKeys.length === 0) {
+        return base(id, def.name, "verified", def.verifyHint);
       }
       if (def.priority === "later" && !process.env[def.envKeys[0] ?? ""]) {
         return base(
@@ -254,7 +270,12 @@ export function listIntegrationStatusSnapshot(): Array<{
 }> {
   return INTEGRATIONS.map((def) => {
     const { missing } = getEnvPresence(def.envKeys);
-    let status: IntegrationStatus = missing.length ? "missing" : "configured";
+    let status: IntegrationStatus =
+      def.envKeys.length === 0
+        ? "configured"
+        : missing.length
+          ? "missing"
+          : "configured";
     if (
       missing.length &&
       (def.priority === "later" ||

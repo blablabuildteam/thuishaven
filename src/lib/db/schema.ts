@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -354,5 +355,45 @@ export const usageEvents = pgTable("usage_events", {
   unitLabel: text("unit_label").notNull().default("call"),
   costEurCents: integer("cost_eur_cents").notNull().default(0),
   meta: jsonb("meta").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/* ─── Externe factoren (weer + festivals) ──────────────────────────────── */
+
+export const weatherDaily = pgTable(
+  "weather_daily",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** Calendar day (UTC date at midnight). */
+    day: timestamp("day", { withTimezone: true }).notNull(),
+    locationKey: text("location_key").notNull().default("amsterdam"),
+    locationLabel: text("location_label").notNull().default("Amsterdam"),
+    tempMinC: numeric("temp_min_c", { precision: 5, scale: 2 }),
+    tempMaxC: numeric("temp_max_c", { precision: 5, scale: 2 }),
+    precipMm: numeric("precip_mm", { precision: 6, scale: 2 }),
+    windMaxMps: numeric("wind_max_mps", { precision: 5, scale: 2 }),
+    weatherCode: integer("weather_code"),
+    source: text("source").notNull().default("open-meteo"),
+    raw: jsonb("raw").$type<Record<string, unknown>>().default({}),
+    syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("weather_daily_day_loc").on(t.day, t.locationKey)],
+);
+
+export const externalEventTypeEnum = pgEnum("external_event_type", [
+  "festival",
+  "holiday",
+  "other",
+]);
+
+export const externalEvents = pgTable("external_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  type: externalEventTypeEnum("type").notNull().default("festival"),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  endsAt: timestamp("ends_at", { withTimezone: true }),
+  region: text("region").notNull().default("Amsterdam"),
+  impactNote: text("impact_note"),
+  source: text("source").notNull().default("manual"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

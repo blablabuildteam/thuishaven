@@ -26,9 +26,17 @@ export default function DashboardPage() {
         title={edition.name}
         description="Unified view — ticketverkoop en marketing naast elkaar, gekoppeld per editie."
         action={
-          <StatusBadge tone="accent" pulse>
-            Live editie
-          </StatusBadge>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/dashboard/context"
+              className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
+            >
+              Weer & festivals →
+            </Link>
+            <StatusBadge tone="accent" pulse>
+              Live editie
+            </StatusBadge>
+          </div>
         }
       />
 

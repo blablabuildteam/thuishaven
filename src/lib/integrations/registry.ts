@@ -46,15 +46,26 @@ export const INTEGRATIONS: IntegrationDef[] = [
   },
   {
     id: "database",
-    name: "PostgreSQL",
+    name: "PostgreSQL (Neon)",
     tool: "shared",
-    description: "Centrale database voor edities, prospects, tickets en sync-jobs.",
+    description:
+      "Vercel Postgres / Neon — edities, tickets, users, usage, weer en festivals.",
     envKeys: ["DATABASE_URL"],
-    askFromClient: [
-      "Akkoord op managed Postgres (bijv. Supabase/Neon) of eigen hosting",
-    ],
-    verifyHint: "Connectie + schema push",
+    askFromClient: [],
+    verifyHint: "select 1 + schema push",
     priority: "critical",
+  },
+  {
+    id: "open_meteo",
+    name: "Open-Meteo (weer)",
+    tool: "dashboard",
+    description:
+      "Dagelijkse weerdata Amsterdam — correlatie met kaartverkoop. Geen API-key nodig.",
+    envKeys: [],
+    askFromClient: [],
+    verifyHint: "Archive/forecast ping AMS",
+    docsUrl: "https://open-meteo.com/",
+    priority: "high",
   },
   {
     id: "brevo",

@@ -21,6 +21,7 @@ import {
   Plug,
   Workflow,
   Gauge,
+  CloudSun,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { UserMenu } from "@/components/auth/user-menu";
@@ -37,6 +38,7 @@ const dashboardNav: NavItem[] = [
   { href: "/dashboard/tickets", label: "Kaartverkoop", icon: Ticket },
   { href: "/dashboard/marketing", label: "Marketing", icon: BarChart3 },
   { href: "/dashboard/edities", label: "Edities", icon: Layers },
+  { href: "/dashboard/context", label: "Weer & festivals", icon: CloudSun },
   { href: "/dashboard/assets", label: "Creatives", icon: ImageIcon },
   { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
   { href: "/dashboard/chat", label: "AI Chat", icon: MessageSquare },
