@@ -46,7 +46,8 @@ export const PROSPECT_SOURCES: ProspectSource[] = [
     status: "gepland",
     envKeys: ["KVK_API_KEY"],
     meetingQuestions: [
-      "Hebben jullie al een KvK API-abonnement, of moeten wij die aanvragen?",
+      "Wij richten de KvK API in — kunnen we dat onder jullie KvK/Developer-account doen zodat credits bij jullie landen?",
+      "Wie nodigt ons uit / deelt toegang tot dat account?",
       "Akkoord targeting 500–5.000 medewerkers, Amsterdam + 50 km?",
     ],
   },

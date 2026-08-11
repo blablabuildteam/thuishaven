@@ -20,6 +20,7 @@ import {
   Layers,
   Plug,
   Workflow,
+  Gauge,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { UserMenu } from "@/components/auth/user-menu";
@@ -49,6 +50,7 @@ const outreachNav: NavItem[] = [
   { href: "/outreach/varianten", label: "Mailvarianten", icon: Layers },
   { href: "/outreach/emails", label: "E-mails", icon: Mail },
   { href: "/outreach/analytics", label: "Wat werkt", icon: LineChart },
+  { href: "/outreach/kosten", label: "Kosten", icon: Gauge },
   {
     href: "/outreach/beschikbaarheid",
     label: "Beschikbaarheid",

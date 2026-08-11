@@ -333,3 +333,26 @@ export const syncJobs = pgTable("sync_jobs", {
   error: text("error"),
   meta: jsonb("meta").$type<Record<string, unknown>>().default({}),
 });
+
+/** Usage / cost events for outreach (AI tokens, KvK, Brevo, Places, …). */
+export const usageVendorEnum = pgEnum("usage_vendor", [
+  "openai",
+  "anthropic",
+  "brevo",
+  "kvk",
+  "google_places",
+  "enrichment",
+  "other",
+]);
+
+export const usageEvents = pgTable("usage_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tool: text("tool").notNull().default("outreach"),
+  vendor: usageVendorEnum("vendor").notNull(),
+  operation: text("operation").notNull(),
+  units: integer("units").notNull().default(1),
+  unitLabel: text("unit_label").notNull().default("call"),
+  costEurCents: integer("cost_eur_cents").notNull().default(0),
+  meta: jsonb("meta").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});

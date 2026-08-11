@@ -8,15 +8,27 @@ import {
   leads,
   outreachKpis,
 } from "@/lib/mock/outreach";
+import { getUsageSummary } from "@/lib/usage/store";
 import { formatNumber, formatPercent } from "@/lib/utils";
 
 export const metadata = { title: "Outreach" };
+export const dynamic = "force-dynamic";
 
-export default function OutreachPage() {
+function eurFromCents(cents: number): string {
+  return new Intl.NumberFormat("nl-NL", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(cents / 100);
+}
+
+export default async function OutreachPage() {
   const openRate =
     outreachKpis.sent > 0
       ? (outreachKpis.opened / outreachKpis.sent) * 100
       : 0;
+  const usage = await getUsageSummary({ sinceDays: 30, tool: "outreach" });
 
   return (
     <div>
@@ -26,6 +38,12 @@ export default function OutreachPage() {
         description="Mailvarianten per groep, A/B onderwerpregels, live beschikbaarheidsagenda en lead routing."
         action={
           <div className="flex flex-wrap gap-2">
+            <Link
+              href="/outreach/kosten"
+              className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
+            >
+              Kostmeter →
+            </Link>
             <Link
               href="/outreach/analytics"
               className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
@@ -42,7 +60,7 @@ export default function OutreachPage() {
         }
       />
 
-      <div className="stagger mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="stagger mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <MetricCard
           label="Prospects"
           value={formatNumber(outreachKpis.prospectsTotal)}
@@ -58,6 +76,11 @@ export default function OutreachPage() {
           value={formatNumber(outreachKpis.replied)}
         />
         <MetricCard label="Leads" value={formatNumber(outreachKpis.leads)} />
+        <MetricCard
+          label="Kosten · 30d"
+          value={eurFromCents(usage.totalEurCents)}
+          hint={`${eurFromCents(usage.clientBilledEurCents)} op hun KvK`}
+        />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
