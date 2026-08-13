@@ -53,7 +53,7 @@ async function writeFileStore(users: AppUserRecord[]) {
 function parseEmailList(raw: string | undefined): string[] {
   return (raw ?? "")
     .split(",")
-    .map((e) => e.trim().toLowerCase())
+    .map((e) => e.trim().toLowerCase().replace(/^["']|["']$/g, ""))
     .filter(Boolean);
 }
 
@@ -146,10 +146,61 @@ async function listFromDb(): Promise<AppUserRecord[]> {
   }));
 }
 
+/** Seed env bootstrap users into Postgres when the table is empty. */
+async function seedEnvUsersToDb(): Promise<AppUserRecord[]> {
+  const bootstrap = envBootstrapUsers();
+  if (!bootstrap.length) return [];
+
+  const db = getDb();
+  for (const user of bootstrap) {
+    await db
+      .insert(appUsers)
+      .values({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        passwordHash: user.passwordHash,
+        role: user.role,
+        active: true,
+        createdByEmail: "env-bootstrap",
+      })
+      .onConflictDoNothing({ target: appUsers.email });
+  }
+  return listFromDb();
+}
+
+/**
+ * Update password for allowlisted emails (env AUTH_PASSWORD) — recovery pad.
+ */
+export async function syncEnvPasswordToDb(): Promise<number> {
+  if (!hasDatabase()) return 0;
+  const password = process.env.AUTH_PASSWORD?.trim();
+  if (!password) return 0;
+  const emails = allowedEmailsFromEnv();
+  if (!emails.length) return 0;
+
+  const hash = await bcrypt.hash(password, 10);
+  const db = getDb();
+  let updated = 0;
+  for (const email of emails) {
+    const result = await db
+      .update(appUsers)
+      .set({ passwordHash: hash, updatedAt: new Date(), active: true })
+      .where(eq(appUsers.email, email))
+      .returning({ id: appUsers.id });
+    updated += result.length;
+  }
+  return updated;
+}
+
 export async function listUsers(): Promise<AppUserRecord[]> {
   if (hasDatabase()) {
     try {
-      return await listFromDb();
+      const rows = await listFromDb();
+      if (rows.length) return rows;
+      // Lege DB: seed vanuit AUTH_* env zodat login werkt
+      const seeded = await seedEnvUsersToDb();
+      if (seeded.length) return seeded;
     } catch (e) {
       console.error("listUsers db error", e);
     }
