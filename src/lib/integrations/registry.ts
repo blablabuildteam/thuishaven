@@ -101,15 +101,24 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "weeztix",
     name: "Weeztix",
     tool: "dashboard",
-    description: "Primaire ticketverkoop + voorraad.",
-    envKeys: ["WEEZTIX_API_KEY"],
-    optionalEnvKeys: ["WEEZTIX_API_URL"],
-    askFromClient: [
-      "API-key / partner credentials",
-      "Event-IDs per editie",
-      "Documentatie of contact tech-partner",
+    description:
+      "Ticketverkoop + voorraad — read-only (alleen GET). OAuth access token van company dashboard.",
+    envKeys: ["WEEZTIX_ACCESS_TOKEN"],
+    optionalEnvKeys: [
+      "WEEZTIX_API_URL",
+      "WEEZTIX_COMPANY_GUID",
+      "WEEZTIX_CLIENT_ID",
+      "WEEZTIX_CLIENT_SECRET",
+      "WEEZTIX_REFRESH_TOKEN",
+      "WEEZTIX_API_KEY", // legacy alias voor access token
     ],
-    verifyHint: "Events/list endpoint",
+    askFromClient: [
+      "OAuth Client in Weeztix (Company settings → OAuth Clients)",
+      "Access token (of refresh token + client id) — read scope",
+      "Company GUID indien meerdere companies",
+    ],
+    verifyHint: "GET auth.weeztix.com/users/me + GET /event",
+    docsUrl: "https://docs.weeztix.com/docs/introduction/authentication/",
     priority: "critical",
   },
   {

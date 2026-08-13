@@ -186,22 +186,6 @@ function presenceCheck(
   );
 }
 
-const presenceIds = [
-  "weeztix",
-  "resident_advisor",
-  "appic",
-  "ticketswap",
-  "internal_ticketing",
-  "instagram",
-  "tiktok",
-  "youtube",
-  "sales_notify",
-  "alert_notify",
-  "linkedin",
-  "google_places",
-  "enrichment",
-] as const;
-
 async function verifyOpenMeteo(): Promise<VerifyResult> {
   const { pingOpenMeteo } = await import("@/lib/weather/open-meteo");
   const ping = await pingOpenMeteo();
@@ -211,6 +195,62 @@ async function verifyOpenMeteo(): Promise<VerifyResult> {
     ping.ok ? "verified" : "error",
     ping.message,
   );
+}
+
+async function verifyWeeztix(): Promise<VerifyResult> {
+  const hasToken =
+    Boolean(process.env.WEEZTIX_ACCESS_TOKEN?.trim()) ||
+    Boolean(process.env.WEEZTIX_API_KEY?.trim());
+  if (!hasToken) {
+    return base(
+      "weeztix",
+      "Weeztix",
+      "missing",
+      "WEEZTIX_ACCESS_TOKEN ontbreekt (OAuth Bearer token)",
+    );
+  }
+
+  try {
+    const { weeztixWhoAmI, listWeeztixEvents } = await import(
+      "@/lib/integrations/weeztix/client"
+    );
+    const me = await weeztixWhoAmI();
+    if (!me.ok) {
+      return base("weeztix", "Weeztix", "error", me.error, {
+        status: me.status,
+      });
+    }
+    const events = await listWeeztixEvents();
+    if (!events.ok) {
+      return base(
+        "weeztix",
+        "Weeztix",
+        "error",
+        `Token OK, events: ${events.error}`,
+        { user: me.user.email ?? me.user.guid },
+      );
+    }
+    return base(
+      "weeztix",
+      "Weeztix",
+      "verified",
+      `Read-only OK · ${events.events.length} events · ${me.user.email ?? me.user.guid ?? "user"}`,
+      {
+        company: me.user.default_company,
+        eventSample: events.events.slice(0, 5).map((e) => ({
+          guid: e.guid,
+          name: e.name,
+        })),
+      },
+    );
+  } catch (e) {
+    return base(
+      "weeztix",
+      "Weeztix",
+      "error",
+      e instanceof Error ? e.message : "Verify mislukt",
+    );
+  }
 }
 
 export async function verifyIntegration(id: string): Promise<VerifyResult> {
@@ -225,6 +265,8 @@ export async function verifyIntegration(id: string): Promise<VerifyResult> {
       return verifyKvk();
     case "open_meteo":
       return verifyOpenMeteo();
+    case "weeztix":
+      return verifyWeeztix();
     default: {
       const def = INTEGRATIONS.find((i) => i.id === id);
       if (!def) {
@@ -270,14 +312,19 @@ export function listIntegrationStatusSnapshot(): Array<{
 }> {
   return INTEGRATIONS.map((def) => {
     const { missing } = getEnvPresence(def.envKeys);
+    // Weeztix: legacy WEEZTIX_API_KEY telt ook als access token
+    const weeztixOk =
+      def.id === "weeztix" &&
+      Boolean(process.env.WEEZTIX_API_KEY?.trim());
     let status: IntegrationStatus =
       def.envKeys.length === 0
         ? "configured"
-        : missing.length
+        : missing.length && !weeztixOk
           ? "missing"
           : "configured";
     if (
       missing.length &&
+      !weeztixOk &&
       (def.priority === "later" ||
         def.id === "linkedin" ||
         def.id === "google_places" ||
@@ -291,7 +338,7 @@ export function listIntegrationStatusSnapshot(): Array<{
       tool: def.tool,
       priority: def.priority,
       status,
-      missing,
+      missing: weeztixOk ? [] : missing,
       askFromClient: def.askFromClient,
     };
   });

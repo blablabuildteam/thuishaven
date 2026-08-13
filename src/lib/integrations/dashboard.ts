@@ -11,11 +11,14 @@ export type SyncResult = {
 };
 
 export async function syncWeeztix(): Promise<SyncResult> {
-  if (!process.env.WEEZTIX_API_KEY) {
-    return { source: "weeztix", ok: false, error: "WEEZTIX_API_KEY ontbreekt" };
-  }
-  // TODO: implement Weeztix API client
-  return { source: "weeztix", ok: false, error: "Nog niet geïmplementeerd" };
+  const { syncWeeztixReadOnly } = await import("@/lib/integrations/weeztix/sync");
+  const result = await syncWeeztixReadOnly();
+  return {
+    source: "weeztix",
+    ok: result.ok,
+    records: result.editionsUpserted || result.eventsFetched,
+    error: result.error,
+  };
 }
 
 export async function syncResidentAdvisor(): Promise<SyncResult> {
