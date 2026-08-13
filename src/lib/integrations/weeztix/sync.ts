@@ -41,11 +41,19 @@ function pickSold(stats: unknown): { sold: number; capacity: number | null } {
   return { sold, capacity };
 }
 
+function eventStartMs(event: WeeztixEvent): number {
+  const t = event.start ? new Date(String(event.start)).getTime() : 0;
+  return Number.isFinite(t) ? t : 0;
+}
+
 /**
  * Haalt Weeztix-events op (GET) en schrijft alleen naar onze DB.
- * Geen create/update op Weeztix.
+ * Stats alleen voor de N meest recente/toekomstige events (snelheid).
  */
-export async function syncWeeztixReadOnly(): Promise<{
+export async function syncWeeztixReadOnly(options?: {
+  includeStats?: boolean;
+  statsLimit?: number;
+}): Promise<{
   ok: boolean;
   source: string;
   eventsFetched: number;
@@ -54,6 +62,9 @@ export async function syncWeeztixReadOnly(): Promise<{
   error?: string;
   preview?: Array<{ guid: string; name: string }>;
 }> {
+  const includeStats = options?.includeStats ?? true;
+  const statsLimit = options?.statsLimit ?? 25;
+
   const listed = await listWeeztixEvents();
   if (!listed.ok) {
     return {
@@ -87,6 +98,7 @@ export async function syncWeeztixReadOnly(): Promise<{
   const db = getDb();
   let editionsUpserted = 0;
   let inventoryUpserted = 0;
+  const editionByGuid = new Map<string, string>();
 
   for (const event of events) {
     const guid = String(event.guid);
@@ -106,9 +118,13 @@ export async function syncWeeztixReadOnly(): Promise<{
         .update(editions)
         .set({
           name,
-          startsAt: Number.isNaN(startsAt.getTime()) ? existing[0].startsAt : startsAt,
+          startsAt: Number.isNaN(startsAt.getTime())
+            ? existing[0].startsAt
+            : startsAt,
           endsAt:
-            endsAt && !Number.isNaN(endsAt.getTime()) ? endsAt : existing[0].endsAt,
+            endsAt && !Number.isNaN(endsAt.getTime())
+              ? endsAt
+              : existing[0].endsAt,
         })
         .where(eq(editions.id, existing[0].id));
       editionId = existing[0].id;
@@ -135,11 +151,29 @@ export async function syncWeeztixReadOnly(): Promise<{
       }
     }
     if (!editionId) continue;
+    editionByGuid.set(guid, editionId);
     editionsUpserted += 1;
+  }
 
-    // Best-effort stats (sommige accounts hebben dit endpoint niet)
-    const stats = await getWeeztixEventStatistics(guid);
-    if (stats.ok) {
+  if (includeStats) {
+    const now = Date.now();
+    const forStats = [...events]
+      .sort((a, b) => {
+        // Prefer upcoming/recent
+        const da = Math.abs(eventStartMs(a) - now);
+        const dbms = Math.abs(eventStartMs(b) - now);
+        return da - dbms;
+      })
+      .slice(0, statsLimit);
+
+    for (const event of forStats) {
+      const guid = String(event.guid);
+      const editionId = editionByGuid.get(guid);
+      if (!editionId) continue;
+
+      const stats = await getWeeztixEventStatistics(guid);
+      if (!stats.ok) continue;
+
       const { sold, capacity } = pickSold(stats.data);
       const inv = await db
         .select()
@@ -148,7 +182,8 @@ export async function syncWeeztixReadOnly(): Promise<{
         .limit(20);
       const weeztixRow = inv.find((r) => r.platform === "weeztix");
       const available =
-        capacity != null ? Math.max(capacity - sold, 0) : Math.max(0, sold === 0 ? 0 : 0);
+        capacity != null ? Math.max(capacity - sold, 0) : 0;
+
       if (weeztixRow) {
         await db
           .update(ticketInventory)
@@ -166,7 +201,7 @@ export async function syncWeeztixReadOnly(): Promise<{
           platform: "weeztix",
           capacity,
           sold,
-          available: capacity != null ? available : 0,
+          available,
           isSoldOut: capacity != null && available <= 0,
         });
       }

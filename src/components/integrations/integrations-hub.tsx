@@ -189,7 +189,13 @@ export function IntegrationsHub() {
           return (
             <article
               key={row.id}
-              className="border border-border bg-surface p-4"
+              className={cn(
+                "border bg-surface p-4 transition-colors",
+                status === "verified" &&
+                  "border-2 border-[#1f8f4e] shadow-[inset_4px_0_0_0_#1f8f4e]",
+                status === "error" && "border-2 border-danger/60",
+                status !== "verified" && status !== "error" && "border-border",
+              )}
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
