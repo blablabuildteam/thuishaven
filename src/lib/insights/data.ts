@@ -26,6 +26,7 @@ export type InsightsSnapshot = {
     editions: number;
     inventoryRows: number;
     sold: number;
+    editionsWithSales: number;
   };
   weather: {
     days: number;
@@ -53,7 +54,7 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
       totalClicks: 0,
       top: [],
     },
-    weeztix: { editions: 0, inventoryRows: 0, sold: 0 },
+    weeztix: { editions: 0, inventoryRows: 0, sold: 0, editionsWithSales: 0 },
     weather: { days: 0, avgFestivalScore: null, recent: [] },
     notes: ["Geen database — zet DATABASE_URL."],
   };
@@ -99,9 +100,9 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
     .where(isNotNull(editions.weeztixEventId));
 
   const inv = await db.select().from(ticketInventory);
-  const sold = inv
-    .filter((r) => r.platform === "weeztix")
-    .reduce((s, r) => s + (r.sold ?? 0), 0);
+  const weeztixInv = inv.filter((r) => r.platform === "weeztix");
+  const sold = weeztixInv.reduce((s, r) => s + (r.sold ?? 0), 0);
+  const editionsWithSales = weeztixInv.filter((r) => (r.sold ?? 0) > 0).length;
 
   let weatherBlock: InsightsSnapshot["weather"] = {
     days: 0,
@@ -162,8 +163,9 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
     },
     weeztix: {
       editions: weeztixEditions[0]?.count ?? 0,
-      inventoryRows: inv.length,
+      inventoryRows: weeztixInv.length,
       sold,
+      editionsWithSales,
     },
     weather: weatherBlock,
     notes,
@@ -194,6 +196,7 @@ export function snapshotToPromptContext(snap: InsightsSnapshot): string {
     "=== Weeztix ===",
     `Edities met Weeztix-id: ${snap.weeztix.editions}`,
     `Inventory rijen: ${snap.weeztix.inventoryRows}`,
+    `Edities met sold>0: ${snap.weeztix.editionsWithSales}`,
     `Sold (Weeztix inventory som): ${snap.weeztix.sold}`,
     "",
     "=== Festival-weer score (1-10, outdoor comfort) ===",

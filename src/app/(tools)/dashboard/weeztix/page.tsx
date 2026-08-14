@@ -1,121 +1,137 @@
-import { desc, isNotNull } from "drizzle-orm";
+import { desc, isNotNull, sql } from "drizzle-orm";
 import { SectionHeader } from "@/components/ui/section-header";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { MetricCard } from "@/components/ui/metric-card";
 import { getDb, hasDatabase } from "@/lib/db/client";
-import { editions } from "@/lib/db/schema";
-import { syncWeeztixReadOnly } from "@/lib/integrations/weeztix/sync";
+import { editions, ticketInventory } from "@/lib/db/schema";
+import { formatNumber } from "@/lib/utils";
+import { and, eq } from "drizzle-orm";
 
 export const metadata = { title: "Weeztix events" };
 export const dynamic = "force-dynamic";
 
 export default async function WeeztixEventsPage() {
-  let synced = { eventsFetched: 0, editionsUpserted: 0, inventoryUpserted: 0 };
-  let rows: Array<{
-    id: string;
-    name: string;
-    startsAt: Date;
-    endsAt: Date | null;
-    weeztixEventId: string | null;
-    status: string;
-  }> = [];
-
-  if (hasDatabase()) {
-    try {
-      // Lichte sync: events + stats voor 25 dichtstbijzijnde
-      const result = await syncWeeztixReadOnly({
-        includeStats: true,
-        statsLimit: 25,
-      });
-      synced = {
-        eventsFetched: result.eventsFetched,
-        editionsUpserted: result.editionsUpserted,
-        inventoryUpserted: result.inventoryUpserted,
-      };
-    } catch (e) {
-      console.error("weeztix page sync", e);
-    }
-
-    const db = getDb();
-    rows = await db
-      .select({
-        id: editions.id,
-        name: editions.name,
-        startsAt: editions.startsAt,
-        endsAt: editions.endsAt,
-        weeztixEventId: editions.weeztixEventId,
-        status: editions.status,
-      })
-      .from(editions)
-      .where(isNotNull(editions.weeztixEventId))
-      .orderBy(desc(editions.startsAt))
-      .limit(50);
+  if (!hasDatabase()) {
+    return (
+      <div>
+        <SectionHeader
+          eyebrow="Weeztix"
+          title="Events"
+          description="Geen DATABASE_URL — sync kan niet worden getoond."
+        />
+      </div>
+    );
   }
+
+  const db = getDb();
+
+  const totals = await db.execute(sql`
+    select
+      (select count(*)::int from editions
+        where weeztix_event_id is not null
+          and name not ilike '%TEMPLATE%') as editions,
+      (select count(*)::int from ticket_inventory
+        where platform = 'weeztix' and sold > 0) as with_sales,
+      (select coalesce(sum(sold),0)::int from ticket_inventory
+        where platform = 'weeztix') as total_sold
+  `);
+  const t = (totals as unknown as Array<Record<string, number>>)[0] ?? {
+    editions: 0,
+    with_sales: 0,
+    total_sold: 0,
+  };
+
+  const rows = await db
+    .select({
+      id: editions.id,
+      name: editions.name,
+      startsAt: editions.startsAt,
+      sold: ticketInventory.sold,
+      capacity: ticketInventory.capacity,
+      available: ticketInventory.available,
+    })
+    .from(editions)
+    .leftJoin(
+      ticketInventory,
+      and(
+        eq(ticketInventory.editionId, editions.id),
+        eq(ticketInventory.platform, "weeztix"),
+      ),
+    )
+    .where(isNotNull(editions.weeztixEventId))
+    .orderBy(desc(editions.startsAt))
+    .limit(60);
 
   return (
     <div>
       <SectionHeader
         eyebrow="Weeztix · read-only"
-        title="Live events"
-        description="Events opgehaald uit Weeztix (alleen GET) en opgeslagen in onze database. Nog geen schrijfacties terug."
+        title="Events & ticketstats"
+        description="Historische sold_count per editie uit Weeztix tickettypes. Alleen GET — niets terugschrijven."
       />
 
-      <div className="stagger mb-8 grid gap-3 sm:grid-cols-3">
+      <div className="mb-8 grid gap-3 sm:grid-cols-3">
         <MetricCard
-          label="Events in Weeztix"
-          value={String(synced.eventsFetched || rows.length)}
+          label="Edities"
+          value={formatNumber(Number(t.editions ?? 0))}
           accent
         />
         <MetricCard
-          label="In onze DB"
-          value={String(synced.editionsUpserted || rows.length)}
+          label="Met ticketverkoop"
+          value={formatNumber(Number(t.with_sales ?? 0))}
         />
         <MetricCard
-          label="Stats bijgewerkt"
-          value={String(synced.inventoryUpserted)}
-          hint="max. 25 dichtstbijzijnde"
+          label="Totaal sold"
+          value={formatNumber(Number(t.total_sold ?? 0))}
+          hint="som over alle edities"
         />
       </div>
 
-      {!hasDatabase() && (
-        <p className="mb-4 border border-warn/40 bg-warn/10 px-3 py-2 text-sm">
-          Geen DATABASE_URL — events kunnen niet worden opgeslagen.
-        </p>
-      )}
-
-      <section className="border border-border bg-surface p-4">
-        <h2 className="mb-4 font-display text-2xl tracking-[0.06em]">
-          Laatste 50 edities
-        </h2>
-        <ul className="divide-y divide-border">
-          {rows.map((row) => (
-            <li
-              key={row.id}
-              className="flex flex-wrap items-center justify-between gap-2 py-3"
-            >
-              <div>
-                <p className="text-sm font-medium text-text">{row.name}</p>
-                <p className="text-xs text-text-muted">
-                  {row.startsAt.toLocaleDateString("nl-NL", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                  {row.weeztixEventId
-                    ? ` · ${row.weeztixEventId.slice(0, 8)}…`
-                    : ""}
-                </p>
-              </div>
-              <StatusBadge tone="accent">Weeztix</StatusBadge>
-            </li>
-          ))}
-          {!rows.length && (
-            <li className="py-6 text-sm text-text-muted">
-              Nog geen Weeztix-events in de database. Sync via API of herlaad
-              deze pagina.
-            </li>
-          )}
-        </ul>
+      <section className="border border-border bg-surface">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-sm">
+            <thead className="border-b border-border text-[11px] tracking-wider text-text-dim uppercase">
+              <tr>
+                <th className="px-4 py-3 font-medium">Editie</th>
+                <th className="px-4 py-3 font-medium">Datum</th>
+                <th className="px-4 py-3 font-medium">Sold</th>
+                <th className="px-4 py-3 font-medium">Cap</th>
+                <th className="px-4 py-3 font-medium">Nog</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows
+                .filter((r) => !/TEMPLATE/i.test(r.name))
+                .map((row) => (
+                  <tr
+                    key={row.id}
+                    className="border-b border-border/70 last:border-0"
+                  >
+                    <td className="max-w-[320px] truncate px-4 py-3 text-text">
+                      {row.name}
+                    </td>
+                    <td className="px-4 py-3 text-text-muted">
+                      {row.startsAt.toLocaleDateString("nl-NL", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </td>
+                    <td className="px-4 py-3 font-mono">
+                      {row.sold != null ? formatNumber(row.sold) : "—"}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-text-muted">
+                      {row.capacity != null ? formatNumber(row.capacity) : "—"}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-text-muted">
+                      {row.available != null
+                        ? formatNumber(row.available)
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );

@@ -1,10 +1,11 @@
-import { eq } from "drizzle-orm";
+import { eq, isNotNull } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { editions, ticketInventory } from "@/lib/db/schema";
 import {
-  getWeeztixEventStatistics,
+  listWeeztixEventTickets,
   listWeeztixEvents,
   type WeeztixEvent,
+  type WeeztixTicketType,
 } from "@/lib/integrations/weeztix/client";
 
 function slugify(name: string): string {
@@ -19,39 +20,48 @@ function slugify(name: string): string {
   );
 }
 
-function pickSold(stats: unknown): { sold: number; capacity: number | null } {
-  if (!stats || typeof stats !== "object") return { sold: 0, capacity: null };
-  const s = stats as Record<string, unknown>;
-  const candidates = [
-    s.sold,
-    s.tickets_sold,
-    s.ticket_sold,
-    s.total_sold,
-    s.quantity_sold,
-  ];
+export function summarizeTicketSales(tickets: WeeztixTicketType[]): {
+  sold: number;
+  capacity: number | null;
+  available: number;
+  revenueCents: number;
+  ticketTypes: number;
+} {
   let sold = 0;
-  for (const c of candidates) {
-    if (typeof c === "number") {
-      sold = c;
-      break;
+  let available = 0;
+  let revenueCents = 0;
+  let hasStock = false;
+
+  for (const t of tickets) {
+    const s = typeof t.sold_count === "number" ? t.sold_count : 0;
+    const stock =
+      typeof t.available_stock === "number" ? t.available_stock : null;
+    const price = typeof t.min_price === "number" ? t.min_price : 0;
+    sold += s;
+    revenueCents += s * price;
+    if (stock != null) {
+      hasStock = true;
+      available += Math.max(stock, 0);
     }
   }
-  const capRaw = s.capacity ?? s.total ?? s.available_total;
-  const capacity = typeof capRaw === "number" ? capRaw : null;
-  return { sold, capacity };
-}
 
-function eventStartMs(event: WeeztixEvent): number {
-  const t = event.start ? new Date(String(event.start)).getTime() : 0;
-  return Number.isFinite(t) ? t : 0;
+  const capacity = hasStock ? sold + available : null;
+  return {
+    sold,
+    capacity,
+    available: hasStock ? available : 0,
+    revenueCents,
+    ticketTypes: tickets.length,
+  };
 }
 
 /**
  * Haalt Weeztix-events op (GET) en schrijft alleen naar onze DB.
- * Stats alleen voor de N meest recente/toekomstige events (snelheid).
+ * Ticketstats via /event/{guid}/ticket (sold_count).
  */
 export async function syncWeeztixReadOnly(options?: {
   includeStats?: boolean;
+  /** Max events voor ticketstats. Default: alles. */
   statsLimit?: number;
 }): Promise<{
   ok: boolean;
@@ -63,7 +73,7 @@ export async function syncWeeztixReadOnly(options?: {
   preview?: Array<{ guid: string; name: string }>;
 }> {
   const includeStats = options?.includeStats ?? true;
-  const statsLimit = options?.statsLimit ?? 25;
+  const statsLimit = options?.statsLimit;
 
   const listed = await listWeeztixEvents();
   if (!listed.ok) {
@@ -77,7 +87,9 @@ export async function syncWeeztixReadOnly(options?: {
     };
   }
 
-  const events = listed.events.filter((e) => e.guid && e.name);
+  const events = listed.events.filter(
+    (e) => e.guid && e.name && !/TEMPLATE/i.test(String(e.name)),
+  );
   const preview = events.slice(0, 20).map((e) => ({
     guid: String(e.guid),
     name: String(e.name),
@@ -97,7 +109,6 @@ export async function syncWeeztixReadOnly(options?: {
 
   const db = getDb();
   let editionsUpserted = 0;
-  let inventoryUpserted = 0;
   const editionByGuid = new Map<string, string>();
 
   for (const event of events) {
@@ -137,8 +148,11 @@ export async function syncWeeztixReadOnly(options?: {
             .values({
               name,
               slug: i === 0 ? baseSlug : `${baseSlug}-${guid.slice(0, 8)}`,
-              startsAt: Number.isNaN(startsAt.getTime()) ? new Date() : startsAt,
-              endsAt: endsAt && !Number.isNaN(endsAt.getTime()) ? endsAt : null,
+              startsAt: Number.isNaN(startsAt.getTime())
+                ? new Date()
+                : startsAt,
+              endsAt:
+                endsAt && !Number.isNaN(endsAt.getTime()) ? endsAt : null,
               status: "upcoming",
               weeztixEventId: guid,
             })
@@ -155,58 +169,17 @@ export async function syncWeeztixReadOnly(options?: {
     editionsUpserted += 1;
   }
 
+  let inventoryUpserted = 0;
   if (includeStats) {
-    const now = Date.now();
-    const forStats = [...events]
-      .sort((a, b) => {
-        // Prefer upcoming/recent
-        const da = Math.abs(eventStartMs(a) - now);
-        const dbms = Math.abs(eventStartMs(b) - now);
-        return da - dbms;
-      })
-      .slice(0, statsLimit);
-
-    for (const event of forStats) {
-      const guid = String(event.guid);
-      const editionId = editionByGuid.get(guid);
-      if (!editionId) continue;
-
-      const stats = await getWeeztixEventStatistics(guid);
-      if (!stats.ok) continue;
-
-      const { sold, capacity } = pickSold(stats.data);
-      const inv = await db
-        .select()
-        .from(ticketInventory)
-        .where(eq(ticketInventory.editionId, editionId))
-        .limit(20);
-      const weeztixRow = inv.find((r) => r.platform === "weeztix");
-      const available =
-        capacity != null ? Math.max(capacity - sold, 0) : 0;
-
-      if (weeztixRow) {
-        await db
-          .update(ticketInventory)
-          .set({
-            sold,
-            capacity,
-            available: capacity != null ? available : weeztixRow.available,
-            isSoldOut: capacity != null ? available <= 0 : false,
-            syncedAt: new Date(),
-          })
-          .where(eq(ticketInventory.id, weeztixRow.id));
-      } else {
-        await db.insert(ticketInventory).values({
-          editionId,
-          platform: "weeztix",
-          capacity,
-          sold,
-          available,
-          isSoldOut: capacity != null && available <= 0,
-        });
-      }
-      inventoryUpserted += 1;
-    }
+    const forStats =
+      statsLimit != null ? events.slice(0, statsLimit) : events;
+    const result = await upsertTicketInventoryForEvents(
+      forStats.map((e) => ({
+        guid: String(e.guid),
+        editionId: editionByGuid.get(String(e.guid))!,
+      })).filter((x) => x.editionId),
+    );
+    inventoryUpserted = result.upserted;
   }
 
   return {
@@ -216,6 +189,146 @@ export async function syncWeeztixReadOnly(options?: {
     editionsUpserted,
     inventoryUpserted,
     preview,
+  };
+}
+
+/**
+ * Historische ticketstats voor alle edities in DB (of subset).
+ * Gebruikt GET /event/{guid}/ticket — read-only.
+ */
+export async function syncWeeztixTicketStatsFromEditions(options?: {
+  concurrency?: number;
+  onlyMissing?: boolean;
+}): Promise<{
+  ok: boolean;
+  attempted: number;
+  upserted: number;
+  failed: number;
+  totalSold: number;
+  errors: string[];
+}> {
+  if (!hasDatabase()) {
+    return {
+      ok: false,
+      attempted: 0,
+      upserted: 0,
+      failed: 0,
+      totalSold: 0,
+      errors: ["DATABASE_URL ontbreekt"],
+    };
+  }
+
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: editions.id,
+      guid: editions.weeztixEventId,
+      name: editions.name,
+    })
+    .from(editions)
+    .where(isNotNull(editions.weeztixEventId));
+
+  let targets = rows.filter(
+    (r) => r.guid && r.name && !/TEMPLATE/i.test(r.name),
+  ) as Array<{ id: string; guid: string; name: string }>;
+
+  if (options?.onlyMissing) {
+    const inv = await db
+      .select({ editionId: ticketInventory.editionId })
+      .from(ticketInventory)
+      .where(eq(ticketInventory.platform, "weeztix"));
+    const have = new Set(inv.map((i) => i.editionId));
+    targets = targets.filter((t) => !have.has(t.id));
+  }
+
+  const mapped = targets.map((t) => ({
+    guid: String(t.guid),
+    editionId: t.id,
+  }));
+
+  return upsertTicketInventoryForEvents(mapped, {
+    concurrency: options?.concurrency ?? 4,
+  });
+}
+
+async function upsertTicketInventoryForEvents(
+  items: Array<{ guid: string; editionId: string }>,
+  options?: { concurrency?: number },
+): Promise<{
+  ok: boolean;
+  attempted: number;
+  upserted: number;
+  failed: number;
+  totalSold: number;
+  errors: string[];
+}> {
+  const db = getDb();
+  const concurrency = Math.max(1, options?.concurrency ?? 4);
+  let upserted = 0;
+  let failed = 0;
+  let totalSold = 0;
+  const errors: string[] = [];
+
+  async function one(item: { guid: string; editionId: string }) {
+    const ticketsRes = await listWeeztixEventTickets(item.guid);
+    if (!ticketsRes.ok) {
+      failed += 1;
+      if (errors.length < 15) {
+        errors.push(`${item.guid.slice(0, 8)}: ${ticketsRes.error}`);
+      }
+      return;
+    }
+
+    const summary = summarizeTicketSales(ticketsRes.tickets);
+    totalSold += summary.sold;
+
+    const inv = await db
+      .select()
+      .from(ticketInventory)
+      .where(eq(ticketInventory.editionId, item.editionId))
+      .limit(20);
+    const weeztixRow = inv.find((r) => r.platform === "weeztix");
+    const isSoldOut =
+      summary.capacity != null
+        ? summary.available <= 0 && summary.sold > 0
+        : false;
+
+    if (weeztixRow) {
+      await db
+        .update(ticketInventory)
+        .set({
+          sold: summary.sold,
+          capacity: summary.capacity,
+          available: summary.available,
+          isSoldOut,
+          syncedAt: new Date(),
+        })
+        .where(eq(ticketInventory.id, weeztixRow.id));
+    } else {
+      await db.insert(ticketInventory).values({
+        editionId: item.editionId,
+        platform: "weeztix",
+        capacity: summary.capacity,
+        sold: summary.sold,
+        available: summary.available,
+        isSoldOut,
+      });
+    }
+    upserted += 1;
+  }
+
+  for (let i = 0; i < items.length; i += concurrency) {
+    const batch = items.slice(i, i + concurrency);
+    await Promise.all(batch.map((item) => one(item)));
+  }
+
+  return {
+    ok: failed === 0 || upserted > 0,
+    attempted: items.length,
+    upserted,
+    failed,
+    totalSold,
+    errors,
   };
 }
 

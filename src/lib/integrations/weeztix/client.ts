@@ -250,6 +250,32 @@ export async function getWeeztixEvent(guid: string): Promise<
   return { ok: true, event: res.data };
 }
 
+export type WeeztixTicketType = {
+  guid?: string;
+  name?: string;
+  min_price?: number;
+  available_stock?: number;
+  sold_count?: number;
+  scanned_count?: number;
+  status?: string;
+  [key: string]: unknown;
+};
+
+/** Read-only: tickettypes + sold_count per event. */
+export async function listWeeztixEventTickets(eventGuid: string): Promise<
+  | { ok: true; tickets: WeeztixTicketType[] }
+  | { ok: false; error: string; status: number }
+> {
+  const res = await weeztixGet<unknown>({
+    path: `/event/${eventGuid}/ticket`,
+  });
+  if (!res.ok) return res;
+  const tickets = Array.isArray(res.data)
+    ? (res.data as WeeztixTicketType[])
+    : [];
+  return { ok: true, tickets };
+}
+
 /** Read-only dashboard statistics voor event (indien beschikbaar). */
 export async function getWeeztixEventStatistics(eventGuid?: string): Promise<
   | { ok: true; data: unknown }
