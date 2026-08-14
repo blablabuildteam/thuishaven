@@ -1,13 +1,13 @@
 /**
  * Open-Meteo — gratis weer-API, geen key.
- * Default: Amsterdam (Thuishaven-omgeving).
+ * Default: Thuishaven-omgeving (Contactweg / Westpoort, Amsterdam).
+ * Geen dakniveau-precisie nodig — dagelijkse regio-waarden volstaan.
  */
-
 export const AMS = {
-  locationKey: "amsterdam",
-  locationLabel: "Amsterdam",
-  latitude: 52.3676,
-  longitude: 4.9041,
+  locationKey: "thuishaven",
+  locationLabel: "Thuishaven · Contactweg (AMS)",
+  latitude: 52.3968,
+  longitude: 4.8564,
 } as const;
 
 export type WeatherDayRow = {
