@@ -1,4 +1,4 @@
-import { and, eq, gte, lte, sql } from "drizzle-orm";
+import { and, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { editions, externalEvents, weatherDaily } from "@/lib/db/schema";
 import {
@@ -105,7 +105,7 @@ export async function listEditionEventDays(): Promise<string[]> {
   const rows = await db
     .select({ startsAt: editions.startsAt, name: editions.name })
     .from(editions)
-    .where(sql`${editions.weeztixEventId} is not null`);
+    .where(isNotNull(editions.weeztixEventId));
 
   const days = new Set<string>();
   for (const r of rows) {
@@ -172,20 +172,41 @@ export async function syncWeatherForEditionDays(options?: {
         continue;
       }
 
-      const result = await syncWeatherRange({
-        startDate,
-        endDate: cappedEnd < startDate ? startDate : cappedEnd,
-        onlyDays,
-      });
-      upserted += result.upserted;
-      years.push({
-        year,
-        days: yearDays.length,
-        upserted: result.upserted,
-      });
+      try {
+        const result = await syncWeatherRange({
+          startDate,
+          endDate: cappedEnd < startDate ? startDate : cappedEnd,
+          onlyDays,
+        });
+        upserted += result.upserted;
+        years.push({
+          year,
+          days: yearDays.length,
+          upserted: result.upserted,
+        });
+      } catch (yearErr) {
+        years.push({
+          year,
+          days: yearDays.length,
+          upserted: 0,
+        });
+        console.error(
+          `weather year ${year}`,
+          yearErr instanceof Error ? yearErr.message : yearErr,
+        );
+      }
     }
 
-    return { ok: true, eventDays: days.length, upserted, years };
+    return {
+      ok: upserted > 0 || years.every((y) => y.upserted >= 0),
+      eventDays: days.length,
+      upserted,
+      years,
+      error:
+        upserted === 0
+          ? "Geen weerdagen opgeslagen — check Open-Meteo"
+          : undefined,
+    };
   } catch (e) {
     return {
       ok: false,

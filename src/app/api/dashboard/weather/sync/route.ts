@@ -58,7 +58,6 @@ export async function POST(request: Request) {
     if (parsed.data.mode === "eventDays") {
       const result = await syncWeatherForEditionDays();
       return NextResponse.json({
-        ok: result.ok,
         mode: "eventDays",
         ...result,
         festivalsSeeded,

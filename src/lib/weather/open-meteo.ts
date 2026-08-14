@@ -39,28 +39,32 @@ export async function fetchOpenMeteoRange(options: {
 }): Promise<WeatherDayRow[]> {
   const lat = options.latitude ?? AMS.latitude;
   const lon = options.longitude ?? AMS.longitude;
-  const params = new URLSearchParams({
-    latitude: String(lat),
-    longitude: String(lon),
-    start_date: options.startDate,
-    end_date: options.endDate,
-    daily:
-      "temperature_2m_min,temperature_2m_max,precipitation_sum,wind_speed_10m_max,weather_code",
-    timezone: "Europe/Amsterdam",
-    wind_speed_unit: "ms",
-  });
 
-  const res = await fetch(
-    `https://archive-api.open-meteo.com/v1/archive?${params}`,
-    { cache: "no-store" },
-  );
-  if (!res.ok) {
-    // Forecast endpoint als archive faalt (recente/toekomstige dagen)
+  async function once(startDate: string, endDate: string): Promise<WeatherDayRow[]> {
+    const params = new URLSearchParams({
+      latitude: String(lat),
+      longitude: String(lon),
+      start_date: startDate,
+      end_date: endDate,
+      daily:
+        "temperature_2m_min,temperature_2m_max,precipitation_sum,wind_speed_10m_max,weather_code",
+      timezone: "Europe/Amsterdam",
+      wind_speed_unit: "ms",
+    });
+
+    const res = await fetch(
+      `https://archive-api.open-meteo.com/v1/archive?${params}`,
+      { cache: "no-store" },
+    );
+    if (res.ok) {
+      return parseDaily((await res.json()) as OpenMeteoDaily);
+    }
+
     const forecast = new URLSearchParams({
       latitude: String(lat),
       longitude: String(lon),
-      start_date: options.startDate,
-      end_date: options.endDate,
+      start_date: startDate,
+      end_date: endDate,
       daily:
         "temperature_2m_min,temperature_2m_max,precipitation_sum,wind_speed_10m_max,weather_code",
       timezone: "Europe/Amsterdam",
@@ -76,7 +80,25 @@ export async function fetchOpenMeteoRange(options: {
     return parseDaily((await fres.json()) as OpenMeteoDaily);
   }
 
-  return parseDaily((await res.json()) as OpenMeteoDaily);
+  // Grote ranges soms 4xx/5xx — split in ~90-daagse chunks
+  const start = new Date(`${options.startDate}T12:00:00Z`);
+  const end = new Date(`${options.endDate}T12:00:00Z`);
+  if (end < start) return [];
+
+  const out: WeatherDayRow[] = [];
+  let cursor = new Date(start);
+  while (cursor <= end) {
+    const chunkEnd = new Date(cursor);
+    chunkEnd.setUTCDate(chunkEnd.getUTCDate() + 89);
+    if (chunkEnd > end) chunkEnd.setTime(end.getTime());
+    const a = cursor.toISOString().slice(0, 10);
+    const b = chunkEnd.toISOString().slice(0, 10);
+    const part = await once(a, b);
+    out.push(...part);
+    cursor = new Date(chunkEnd);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return out;
 }
 
 function parseDaily(data: OpenMeteoDaily): WeatherDayRow[] {
