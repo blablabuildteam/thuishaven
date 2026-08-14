@@ -40,6 +40,11 @@ export type InsightsSnapshot = {
       reasons: string[];
     }>;
   };
+  editions?: {
+    lessons: Array<{ title: string; body: string; evidence: string }>;
+    topArtists: Array<{ artist: string; avgSold: number; editions: number }>;
+    campaignsLinked: number;
+  };
   notes: string[];
 };
 
@@ -152,6 +157,29 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
     notes.push("Weer-snapshot kon niet geladen worden.");
   }
 
+  let editionsBlock: InsightsSnapshot["editions"];
+  try {
+    const { getEditionAnalysisBundle } = await import(
+      "@/lib/editions/analysis"
+    );
+    const bundle = await getEditionAnalysisBundle({ limit: 80 });
+    editionsBlock = {
+      lessons: bundle.lessons.map((l) => ({
+        title: l.title,
+        body: l.body,
+        evidence: l.evidence,
+      })),
+      topArtists: bundle.artistLeaderboard.slice(0, 8).map((a) => ({
+        artist: a.artist,
+        avgSold: a.avgSold,
+        editions: a.editions,
+      })),
+      campaignsLinked: bundle.totals.campaignsLinked,
+    };
+  } catch {
+    notes.push("Editie-analyse kon niet geladen worden.");
+  }
+
   return {
     generatedAt: new Date().toISOString(),
     brevo: {
@@ -168,6 +196,7 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
       editionsWithSales,
     },
     weather: weatherBlock,
+    editions: editionsBlock,
     notes,
   };
 }
@@ -209,6 +238,23 @@ export function snapshotToPromptContext(snap: InsightsSnapshot): string {
     lines.push(
       `- ${d.day} | score=${d.score}/10 (${d.label}) | max=${d.tempMaxC ?? "?"}°C precip=${d.precipMm ?? "?"}mm | ${d.reasons.join("; ")}`,
     );
+  }
+
+  if (snap.editions) {
+    lines.push(
+      "",
+      "=== Editie-lessen ===",
+      `Campagnes gekoppeld: ${snap.editions.campaignsLinked}`,
+    );
+    for (const l of snap.editions.lessons) {
+      lines.push(`- ${l.title}: ${l.body} [${l.evidence}]`);
+    }
+    lines.push("", "Top artiesten (avg sold):");
+    for (const a of snap.editions.topArtists) {
+      lines.push(
+        `- ${a.artist}: avg ${a.avgSold} over ${a.editions} edities`,
+      );
+    }
   }
 
   if (snap.notes.length) {
