@@ -5,23 +5,18 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
-  Bell,
-  CalendarDays,
+  CloudSun,
+  Home,
   LayoutDashboard,
-  Mail,
   MessageSquare,
+  Plug,
   Send,
   Ticket,
   Users,
-  ImageIcon,
   Sparkles,
-  Home,
+  Mail,
   LineChart,
-  Layers,
-  Plug,
   Workflow,
-  Gauge,
-  CloudSun,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { UserMenu } from "@/components/auth/user-menu";
@@ -37,12 +32,9 @@ const dashboardNav: NavItem[] = [
   { href: "/dashboard", label: "Overzicht", icon: LayoutDashboard },
   { href: "/dashboard/tickets", label: "Kaartverkoop", icon: Ticket },
   { href: "/dashboard/marketing", label: "Marketing", icon: BarChart3 },
-  { href: "/dashboard/edities", label: "Edities", icon: Layers },
+  { href: "/dashboard/insights", label: "Insights", icon: MessageSquare },
   { href: "/dashboard/weeztix", label: "Weeztix", icon: Ticket },
-  { href: "/dashboard/context", label: "Weer & festivals", icon: CloudSun },
-  { href: "/dashboard/assets", label: "Creatives", icon: ImageIcon },
-  { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
-  { href: "/dashboard/chat", label: "AI Chat", icon: MessageSquare },
+  { href: "/dashboard/context", label: "Weer", icon: CloudSun },
   { href: "/koppelingen", label: "Koppelingen", icon: Plug },
 ];
 
@@ -50,17 +42,9 @@ const outreachNav: NavItem[] = [
   { href: "/outreach", label: "Overzicht", icon: Send },
   { href: "/outreach/prospects", label: "Prospects", icon: Users },
   { href: "/outreach/campaigns", label: "Campagnes", icon: Sparkles },
-  { href: "/outreach/varianten", label: "Mailvarianten", icon: Layers },
   { href: "/outreach/emails", label: "E-mails", icon: Mail },
   { href: "/outreach/analytics", label: "Wat werkt", icon: LineChart },
-  { href: "/outreach/kosten", label: "Kosten", icon: Gauge },
-  {
-    href: "/outreach/beschikbaarheid",
-    label: "Beschikbaarheid",
-    icon: CalendarDays,
-  },
   { href: "/outreach/pipeline", label: "Pipeline", icon: Workflow },
-  { href: "/outreach/leads", label: "Leads", icon: Bell },
   { href: "/koppelingen", label: "Koppelingen", icon: Plug },
 ];
 
@@ -69,37 +53,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isOutreach = pathname.startsWith("/outreach");
   const nav = isOutreach ? outreachNav : dashboardNav;
   const toolLabel = isOutreach
-    ? "Bedrijfsevent Outreach"
+    ? "Outreach"
     : pathname.startsWith("/koppelingen")
       ? "Koppelingen"
-      : "Marketing & Kaartverkoop";
+      : "Dashboard";
 
   return (
     <div className="relative z-0 flex min-h-screen bg-bg">
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-border bg-bg-elevated lg:flex">
-        <div className="border-b border-border px-4 py-5">
+      <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-border bg-bg lg:flex">
+        <div className="border-b border-border px-4 py-4">
           <Link href="/" className="group flex items-center gap-3">
             <Image
               src="/brand/logo-mark.png"
               alt=""
-              width={40}
-              height={40}
+              width={36}
+              height={36}
               className="object-contain"
               priority
             />
             <div>
-              <p className="font-display text-xl leading-none tracking-[0.06em] text-text transition-colors group-hover:text-accent">
+              <p className="font-display text-lg leading-none tracking-[0.04em] text-text">
                 Thuishaven
               </p>
-              <p className="mt-1 font-display text-[11px] tracking-[0.18em] text-text-dim">
-                Tools
-              </p>
+              <p className="mt-1 text-[11px] text-text-dim">Tools</p>
             </div>
           </Link>
         </div>
 
         <div className="border-b border-border px-3 py-3">
-          <div className="grid grid-cols-2 gap-1 bg-bg p-1">
+          <div className="grid grid-cols-2 gap-1 bg-bg-elevated p-1">
             <ToolSwitch
               href="/dashboard"
               active={!isOutreach}
@@ -113,11 +95,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3 py-4">
-          <p className="mb-2 px-2 font-display text-[11px] tracking-[0.16em] text-text-dim">
+        <div className="flex-1 overflow-y-auto px-2 py-4">
+          <p className="mb-2 px-2 text-[11px] font-medium tracking-[0.12em] text-text-dim uppercase">
             {toolLabel}
           </p>
-          <div className="mb-3 ml-2 h-px w-8 bg-highlight" />
           <nav className="space-y-0.5">
             {nav.map((item) => {
               const active =
@@ -137,10 +118,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       : "text-text-muted hover:bg-surface hover:text-text",
                   )}
                 >
-                  <Icon className="size-4 shrink-0 opacity-80" />
-                  <span className={cn(active && "font-display tracking-[0.06em]")}>
-                    {item.label}
-                  </span>
+                  <Icon className="size-4 shrink-0 opacity-70" />
+                  <span>{item.label}</span>
                 </Link>
               );
             })}
@@ -152,14 +131,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <UserMenu />
           <Link
             href="/"
-            className="flex items-center gap-2 font-display text-xs tracking-[0.12em] text-text-muted transition-colors hover:text-accent"
+            className="flex items-center gap-2 text-xs text-text-muted transition-colors hover:text-text"
           >
             <Home className="size-3.5" />
             Hub
           </Link>
-          <p className="text-[10px] uppercase tracking-wider text-text-dim">
-            Mockdata · v0
-          </p>
         </div>
       </aside>
 
@@ -173,7 +149,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               height={28}
               className="object-contain"
             />
-            <span className="font-display text-lg tracking-[0.06em]">
+            <span className="font-display text-lg tracking-[0.04em]">
               Thuishaven
             </span>
           </Link>
@@ -188,13 +164,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <nav className="flex gap-1 overflow-x-auto border-b border-border px-3 py-2 lg:hidden">
           {nav.map((item) => {
-            const active = pathname === item.href;
+            const active =
+              pathname === item.href ||
+              (item.href !== "/dashboard" &&
+                item.href !== "/outreach" &&
+                pathname.startsWith(item.href));
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "shrink-0 px-3 py-1.5 font-display text-sm tracking-[0.08em] transition-colors",
+                  "shrink-0 px-3 py-1.5 text-sm transition-colors",
                   active
                     ? "bg-accent text-accent-contrast"
                     : "text-text-muted hover:text-text",
@@ -206,7 +186,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-10">{children}</main>
       </div>
     </div>
   );
@@ -225,7 +205,7 @@ function ToolSwitch({
     <Link
       href={href}
       className={cn(
-        "px-2 py-1.5 text-center font-display text-sm tracking-[0.1em] transition-colors",
+        "px-2 py-1.5 text-center text-sm transition-colors",
         active
           ? "bg-accent text-accent-contrast"
           : "text-text-muted hover:text-text",

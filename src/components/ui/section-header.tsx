@@ -12,19 +12,18 @@ export function SectionHeader({
   action,
 }: SectionHeaderProps) {
   return (
-    <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
         {eyebrow && (
-          <p className="mb-2 font-display text-sm tracking-[0.2em] text-text-muted">
+          <p className="mb-1 text-xs font-medium tracking-[0.14em] text-text-dim uppercase">
             {eyebrow}
           </p>
         )}
-        <h1 className="font-display text-4xl tracking-[0.04em] text-text sm:text-5xl">
+        <h1 className="font-display text-3xl tracking-[0.03em] text-text sm:text-4xl">
           {title}
         </h1>
-        <div className="mt-3 h-px w-16 bg-highlight" />
         {description && (
-          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-text-muted">
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-muted">
             {description}
           </p>
         )}

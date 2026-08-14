@@ -294,11 +294,32 @@ export async function verifyIntegration(id: string): Promise<VerifyResult> {
 }
 
 export async function verifyAllIntegrations(): Promise<VerifyResult[]> {
-  const results: VerifyResult[] = [];
-  for (const def of INTEGRATIONS) {
-    results.push(await verifyIntegration(def.id));
-  }
-  return results;
+  return Promise.all(INTEGRATIONS.map((def) => verifyIntegration(def.id)));
+}
+
+/** Live probe for configured (non-manual) integrations — used by status API. */
+export async function probeConfiguredIntegrations(): Promise<VerifyResult[]> {
+  const snapshot = listIntegrationStatusSnapshot();
+  const toProbe = snapshot.filter(
+    (row) =>
+      row.status === "configured" ||
+      (row.status !== "manual" &&
+        row.status !== "missing" &&
+        ["brevo", "weeztix", "database", "open_meteo", "ai", "kvk"].includes(
+          row.id,
+        )),
+  );
+  // Always probe these when not missing — clearer green state on hub
+  const always = ["brevo", "weeztix", "database", "open_meteo", "ai"];
+  const ids = new Set([
+    ...toProbe.map((r) => r.id),
+    ...always.filter((id) => {
+      const row = snapshot.find((r) => r.id === id);
+      return row && row.status !== "missing" && row.status !== "manual";
+    }),
+  ]);
+
+  return Promise.all([...ids].map((id) => verifyIntegration(id)));
 }
 
 export function listIntegrationStatusSnapshot(): Array<{

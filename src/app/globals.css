@@ -20,19 +20,11 @@
   --warn: #f1c40f;
   --danger: #d22624;
   --info: #79cae5;
-  --success: #000000;
+  /* Duidelijke “werkt”-status — past bij cream/zwart, geen neon */
+  --success: #1f7a45;
+  --success-soft: rgba(31, 122, 69, 0.1);
   --cream: #f1eee7;
-  --hub-glow: radial-gradient(
-      ellipse 80% 55% at 50% -10%,
-      rgba(121, 202, 229, 0.28),
-      transparent 55%
-    ),
-    radial-gradient(
-      ellipse 45% 35% at 90% 5%,
-      rgba(255, 242, 1, 0.22),
-      transparent 50%
-    ),
-    linear-gradient(180deg, #f7f5f0 0%, #f1eee7 60%);
+  --hub-glow: linear-gradient(180deg, #f7f5f0 0%, #f1eee7 70%);
   --chart-grid: #d2cdc2;
   --chart-tick: #8a867c;
   --chart-tooltip-bg: #ffffff;
@@ -61,13 +53,9 @@
   --warn: #f1c40f;
   --danger: #d22624;
   --info: #79cae5;
-  --success: #fff201;
-  --hub-glow: radial-gradient(
-      ellipse 60% 40% at 50% -5%,
-      rgba(255, 242, 1, 0.12),
-      transparent 55%
-    ),
-    linear-gradient(180deg, #0a0a0a 0%, #000000 55%);
+  --success: #3d9b5f;
+  --success-soft: rgba(61, 155, 95, 0.14);
+  --hub-glow: linear-gradient(180deg, #0a0a0a 0%, #000000 60%);
   --chart-grid: #2a2a2a;
   --chart-tick: #b0b0b0;
   --chart-tooltip-bg: #141414;
@@ -95,6 +83,7 @@
   --color-danger: var(--danger);
   --color-info: var(--info);
   --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
   --color-cream: var(--cream);
   --font-display: var(--font-display);
   --font-sans: var(--font-sans);
@@ -129,14 +118,22 @@ body::before {
   position: fixed;
   inset: 0;
   background-image: var(--grain);
-  opacity: 0.03;
+  opacity: 0.015;
   z-index: 50;
   mix-blend-mode: multiply;
 }
 
 html.dark body::before {
-  opacity: 0.04;
+  opacity: 0.02;
   mix-blend-mode: overlay;
+}
+
+/* Koppeling live / geverifieerd */
+.integration-ok {
+  border-color: var(--success);
+  border-width: 1.5px;
+  background: color-mix(in srgb, var(--success-soft) 80%, var(--surface));
+  box-shadow: inset 4px 0 0 0 var(--success);
 }
 
 ::selection {

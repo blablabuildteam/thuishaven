@@ -1,120 +1,110 @@
+import Link from "next/link";
 import { SectionHeader } from "@/components/ui/section-header";
 import { MetricCard } from "@/components/ui/metric-card";
-import {
-  emailCampaigns,
-  marketingPosts,
-} from "@/lib/mock/dashboard";
+import { listRecentCampaigns } from "@/lib/insights/data";
 import { formatNumber, formatPercent } from "@/lib/utils";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 
 export const metadata = { title: "Marketing" };
 
-export default function MarketingPage() {
-  const totalReach = marketingPosts.reduce((s, p) => s + p.reach, 0);
-  const totalEngagement = marketingPosts.reduce((s, p) => s + p.engagement, 0);
+export default async function MarketingPage() {
+  const campaigns = await listRecentCampaigns(24);
+  const totalSent = campaigns.reduce((s, c) => s + (c.sent ?? 0), 0);
+  const totalOpens = campaigns.reduce((s, c) => s + (c.opens ?? 0), 0);
+  const totalClicks = campaigns.reduce((s, c) => s + (c.clicks ?? 0), 0);
+  const openRate = totalSent > 0 ? (totalOpens / totalSent) * 100 : null;
 
   return (
     <div>
       <SectionHeader
         eyebrow="Marketing"
-        title="Kanalen & campagnes"
-        description="Instagram, TikTok, YouTube en Brevo — gesynchroniseerd per editie. Data vanaf go-live, geen historische backfill in v1."
+        title="E-mailcampagnes"
+        description="Live Brevo-metrics uit jullie sync. Social volgt later."
+        action={
+          <Link
+            href="/dashboard/insights"
+            className="border border-border px-3 py-2 text-sm hover:border-text"
+          >
+            Insights & chat →
+          </Link>
+        }
       />
 
-      <div className="stagger mb-8 grid gap-3 sm:grid-cols-3">
-        <MetricCard label="Totale reach" value={formatNumber(totalReach)} />
+      <div className="mb-8 grid gap-3 sm:grid-cols-3">
         <MetricCard
-          label="Engagement"
-          value={formatNumber(totalEngagement)}
+          label="Campagnes"
+          value={formatNumber(campaigns.length)}
           accent
         />
+        <MetricCard label="Sent" value={formatNumber(totalSent)} />
         <MetricCard
-          label="Posts / mails"
-          value={String(marketingPosts.length + emailCampaigns.length)}
+          label="Open rate"
+          value={openRate != null ? formatPercent(openRate) : "—"}
+          hint={`${formatNumber(totalClicks)} clicks`}
         />
       </div>
 
-      <section className="mb-6 border border-border bg-surface p-4">
-        <h2 className="mb-4 font-display text-2xl tracking-[0.06em]">Social posts</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead className="border-b border-border text-[11px] uppercase tracking-wider text-text-muted">
-              <tr>
-                <th className="pb-3 font-medium">Kanaal</th>
-                <th className="pb-3 font-medium">Titel</th>
-                <th className="pb-3 font-medium">Gepubliceerd</th>
-                <th className="pb-3 font-medium">Reach</th>
-                <th className="pb-3 font-medium">Engagement</th>
-                <th className="pb-3 font-medium">Tickets ±48u</th>
-              </tr>
-            </thead>
-            <tbody>
-              {marketingPosts
-                .filter((p) => p.channel !== "brevo")
-                .map((post) => (
-                  <tr
-                    key={post.id}
-                    className="border-b border-border last:border-0"
-                  >
-                    <td className="py-3 capitalize text-text-muted">
-                      {post.channel}
-                    </td>
-                    <td className="py-3 text-text">{post.title}</td>
-                    <td className="py-3 text-text-muted">
-                      {format(new Date(post.publishedAt), "d MMM", {
-                        locale: nl,
-                      })}
-                    </td>
-                    <td className="py-3 font-mono">
-                      {formatNumber(post.reach)}
-                    </td>
-                    <td className="py-3 font-mono">
-                      {formatNumber(post.engagement)}
-                    </td>
-                    <td className="py-3 font-mono text-accent">
-                      +{post.ticketsAroundPublish}
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="border border-border bg-surface p-4">
-        <h2 className="mb-4 font-display text-2xl tracking-[0.06em]">
-          Brevo e-mailcampagnes
-        </h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {emailCampaigns.map((c) => (
-            <div
-              key={c.id}
-              className="border border-border bg-bg p-4"
-            >
-              <p className="text-sm text-text">{c.name}</p>
-              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                <div>
-                  <p className="font-mono text-lg">{formatNumber(c.sent)}</p>
-                  <p className="text-[10px] uppercase text-text-dim">sent</p>
-                </div>
-                <div>
-                  <p className="font-mono text-lg text-accent">
-                    {formatPercent((c.opens / c.sent) * 100)}
-                  </p>
-                  <p className="text-[10px] uppercase text-text-dim">open</p>
-                </div>
-                <div>
-                  <p className="font-mono text-lg">
-                    {formatPercent((c.clicks / c.sent) * 100)}
-                  </p>
-                  <p className="text-[10px] uppercase text-text-dim">click</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+      {campaigns.length === 0 ? (
+        <p className="text-sm text-text-muted">
+          Nog geen campagnes in de database. Sync via{" "}
+          <Link href="/koppelingen" className="underline">
+            Koppelingen
+          </Link>{" "}
+          of POST /api/integrations/brevo/campaigns.
+        </p>
+      ) : (
+        <section className="border border-border bg-surface">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead className="border-b border-border text-[11px] tracking-wider text-text-dim uppercase">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Campagne</th>
+                  <th className="px-4 py-3 font-medium">Verzonden</th>
+                  <th className="px-4 py-3 font-medium">Sent</th>
+                  <th className="px-4 py-3 font-medium">Opens</th>
+                  <th className="px-4 py-3 font-medium">Clicks</th>
+                  <th className="px-4 py-3 font-medium">Open %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {campaigns.map((c) => {
+                  const sent = c.sent ?? 0;
+                  const opens = c.opens ?? 0;
+                  const rate = sent > 0 ? (opens / sent) * 100 : null;
+                  return (
+                    <tr
+                      key={c.id}
+                      className="border-b border-border/70 last:border-0"
+                    >
+                      <td className="px-4 py-3 text-text">{c.name}</td>
+                      <td className="px-4 py-3 text-text-muted">
+                        {c.sentAt
+                          ? format(new Date(c.sentAt), "d MMM yyyy", {
+                              locale: nl,
+                            })
+                          : "—"}
+                      </td>
+                      <td className="px-4 py-3 font-mono">
+                        {formatNumber(sent)}
+                      </td>
+                      <td className="px-4 py-3 font-mono">
+                        {formatNumber(opens)}
+                      </td>
+                      <td className="px-4 py-3 font-mono">
+                        {formatNumber(c.clicks ?? 0)}
+                      </td>
+                      <td className="px-4 py-3 font-mono">
+                        {rate != null ? formatPercent(rate) : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
