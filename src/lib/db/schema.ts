@@ -261,6 +261,8 @@ export const ticketInventory = pgTable("ticket_inventory", {
   capacity: integer("capacity"),
   sold: integer("sold").notNull().default(0),
   available: integer("available").notNull().default(0),
+  /** Gewogen gem. ticketprijs in EUR (uit Weeztix min_price × sold). */
+  avgPriceEur: numeric("avg_price_eur", { precision: 10, scale: 2 }),
   isSoldOut: boolean("is_sold_out").notNull().default(false),
   syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
 });

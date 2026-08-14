@@ -25,6 +25,9 @@ export type EditionAnalysisRow = {
   isNachtshow: boolean;
   sold: number;
   capacity: number | null;
+  /** Gewogen gem. ticketprijs (EUR) uit Weeztix tickettypes */
+  avgPriceEur: number | null;
+  sellThrough: number | null;
   weather: FestivalWeatherScore | null;
   campaigns: Array<{
     id: string;
@@ -34,6 +37,8 @@ export type EditionAnalysisRow = {
     openRate: number | null;
   }>;
   competingFestivals: string[];
+  /** Social volgt later (IG/Meta) */
+  socialLinked: boolean;
 };
 
 export type ArtistStat = {
@@ -122,6 +127,7 @@ export async function getEditionAnalysisBundle(options?: {
       startsAt: editions.startsAt,
       sold: ticketInventory.sold,
       capacity: ticketInventory.capacity,
+      avgPriceEur: ticketInventory.avgPriceEur,
     })
     .from(editions)
     .leftJoin(
@@ -190,6 +196,13 @@ export async function getEditionAnalysisBundle(options?: {
       .filter((f) => overlapsDay(day, f.startsAt, f.endsAt))
       .map((f) => f.name);
 
+    const sold = e.sold ?? 0;
+    const capacity = e.capacity;
+    const avgPriceEur =
+      e.avgPriceEur != null ? Number(e.avgPriceEur) : null;
+    const sellThrough =
+      capacity != null && capacity > 0 ? (sold / capacity) * 100 : null;
+
     return {
       id: e.id,
       name: e.name,
@@ -199,8 +212,13 @@ export async function getEditionAnalysisBundle(options?: {
       headliner: lineup.headliner,
       kind: lineup.kind,
       isNachtshow: lineup.isNachtshow,
-      sold: e.sold ?? 0,
-      capacity: e.capacity,
+      sold,
+      capacity,
+      avgPriceEur:
+        avgPriceEur != null && Number.isFinite(avgPriceEur)
+          ? avgPriceEur
+          : null,
+      sellThrough,
       weather,
       campaigns: linked.map((c) => {
         const sent = c.sent ?? 0;
@@ -214,6 +232,7 @@ export async function getEditionAnalysisBundle(options?: {
         };
       }),
       competingFestivals: competing,
+      socialLinked: false,
     };
   });
 

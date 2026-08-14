@@ -41,8 +41,8 @@ const statusLabel: Record<StatusRow["status"], string> = {
 
 const toolLabel: Record<string, string> = {
   all: "Alles",
-  shared: "Gedeeld",
-  dashboard: "Dashboard",
+  shared: "Systeem",
+  dashboard: "Event-data",
   outreach: "Outreach",
 };
 
@@ -50,7 +50,7 @@ export function IntegrationsHub() {
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [rows, setRows] = useState<StatusRow[]>([]);
   const [filter, setFilter] = useState<"all" | "dashboard" | "outreach" | "shared">(
-    "dashboard",
+    "all",
   );
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -154,8 +154,8 @@ export function IntegrationsHub() {
     <div>
       <SectionHeader
         eyebrow="Koppelingen"
-        title="Data-bronnen"
-        description="Groen = live getest en bereikbaar. We lezen alleen data, we schrijven niets terug naar Brevo/Weeztix."
+        title="Bronnen"
+        description="API’s die data leveren voor het event-dashboard. Groen = live getest. We lezen alleen."
         action={
           <button
             type="button"
@@ -168,6 +168,9 @@ export function IntegrationsHub() {
         }
       />
 
+      <p className="mb-6 text-sm text-text-muted">
+        Filters hieronder zijn alleen voor deze bronnenlijst — niet het event-dashboard.
+      </p>
       <div className="mb-8 flex flex-wrap items-center gap-6 text-sm">
         <Count
           icon={<CheckCircle2 className="size-4 text-success" />}
@@ -197,7 +200,7 @@ export function IntegrationsHub() {
       )}
 
       <div className="mb-5 flex flex-wrap gap-1">
-        {(["dashboard", "shared", "outreach", "all"] as const).map((f) => (
+        {(["all", "dashboard", "outreach", "shared"] as const).map((f) => (
           <button
             key={f}
             type="button"

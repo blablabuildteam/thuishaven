@@ -5,10 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
-  CloudSun,
   Home,
   LayoutDashboard,
-  Layers,
   MessageSquare,
   Plug,
   Send,
@@ -29,15 +27,13 @@ type NavItem = {
   icon: React.ComponentType<{ className?: string }>;
 };
 
+/** Event-first: minder tabs, duidelijkere namen */
 const dashboardNav: NavItem[] = [
-  { href: "/dashboard", label: "Overzicht", icon: LayoutDashboard },
-  { href: "/dashboard/tickets", label: "Kaartverkoop", icon: Ticket },
-  { href: "/dashboard/marketing", label: "Marketing", icon: BarChart3 },
-  { href: "/dashboard/edities", label: "Edities", icon: Layers },
+  { href: "/dashboard", label: "Events", icon: LayoutDashboard },
+  { href: "/dashboard/marketing", label: "Mailings", icon: BarChart3 },
+  { href: "/dashboard/weeztix", label: "Tickets", icon: Ticket },
   { href: "/dashboard/insights", label: "Insights", icon: MessageSquare },
-  { href: "/dashboard/weeztix", label: "Weeztix", icon: Ticket },
-  { href: "/dashboard/context", label: "Weer", icon: CloudSun },
-  { href: "/koppelingen", label: "Koppelingen", icon: Plug },
+  { href: "/koppelingen", label: "Bronnen", icon: Plug },
 ];
 
 const outreachNav: NavItem[] = [
@@ -47,7 +43,7 @@ const outreachNav: NavItem[] = [
   { href: "/outreach/emails", label: "E-mails", icon: Mail },
   { href: "/outreach/analytics", label: "Wat werkt", icon: LineChart },
   { href: "/outreach/pipeline", label: "Pipeline", icon: Workflow },
-  { href: "/koppelingen", label: "Koppelingen", icon: Plug },
+  { href: "/koppelingen", label: "Bronnen", icon: Plug },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -57,8 +53,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const toolLabel = isOutreach
     ? "Outreach"
     : pathname.startsWith("/koppelingen")
-      ? "Koppelingen"
-      : "Dashboard";
+      ? "Bronnen"
+      : "Events";
 
   return (
     <div className="relative z-0 flex min-h-screen bg-bg">
@@ -87,7 +83,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <ToolSwitch
               href="/dashboard"
               active={!isOutreach}
-              label="Dashboard"
+              label="Events"
             />
             <ToolSwitch
               href="/outreach"
@@ -158,7 +154,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-1">
             <ThemeToggle compact />
             <div className="flex gap-1 bg-surface p-1">
-              <ToolSwitch href="/dashboard" active={!isOutreach} label="Dash" />
+              <ToolSwitch href="/dashboard" active={!isOutreach} label="Events" />
               <ToolSwitch href="/outreach" active={isOutreach} label="Out" />
             </div>
           </div>

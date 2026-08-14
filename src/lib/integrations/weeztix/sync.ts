@@ -25,6 +25,7 @@ export function summarizeTicketSales(tickets: WeeztixTicketType[]): {
   capacity: number | null;
   available: number;
   revenueCents: number;
+  avgPriceCents: number | null;
   ticketTypes: number;
 } {
   let sold = 0;
@@ -51,6 +52,7 @@ export function summarizeTicketSales(tickets: WeeztixTicketType[]): {
     capacity,
     available: hasStock ? available : 0,
     revenueCents,
+    avgPriceCents: sold > 0 ? Math.round(revenueCents / sold) : null,
     ticketTypes: tickets.length,
   };
 }
@@ -300,6 +302,10 @@ async function upsertTicketInventoryForEvents(
           sold: summary.sold,
           capacity: summary.capacity,
           available: summary.available,
+          avgPriceEur:
+            summary.avgPriceCents != null
+              ? (summary.avgPriceCents / 100).toFixed(2)
+              : weeztixRow.avgPriceEur,
           isSoldOut,
           syncedAt: new Date(),
         })
@@ -311,6 +317,10 @@ async function upsertTicketInventoryForEvents(
         capacity: summary.capacity,
         sold: summary.sold,
         available: summary.available,
+        avgPriceEur:
+          summary.avgPriceCents != null
+            ? (summary.avgPriceCents / 100).toFixed(2)
+            : null,
         isSoldOut,
       });
     }
