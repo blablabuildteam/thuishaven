@@ -8,6 +8,10 @@ import {
   type WeatherRecord,
 } from "@/lib/weather/store";
 import { weatherCodeLabel } from "@/lib/weather/open-meteo";
+import {
+  scoreFestivalWeather,
+  type FestivalWeatherScore,
+} from "@/lib/weather/festival-score";
 import { hasDatabase } from "@/lib/db/client";
 
 export type SalesContextDay = {
@@ -16,7 +20,9 @@ export type SalesContextDay = {
   tickets: number;
   tempMaxC: number | null;
   precipMm: number | null;
+  windMaxMps: number | null;
   weatherLabel: string;
+  festivalWeather: FestivalWeatherScore;
   note: string | null;
 };
 
@@ -26,6 +32,7 @@ export type SalesContextBundle = {
   weatherSynced: number;
   hasDb: boolean;
   insight: string;
+  avgFestivalScore: number | null;
 };
 
 function isoDaysBack(n: number): string {
@@ -54,7 +61,26 @@ function overlaps(
   return t >= start && t <= end;
 }
 
-function buildInsight(days: SalesContextDay[], festivals: ExternalEventRecord[]): string {
+function buildInsight(
+  days: SalesContextDay[],
+  festivals: ExternalEventRecord[],
+): string {
+  const parts: string[] = [];
+
+  const scores = days.map((d) => d.festivalWeather.score);
+  if (scores.length) {
+    const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+    const best = [...days].sort(
+      (a, b) => b.festivalWeather.score - a.festivalWeather.score,
+    )[0];
+    const worst = [...days].sort(
+      (a, b) => a.festivalWeather.score - b.festivalWeather.score,
+    )[0];
+    parts.push(
+      `Gemiddelde festival-weer score: ${avg.toFixed(1)}/10. Beste dag: ${best.label} (${best.festivalWeather.score}/10 · ${best.festivalWeather.label}). Zwakste: ${worst.label} (${worst.festivalWeather.score}/10).`,
+    );
+  }
+
   const rainy = days.filter((d) => (d.precipMm ?? 0) >= 2);
   const rainyAvg =
     rainy.length > 0
@@ -66,7 +92,6 @@ function buildInsight(days: SalesContextDay[], festivals: ExternalEventRecord[])
       ? dry.reduce((s, d) => s + d.tickets, 0) / dry.length
       : null;
 
-  const parts: string[] = [];
   if (rainyAvg != null && dryAvg != null && dry.length && rainy.length) {
     const delta = ((dryAvg - rainyAvg) / dryAvg) * 100;
     if (Math.abs(delta) >= 8) {
@@ -141,13 +166,23 @@ export async function getSalesContextBundle(): Promise<SalesContextBundle> {
     const date = isoDaysBack(offset);
     const w = weatherByDay.get(date);
     const tickets = row.weeztix + row.ra + row.appic + row.ticketswap;
+    const festivalWeather = scoreFestivalWeather({
+      day: date,
+      tempMinC: w?.tempMinC ?? null,
+      tempMaxC: w?.tempMaxC ?? null,
+      precipMm: w?.precipMm ?? null,
+      windMaxMps: w?.windMaxMps ?? null,
+      weatherCode: w?.weatherCode ?? null,
+    });
     return {
       date,
       label: formatDayLabel(date),
       tickets,
       tempMaxC: w?.tempMaxC ?? null,
       precipMm: w?.precipMm ?? null,
+      windMaxMps: w?.windMaxMps ?? null,
       weatherLabel: weatherCodeLabel(w?.weatherCode),
+      festivalWeather,
       note: null,
     };
   });
@@ -172,11 +207,17 @@ export async function getSalesContextBundle(): Promise<SalesContextBundle> {
     return s >= Date.now() - 30 * 86400000 && s <= Date.now() + 60 * 86400000;
   });
 
+  const avgFestivalScore =
+    days.length > 0
+      ? days.reduce((s, d) => s + d.festivalWeather.score, 0) / days.length
+      : null;
+
   return {
     days,
     festivals: relevant.length ? relevant : festivals.slice(0, 4),
     weatherSynced,
     hasDb: hasDatabase(),
     insight: buildInsight(days, relevant),
+    avgFestivalScore,
   };
 }

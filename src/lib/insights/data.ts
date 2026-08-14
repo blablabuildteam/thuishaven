@@ -27,6 +27,18 @@ export type InsightsSnapshot = {
     inventoryRows: number;
     sold: number;
   };
+  weather: {
+    days: number;
+    avgFestivalScore: number | null;
+    recent: Array<{
+      day: string;
+      score: number;
+      label: string;
+      tempMaxC: number | null;
+      precipMm: number | null;
+      reasons: string[];
+    }>;
+  };
   notes: string[];
 };
 
@@ -42,6 +54,7 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
       top: [],
     },
     weeztix: { editions: 0, inventoryRows: 0, sold: 0 },
+    weather: { days: 0, avgFestivalScore: null, recent: [] },
     notes: ["Geen database — zet DATABASE_URL."],
   };
 
@@ -90,6 +103,54 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
     .filter((r) => r.platform === "weeztix")
     .reduce((s, r) => s + (r.sold ?? 0), 0);
 
+  let weatherBlock: InsightsSnapshot["weather"] = {
+    days: 0,
+    avgFestivalScore: null,
+    recent: [],
+  };
+  try {
+    const { listWeatherDays } = await import("@/lib/weather/store");
+    const { scoreFestivalWeather } = await import(
+      "@/lib/weather/festival-score"
+    );
+    const end = new Date();
+    const start = new Date();
+    start.setUTCDate(end.getUTCDate() - 13);
+    const days = await listWeatherDays({
+      startDate: start.toISOString().slice(0, 10),
+      endDate: end.toISOString().slice(0, 10),
+    });
+    const recent = days.slice(-10).map((w) => {
+      const scored = scoreFestivalWeather({
+        day: w.day,
+        tempMinC: w.tempMinC,
+        tempMaxC: w.tempMaxC,
+        precipMm: w.precipMm,
+        windMaxMps: w.windMaxMps,
+        weatherCode: w.weatherCode,
+      });
+      return {
+        day: w.day,
+        score: scored.score,
+        label: scored.label,
+        tempMaxC: w.tempMaxC,
+        precipMm: w.precipMm,
+        reasons: scored.reasons,
+      };
+    });
+    const avg =
+      recent.length > 0
+        ? recent.reduce((s, d) => s + d.score, 0) / recent.length
+        : null;
+    weatherBlock = {
+      days: days.length,
+      avgFestivalScore: avg,
+      recent,
+    };
+  } catch {
+    notes.push("Weer-snapshot kon niet geladen worden.");
+  }
+
   return {
     generatedAt: new Date().toISOString(),
     brevo: {
@@ -104,6 +165,7 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
       inventoryRows: inv.length,
       sold,
     },
+    weather: weatherBlock,
     notes,
   };
 }
@@ -133,7 +195,18 @@ export function snapshotToPromptContext(snap: InsightsSnapshot): string {
     `Edities met Weeztix-id: ${snap.weeztix.editions}`,
     `Inventory rijen: ${snap.weeztix.inventoryRows}`,
     `Sold (Weeztix inventory som): ${snap.weeztix.sold}`,
+    "",
+    "=== Festival-weer score (1-10, outdoor comfort) ===",
+    `Dagen in window: ${snap.weather.days}`,
+    `Gemiddelde score: ${snap.weather.avgFestivalScore?.toFixed(1) ?? "n/a"}`,
+    "Recente dagen:",
   );
+
+  for (const d of snap.weather.recent) {
+    lines.push(
+      `- ${d.day} | score=${d.score}/10 (${d.label}) | max=${d.tempMaxC ?? "?"}°C precip=${d.precipMm ?? "?"}mm | ${d.reasons.join("; ")}`,
+    );
+  }
 
   if (snap.notes.length) {
     lines.push("", "Notities:", ...snap.notes.map((n) => `- ${n}`));
