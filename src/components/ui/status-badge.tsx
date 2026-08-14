@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 const tones = {
   neutral: "bg-surface-hover text-text-muted border-border",
   accent: "bg-accent text-accent-contrast border-accent",
-  success: "bg-accent text-accent-contrast border-accent",
+  success: "border-[#1f8f4e] bg-[#1f8f4e] text-white",
   warn: "bg-warn text-white border-warn",
   danger: "bg-danger text-white border-danger",
   info: "bg-info/15 text-info border-info/40",

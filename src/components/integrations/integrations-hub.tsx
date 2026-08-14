@@ -86,10 +86,25 @@ export function IntegrationsHub() {
   }, []);
 
   useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("th-verify-map");
+      if (raw) setVerifyMap(JSON.parse(raw) as Record<string, VerifyResult>);
+    } catch {
+      /* ignore */
+    }
     load().catch((e) =>
       setError(e instanceof Error ? e.message : "Onbekende fout"),
     );
   }, [load]);
+
+  function persistVerify(next: Record<string, VerifyResult>) {
+    setVerifyMap(next);
+    try {
+      sessionStorage.setItem("th-verify-map", JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  }
 
   function runVerify(id?: string) {
     startTransition(async () => {
@@ -105,7 +120,7 @@ export function IntegrationsHub() {
         for (const r of data.results as VerifyResult[]) {
           next[r.id] = r;
         }
-        setVerifyMap(next);
+        persistVerify(next);
         await load();
       } catch (e) {
         setError(e instanceof Error ? e.message : "Verificatie mislukt");
@@ -126,7 +141,7 @@ export function IntegrationsHub() {
       <SectionHeader
         eyebrow="Backend"
         title="Koppelingen"
-        description="Zet API-keys in .env.local. Met Verifiëren testen we of de key werkt (Brevo, AI, KvK, database) of of hij in ieder geval aanwezig is."
+        description="Zet API-keys in .env.local / Vercel. Verifiëren = test-GET. Geverifieerd krijgt een groene rand + badge."
         action={
           <button
             type="button"
@@ -140,19 +155,16 @@ export function IntegrationsHub() {
       />
 
       <div className="mb-4 border border-border bg-surface px-4 py-3 text-sm text-text-muted">
-        <strong className="text-text">Hoe werkt Verifiëren?</strong> De knop
-        roept onze backend aan. Die checkt of de benodigde omgevingsvariabelen
-        gezet zijn. Voor Brevo, OpenAI, KvK en de database doen we daarna een
-        echte API-/connectietest. Andere bronnen markeren we als
-        “geconfigureerd” zodra de keys er zijn — de live endpoint-wire volgt
-        zodra documentatie binnen is.
+        <strong className="text-text">Read-only:</strong> we lezen alleen data.
+        Klik <em>Verifiëren</em> per koppeling (of Alles verifiëren) — daarna blijft
+        de groene status bewaard in deze browsersessie.
       </div>
 
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
         <Stat label="Ontbreekt" value={String(counts.missing)} />
         <Stat label="Geconfigureerd" value={String(counts.configured)} />
         <Stat
-          label="Geverifieerd (deze sessie)"
+          label="Geverifieerd"
           value={String(counts.verified)}
         />
       </div>
@@ -186,16 +198,24 @@ export function IntegrationsHub() {
           const meta = catalog.find((c) => c.id === row.id);
           const verified = verifyMap[row.id];
           const status = verified?.status ?? row.status;
+          const isVerified = status === "verified";
           return (
             <article
               key={row.id}
               className={cn(
                 "border bg-surface p-4 transition-colors",
-                status === "verified" &&
-                  "border-2 border-[#1f8f4e] shadow-[inset_4px_0_0_0_#1f8f4e]",
                 status === "error" && "border-2 border-danger/60",
-                status !== "verified" && status !== "error" && "border-border",
+                !isVerified && status !== "error" && "border-border",
               )}
+              style={
+                isVerified
+                  ? {
+                      borderWidth: 2,
+                      borderColor: "#1f8f4e",
+                      boxShadow: "inset 5px 0 0 0 #1f8f4e",
+                    }
+                  : undefined
+              }
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
