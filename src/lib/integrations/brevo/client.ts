@@ -95,6 +95,8 @@ export async function listBrevoEmailCampaigns(options?: {
     limit: String(limit),
     offset: String(offset),
     sort: "desc",
+    // Zonder deze param komen sent/opens als 0/null terug.
+    statistics: "globalStats",
   });
   return brevoGet<CampaignListResponse>(`/emailCampaigns?${qs}`);
 }

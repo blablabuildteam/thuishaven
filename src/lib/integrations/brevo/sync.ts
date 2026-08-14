@@ -3,6 +3,7 @@ import { emailCampaignMetrics } from "@/lib/db/schema";
 import {
   getBrevoAccount,
   listBrevoEmailCampaigns,
+  type BrevoEmailCampaign,
 } from "@/lib/integrations/brevo/client";
 import { eq } from "drizzle-orm";
 
@@ -30,19 +31,30 @@ export async function syncBrevoCampaignsReadOnly(): Promise<{
     };
   }
 
-  const listed = await listBrevoEmailCampaigns({ limit: 50 });
-  if (!listed.ok) {
-    return {
-      ok: false,
-      source: "brevo",
-      account: account.data.email ?? account.data.companyName,
-      campaignsFetched: 0,
-      metricsUpserted: 0,
-      error: listed.error,
-    };
+  const pageSize = 50;
+  const campaigns: BrevoEmailCampaign[] = [];
+
+  for (let offset = 0; offset < 500; offset += pageSize) {
+    const listed = await listBrevoEmailCampaigns({
+      limit: pageSize,
+      offset,
+    });
+    if (!listed.ok) {
+      return {
+        ok: false,
+        source: "brevo",
+        account: account.data.email ?? account.data.companyName,
+        campaignsFetched: campaigns.length,
+        metricsUpserted: 0,
+        error: listed.error,
+      };
+    }
+    const batch = listed.data.campaigns ?? [];
+    campaigns.push(...batch);
+    const total = listed.data.count ?? campaigns.length;
+    if (batch.length < pageSize || campaigns.length >= total) break;
   }
 
-  const campaigns = listed.data.campaigns ?? [];
   const preview = campaigns.slice(0, 15).map((c) => {
     const g = c.statistics?.globalStats;
     return {
@@ -91,7 +103,10 @@ export async function syncBrevoCampaignsReadOnly(): Promise<{
           sent,
           opens,
           clicks,
-          sentAt: sentAt && !Number.isNaN(sentAt.getTime()) ? sentAt : existing[0].sentAt,
+          sentAt:
+            sentAt && !Number.isNaN(sentAt.getTime())
+              ? sentAt
+              : existing[0].sentAt,
           syncedAt: new Date(),
         })
         .where(eq(emailCampaignMetrics.id, existing[0].id));
