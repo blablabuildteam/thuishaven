@@ -73,13 +73,35 @@ export default async function DashboardPage() {
       </div>
 
       {bundle.lessons.length > 0 && (
-        <section className="mb-8">
+        <section className="mb-6">
           <h2 className="mb-3 text-sm font-medium tracking-[0.08em] text-text-dim uppercase">
-            Wat de data nu zegt
+            Inzichten
           </h2>
           <ul className="grid gap-3 md:grid-cols-2">
             {bundle.lessons.slice(0, 4).map((l) => (
               <li key={l.id} className="border border-border bg-surface p-4">
+                <p className="text-sm font-medium text-text">{l.title}</p>
+                <p className="mt-1.5 text-sm leading-relaxed text-text-muted">
+                  {l.body}
+                </p>
+                <p className="mt-2 text-[11px] text-text-dim">{l.evidence}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {bundle.recommendations.length > 0 && (
+        <section className="mb-8">
+          <h2 className="mb-3 text-sm font-medium tracking-[0.08em] text-text-dim uppercase">
+            Recommendations
+          </h2>
+          <ul className="grid gap-3 md:grid-cols-2">
+            {bundle.recommendations.map((l) => (
+              <li
+                key={l.id}
+                className="border-l-[3px] border-l-highlight border border-border bg-surface p-4"
+              >
                 <p className="text-sm font-medium text-text">{l.title}</p>
                 <p className="mt-1.5 text-sm leading-relaxed text-text-muted">
                   {l.body}

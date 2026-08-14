@@ -42,6 +42,7 @@ export type InsightsSnapshot = {
   };
   editions?: {
     lessons: Array<{ title: string; body: string; evidence: string }>;
+    recommendations: Array<{ title: string; body: string; evidence: string }>;
     topArtists: Array<{ artist: string; avgSold: number; editions: number }>;
     campaignsLinked: number;
   };
@@ -169,6 +170,11 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
         body: l.body,
         evidence: l.evidence,
       })),
+      recommendations: bundle.recommendations.map((l) => ({
+        title: l.title,
+        body: l.body,
+        evidence: l.evidence,
+      })),
       topArtists: bundle.artistLeaderboard.slice(0, 8).map((a) => ({
         artist: a.artist,
         avgSold: a.avgSold,
@@ -247,6 +253,10 @@ export function snapshotToPromptContext(snap: InsightsSnapshot): string {
       `Campagnes gekoppeld: ${snap.editions.campaignsLinked}`,
     );
     for (const l of snap.editions.lessons) {
+      lines.push(`- ${l.title}: ${l.body} [${l.evidence}]`);
+    }
+    lines.push("", "Recommendations:");
+    for (const l of snap.editions.recommendations) {
       lines.push(`- ${l.title}: ${l.body} [${l.evidence}]`);
     }
     lines.push("", "Top artiesten (avg sold):");

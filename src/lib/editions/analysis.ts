@@ -53,12 +53,15 @@ export type EditionLesson = {
   title: string;
   body: string;
   evidence: string;
+  /** actionable | insight | caution */
+  kind?: "action" | "insight" | "caution";
 };
 
 export type EditionAnalysisBundle = {
   rows: EditionAnalysisRow[];
   artistLeaderboard: ArtistStat[];
   lessons: EditionLesson[];
+  recommendations: EditionLesson[];
   totals: {
     editions: number;
     withSales: number;
@@ -107,6 +110,7 @@ export async function getEditionAnalysisBundle(options?: {
     rows: [],
     artistLeaderboard: [],
     lessons: [],
+    recommendations: [],
     totals: {
       editions: 0,
       withSales: 0,
@@ -259,7 +263,7 @@ export async function getEditionAnalysisBundle(options?: {
     .sort((a, b) => b.avgSold - a.avgSold)
     .slice(0, 12);
 
-  const lessons = buildLessons(rows, artistLeaderboard);
+  const { lessons, recommendations } = buildLessons(rows, artistLeaderboard);
 
   const withWeather = rows.filter((r) => r.weather);
   const avgWeather =
@@ -272,6 +276,7 @@ export async function getEditionAnalysisBundle(options?: {
     rows,
     artistLeaderboard,
     lessons,
+    recommendations,
     totals: {
       editions: rows.length,
       withSales: rows.filter((r) => r.sold > 0).length,
@@ -282,25 +287,123 @@ export async function getEditionAnalysisBundle(options?: {
   };
 }
 
+function avg(nums: number[]): number | null {
+  if (!nums.length) return null;
+  return nums.reduce((a, b) => a + b, 0) / nums.length;
+}
+
 function buildLessons(
   rows: EditionAnalysisRow[],
   artists: ArtistStat[],
-): EditionLesson[] {
+): { lessons: EditionLesson[]; recommendations: EditionLesson[] } {
   const lessons: EditionLesson[] = [];
+  const recommendations: EditionLesson[] = [];
   const past = rows.filter(
     (r) => new Date(r.startsAt).getTime() < Date.now() && r.sold > 0,
   );
 
-  if (artists[0]) {
+  const hrs10 = past.filter((r) => /10\s*h/i.test(r.name));
+  const regular = past.filter(
+    (r) => r.kind === "regular" && !r.isNachtshow && !/10\s*h/i.test(r.name),
+  );
+  const nacht = past.filter(
+    (r) => r.isNachtshow || r.kind === "nachtshow",
+  );
+  const ade = past.filter((r) => r.kind === "ade");
+  const summer = past.filter((r) => {
+    const m = new Date(r.startsAt).getUTCMonth() + 1;
+    return m >= 5 && m <= 9;
+  });
+  const winter = past.filter((r) => {
+    const m = new Date(r.startsAt).getUTCMonth() + 1;
+    return m <= 4 || m >= 10;
+  });
+
+  const a10 = avg(hrs10.map((r) => r.sold));
+  const aReg = avg(regular.map((r) => r.sold));
+  if (a10 != null && aReg != null && hrs10.length >= 15 && regular.length >= 30) {
+    const lift = ((a10 - aReg) / aReg) * 100;
     lessons.push({
-      id: "top-artist",
-      title: `${artists[0].artist} trekt relatief hard`,
-      body: `Over ${artists[0].editions} edities gemiddeld ~${artists[0].avgSold.toLocaleString("nl-NL")} sold (som ${artists[0].totalSold.toLocaleString("nl-NL")}).`,
-      evidence: "Line-up parse × Weeztix sold_count",
+      id: "10hrs",
+      kind: "insight",
+      title: "10HRS-formats verkopen structureel harder",
+      body: `10HRS gem. ~${Math.round(a10).toLocaleString("nl-NL")} sold vs overige regular ~${Math.round(aReg).toLocaleString("nl-NL")} (${lift > 0 ? "+" : ""}${Math.round(lift)}%).`,
+      evidence: `n=${hrs10.length} 10HRS · n=${regular.length} overig regular`,
+    });
+    if (lift >= 10) {
+      recommendations.push({
+        id: "rec-10hrs",
+        kind: "action",
+        title: "Bescherm en herhaal 10HRS-slots",
+        body: "Houd top-DJ’s op 10HRS i.p.v. kortere slots als omzet/volume het doel is. Test A/B alleen op mid-tier namen.",
+        evidence: "Format-cohort op historische sold",
+      });
+    }
+  }
+
+  const aNacht = avg(nacht.map((r) => r.sold));
+  const fNacht = avg(
+    nacht
+      .map((r) => r.sellThrough)
+      .filter((x): x is number => x != null),
+  );
+  const fReg = avg(
+    regular
+      .map((r) => r.sellThrough)
+      .filter((x): x is number => x != null),
+  );
+  if (aNacht != null && aReg != null && nacht.length >= 5) {
+    lessons.push({
+      id: "nachtshow",
+      kind: "caution",
+      title: "Nachtshows blijven achter op volume én fill",
+      body: `Nachtshow gem. ~${Math.round(aNacht).toLocaleString("nl-NL")} sold (fill ~${fNacht != null ? `${Math.round(fNacht)}%` : "n/a"}) vs regular ~${Math.round(aReg).toLocaleString("nl-NL")} (fill ~${fReg != null ? `${Math.round(fReg)}%` : "n/a"}).`,
+      evidence: `n=${nacht.length} nachtshows`,
+    });
+    recommendations.push({
+      id: "rec-nacht",
+      kind: "action",
+      title: "Nachtshow = aparte P&L, geen default upsell",
+      body: "Alleen plannen als marge/atmosfeer het doel is, of koppelen aan een uitverkochte day-show. Niet als standaard tweede stack op zwakke dagen.",
+      evidence: "Lagere sold + lagere fill historisch",
     });
   }
 
-  // Weather correlation
+  const aSum = avg(summer.map((r) => r.sold));
+  const aWin = avg(winter.map((r) => r.sold));
+  if (aSum != null && aWin != null && summer.length >= 40 && winter.length >= 40) {
+    const lift = ((aSum - aWin) / aWin) * 100;
+    lessons.push({
+      id: "season",
+      kind: "insight",
+      title: "Mei–september draait hardere volumes",
+      body: `Zomerseizoen gem. ~${Math.round(aSum).toLocaleString("nl-NL")} sold vs okt–apr ~${Math.round(aWin).toLocaleString("nl-NL")} (${lift > 0 ? "+" : ""}${Math.round(lift)}%).`,
+      evidence: `n=${summer.length} zomer · n=${winter.length} winter`,
+    });
+    recommendations.push({
+      id: "rec-season",
+      kind: "action",
+      title: "Zet A-lijst headliners in mei–sept",
+      body: "Reserveer zwakkere winterslots voor community/mid-tier; A-namen en 10HRS bij voorkeur in outdoor-seizoen.",
+      evidence: "Seizoenscohort",
+    });
+  }
+
+  if (ade.length >= 5 && aReg != null) {
+    const aAde = avg(ade.map((r) => r.sold));
+    const fAde = avg(
+      ade.map((r) => r.sellThrough).filter((x): x is number => x != null),
+    );
+    lessons.push({
+      id: "ade",
+      kind: "insight",
+      title: "ADE vult beter dan een gemiddelde regular",
+      body: `ADE gem. ~${Math.round(aAde ?? 0).toLocaleString("nl-NL")} sold · fill ~${fAde != null ? `${Math.round(fAde)}%` : "n/a"} (regular fill ~${fReg != null ? `${Math.round(fReg)}%` : "n/a"}). Apart cohort houden in reporting.`,
+      evidence: `n=${ade.length} ADE-dagen`,
+    });
+  }
+
+  // Weather: overall mild; be honest
   const scored = past.filter((r) => r.weather);
   const corr = pearson(
     scored.map((r) => r.weather!.score),
@@ -308,89 +411,66 @@ function buildLessons(
   );
   if (corr != null) {
     lessons.push({
-      id: "weather-corr",
+      id: "weather",
+      kind: "caution",
       title:
-        corr > 0.15
-          ? "Beter festivalweer hangt samen met hogere sold"
-          : corr < -0.15
-            ? "Sold loopt niet synchroon met ‘mooi’ weer"
-            : "Weer alleen verklaart sold nauwelijks",
+        Math.abs(corr) < 0.15
+          ? "Weer is geen primaire omzetdriver"
+          : corr > 0
+            ? "Weer speelt mee, maar modest"
+            : "Weer correleert negatief — check confounders",
       body:
-        corr > 0.15
-          ? `Correlatie weer-score ↔ sold ≈ ${corr.toFixed(2)} (positief). Natte/hete outliers blijven apart bekijken.`
-          : corr < -0.15
-            ? `Correlatie ≈ ${corr.toFixed(2)}. Sterke headliners of indoor-achtige edities kunnen weer overrulen.`
-            : `Correlatie ≈ ${corr.toFixed(2)}. Line-up en timing wegen zwaarder dan de dagscore.`,
-      evidence: `n=${scored.length} edities met weer + sold`,
+        Math.abs(corr) < 0.15
+          ? `Correlatie weer-score ↔ sold ≈ ${corr.toFixed(2)}. Line-up/format/seizoen verklaren meer. Gebruik weer als context, niet als forecast-knop.`
+          : `Correlatie ≈ ${corr.toFixed(2)}. Blijf weer meenemen in post-mortems, niet als enige stuurvariabele.`,
+      evidence: `n=${scored.length}`,
     });
   }
 
-  const withMail = past.filter((r) => r.campaigns.length > 0);
-  const withoutMail = past.filter((r) => r.campaigns.length === 0);
-  if (withMail.length >= 5 && withoutMail.length >= 5) {
-    const avgWith =
-      withMail.reduce((s, r) => s + r.sold, 0) / withMail.length;
-    const avgWithout =
-      withoutMail.reduce((s, r) => s + r.sold, 0) / withoutMail.length;
-    const delta = ((avgWith - avgWithout) / Math.max(avgWithout, 1)) * 100;
+  const strongArtists = artists.filter((a) => a.editions >= 3).slice(0, 5);
+  if (strongArtists[0]) {
     lessons.push({
-      id: "mail-lift",
-      title:
-        delta > 8
-          ? "Edities mét gekoppelde mail verkopen gemiddeld meer"
-          : "Mail-koppeling laat nog geen duidelijk lift-patroon zien",
-      body: `Gem. sold met mail ~${Math.round(avgWith).toLocaleString("nl-NL")} vs zonder ~${Math.round(avgWithout).toLocaleString("nl-NL")} (${delta > 0 ? "+" : ""}${Math.round(delta)}%). Let op: correlatie, geen harde causaliteit.`,
-      evidence: `${withMail.length} met mail · ${withoutMail.length} zonder`,
+      id: "artists",
+      kind: "insight",
+      title: `Herhaalde top: ${strongArtists
+        .slice(0, 3)
+        .map((a) => a.artist)
+        .join(", ")}`,
+      body: `${strongArtists[0].artist} avg ~${strongArtists[0].avgSold.toLocaleString("nl-NL")} sold over ${strongArtists[0].editions} edities. Booking-beslissingen kunnen op deze herhaal-metrics.`,
+      evidence: "Artiesten met ≥3 edities in view",
+    });
+    recommendations.push({
+      id: "rec-artists",
+      kind: "action",
+      title: "Bouw een ‘proven draw’-lijst",
+      body: `Prioriteer herboekingen van namen met ≥3 edities en bovengemiddelde sold (nu o.a. ${strongArtists
+        .slice(0, 4)
+        .map((a) => a.artist)
+        .join(", ")}). Nieuwe namen: kleinere capacity of support-slot.`,
+      evidence: "Artist leaderboard",
     });
   }
 
-  const ade = past.filter((r) => r.kind === "ade");
-  const regular = past.filter((r) => r.kind === "regular" && !r.isNachtshow);
-  if (ade.length >= 3 && regular.length >= 10) {
-    const adeAvg = ade.reduce((s, r) => s + r.sold, 0) / ade.length;
-    const regAvg = regular.reduce((s, r) => s + r.sold, 0) / regular.length;
-    lessons.push({
-      id: "ade",
-      title: "ADE-dagen vs reguliere edities",
-      body: `ADE gem. ~${Math.round(adeAvg).toLocaleString("nl-NL")} sold · regulier ~${Math.round(regAvg).toLocaleString("nl-NL")}. Gebruik ADE als aparte cohort in planning.`,
-      evidence: `${ade.length} ADE · ${regular.length} regular`,
-    });
-  }
+  recommendations.push({
+    id: "rec-data",
+    kind: "action",
+    title: "Volgende data voor scherpere claims",
+    body: "1) Dagelijkse verkoopcurve (Weeztix) rond mail/post. 2) Instagram/Meta posts gekoppeld op datum. 3) Netto ticketprijs zonder free/import barcodes. 4) Exacte concurrent-agenda. Zonder #1 blijft attributie zacht.",
+    evidence: "Huidige gaten in event-model",
+  });
 
-  const competing = past.filter((r) => r.competingFestivals.length > 0);
-  if (competing.length >= 5) {
-    const avgC =
-      competing.reduce((s, r) => s + r.sold, 0) / competing.length;
-    const rest = past.filter((r) => r.competingFestivals.length === 0);
-    const avgR =
-      rest.length > 0
-        ? rest.reduce((s, r) => s + r.sold, 0) / rest.length
-        : null;
-    lessons.push({
-      id: "competition",
-      title: "Overlap met grote festivals",
-      body:
-        avgR != null
-          ? `${competing.length} edities vielen samen met curated concurrenten (gem. sold ~${Math.round(avgC).toLocaleString("nl-NL")} vs ~${Math.round(avgR).toLocaleString("nl-NL")} zonder overlap).`
-          : `${competing.length} edities met concurrentie-overlap — agenda verder verrijken voor scherpere claims.`,
-      evidence: "external_events curated seed",
-    });
-  }
+  recommendations.push({
+    id: "rec-mail",
+    kind: "caution",
+    title: "Mail-lift nog niet hard te claimen",
+    body: "Gekoppelde mails zitten vooral op recentere edities (betere capacity-data). Claim geen causaliteit tot je sold-per-dag rond send hebt.",
+    evidence: "Selection bias mail-cohort",
+  });
 
-  // Outlier: strong sold on harsh weather
-  const tough = past
-    .filter((r) => (r.weather?.score ?? 10) <= 4 && r.sold >= 2000)
-    .sort((a, b) => b.sold - a.sold)[0];
-  if (tough) {
-    lessons.push({
-      id: "weather-proof",
-      title: "Weer-proof editie",
-      body: `${tough.headliner ?? tough.name} deed ${tough.sold.toLocaleString("nl-NL")} sold bij weer-score ${tough.weather?.score}/10 (${tough.weather?.label}). Line-up kan slecht weer overrulen.`,
-      evidence: tough.day,
-    });
-  }
-
-  return lessons.slice(0, 6);
+  return {
+    lessons: lessons.slice(0, 6),
+    recommendations: recommendations.slice(0, 6),
+  };
 }
 
 /** Compact text block for LLM insights */
@@ -407,6 +487,11 @@ export function editionAnalysisToPrompt(
     "",
     "Lessen:",
     ...bundle.lessons.map(
+      (l) => `- ${l.title}: ${l.body} [${l.evidence}]`,
+    ),
+    "",
+    "Recommendations:",
+    ...bundle.recommendations.map(
       (l) => `- ${l.title}: ${l.body} [${l.evidence}]`,
     ),
     "",

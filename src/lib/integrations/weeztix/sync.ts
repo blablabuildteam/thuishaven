@@ -39,12 +39,21 @@ export function summarizeTicketSales(tickets: WeeztixTicketType[]): {
       typeof t.available_stock === "number" ? t.available_stock : null;
     const price = typeof t.min_price === "number" ? t.min_price : 0;
     sold += s;
-    revenueCents += s * price;
+    // Gratis/import barcodes niet meewegen in gem. prijs
+    if (price > 0 && s > 0) {
+      revenueCents += s * price;
+    }
     if (stock != null) {
       hasStock = true;
       available += Math.max(stock, 0);
     }
   }
+
+  const paidSold = tickets.reduce((sum, t) => {
+    const s = typeof t.sold_count === "number" ? t.sold_count : 0;
+    const price = typeof t.min_price === "number" ? t.min_price : 0;
+    return price > 0 ? sum + s : sum;
+  }, 0);
 
   const capacity = hasStock ? sold + available : null;
   return {
@@ -52,7 +61,7 @@ export function summarizeTicketSales(tickets: WeeztixTicketType[]): {
     capacity,
     available: hasStock ? available : 0,
     revenueCents,
-    avgPriceCents: sold > 0 ? Math.round(revenueCents / sold) : null,
+    avgPriceCents: paidSold > 0 ? Math.round(revenueCents / paidSold) : null,
     ticketTypes: tickets.length,
   };
 }
