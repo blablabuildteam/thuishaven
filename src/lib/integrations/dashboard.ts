@@ -43,10 +43,16 @@ export async function syncTicketSwap(): Promise<SyncResult> {
 }
 
 export async function syncBrevoCampaigns(): Promise<SyncResult> {
-  if (!process.env.BREVO_API_KEY) {
-    return { source: "brevo", ok: false, error: "BREVO_API_KEY ontbreekt" };
-  }
-  return { source: "brevo", ok: false, error: "Nog niet geïmplementeerd" };
+  const { syncBrevoCampaignsReadOnly } = await import(
+    "@/lib/integrations/brevo/sync"
+  );
+  const result = await syncBrevoCampaignsReadOnly();
+  return {
+    source: "brevo",
+    ok: result.ok,
+    records: result.metricsUpserted || result.campaignsFetched,
+    error: result.error,
+  };
 }
 
 export async function syncInstagram(): Promise<SyncResult> {
