@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   MessageSquare,
   Plug,
+  ScrollText,
   Send,
   Ticket,
   Users,
@@ -33,6 +34,7 @@ const dashboardNav: NavItem[] = [
   { href: "/dashboard/marketing", label: "Mailings", icon: BarChart3 },
   { href: "/dashboard/weeztix", label: "Tickets", icon: Ticket },
   { href: "/dashboard/insights", label: "Insights", icon: MessageSquare },
+  { href: "/dashboard/logs", label: "Log", icon: ScrollText },
   { href: "/koppelingen", label: "Bronnen", icon: Plug },
 ];
 

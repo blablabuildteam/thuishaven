@@ -96,10 +96,21 @@ export async function weeztixGet<T = unknown>(
       data = { raw: text.slice(0, 500) };
     }
     if (!res.ok) {
+      const error = `Weeztix HTTP ${res.status}: ${typeof data === "object" && data && "message" in data ? String((data as { message: unknown }).message) : text.slice(0, 200)}`;
+      if (res.status === 401 || res.status === 403) {
+        const { logIntegration } = await import("@/lib/integrations/log");
+        await logIntegration({
+          source: "weeztix",
+          level: "error",
+          event: "api.unauthorized",
+          message: error,
+          detail: { path: options.path, status: res.status },
+        });
+      }
       return {
         ok: false,
         status: res.status,
-        error: `Weeztix HTTP ${res.status}: ${typeof data === "object" && data && "message" in data ? String((data as { message: unknown }).message) : text.slice(0, 200)}`,
+        error,
       };
     }
     return { ok: true, status: res.status, data: data as T };
@@ -141,6 +152,14 @@ export async function weeztixWhoAmI(): Promise<
     const res = await fetch(url, { method: "GET", headers, cache: "no-store" });
     const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (!res.ok) {
+      const { logIntegration } = await import("@/lib/integrations/log");
+      await logIntegration({
+        source: "weeztix",
+        level: "error",
+        event: "auth.unauthorized",
+        message: `Auth HTTP ${res.status}`,
+        detail: { status: res.status },
+      });
       return {
         ok: false,
         status: res.status,

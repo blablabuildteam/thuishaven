@@ -157,14 +157,22 @@ export function IntegrationsHub() {
         title="Bronnen"
         description="API’s die data leveren voor het event-dashboard. Groen = live getest. We lezen alleen."
         action={
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => runVerify()}
-            className="bg-accent px-3 py-2 text-sm text-accent-contrast disabled:opacity-50"
-          >
-            {pending ? "Testen…" : "Alles opnieuw testen"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/dashboard/logs"
+              className="border border-border px-3 py-2 text-sm hover:border-text"
+            >
+              Foutenlog
+            </Link>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => runVerify()}
+              className="bg-accent px-3 py-2 text-sm text-accent-contrast disabled:opacity-50"
+            >
+              {pending ? "Testen…" : "Alles opnieuw testen"}
+            </button>
+          </div>
         }
       />
 

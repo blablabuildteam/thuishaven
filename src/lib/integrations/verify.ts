@@ -228,6 +228,14 @@ async function verifyWeeztix(): Promise<VerifyResult> {
     }
     const events = await listWeeztixEvents();
     if (!events.ok) {
+      const { logIntegration } = await import("@/lib/integrations/log");
+      await logIntegration({
+        source: "weeztix",
+        level: "error",
+        event: "verify.events_failed",
+        message: events.error,
+        detail: { status: events.status },
+      });
       return base(
         "weeztix",
         "Weeztix",

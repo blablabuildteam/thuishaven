@@ -1,12 +1,15 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { integrationCredentials } from "@/lib/db/schema";
+import { logIntegration } from "@/lib/integrations/log";
 import { assertExternalReadOnly } from "@/lib/integrations/read-only";
 
 const AUTH_BASE = "https://auth.weeztix.com";
 const PROVIDER = "weeztix";
 /** Refresh 1 uur voor expiry — access token leeft ~3 dagen. */
 const REFRESH_SKEW_MS = 60 * 60 * 1000;
+const LOCK_MS = 30_000;
+const WAIT_FOR_OTHER_MS = 15_000;
 
 export type WeeztixStoredTokens = {
   accessToken: string | null;
@@ -53,24 +56,31 @@ function fromEnv(): WeeztixStoredTokens {
   };
 }
 
-async function loadStored(): Promise<WeeztixStoredTokens> {
-  if (!hasDatabase()) return fromEnv();
+function rowToStored(
+  row: typeof integrationCredentials.$inferSelect,
+): WeeztixStoredTokens {
+  return {
+    accessToken: row.accessToken,
+    refreshToken: row.refreshToken,
+    accessExpiresAt: row.accessExpiresAt,
+    refreshExpiresAt: row.refreshExpiresAt,
+  };
+}
 
+async function loadFromDb(): Promise<WeeztixStoredTokens | null> {
+  if (!hasDatabase()) return null;
   const db = getDb();
   const rows = await db
     .select()
     .from(integrationCredentials)
     .where(eq(integrationCredentials.provider, PROVIDER))
     .limit(1);
-  const row = rows[0];
-  if (row?.accessToken || row?.refreshToken) {
-    return {
-      accessToken: row.accessToken,
-      refreshToken: row.refreshToken,
-      accessExpiresAt: row.accessExpiresAt,
-      refreshExpiresAt: row.refreshExpiresAt,
-    };
-  }
+  return rows[0] ? rowToStored(rows[0]) : null;
+}
+
+async function loadStored(): Promise<WeeztixStoredTokens> {
+  const fromDb = await loadFromDb();
+  if (fromDb?.accessToken || fromDb?.refreshToken) return fromDb;
 
   const env = fromEnv();
   if (env.accessToken || env.refreshToken) {
@@ -102,8 +112,9 @@ async function persistTokens(input: {
   refreshToken?: string | null;
   expiresIn?: number;
   refreshExpiresIn?: number;
-}): Promise<void> {
-  if (!hasDatabase()) return;
+  expectedRefreshToken?: string | null;
+}): Promise<boolean> {
+  if (!hasDatabase()) return true;
 
   const db = getDb();
   const now = new Date();
@@ -124,32 +135,86 @@ async function persistTokens(input: {
     .where(eq(integrationCredentials.provider, PROVIDER))
     .limit(1);
 
-  const values = {
-    provider: PROVIDER,
-    accessToken: input.accessToken,
-    refreshToken: input.refreshToken ?? null,
-    accessExpiresAt,
-    ...(refreshExpiresAt ? { refreshExpiresAt } : {}),
-    updatedAt: now,
-  };
-
   if (existing[0]) {
     const patch: Partial<typeof integrationCredentials.$inferInsert> = {
       accessToken: input.accessToken,
       accessExpiresAt,
+      refreshLockUntil: null,
       updatedAt: now,
     };
     if (input.refreshToken) {
       patch.refreshToken = input.refreshToken;
       if (refreshExpiresAt) patch.refreshExpiresAt = refreshExpiresAt;
     }
-    await db
+    const where =
+      input.expectedRefreshToken != null
+        ? and(
+            eq(integrationCredentials.provider, PROVIDER),
+            eq(integrationCredentials.refreshToken, input.expectedRefreshToken),
+          )
+        : eq(integrationCredentials.provider, PROVIDER);
+    const updated = await db
       .update(integrationCredentials)
       .set(patch)
-      .where(eq(integrationCredentials.provider, PROVIDER));
-  } else {
-    await db.insert(integrationCredentials).values(values);
+      .where(where)
+      .returning({ provider: integrationCredentials.provider });
+    return Boolean(updated[0]);
   }
+
+  await db.insert(integrationCredentials).values({
+    provider: PROVIDER,
+    accessToken: input.accessToken,
+    refreshToken: input.refreshToken ?? null,
+    accessExpiresAt,
+    refreshExpiresAt: refreshExpiresAt ?? null,
+    refreshLockUntil: null,
+    updatedAt: now,
+  });
+  return true;
+}
+
+async function claimRefreshLock(): Promise<boolean> {
+  if (!hasDatabase()) return true;
+  const db = getDb();
+  const now = new Date();
+  const until = new Date(now.getTime() + LOCK_MS);
+  const claimed = await db
+    .update(integrationCredentials)
+    .set({ refreshLockUntil: until, updatedAt: now })
+    .where(
+      and(
+        eq(integrationCredentials.provider, PROVIDER),
+        or(
+          isNull(integrationCredentials.refreshLockUntil),
+          lt(integrationCredentials.refreshLockUntil, now),
+        ),
+      ),
+    )
+    .returning({ provider: integrationCredentials.provider });
+  return Boolean(claimed[0]);
+}
+
+async function releaseRefreshLock(): Promise<void> {
+  if (!hasDatabase()) return;
+  const db = getDb();
+  await db
+    .update(integrationCredentials)
+    .set({ refreshLockUntil: null, updatedAt: new Date() })
+    .where(eq(integrationCredentials.provider, PROVIDER));
+}
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function waitForFreshAccess(): Promise<string | null> {
+  const deadline = Date.now() + WAIT_FOR_OTHER_MS;
+  while (Date.now() < deadline) {
+    await sleep(350);
+    const stored = await loadFromDb();
+    if (stored?.accessToken && !needsRefresh(stored)) return stored.accessToken;
+  }
+  return null;
 }
 
 async function refreshHttp(refreshToken: string): Promise<TokenHttpResult> {
@@ -212,8 +277,82 @@ function needsRefresh(stored: WeeztixStoredTokens): boolean {
   return exp.getTime() - Date.now() < REFRESH_SKEW_MS;
 }
 
+async function performRefresh(stored: WeeztixStoredTokens): Promise<string> {
+  if (!stored.refreshToken) {
+    const msg =
+      "Weeztix access token is verlopen en er is geen refresh token. Koppel opnieuw via Bronnen → Opnieuw koppelen.";
+    await logIntegration({
+      source: "weeztix",
+      level: "error",
+      event: "token.missing_refresh",
+      message: msg,
+    });
+    throw new Error(msg);
+  }
+
+  const usedRefresh = stored.refreshToken;
+  const refreshed = await refreshHttp(usedRefresh);
+  if (!refreshed.ok) {
+    await logIntegration({
+      source: "weeztix",
+      level: "error",
+      event: "token.refresh_failed",
+      message: refreshed.error,
+      detail: { status: refreshed.status },
+      throttleMs: 0,
+    });
+    throw new Error(refreshed.error);
+  }
+
+  const saved = await persistTokens({
+    accessToken: refreshed.accessToken,
+    refreshToken: refreshed.refreshToken ?? usedRefresh,
+    expiresIn: refreshed.expiresIn,
+    refreshExpiresIn: refreshed.refreshExpiresIn,
+    expectedRefreshToken: usedRefresh,
+  });
+
+  if (!saved) {
+    const raced = await loadFromDb();
+    if (raced?.accessToken && !needsRefresh(raced)) {
+      await logIntegration({
+        source: "weeztix",
+        level: "info",
+        event: "token.refresh_race_ok",
+        message: "Andere instance had al ververst; die token gebruikt.",
+      });
+      return raced.accessToken;
+    }
+    const msg =
+      "Weeztix refresh-token was al verbruikt door een andere instance. Koppel opnieuw als de koppeling rood blijft.";
+    await logIntegration({
+      source: "weeztix",
+      level: "error",
+      event: "token.refresh_cas_failed",
+      message: msg,
+      throttleMs: 0,
+    });
+    throw new Error(msg);
+  }
+
+  const exp =
+    refreshed.expiresIn != null
+      ? new Date(Date.now() + refreshed.expiresIn * 1000)
+      : jwtExpiry(refreshed.accessToken);
+  await logIntegration({
+    source: "weeztix",
+    level: "info",
+    event: "token.refreshed",
+    message: `Access token ververst tot ${exp?.toISOString() ?? "?"}`,
+    detail: { accessExpiresAt: exp?.toISOString() ?? null },
+    throttleMs: 0,
+  });
+  return refreshed.accessToken;
+}
+
 /**
  * Geldige access token. Refresh-token is éénmalig — nieuwe tokens gaan naar Postgres.
+ * Mutex in de database zodat serverless-instances niet dezelfde refresh opeten.
  */
 export async function ensureWeeztixAccessToken(): Promise<
   { ok: true; token: string } | { ok: false; error: string }
@@ -235,25 +374,42 @@ export async function ensureWeeztixAccessToken(): Promise<
     if (!needsRefresh(stored) && stored.accessToken) {
       return stored.accessToken;
     }
-    if (!stored.refreshToken) {
-      if (stored.accessToken && !needsRefresh(stored)) return stored.accessToken;
-      throw new Error(
-        "Weeztix access token is verlopen en er is geen refresh token. Koppel opnieuw via /api/integrations/weeztix/oauth/start",
-      );
+
+    if (hasDatabase()) {
+      const claimed = await claimRefreshLock();
+      if (!claimed) {
+        const waited = await waitForFreshAccess();
+        if (waited) return waited;
+        const retry = await claimRefreshLock();
+        if (!retry) {
+          const again = await loadFromDb();
+          if (again?.accessToken) return again.accessToken;
+          const msg =
+            "Weeztix token-refresh is bezet en leverde geen verse token. Probeer opnieuw of koppel via Bronnen.";
+          await logIntegration({
+            source: "weeztix",
+            level: "error",
+            event: "token.refresh_lock_timeout",
+            message: msg,
+          });
+          throw new Error(msg);
+        }
+      }
+
+      try {
+        const latest = (await loadFromDb()) ?? stored;
+        if (!needsRefresh(latest) && latest.accessToken) {
+          await releaseRefreshLock();
+          return latest.accessToken;
+        }
+        return await performRefresh(latest);
+      } catch (e) {
+        await releaseRefreshLock();
+        throw e;
+      }
     }
 
-    const refreshed = await refreshHttp(stored.refreshToken);
-    if (!refreshed.ok) {
-      throw new Error(refreshed.error);
-    }
-
-    await persistTokens({
-      accessToken: refreshed.accessToken,
-      refreshToken: refreshed.refreshToken ?? stored.refreshToken,
-      expiresIn: refreshed.expiresIn,
-      refreshExpiresIn: refreshed.refreshExpiresIn,
-    });
-    return refreshed.accessToken;
+    return performRefresh(stored);
   })();
 
   refreshInFlight = run;
@@ -274,27 +430,21 @@ export async function weeztixTokenStatus(): Promise<{
   hasAccess: boolean;
   hasRefresh: boolean;
   accessExpiresAt: string | null;
+  refreshExpiresAt: string | null;
   expired: boolean;
   source: "database" | "env";
 }> {
-  const inDb =
-    hasDatabase() &&
-    Boolean(
-      (
-        await getDb()
-          .select({ provider: integrationCredentials.provider })
-          .from(integrationCredentials)
-          .where(eq(integrationCredentials.provider, PROVIDER))
-          .limit(1)
-      )[0],
-    );
-  const stored = await loadStored();
-  const exp = stored.accessExpiresAt ?? (stored.accessToken ? jwtExpiry(stored.accessToken) : null);
+  const fromDb = await loadFromDb();
+  const stored = fromDb ?? fromEnv();
+  const exp =
+    stored.accessExpiresAt ??
+    (stored.accessToken ? jwtExpiry(stored.accessToken) : null);
   return {
     hasAccess: Boolean(stored.accessToken),
     hasRefresh: Boolean(stored.refreshToken),
     accessExpiresAt: exp?.toISOString() ?? null,
+    refreshExpiresAt: stored.refreshExpiresAt?.toISOString() ?? null,
     expired: exp ? exp.getTime() <= Date.now() : !stored.accessToken,
-    source: inDb ? "database" : "env",
+    source: fromDb ? "database" : "env",
   };
 }

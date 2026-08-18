@@ -8,6 +8,7 @@ import {
   pgTable,
   text,
   timestamp,
+  index,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -285,11 +286,35 @@ export const integrationCredentials = pgTable("integration_credentials", {
   refreshToken: text("refresh_token"),
   accessExpiresAt: timestamp("access_expires_at", { withTimezone: true }),
   refreshExpiresAt: timestamp("refresh_expires_at", { withTimezone: true }),
+  /** Serverless mutex: wie refresh doet tot dit tijdstip. */
+  refreshLockUntil: timestamp("refresh_lock_until", { withTimezone: true }),
   meta: jsonb("meta").$type<Record<string, unknown>>().default({}),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
 });
+
+export const integrationLogLevelEnum = pgEnum("integration_log_level", [
+  "info",
+  "error",
+]);
+
+/** Koppelingen-log — token refresh, OAuth, API-fouten. */
+export const integrationLogs = pgTable(
+  "integration_logs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    source: text("source").notNull(),
+    level: integrationLogLevelEnum("level").notNull(),
+    event: text("event").notNull(),
+    message: text("message").notNull(),
+    detail: jsonb("detail").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [index("integration_logs_created_at").on(t.createdAt)],
+);
 
 export const ticketInventory = pgTable("ticket_inventory", {
   id: uuid("id").defaultRandom().primaryKey(),

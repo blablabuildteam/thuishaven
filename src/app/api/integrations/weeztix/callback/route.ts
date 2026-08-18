@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { auth } from "@/auth";
 import { assertExternalReadOnly } from "@/lib/integrations/read-only";
 import { persistWeeztixTokens } from "@/lib/integrations/weeztix/tokens";
+import { logIntegration } from "@/lib/integrations/log";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,13 @@ export async function GET(request: Request) {
   const err = searchParams.get("error");
 
   if (err) {
+    await logIntegration({
+      source: "weeztix",
+      level: "error",
+      event: "oauth.denied",
+      message: err,
+      throttleMs: 0,
+    });
     return htmlPage("Weeztix OAuth mislukt", `<p>${escapeHtml(err)}</p>`);
   }
   if (!code) {
@@ -78,9 +86,18 @@ export async function GET(request: Request) {
   };
 
   if (!res.ok || !data.access_token) {
+    const msg = data.message ?? data.error ?? `HTTP ${res.status}`;
+    await logIntegration({
+      source: "weeztix",
+      level: "error",
+      event: "oauth.exchange_failed",
+      message: msg,
+      detail: { status: res.status },
+      throttleMs: 0,
+    });
     return htmlPage(
       "Token exchange mislukt",
-      `<p>${escapeHtml(data.message ?? data.error ?? `HTTP ${res.status}`)}</p>`,
+      `<p>${escapeHtml(msg)}</p>`,
     );
   }
 
@@ -92,11 +109,27 @@ export async function GET(request: Request) {
       refreshExpiresIn: data.refresh_token_expires_in,
     });
   } catch (e) {
+    await logIntegration({
+      source: "weeztix",
+      level: "error",
+      event: "oauth.persist_failed",
+      message: e instanceof Error ? e.message : "Databasefout",
+      throttleMs: 0,
+    });
     return htmlPage(
       "Tokens ontvangen, opslaan mislukt",
       `<p>${escapeHtml(e instanceof Error ? e.message : "Databasefout")}. Probeer opnieuw te koppelen.</p>`,
     );
   }
+
+  await logIntegration({
+    source: "weeztix",
+    level: "info",
+    event: "oauth.connected",
+    message: "Weeztix opnieuw gekoppeld via OAuth. Tokens in database opgeslagen.",
+    detail: { expiresIn: data.expires_in ?? null },
+    throttleMs: 0,
+  });
 
   const appUrl = (
     process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || ""
