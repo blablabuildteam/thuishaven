@@ -18,7 +18,7 @@ export class ReadOnlyViolationError extends Error {
 export function assertExternalReadOnly(
   method: string,
   url: string,
-  options?: { allowAuthTokenPost?: boolean },
+  options?: { allowAuthTokenPost?: boolean; allowGraphqlReadPost?: boolean },
 ) {
   const upper = method.toUpperCase();
   if (!WRITE_METHODS.has(upper)) return;
@@ -27,6 +27,14 @@ export function assertExternalReadOnly(
     options?.allowAuthTokenPost &&
     upper === "POST" &&
     /auth\.weeztix\.com\/tokens\/?$/i.test(url)
+  ) {
+    return;
+  }
+
+  if (
+    options?.allowGraphqlReadPost &&
+    upper === "POST" &&
+    /^https:\/\/ra\.co\/graphql\/?$/i.test(url)
   ) {
     return;
   }

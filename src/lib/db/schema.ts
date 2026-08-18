@@ -316,6 +316,26 @@ export const integrationLogs = pgTable(
   (t) => [index("integration_logs_created_at").on(t.createdAt)],
 );
 
+/** Resident Advisor public listings (attending ≠ Weeztix sold). */
+export const raListings = pgTable(
+  "ra_listings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    raEventId: text("ra_event_id").notNull(),
+    title: text("title").notNull(),
+    startsAt: timestamp("starts_at", { withTimezone: true }),
+    attending: integer("attending").notNull().default(0),
+    isTicketed: boolean("is_ticketed").notNull().default(false),
+    soldOut: boolean("sold_out").notNull().default(false),
+    contentUrl: text("content_url"),
+    editionId: uuid("edition_id").references(() => editions.id),
+    syncedAt: timestamp("synced_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [uniqueIndex("ra_listings_ra_event_id").on(t.raEventId)],
+);
+
 export const ticketInventory = pgTable("ticket_inventory", {
   id: uuid("id").defaultRandom().primaryKey(),
   editionId: uuid("edition_id")

@@ -267,6 +267,50 @@ async function verifyWeeztix(): Promise<VerifyResult> {
   }
 }
 
+async function verifyResidentAdvisor(): Promise<VerifyResult> {
+  try {
+    const { getRaVenue, listRaVenueEvents } = await import(
+      "@/lib/integrations/ra/client"
+    );
+    const venue = await getRaVenue();
+    if (!venue.ok) {
+      return base("resident_advisor", "Resident Advisor", "error", venue.error, {
+        status: venue.status,
+      });
+    }
+    const events = await listRaVenueEvents({ type: "LATEST", limit: 8 });
+    if (!events.ok) {
+      return base(
+        "resident_advisor",
+        "Resident Advisor",
+        "error",
+        `Venue OK, listings: ${events.error}`,
+        { venue: venue.venue.name },
+      );
+    }
+    return base(
+      "resident_advisor",
+      "Resident Advisor",
+      "verified",
+      `Read-only listings · ${venue.venue.name} · ${events.events.length} upcoming (attending ≠ sold)`,
+      {
+        venueId: venue.venue.id,
+        sample: events.events.slice(0, 3).map((e) => ({
+          title: e.title,
+          attending: e.attending,
+        })),
+      },
+    );
+  } catch (e) {
+    return base(
+      "resident_advisor",
+      "Resident Advisor",
+      "error",
+      e instanceof Error ? e.message : "Verify mislukt",
+    );
+  }
+}
+
 export async function verifyIntegration(id: string): Promise<VerifyResult> {
   switch (id) {
     case "brevo":
@@ -281,6 +325,8 @@ export async function verifyIntegration(id: string): Promise<VerifyResult> {
       return verifyOpenMeteo();
     case "weeztix":
       return verifyWeeztix();
+    case "resident_advisor":
+      return verifyResidentAdvisor();
     default: {
       const def = INTEGRATIONS.find((i) => i.id === id);
       if (!def) {
@@ -319,12 +365,11 @@ export async function probeConfiguredIntegrations(): Promise<VerifyResult[]> {
       row.status === "configured" ||
       (row.status !== "manual" &&
         row.status !== "missing" &&
-        ["brevo", "weeztix", "database", "open_meteo", "ai", "kvk"].includes(
+        ["brevo", "weeztix", "database", "open_meteo", "ai", "kvk", "resident_advisor"].includes(
           row.id,
         )),
   );
-  // Always probe these when not missing — clearer green state on hub
-  const always = ["brevo", "weeztix", "database", "open_meteo", "ai"];
+  const always = ["brevo", "weeztix", "database", "open_meteo", "ai", "resident_advisor"];
   const ids = new Set([
     ...toProbe.map((r) => r.id),
     ...always.filter((id) => {

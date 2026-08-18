@@ -136,6 +136,38 @@ export function IntegrationsHub() {
     });
   }
 
+  function runRaSync() {
+    startTransition(async () => {
+      setError(null);
+      try {
+        const res = await fetch("/api/integrations/ra/sync", { method: "POST" });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          upserted?: number;
+          linked?: number;
+          venue?: string;
+        };
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error ?? "RA sync mislukt");
+        }
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === "resident_advisor"
+              ? {
+                  ...row,
+                  status: "verified",
+                  message: `${data.venue ?? "RA"} · ${data.upserted ?? 0} listings · ${data.linked ?? 0} gekoppeld`,
+                }
+              : row,
+          ),
+        );
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "RA sync mislukt");
+      }
+    });
+  }
+
   const visible = useMemo(
     () => rows.filter((r) => filter === "all" || r.tool === filter),
     [rows, filter],
@@ -290,6 +322,26 @@ export function IntegrationsHub() {
                   >
                     Opnieuw koppelen
                   </a>
+                )}
+                {row.id === "resident_advisor" && (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => runRaSync()}
+                    className="border border-border px-3 py-1.5 text-sm hover:border-text disabled:opacity-50"
+                  >
+                    Sync listings
+                  </button>
+                )}
+                {row.id === "resident_advisor" && (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => runRaSync()}
+                    className="border border-border px-3 py-1.5 text-sm hover:border-text disabled:opacity-50"
+                  >
+                    Sync listings
+                  </button>
                 )}
               </div>
               </div>

@@ -3,6 +3,7 @@ import { getDb, hasDatabase } from "@/lib/db/client";
 import {
   emailCampaignMetrics,
   editions,
+  raListings,
   ticketInventory,
   ticketSalesDaily,
 } from "@/lib/db/schema";
@@ -36,6 +37,12 @@ export type InsightsSnapshot = {
       total: number;
       peak?: { day: string; sold: number };
     }>;
+  };
+  ra: {
+    listings: number;
+    linked: number;
+    soldOut: number;
+    topAttending: Array<{ title: string; attending: number; soldOut: boolean }>;
   };
   weather: {
     days: number;
@@ -78,6 +85,7 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
       dailyEditions: 0,
       recentCurves: [],
     },
+    ra: { listings: 0, linked: 0, soldOut: 0, topAttending: [] },
     weather: { days: 0, avgFestivalScore: null, recent: [] },
     notes: ["Geen database — zet DATABASE_URL."],
   };
@@ -113,9 +121,27 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
     .sort((a, b) => (b.openRate ?? 0) - (a.openRate ?? 0))
     .slice(0, 8);
 
-  if (campaigns.length === 0) {
-    notes.push("Nog geen Brevo-campagnes in DB — sync via Koppelingen / API.");
-  }
+  const raRows = await db
+    .select({
+      title: raListings.title,
+      attending: raListings.attending,
+      soldOut: raListings.soldOut,
+      editionId: raListings.editionId,
+    })
+    .from(raListings);
+  const raBlock = {
+    listings: raRows.length,
+    linked: raRows.filter((r) => r.editionId).length,
+    soldOut: raRows.filter((r) => r.soldOut).length,
+    topAttending: [...raRows]
+      .sort((a, b) => (b.attending ?? 0) - (a.attending ?? 0))
+      .slice(0, 5)
+      .map((r) => ({
+        title: r.title,
+        attending: r.attending ?? 0,
+        soldOut: Boolean(r.soldOut),
+      })),
+  };
 
   const weeztixEditions = await db
     .select({ count: sql<number>`count(*)::int` })
@@ -250,6 +276,7 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
       dailyEditions: dailyCount[0]?.editions ?? 0,
       recentCurves,
     },
+    ra: raBlock,
     weather: weatherBlock,
     editions: editionsBlock,
     notes,
@@ -288,6 +315,17 @@ export function snapshotToPromptContext(snap: InsightsSnapshot): string {
   for (const c of snap.weeztix.recentCurves) {
     lines.push(
       `- ${c.name} | orders≈${c.total} piek=${c.peak ? `${c.peak.day} (${c.peak.sold})` : "n/a"} start=${c.startsAt.slice(0, 10)}`,
+    );
+  }
+
+  lines.push(
+    "",
+    "=== Resident Advisor (publieke listings, attending ≠ ticket sold) ===",
+    `Listings: ${snap.ra.listings} · gekoppeld aan editie: ${snap.ra.linked} · sold-out in titel: ${snap.ra.soldOut}`,
+  );
+  for (const r of snap.ra.topAttending) {
+    lines.push(
+      `- ${r.title} | attending=${r.attending}${r.soldOut ? " · SOLD OUT (titel)" : ""}`,
     );
   }
 

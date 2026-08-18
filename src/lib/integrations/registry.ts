@@ -124,13 +124,16 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "resident_advisor",
     name: "Resident Advisor",
     tool: "dashboard",
-    description: "Ticketverkoop & sold-out status.",
-    envKeys: ["RA_API_KEY"],
+    description:
+      "Publieke listings voor club Thuishaven (ra.co/clubs/109027): attending, ticketed, sold-out in de titel. Geen ticket-sold zoals Weeztix — RA heeft geen officiële sales-API.",
+    envKeys: [],
+    optionalEnvKeys: ["RA_VENUE_ID", "RA_API_KEY"],
     askFromClient: [
-      "API-toegang of export-methode",
-      "Event-IDs mapping",
+      "Club-ID staat default op 109027 (Thuishaven)",
+      "Voor echte RA-ticketverkopen: exporter uit promoter-dashboard (bestaat geen publieke sales-API)",
     ],
-    verifyHint: "Event detail / tickets",
+    verifyHint: "GraphQL venue + listings (read-only)",
+    docsUrl: "https://ra.co/clubs/109027",
     priority: "high",
   },
   {

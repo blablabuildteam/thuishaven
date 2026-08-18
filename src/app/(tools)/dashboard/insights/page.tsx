@@ -50,6 +50,11 @@ export default async function InsightsPage() {
           value={formatNumber(snap.weeztix.editions)}
           hint={`${formatNumber(snap.weeztix.sold)} sold in inventory`}
         />
+        <MetricCard
+          label="RA listings"
+          value={formatNumber(snap.ra.listings)}
+          hint={`${formatNumber(snap.ra.linked)} gekoppeld · attending ≠ sold`}
+        />
       </div>
 
       {snap.notes.length > 0 && (

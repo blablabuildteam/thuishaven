@@ -22,10 +22,16 @@ export async function syncWeeztix(): Promise<SyncResult> {
 }
 
 export async function syncResidentAdvisor(): Promise<SyncResult> {
-  if (!process.env.RA_API_KEY) {
-    return { source: "resident_advisor", ok: false, error: "RA_API_KEY ontbreekt" };
-  }
-  return { source: "resident_advisor", ok: false, error: "Nog niet geïmplementeerd" };
+  const { syncResidentAdvisorReadOnly } = await import(
+    "@/lib/integrations/ra/sync"
+  );
+  const result = await syncResidentAdvisorReadOnly();
+  return {
+    source: "resident_advisor",
+    ok: result.ok,
+    records: result.upserted,
+    error: result.error,
+  };
 }
 
 export async function syncAppic(): Promise<SyncResult> {
