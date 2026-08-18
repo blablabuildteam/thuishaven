@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { auth } from "@/auth";
 import { assertExternalReadOnly } from "@/lib/integrations/read-only";
+import { persistWeeztixTokens } from "@/lib/integrations/weeztix/tokens";
 
 export const dynamic = "force-dynamic";
 
 /**
  * OAuth callback: wisselt code om voor tokens (POST alleen naar auth.weeztix.com/tokens).
- * Toont tokens één keer aan admin om in .env.local / Vercel te zetten.
- * Schrijft niets naar Weeztix resources.
+ * Bewaart tokens in Postgres (refresh is éénmalig). Schrijft niets naar Weeztix resources.
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -28,11 +28,10 @@ export async function GET(request: Request) {
   if (!expected || !state || expected !== state) {
     return htmlPage(
       "Weeztix OAuth",
-      "<p>State mismatch — start opnieuw via /api/integrations/weeztix/oauth/start (eerst inloggen als admin).</p>",
+      "<p>State mismatch — start opnieuw via Koppelingen → Weeztix opnieuw koppelen (eerst inloggen als admin).</p>",
     );
   }
 
-  // Optioneel: liever ingelogd, maar code mag niet verloren gaan
   const session = await auth();
   if (session?.user && session.user.role !== "admin") {
     return new NextResponse("Alleen admins", { status: 403 });
@@ -73,6 +72,7 @@ export async function GET(request: Request) {
     access_token?: string;
     refresh_token?: string;
     expires_in?: number;
+    refresh_token_expires_in?: number;
     error?: string;
     message?: string;
   };
@@ -80,22 +80,35 @@ export async function GET(request: Request) {
   if (!res.ok || !data.access_token) {
     return htmlPage(
       "Token exchange mislukt",
-      `<pre>${escapeHtml(JSON.stringify(data, null, 2) || `HTTP ${res.status}`)}</pre>`,
+      `<p>${escapeHtml(data.message ?? data.error ?? `HTTP ${res.status}`)}</p>`,
     );
   }
 
-  const lines = [
-    `WEEZTIX_ACCESS_TOKEN=${data.access_token}`,
-    data.refresh_token ? `WEEZTIX_REFRESH_TOKEN=${data.refresh_token}` : null,
-  ].filter(Boolean);
+  try {
+    await persistWeeztixTokens({
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresIn: data.expires_in,
+      refreshExpiresIn: data.refresh_token_expires_in,
+    });
+  } catch (e) {
+    return htmlPage(
+      "Tokens ontvangen, opslaan mislukt",
+      `<p>${escapeHtml(e instanceof Error ? e.message : "Databasefout")}. Probeer opnieuw te koppelen.</p>`,
+    );
+  }
+
+  const appUrl = (
+    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || ""
+  ).trim();
+  const dest = `${appUrl || ""}/koppelingen?weeztix=connected`;
 
   return htmlPage(
-    "Weeztix tokens — read-only klaar",
+    "Weeztix gekoppeld",
     `
-    <p>Kopieer deze regels naar <code>.env.local</code> (en daarna naar Vercel). Deel ze niet in chat.</p>
-    <pre style="white-space:pre-wrap;word-break:break-all;background:#111;color:#eee;padding:12px;border-radius:4px">${escapeHtml(lines.join("\n"))}</pre>
-    <p>Expires in: ${data.expires_in ?? "?"} seconden. Daarna refresh_token gebruiken.</p>
-    <p><a href="/koppelingen">Terug naar koppelingen</a></p>
+    <p>Tokens zijn opgeslagen. Access token verloopt over ~3 dagen; we verversen automatisch (refresh token is éénmalig en staat niet meer in env).</p>
+    <p>Expires in: ${data.expires_in ?? "?"} seconden.</p>
+    <p><a href="${escapeHtml(dest)}">Terug naar koppelingen</a></p>
     `,
   );
 }

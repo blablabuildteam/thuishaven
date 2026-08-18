@@ -266,6 +266,7 @@ export function IntegrationsHub() {
                     </p>
                   )}
                 </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
                 <button
                   type="button"
                   disabled={pending}
@@ -274,6 +275,15 @@ export function IntegrationsHub() {
                 >
                   Test
                 </button>
+                {row.id === "weeztix" && (
+                  <a
+                    href="/api/integrations/weeztix/oauth/start"
+                    className="border border-border px-3 py-1.5 text-sm hover:border-text"
+                  >
+                    Opnieuw koppelen
+                  </a>
+                )}
+              </div>
               </div>
 
               {meta && row.status !== "verified" && (

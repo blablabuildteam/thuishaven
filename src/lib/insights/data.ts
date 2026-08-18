@@ -4,6 +4,7 @@ import {
   emailCampaignMetrics,
   editions,
   ticketInventory,
+  ticketSalesDaily,
 } from "@/lib/db/schema";
 
 export type InsightsSnapshot = {
@@ -27,6 +28,14 @@ export type InsightsSnapshot = {
     inventoryRows: number;
     sold: number;
     editionsWithSales: number;
+    dailyDays: number;
+    dailyEditions: number;
+    recentCurves: Array<{
+      name: string;
+      startsAt: string;
+      total: number;
+      peak?: { day: string; sold: number };
+    }>;
   };
   weather: {
     days: number;
@@ -60,7 +69,15 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
       totalClicks: 0,
       top: [],
     },
-    weeztix: { editions: 0, inventoryRows: 0, sold: 0, editionsWithSales: 0 },
+    weeztix: {
+      editions: 0,
+      inventoryRows: 0,
+      sold: 0,
+      editionsWithSales: 0,
+      dailyDays: 0,
+      dailyEditions: 0,
+      recentCurves: [],
+    },
     weather: { days: 0, avgFestivalScore: null, recent: [] },
     notes: ["Geen database — zet DATABASE_URL."],
   };
@@ -109,6 +126,35 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
   const weeztixInv = inv.filter((r) => r.platform === "weeztix");
   const sold = weeztixInv.reduce((s, r) => s + (r.sold ?? 0), 0);
   const editionsWithSales = weeztixInv.filter((r) => (r.sold ?? 0) > 0).length;
+
+  const dailyCount = await db
+    .select({
+      days: sql<number>`count(*)::int`,
+      editions: sql<number>`count(distinct ${ticketSalesDaily.editionId})::int`,
+    })
+    .from(ticketSalesDaily);
+
+  let recentCurves: InsightsSnapshot["weeztix"]["recentCurves"] = [];
+  try {
+    const { recentDailyCurves } = await import(
+      "@/lib/integrations/weeztix/daily"
+    );
+    const curves = await recentDailyCurves(3);
+    recentCurves = curves.map((c) => {
+      const peak = c.points.reduce<{ day: string; sold: number } | undefined>(
+        (best, p) => (!best || p.sold > best.sold ? p : best),
+        undefined,
+      );
+      return {
+        name: c.name,
+        startsAt: c.startsAt,
+        total: c.total,
+        peak,
+      };
+    });
+  } catch {
+    notes.push("Dagelijkse Weeztix-curves konden niet geladen worden.");
+  }
 
   let weatherBlock: InsightsSnapshot["weather"] = {
     days: 0,
@@ -200,6 +246,9 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
       inventoryRows: weeztixInv.length,
       sold,
       editionsWithSales,
+      dailyDays: dailyCount[0]?.days ?? 0,
+      dailyEditions: dailyCount[0]?.editions ?? 0,
+      recentCurves,
     },
     weather: weatherBlock,
     editions: editionsBlock,
@@ -233,6 +282,16 @@ export function snapshotToPromptContext(snap: InsightsSnapshot): string {
     `Inventory rijen: ${snap.weeztix.inventoryRows}`,
     `Edities met sold>0: ${snap.weeztix.editionsWithSales}`,
     `Sold (Weeztix inventory som): ${snap.weeztix.sold}`,
+    `Dagelijkse curves: ${snap.weeztix.dailyEditions} edities · ${snap.weeztix.dailyDays} dagen (orders/dag via timeToBank, proxy)`,
+    "Recente curves (piekdag):",
+  );
+  for (const c of snap.weeztix.recentCurves) {
+    lines.push(
+      `- ${c.name} | orders≈${c.total} piek=${c.peak ? `${c.peak.day} (${c.peak.sold})` : "n/a"} start=${c.startsAt.slice(0, 10)}`,
+    );
+  }
+
+  lines.push(
     "",
     "=== Festival-weer score (1-10, outdoor comfort) ===",
     `Dagen in window: ${snap.weather.days}`,

@@ -1,5 +1,6 @@
 import {
   boolean,
+  date,
   integer,
   jsonb,
   numeric,
@@ -250,6 +251,44 @@ export const ticketSales = pgTable("ticket_sales", {
   soldAt: timestamp("sold_at", { withTimezone: true }).notNull(),
   externalId: text("external_id"),
   syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** Dagelijkse sold/revenue per editie — voor mail-attributie en curves. */
+export const ticketSalesDaily = pgTable(
+  "ticket_sales_daily",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    editionId: uuid("edition_id")
+      .notNull()
+      .references(() => editions.id),
+    platform: ticketPlatformEnum("platform").notNull(),
+    day: date("day").notNull(),
+    sold: integer("sold").notNull().default(0),
+    revenueCents: integer("revenue_cents").notNull().default(0),
+    syncedAt: timestamp("synced_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("ticket_sales_daily_edition_platform_day").on(
+      t.editionId,
+      t.platform,
+      t.day,
+    ),
+  ],
+);
+
+/** OAuth tokens (Weeztix refresh is éénmalig — niet in env laten staan). */
+export const integrationCredentials = pgTable("integration_credentials", {
+  provider: text("provider").primaryKey(),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  accessExpiresAt: timestamp("access_expires_at", { withTimezone: true }),
+  refreshExpiresAt: timestamp("refresh_expires_at", { withTimezone: true }),
+  meta: jsonb("meta").$type<Record<string, unknown>>().default({}),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 });
 
 export const ticketInventory = pgTable("ticket_inventory", {

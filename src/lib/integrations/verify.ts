@@ -198,15 +198,17 @@ async function verifyOpenMeteo(): Promise<VerifyResult> {
 }
 
 async function verifyWeeztix(): Promise<VerifyResult> {
-  const hasToken =
+  const hasCreds =
     Boolean(process.env.WEEZTIX_ACCESS_TOKEN?.trim()) ||
-    Boolean(process.env.WEEZTIX_API_KEY?.trim());
-  if (!hasToken) {
+    Boolean(process.env.WEEZTIX_API_KEY?.trim()) ||
+    Boolean(process.env.WEEZTIX_REFRESH_TOKEN?.trim()) ||
+    Boolean(process.env.WEEZTIX_CLIENT_ID?.trim());
+  if (!hasCreds) {
     return base(
       "weeztix",
       "Weeztix",
       "missing",
-      "WEEZTIX_ACCESS_TOKEN ontbreekt (OAuth Bearer token)",
+      "WEEZTIX_CLIENT_ID ontbreekt — maak een OAuth-client en koppel via Koppelingen",
     );
   }
 
@@ -216,7 +218,11 @@ async function verifyWeeztix(): Promise<VerifyResult> {
     );
     const me = await weeztixWhoAmI();
     if (!me.ok) {
-      return base("weeztix", "Weeztix", "error", me.error, {
+      const hint =
+        me.status === 401 || /verlop/i.test(me.error)
+          ? " — klik Opnieuw koppelen (refresh token is éénmalig)"
+          : "";
+      return base("weeztix", "Weeztix", "error", `${me.error}${hint}`, {
         status: me.status,
       });
     }
@@ -336,7 +342,10 @@ export function listIntegrationStatusSnapshot(): Array<{
     // Weeztix: legacy WEEZTIX_API_KEY telt ook als access token
     const weeztixOk =
       def.id === "weeztix" &&
-      Boolean(process.env.WEEZTIX_API_KEY?.trim());
+      (Boolean(process.env.WEEZTIX_API_KEY?.trim()) ||
+        Boolean(process.env.WEEZTIX_ACCESS_TOKEN?.trim()) ||
+        Boolean(process.env.WEEZTIX_REFRESH_TOKEN?.trim()) ||
+        Boolean(process.env.WEEZTIX_CLIENT_ID?.trim()));
     let status: IntegrationStatus =
       def.envKeys.length === 0
         ? "configured"

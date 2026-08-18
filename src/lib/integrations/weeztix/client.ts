@@ -1,4 +1,5 @@
 import { assertExternalReadOnly } from "@/lib/integrations/read-only";
+import { ensureWeeztixAccessToken } from "@/lib/integrations/weeztix/tokens";
 
 const DEFAULT_API = "https://api.weeztix.com";
 const AUTH_BASE = "https://auth.weeztix.com";
@@ -9,6 +10,19 @@ export type WeeztixConfig = {
   companyGuid?: string;
 };
 
+async function resolveWeeztixConfig(): Promise<
+  WeeztixConfig | { error: string }
+> {
+  const token = await ensureWeeztixAccessToken();
+  if (!token.ok) return { error: token.error };
+  return {
+    apiUrl: (process.env.WEEZTIX_API_URL || DEFAULT_API).replace(/\/$/, ""),
+    accessToken: token.token,
+    companyGuid: process.env.WEEZTIX_COMPANY_GUID?.trim() || undefined,
+  };
+}
+
+/** @deprecated gebruik resolve via weeztixGet; token zit in de database. */
 export function getWeeztixConfig(): WeeztixConfig | { error: string } {
   const accessToken =
     process.env.WEEZTIX_ACCESS_TOKEN?.trim() ||
@@ -16,7 +30,7 @@ export function getWeeztixConfig(): WeeztixConfig | { error: string } {
   if (!accessToken) {
     return {
       error:
-        "WEEZTIX_ACCESS_TOKEN (of legacy WEEZTIX_API_KEY) ontbreekt — OAuth access token",
+        "Weeztix token ontbreekt — koppel via OAuth of zet WEEZTIX_CLIENT_ID + refresh in de database",
     };
   }
   return {
@@ -40,7 +54,7 @@ type WeeztixFetchOptions = {
 export async function weeztixGet<T = unknown>(
   options: WeeztixFetchOptions,
 ): Promise<{ ok: true; data: T; status: number } | { ok: false; error: string; status: number }> {
-  const cfg = getWeeztixConfig();
+  const cfg = await resolveWeeztixConfig();
   if ("error" in cfg) {
     return { ok: false, error: cfg.error, status: 0 };
   }
@@ -111,7 +125,7 @@ export async function weeztixWhoAmI(): Promise<
     }
   | { ok: false; error: string; status: number }
 > {
-  const cfg = getWeeztixConfig();
+  const cfg = await resolveWeeztixConfig();
   if ("error" in cfg) return { ok: false, error: cfg.error, status: 0 };
 
   const url = `${AUTH_BASE}/users/me`;
@@ -155,58 +169,16 @@ export async function weeztixWhoAmI(): Promise<
 }
 
 /**
- * Vernieuw access token via refresh_token.
- * Enige toegestane POST: auth.weeztix.com/tokens (geen event/order mutatie).
+ * Vernieuw access token via refresh_token en bewaar in Postgres.
+ * Enige toegestane POST: auth.weeztix.com/tokens.
  */
 export async function weeztixRefreshAccessToken(): Promise<
   | { ok: true; accessToken: string; expiresIn?: number }
   | { ok: false; error: string }
 > {
-  const refresh = process.env.WEEZTIX_REFRESH_TOKEN?.trim();
-  const clientId = process.env.WEEZTIX_CLIENT_ID?.trim();
-  const clientSecret = process.env.WEEZTIX_CLIENT_SECRET?.trim();
-  if (!refresh || !clientId) {
-    return {
-      ok: false,
-      error: "WEEZTIX_REFRESH_TOKEN + WEEZTIX_CLIENT_ID nodig voor refresh",
-    };
-  }
-
-  const url = `${AUTH_BASE}/tokens`;
-  assertExternalReadOnly("POST", url, { allowAuthTokenPost: true });
-
-  const body = new URLSearchParams({
-    grant_type: "refresh_token",
-    refresh_token: refresh,
-    client_id: clientId,
-  });
-  if (clientSecret) body.set("client_secret", clientSecret);
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body,
-    cache: "no-store",
-  });
-  const data = (await res.json().catch(() => ({}))) as {
-    access_token?: string;
-    expires_in?: number;
-    error?: string;
-  };
-  if (!res.ok || !data.access_token) {
-    return {
-      ok: false,
-      error: data.error ?? `Token refresh HTTP ${res.status}`,
-    };
-  }
-  return {
-    ok: true,
-    accessToken: data.access_token,
-    expiresIn: data.expires_in,
-  };
+  const ensured = await ensureWeeztixAccessToken();
+  if (!ensured.ok) return { ok: false, error: ensured.error };
+  return { ok: true, accessToken: ensured.token };
 }
 
 export type WeeztixEvent = {

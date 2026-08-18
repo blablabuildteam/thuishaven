@@ -101,12 +101,12 @@ export const INTEGRATIONS: IntegrationDef[] = [
     name: "Weeztix",
     tool: "dashboard",
     description:
-      "Ticketverkoop + voorraad — read-only (alleen GET). OAuth access token van company dashboard.",
-    envKeys: ["WEEZTIX_ACCESS_TOKEN"],
+      "Ticketverkoop + voorraad — read-only. Access token verloopt na ~3 dagen; refresh is éénmalig en wordt in de database bewaard.",
+    envKeys: ["WEEZTIX_CLIENT_ID"],
     optionalEnvKeys: [
+      "WEEZTIX_ACCESS_TOKEN",
       "WEEZTIX_API_URL",
       "WEEZTIX_COMPANY_GUID",
-      "WEEZTIX_CLIENT_ID",
       "WEEZTIX_CLIENT_SECRET",
       "WEEZTIX_REFRESH_TOKEN",
       "WEEZTIX_API_KEY", // legacy alias voor access token

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { syncWeeztixDailySales } from "@/lib/integrations/weeztix/daily";
 import {
   syncWeeztixReadOnly,
   syncWeeztixTicketStatsFromEditions,
@@ -12,6 +13,7 @@ export const maxDuration = 300;
  * POST /api/integrations/weeztix/sync
  * { mode: "events" } — events + optionele stats
  * { mode: "ticketStats", onlyMissing?: boolean } — historische sold_count voor edities
+ * { mode: "dailySales" } — verkoopcurve uit statistics timeToBank
  */
 export async function POST(req: Request) {
   const session = await auth();
@@ -24,9 +26,22 @@ export async function POST(req: Request) {
     onlyMissing?: boolean;
     statsLimit?: number;
     includeStats?: boolean;
+    limit?: number;
+    daysBack?: number;
   };
 
   const mode = body.mode ?? "events";
+
+  if (mode === "dailySales") {
+    const result = await syncWeeztixDailySales({
+      limit: body.limit ?? 80,
+      daysBack: body.daysBack ?? 400,
+    });
+    return NextResponse.json(
+      { readOnly: true, mode, ...result },
+      { status: result.ok ? 200 : 502 },
+    );
+  }
 
   if (mode === "ticketStats") {
     const result = await syncWeeztixTicketStatsFromEditions({
@@ -47,7 +62,6 @@ export async function POST(req: Request) {
     includeStats: body.includeStats ?? true,
     statsLimit: body.statsLimit ?? 40,
   });
-
   return NextResponse.json(
     {
       readOnly: true,
