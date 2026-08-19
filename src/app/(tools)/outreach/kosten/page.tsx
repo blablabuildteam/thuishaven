@@ -29,7 +29,21 @@ const vendorLabel: Record<string, string> = {
 };
 
 export default async function OutreachKostenPage() {
-  const summary = await getUsageSummary({ sinceDays: 30, tool: "outreach" });
+  let summary: Awaited<ReturnType<typeof getUsageSummary>>;
+  try {
+    summary = await getUsageSummary({ sinceDays: 30, tool: "outreach" });
+  } catch (e) {
+    console.error("outreach kosten", e);
+    return (
+      <div>
+        <SectionHeader
+          eyebrow="Outreach"
+          title="Kostmeter"
+          description="Kon kosten niet laden. Check DATABASE_URL of probeer later."
+        />
+      </div>
+    );
+  }
   const max = Math.max(...summary.byVendor.map((v) => v.costEurCents), 1);
 
   return (

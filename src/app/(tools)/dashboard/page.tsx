@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { SectionHeader } from "@/components/ui/section-header";
-import { linkCampaignsToEditions } from "@/lib/editions/link-campaigns";
-import { getEditionAnalysisBundle } from "@/lib/editions/analysis";
-import { getMailLiftByEdition } from "@/lib/editions/mail-lift";
+import {
+  loadEditionBundle,
+  loadMailLift,
+  loadWeatherImpact,
+} from "@/lib/cache/dashboard";
 import {
   periodClaims,
   weekdayClaims,
@@ -10,7 +12,6 @@ import {
 import { formatNumber } from "@/lib/utils";
 import { hasDatabase } from "@/lib/db/client";
 import { listOpenDashboardAlerts } from "@/lib/integrations/alerts";
-import { getWeatherImpact } from "@/lib/weather/impact";
 import { WeatherStory } from "@/components/dashboard/weather-story";
 import {
   EventsBoard,
@@ -21,16 +22,10 @@ export const metadata = { title: "Events" };
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  try {
-    await linkCampaignsToEditions({ persist: true, minConfidence: 0.55 });
-  } catch (e) {
-    console.error("campaign link", e);
-  }
-
   const [bundle, impact, mailLift, openAlerts] = await Promise.all([
-    getEditionAnalysisBundle({ limit: 150 }),
-    getWeatherImpact({ fromYear: 2025, sync: true }),
-    getMailLiftByEdition({ limit: 80 }).catch(() => null),
+    loadEditionBundle(),
+    loadWeatherImpact(),
+    loadMailLift().catch(() => null),
     hasDatabase()
       ? listOpenDashboardAlerts().catch(() => ({
           ra: [],
@@ -79,20 +74,20 @@ export default async function DashboardPage() {
       <SectionHeader
         eyebrow="Events"
         title="Events"
-        description={`${formatNumber(bundle.totals.editions)} edities · ${formatNumber(bundle.totals.totalSold)} sold`}
+        description={`${formatNumber(bundle.totals.editions)} edities`}
         action={
           <div className="flex flex-wrap gap-2">
             <Link
               href="/dashboard/weer"
-              className="bg-accent px-3 py-2 text-sm text-accent-contrast"
+              className="border border-border px-3 py-2 text-sm hover:border-text"
             >
               Weer
             </Link>
             <Link
-              href="/dashboard/insights"
-              className="border border-border px-3 py-2 text-sm hover:border-text"
+              href="/dashboard/marketing"
+              className="bg-accent px-3 py-2 text-sm text-accent-contrast"
             >
-              Insights
+              Mailings
             </Link>
           </div>
         }
@@ -117,14 +112,10 @@ export default async function DashboardPage() {
       <WeatherStory impact={impact} compact />
 
       {cohortBits.length > 0 && (
-        <ul className="mb-6 flex flex-wrap gap-3 text-sm">
+        <ul className="mb-6 flex flex-wrap gap-x-6 gap-y-2 text-sm">
           {cohortBits.map((c) => (
-            <li
-              key={c.title}
-              className="border-l-2 border-highlight pl-3"
-              title={c.evidence}
-            >
-              <span className="font-medium text-text">{c.title}</span>
+            <li key={c.title} title={c.evidence}>
+              <span className="font-medium">{c.title}</span>
               <span className="ml-2 text-text-muted">{c.body}</span>
             </li>
           ))}
@@ -132,18 +123,18 @@ export default async function DashboardPage() {
       )}
 
       {bundle.artistLeaderboard.length > 0 && (
-        <section className="mb-8">
-          <h2 className="mb-2 text-xs font-medium tracking-[0.12em] text-text-dim uppercase">
-            Draw · ≥2 edities
-          </h2>
+        <section className="mb-6">
+          <p className="mb-2 text-[10px] font-medium tracking-[0.14em] text-text-dim uppercase">
+            Top draw
+          </p>
           <ul className="flex flex-wrap gap-2">
             {bundle.artistLeaderboard.slice(0, 5).map((a) => (
               <li
                 key={a.artist}
-                className="border border-border bg-surface px-3 py-2"
+                className="border border-border px-2.5 py-1.5 text-sm"
               >
-                <span className="text-sm font-medium">{a.artist}</span>
-                <span className="ml-2 font-mono text-xs text-text-muted">
+                {a.artist}
+                <span className="ml-2 text-xs text-text-dim">
                   ~{formatNumber(a.avgSold)}
                 </span>
               </li>
@@ -152,7 +143,7 @@ export default async function DashboardPage() {
         </section>
       )}
 
-      <EventsBoard rows={boardRows} totalSold={bundle.totals.totalSold} />
+      <EventsBoard rows={boardRows} />
     </div>
   );
 }

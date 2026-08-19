@@ -49,6 +49,7 @@ const outreachNav: NavItem[] = [
   { href: "/outreach/emails", label: "E-mails", icon: Mail },
   { href: "/outreach/analytics", label: "Wat werkt", icon: LineChart },
   { href: "/outreach/pipeline", label: "Pipeline", icon: Workflow },
+  { href: "/outreach/kosten", label: "Kosten", icon: BarChart3 },
   { href: "/koppelingen", label: "Bronnen", icon: Plug },
 ];
 
@@ -89,7 +90,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <ToolSwitch
               href="/dashboard"
               active={!isOutreach}
-              label="Events"
+              label="Dashboard"
             />
             <ToolSwitch
               href="/outreach"
@@ -160,7 +161,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-1">
             <ThemeToggle compact />
             <div className="flex gap-1 bg-surface p-1">
-              <ToolSwitch href="/dashboard" active={!isOutreach} label="Events" />
+              <ToolSwitch href="/dashboard" active={!isOutreach} label="Dash" />
               <ToolSwitch href="/outreach" active={isOutreach} label="Out" />
             </div>
           </div>

@@ -28,7 +28,12 @@ export default async function OutreachPage() {
     outreachKpis.sent > 0
       ? (outreachKpis.opened / outreachKpis.sent) * 100
       : 0;
-  const usage = await getUsageSummary({ sinceDays: 30, tool: "outreach" });
+  let usage: Awaited<ReturnType<typeof getUsageSummary>> | null = null;
+  try {
+    usage = await getUsageSummary({ sinceDays: 30, tool: "outreach" });
+  } catch (e) {
+    console.error("outreach usage", e);
+  }
 
   return (
     <div>
@@ -78,8 +83,12 @@ export default async function OutreachPage() {
         <MetricCard label="Leads" value={formatNumber(outreachKpis.leads)} />
         <MetricCard
           label="Kosten · 30d"
-          value={eurFromCents(usage.totalEurCents)}
-          hint={`${eurFromCents(usage.clientBilledEurCents)} op hun KvK`}
+          value={usage ? eurFromCents(usage.totalEurCents) : "—"}
+          hint={
+            usage
+              ? `${eurFromCents(usage.clientBilledEurCents)} op hun KvK`
+              : "Kostmeter tijdelijk niet geladen"
+          }
         />
       </div>
 
