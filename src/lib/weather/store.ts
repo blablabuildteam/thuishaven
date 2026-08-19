@@ -1,4 +1,4 @@
-import { and, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
+import { and, eq, gte, isNotNull, lte, or, sql } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { editions, externalEvents, weatherDaily } from "@/lib/db/schema";
 import {
@@ -7,6 +7,14 @@ import {
   type WeatherDayRow,
 } from "@/lib/weather/open-meteo";
 import { scoreFestivalWeather } from "@/lib/weather/festival-score";
+import { amsterdamDay } from "@/lib/time/amsterdam";
+
+export function weatherLocationMatch() {
+  return or(
+    eq(weatherDaily.locationKey, AMS.locationKey),
+    eq(weatherDaily.locationKey, "amsterdam"),
+  );
+}
 
 function dayToDate(day: string): Date {
   return new Date(`${day}T12:00:00.000Z`);
@@ -45,7 +53,7 @@ export async function syncWeatherRange(options: {
       .from(weatherDaily)
       .where(
         and(
-          eq(weatherDaily.locationKey, AMS.locationKey),
+          weatherLocationMatch(),
           sql`(${weatherDaily.day})::date = ${row.day}::date`,
         ),
       )
@@ -110,7 +118,7 @@ export async function listEditionEventDays(): Promise<string[]> {
   const days = new Set<string>();
   for (const r of rows) {
     if (/template/i.test(r.name)) continue;
-    days.add(toIsoDay(r.startsAt));
+    days.add(amsterdamDay(r.startsAt) || toIsoDay(r.startsAt));
   }
   return [...days].sort();
 }
@@ -218,6 +226,52 @@ export async function syncWeatherForEditionDays(options?: {
   }
 }
 
+/**
+ * Vul ontbrekende eventdagen vanaf `fromYear` (default 2025).
+ * Slaat dagen over die al in weather_daily staan.
+ */
+export async function ensureEditionWeather(options?: {
+  fromYear?: number;
+}): Promise<{
+  needed: number;
+  missing: number;
+  upserted: number;
+}> {
+  const fromYear = options?.fromYear ?? 2025;
+  const today = new Date().toISOString().slice(0, 10);
+  const allDays = (await listEditionEventDays()).filter((d) => {
+    const y = Number(d.slice(0, 4));
+    return y >= fromYear && d <= today;
+  });
+
+  if (!allDays.length) {
+    return { needed: 0, missing: 0, upserted: 0 };
+  }
+
+  const existing = await listWeatherDays({
+    startDate: allDays[0]!,
+    endDate: allDays[allDays.length - 1]!,
+  });
+  const have = new Set(existing.map((r) => r.day));
+  const missing = allDays.filter((d) => !have.has(d));
+
+  if (!missing.length) {
+    return { needed: allDays.length, missing: 0, upserted: 0 };
+  }
+
+  const result = await syncWeatherRange({
+    startDate: missing[0]!,
+    endDate: missing[missing.length - 1]!,
+    onlyDays: new Set(missing),
+  });
+
+  return {
+    needed: allDays.length,
+    missing: missing.length,
+    upserted: result.upserted,
+  };
+}
+
 export type WeatherRecord = {
   day: string;
   tempMinC: number | null;
@@ -241,7 +295,7 @@ export async function listWeatherDays(options: {
     .from(weatherDaily)
     .where(
       and(
-        eq(weatherDaily.locationKey, AMS.locationKey),
+        weatherLocationMatch(),
         gte(weatherDaily.day, start),
         lte(weatherDaily.day, end),
       ),
@@ -249,7 +303,7 @@ export async function listWeatherDays(options: {
     .orderBy(weatherDaily.day);
 
   return rows.map((r) => ({
-    day: r.day.toISOString().slice(0, 10),
+    day: amsterdamDay(r.day) || r.day.toISOString().slice(0, 10),
     tempMinC: r.tempMinC != null ? Number(r.tempMinC) : null,
     tempMaxC: r.tempMaxC != null ? Number(r.tempMaxC) : null,
     precipMm: r.precipMm != null ? Number(r.precipMm) : null,

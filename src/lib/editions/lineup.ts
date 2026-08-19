@@ -105,6 +105,53 @@ export type ParsedLineup = {
   rooms: string[];
 };
 
+/** UI-filter: formats die we in de Events-board tonen. */
+export type EditionFormat =
+  | "hrs10"
+  | "regular"
+  | "nacht"
+  | "ade"
+  | "paas"
+  | "hollandse_haven"
+  | "opening"
+  | "closing"
+  | "other";
+
+export function editionFormat(
+  name: string,
+  kind: string,
+  isNachtshow: boolean,
+): EditionFormat {
+  if (kind === "ade" || /\bADE\b/i.test(name)) return "ade";
+  if (isNachtshow || kind === "nachtshow") return "nacht";
+  if (kind === "paasweekender" || /paas/i.test(name)) return "paas";
+  if (kind === "hollandse_haven" || /hollandse\s+haven/i.test(name)) {
+    return "hollandse_haven";
+  }
+  if (
+    kind === "zomeropening" ||
+    kind === "winteropening"
+  ) {
+    return "opening";
+  }
+  if (kind === "zomerclosing") return "closing";
+  if (/10\s*h/i.test(name)) return "hrs10";
+  if (kind === "regular") return "regular";
+  return "other";
+}
+
+export const EDITION_FORMAT_LABEL: Record<EditionFormat, string> = {
+  hrs10: "10HRS",
+  regular: "Regular",
+  nacht: "Nacht",
+  ade: "ADE",
+  paas: "Paas",
+  hollandse_haven: "Hollandse Haven",
+  opening: "Opening",
+  closing: "Closing",
+  other: "Overig",
+};
+
 function cleanToken(raw: string): string | null {
   let t = raw
     .replace(/\(.*?\)/g, " ")

@@ -65,6 +65,23 @@ export type InsightsSnapshot = {
   weather: {
     days: number;
     avgFestivalScore: number | null;
+    fromYear: number;
+    coverage: { editions: number; withWeather: number };
+    verdict: { title: string; body: string; evidence: string } | null;
+    buckets: Array<{
+      kind: string;
+      label: string;
+      n: number;
+      avgSold: number;
+      vsComfortPct: number | null;
+    }>;
+    extremes: Array<{
+      name: string;
+      day: string;
+      label: string;
+      summary: string;
+      sold: number;
+    }>;
     recent: Array<{
       day: string;
       score: number;
@@ -112,7 +129,16 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
       topAttending: [],
     },
     ticketswap: { listings: 0, linked: 0, withStock: 0, mismatches: [] },
-    weather: { days: 0, avgFestivalScore: null, recent: [] },
+    weather: {
+      days: 0,
+      avgFestivalScore: null,
+      fromYear: 2025,
+      coverage: { editions: 0, withWeather: 0 },
+      verdict: null,
+      buckets: [],
+      extremes: [],
+      recent: [],
+    },
     notes: ["Geen database — zet DATABASE_URL."],
   };
 
@@ -260,46 +286,44 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
   let weatherBlock: InsightsSnapshot["weather"] = {
     days: 0,
     avgFestivalScore: null,
+    fromYear: 2025,
+    coverage: { editions: 0, withWeather: 0 },
+    verdict: null,
+    buckets: [],
+    extremes: [],
     recent: [],
   };
   try {
-    const { listWeatherDays } = await import("@/lib/weather/store");
-    const { scoreFestivalWeather } = await import(
-      "@/lib/weather/festival-score"
-    );
-    const end = new Date();
-    const start = new Date();
-    start.setUTCDate(end.getUTCDate() - 13);
-    const days = await listWeatherDays({
-      startDate: start.toISOString().slice(0, 10),
-      endDate: end.toISOString().slice(0, 10),
-    });
-    const recent = days.slice(-10).map((w) => {
-      const scored = scoreFestivalWeather({
-        day: w.day,
-        tempMinC: w.tempMinC,
-        tempMaxC: w.tempMaxC,
-        precipMm: w.precipMm,
-        windMaxMps: w.windMaxMps,
-        weatherCode: w.weatherCode,
-      });
-      return {
-        day: w.day,
-        score: scored.score,
-        label: scored.label,
-        tempMaxC: w.tempMaxC,
-        precipMm: w.precipMm,
-        reasons: scored.reasons,
-      };
-    });
-    const avg =
-      recent.length > 0
-        ? recent.reduce((s, d) => s + d.score, 0) / recent.length
-        : null;
+    const { getWeatherImpact } = await import("@/lib/weather/impact");
+    const impact = await getWeatherImpact({ fromYear: 2025, sync: false });
     weatherBlock = {
-      days: days.length,
-      avgFestivalScore: avg,
-      recent,
+      days: impact.coverage.withWeather,
+      avgFestivalScore: null,
+      fromYear: impact.fromYear,
+      coverage: impact.coverage,
+      verdict: impact.verdict,
+      buckets: impact.outdoor.buckets.map((b) => ({
+        kind: b.kind,
+        label: b.label,
+        n: b.n,
+        avgSold: b.avgSold,
+        vsComfortPct: b.vsComfortPct,
+      })),
+      extremes: impact.extremes.slice(0, 8).map((e) => ({
+        name: e.headliner ?? e.name,
+        day: e.day,
+        label: e.weather.label,
+        summary: e.weather.summary,
+        sold: e.sold,
+      })),
+      recent: impact.extremes.slice(0, 8).map((e) => ({
+        day: e.day,
+        score: e.weather.score.score,
+        label: e.weather.label,
+        tempMaxC: e.weather.tempMaxC,
+        precipMm: e.weather.precipMm,
+        reasons: e.weather.score.reasons,
+      })),
     };
   } catch {
     notes.push("Weer-snapshot kon niet geladen worden.");
@@ -427,15 +451,22 @@ export function snapshotToPromptContext(snap: InsightsSnapshot): string {
 
   lines.push(
     "",
-    "=== Festival-weer score (1-10, outdoor comfort) ===",
-    `Dagen in window: ${snap.weather.days}`,
-    `Gemiddelde score: ${snap.weather.avgFestivalScore?.toFixed(1) ?? "n/a"}`,
-    "Recente dagen:",
+    `=== Festivalweer op eventdagen vanaf ${snap.weather.fromYear} ===`,
+    `Edities met weer: ${snap.weather.coverage.withWeather} / ${snap.weather.coverage.editions}`,
+    snap.weather.verdict
+      ? `Verdict: ${snap.weather.verdict.title} — ${snap.weather.verdict.body} [${snap.weather.verdict.evidence}]`
+      : "Geen verdict.",
+    "Buckets (outdoor mei–sept, gem. sold vs comfortabele dagen):",
   );
-
-  for (const d of snap.weather.recent) {
+  for (const b of snap.weather.buckets) {
     lines.push(
-      `- ${d.day} | score=${d.score}/10 (${d.label}) | max=${d.tempMaxC ?? "?"}°C precip=${d.precipMm ?? "?"}mm | ${d.reasons.join("; ")}`,
+      `- ${b.label} n=${b.n} avgSold=${b.avgSold} vsComfort=${b.vsComfortPct != null ? `${b.vsComfortPct.toFixed(0)}%` : "n/a"}`,
+    );
+  }
+  lines.push("Extreme eventdagen (koud/nat of te heet):");
+  for (const d of snap.weather.extremes) {
+    lines.push(
+      `- ${d.day} ${d.name} | ${d.label} ${d.summary} | sold=${d.sold}`,
     );
   }
 

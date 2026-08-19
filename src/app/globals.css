@@ -209,6 +209,60 @@ html.dark body::before {
 .stagger > *:nth-child(5) {
   animation-delay: 0.25s;
 }
-.stagger > *:nth-child(6) {
-  animation-delay: 0.3s;
+.stagger > *:nth-child(7) {
+  animation-delay: 0.35s;
+}
+.stagger > *:nth-child(8) {
+  animation-delay: 0.4s;
+}
+
+.wx-heat {
+  background: linear-gradient(165deg, #ffe08a 0%, var(--surface) 58%);
+}
+.wx-cold_wet,
+.wx-wet {
+  background: linear-gradient(165deg, #c5d8e4 0%, var(--surface) 58%);
+}
+.wx-cold {
+  background: linear-gradient(165deg, #d7e0e8 0%, var(--surface) 58%);
+}
+.wx-windy {
+  background: linear-gradient(165deg, #e4e4e0 0%, var(--surface) 58%);
+}
+.wx-ideal {
+  background: linear-gradient(165deg, var(--highlight) 0%, var(--surface) 62%);
+}
+.wx-ok {
+  background: var(--surface);
+}
+
+html.dark .wx-heat {
+  background: linear-gradient(165deg, #4a2e08 0%, var(--surface) 62%);
+}
+html.dark .wx-cold_wet,
+html.dark .wx-wet {
+  background: linear-gradient(165deg, #163044 0%, var(--surface) 62%);
+}
+html.dark .wx-cold {
+  background: linear-gradient(165deg, #1a2430 0%, var(--surface) 62%);
+}
+html.dark .wx-windy {
+  background: linear-gradient(165deg, #2a2a28 0%, var(--surface) 62%);
+}
+html.dark .wx-ideal {
+  background: linear-gradient(165deg, #3a3800 0%, var(--surface) 62%);
+}
+
+.wx-rain {
+  transform-origin: left center;
+  animation: wx-rain-in 0.7s ease-out both;
+}
+
+@keyframes wx-rain-in {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
 }

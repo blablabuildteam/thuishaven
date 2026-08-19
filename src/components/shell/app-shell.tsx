@@ -7,6 +7,7 @@ import {
   BarChart3,
   Bell,
   Home,
+  CloudSun,
   LayoutDashboard,
   MessageSquare,
   Plug,
@@ -32,6 +33,7 @@ type NavItem = {
 /** Event-first: minder tabs, duidelijkere namen */
 const dashboardNav: NavItem[] = [
   { href: "/dashboard", label: "Events", icon: LayoutDashboard },
+  { href: "/dashboard/weer", label: "Weer", icon: CloudSun },
   { href: "/dashboard/marketing", label: "Mailings", icon: BarChart3 },
   { href: "/dashboard/weeztix", label: "Tickets", icon: Ticket },
   { href: "/dashboard/alerts", label: "Alerts", icon: Bell },

@@ -5,14 +5,36 @@ import {
   emailCampaignMetrics,
   externalEvents,
   ticketInventory,
+  ticketSalesDaily,
   weatherDaily,
 } from "@/lib/db/schema";
-import { parseEditionLineup } from "@/lib/editions/lineup";
+import {
+  parseEditionLineup,
+  editionFormat,
+  type EditionFormat,
+} from "@/lib/editions/lineup";
 import {
   scoreFestivalWeather,
   type FestivalWeatherScore,
 } from "@/lib/weather/festival-score";
-import { AMS } from "@/lib/weather/open-meteo";
+import {
+  classifyEventWeather,
+  type ClassifiedWeather,
+} from "@/lib/weather/classify";
+import { weatherLocationMatch } from "@/lib/weather/store";
+import {
+  amsterdamDay,
+  isOutdoorSeason,
+  shiftIsoDay,
+} from "@/lib/time/amsterdam";
+import {
+  periodsForDay,
+  weekdayKeyFromIso,
+  yearFromIso,
+  isUsableArtistName,
+  type CalendarPeriod,
+  type WeekdayKey,
+} from "@/lib/time/nl-calendar";
 
 export type EditionAnalysisRow = {
   id: string;
@@ -22,13 +44,20 @@ export type EditionAnalysisRow = {
   artists: string[];
   headliner: string | null;
   kind: string;
+  format: EditionFormat;
+  weekday: WeekdayKey;
+  year: number;
+  periods: CalendarPeriod[];
   isNachtshow: boolean;
   sold: number;
   capacity: number | null;
   /** Gewogen gem. ticketprijs (EUR) uit Weeztix tickettypes */
   avgPriceEur: number | null;
   sellThrough: number | null;
+  /** Orders in de 7 dagen tot en met eventdag (waar curve bestaat) */
+  lastWeekSold: number | null;
   weather: FestivalWeatherScore | null;
+  weatherClass: ClassifiedWeather | null;
   campaigns: Array<{
     id: string;
     name: string;
@@ -156,13 +185,13 @@ export async function getEditionAnalysisBundle(options?: {
     .from(weatherDaily)
     .where(
       and(
-        eq(weatherDaily.locationKey, AMS.locationKey),
+        weatherLocationMatch(),
         gte(weatherDaily.day, minDay),
         lte(weatherDaily.day, maxDay),
       ),
     );
   const weatherByDay = new Map(
-    weatherRows.map((w) => [w.day.toISOString().slice(0, 10), w]),
+    weatherRows.map((w) => [amsterdamDay(w.day), w]),
   );
 
   const camps = await db
@@ -180,20 +209,42 @@ export async function getEditionAnalysisBundle(options?: {
 
   const festivals = await db.select().from(externalEvents);
 
+  const dailyRows = await db
+    .select({
+      editionId: ticketSalesDaily.editionId,
+      day: ticketSalesDaily.day,
+      sold: ticketSalesDaily.sold,
+    })
+    .from(ticketSalesDaily)
+    .where(eq(ticketSalesDaily.platform, "weeztix"));
+  const dailyByEdition = new Map<string, Array<{ day: string; sold: number }>>();
+  for (const r of dailyRows) {
+    const list = dailyByEdition.get(r.editionId) ?? [];
+    const day =
+      typeof r.day === "string"
+        ? r.day.slice(0, 10)
+        : amsterdamDay(r.day);
+    list.push({ day, sold: r.sold });
+    dailyByEdition.set(r.editionId, list);
+  }
+
   const rows: EditionAnalysisRow[] = filtered.map((e) => {
-    const day = e.startsAt.toISOString().slice(0, 10);
+    const day = amsterdamDay(e.startsAt);
     const lineup = parseEditionLineup(e.name);
+    const format = editionFormat(e.name, lineup.kind, lineup.isNachtshow);
     const w = weatherByDay.get(day);
-    const weather = w
-      ? scoreFestivalWeather({
+    const wxInput = w
+      ? {
           day,
           tempMinC: w.tempMinC != null ? Number(w.tempMinC) : null,
           tempMaxC: w.tempMaxC != null ? Number(w.tempMaxC) : null,
           precipMm: w.precipMm != null ? Number(w.precipMm) : null,
           windMaxMps: w.windMaxMps != null ? Number(w.windMaxMps) : null,
           weatherCode: w.weatherCode,
-        })
+        }
       : null;
+    const weather = wxInput ? scoreFestivalWeather(wxInput) : null;
+    const weatherClass = wxInput ? classifyEventWeather(wxInput) : null;
 
     const linked = campsByEdition.get(e.id) ?? [];
     const competing = festivals
@@ -207,14 +258,25 @@ export async function getEditionAnalysisBundle(options?: {
     const sellThrough =
       capacity != null && capacity > 0 ? (sold / capacity) * 100 : null;
 
+    const windowStart = shiftIsoDay(day, -6);
+    const lastWeek = (dailyByEdition.get(e.id) ?? [])
+      .filter((p) => p.day >= windowStart && p.day <= day)
+      .reduce((s, p) => s + p.sold, 0);
+
+    const artists = lineup.artists.filter(isUsableArtistName);
+
     return {
       id: e.id,
       name: e.name,
       day,
       startsAt: e.startsAt.toISOString(),
-      artists: lineup.artists,
-      headliner: lineup.headliner,
+      artists,
+      headliner: artists[0] ?? lineup.headliner,
       kind: lineup.kind,
+      format,
+      weekday: weekdayKeyFromIso(day),
+      year: yearFromIso(day),
+      periods: periodsForDay(day),
       isNachtshow: lineup.isNachtshow,
       sold,
       capacity,
@@ -223,7 +285,9 @@ export async function getEditionAnalysisBundle(options?: {
           ? avgPriceEur
           : null,
       sellThrough,
+      lastWeekSold: lastWeek > 0 ? lastWeek : null,
       weather,
+      weatherClass,
       campaigns: linked.map((c) => {
         const sent = c.sent ?? 0;
         const opens = c.opens ?? 0;
@@ -403,28 +467,60 @@ function buildLessons(
     });
   }
 
-  // Weather: overall mild; be honest
-  const scored = past.filter((r) => r.weather);
-  const corr = pearson(
-    scored.map((r) => r.weather!.score),
-    scored.map((r) => r.sold),
+  const outdoorWx = past.filter(
+    (r) =>
+      r.weatherClass &&
+      isOutdoorSeason(r.day) &&
+      Number(r.day.slice(0, 4)) >= 2025,
   );
-  if (corr != null) {
+  const harshWx = outdoorWx.filter(
+    (r) =>
+      r.weatherClass!.kind === "cold_wet" ||
+      r.weatherClass!.kind === "wet" ||
+      r.weatherClass!.kind === "heat" ||
+      r.weatherClass!.kind === "cold",
+  );
+  const comfortWx = outdoorWx.filter(
+    (r) =>
+      r.weatherClass!.kind === "ideal" || r.weatherClass!.kind === "ok",
+  );
+  const aHarsh = avg(harshWx.map((r) => r.sold));
+  const aComfort = avg(comfortWx.map((r) => r.sold));
+  if (
+    aHarsh != null &&
+    aComfort != null &&
+    harshWx.length >= 3 &&
+    comfortWx.length >= 5
+  ) {
+    const lift = ((aHarsh - aComfort) / aComfort) * 100;
     lessons.push({
       id: "weather",
       kind: "caution",
       title:
-        Math.abs(corr) < 0.15
-          ? "Weer is geen primaire omzetdriver"
-          : corr > 0
-            ? "Weer speelt mee, maar modest"
-            : "Weer correleert negatief — check confounders",
+        lift < -8
+          ? "Koud/nat of te heet: lagere volumes vanaf 2025"
+          : "Weer op de eventdag is nu zichtbaar — effect op totaal is modest",
       body:
-        Math.abs(corr) < 0.15
-          ? `Correlatie weer-score ↔ sold ≈ ${corr.toFixed(2)}. Line-up/format/seizoen verklaren meer. Gebruik weer als context, niet als forecast-knop.`
-          : `Correlatie ≈ ${corr.toFixed(2)}. Blijf weer meenemen in post-mortems, niet als enige stuurvariabele.`,
-      evidence: `n=${scored.length}`,
+        lift < -8
+          ? `Op outdoor-dagen vanaf 2025 verkopen koud-natte / regen- / hitte-edities gem. ~${Math.round(aHarsh).toLocaleString("nl-NL")} vs ~${Math.round(aComfort).toLocaleString("nl-NL")} op droge, comfortabele dagen (${Math.round(lift)}%). Totaalverkoop loopt weken; weer raakt vooral de dag zelf.`
+          : `Comfortabele dagen gem. ~${Math.round(aComfort).toLocaleString("nl-NL")} sold, slecht weer ~${Math.round(aHarsh).toLocaleString("nl-NL")}. Line-up blijft zwaarder; check de Weer-pagina voor de echte dagen.`,
+      evidence: `n=${harshWx.length} slecht · n=${comfortWx.length} comfort · mei–sept 2025+`,
     });
+  } else {
+    const scored = past.filter((r) => r.weather);
+    const corr = pearson(
+      scored.map((r) => r.weather!.score),
+      scored.map((r) => r.sold),
+    );
+    if (corr != null) {
+      lessons.push({
+        id: "weather",
+        kind: "insight",
+        title: "Weer meenemen als dagconditie, niet als 1–10 score",
+        body: "Kijk naar °C en mm regen op de eventdag (vanaf 2025). Een koude regendag of hitte verandert sfeer en last-minute, niet altijd de hele voorverkoop.",
+        evidence: `n=${scored.length} met weerdata`,
+      });
+    }
   }
 
   const strongArtists = artists.filter((a) => a.editions >= 3).slice(0, 5);

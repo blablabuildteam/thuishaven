@@ -4,10 +4,10 @@ import { useState, useTransition } from "react";
 import { Send } from "lucide-react";
 
 const suggestions = [
+  "Wat doet koud en nat weer met de verkoop vanaf 2025?",
+  "Welke edities hadden een te hete eventdag?",
   "Welke mailings hadden de hoogste open rate?",
   "Vat de laatste Brevo-campagnes samen",
-  "Hoeveel Weeztix-edities staan er in de data?",
-  "Welke campagne had de meeste sends?",
 ];
 
 export function InsightsChatPanel() {
@@ -17,7 +17,7 @@ export function InsightsChatPanel() {
     {
       role: "assistant",
       content:
-        "Stel een vraag over Brevo-campagnes of Weeztix-edities. Ik gebruik alleen live gesynchroniseerde data uit jullie database.",
+        "Vraag naar weer (koud/nat, hitte) vanaf 2025, mailings of Weeztix-edities. Ik gebruik alleen live data.",
     },
   ]);
   const [input, setInput] = useState("");

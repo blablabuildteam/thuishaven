@@ -1,21 +1,25 @@
 import Link from "next/link";
 import { SectionHeader } from "@/components/ui/section-header";
-import { MetricCard } from "@/components/ui/metric-card";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { linkCampaignsToEditions } from "@/lib/editions/link-campaigns";
 import { getEditionAnalysisBundle } from "@/lib/editions/analysis";
-import { festivalWeatherTone } from "@/lib/weather/festival-score";
-import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils";
+import { getMailLiftByEdition } from "@/lib/editions/mail-lift";
+import {
+  periodClaims,
+  weekdayClaims,
+} from "@/lib/editions/cohort-claims";
+import { formatNumber } from "@/lib/utils";
 import { hasDatabase } from "@/lib/db/client";
 import { listOpenDashboardAlerts } from "@/lib/integrations/alerts";
+import { getWeatherImpact } from "@/lib/weather/impact";
+import { WeatherStory } from "@/components/dashboard/weather-story";
+import {
+  EventsBoard,
+  type EventsBoardRow,
+} from "@/components/dashboard/events-board";
 
 export const metadata = { title: "Events" };
 export const dynamic = "force-dynamic";
 
-/**
- * Event-first dashboard: elke rij = één Thuishaven-editie
- * met factoren die we naast verkoop leggen.
- */
 export default async function DashboardPage() {
   try {
     await linkCampaignsToEditions({ persist: true, minConfidence: 0.55 });
@@ -23,255 +27,132 @@ export default async function DashboardPage() {
     console.error("campaign link", e);
   }
 
-  const bundle = await getEditionAnalysisBundle({ limit: 150 });
-  const openAlerts = hasDatabase()
-    ? await listOpenDashboardAlerts().catch(() => ({
-        ra: [],
-        ticketswap: [],
-        conflicts: [],
-      }))
-    : { ra: [], ticketswap: [], conflicts: [] };
+  const [bundle, impact, mailLift, openAlerts] = await Promise.all([
+    getEditionAnalysisBundle({ limit: 150 }),
+    getWeatherImpact({ fromYear: 2025, sync: true }),
+    getMailLiftByEdition({ limit: 80 }).catch(() => null),
+    hasDatabase()
+      ? listOpenDashboardAlerts().catch(() => ({
+          ra: [],
+          ticketswap: [],
+          conflicts: [],
+        }))
+      : Promise.resolve({ ra: [], ticketswap: [], conflicts: [] }),
+  ]);
+
+  const mailByEdition = new Map(
+    (mailLift?.editions ?? []).map((e) => [e.editionId, e]),
+  );
   const conflicts = openAlerts.conflicts;
+
+  const boardRows: EventsBoardRow[] = bundle.rows.map((r) => {
+    const mail = mailByEdition.get(r.id);
+    return {
+      id: r.id,
+      day: r.day,
+      name: r.name,
+      headliner: r.headliner,
+      artists: r.artists,
+      format: r.format,
+      weekday: r.weekday,
+      year: r.year,
+      periods: r.periods,
+      sold: r.sold,
+      lastWeekSold: r.lastWeekSold,
+      mailOrdersAfter:
+        mail && mail.totalOrdersAfterMails > 0
+          ? mail.totalOrdersAfterMails
+          : null,
+      brevoClickOrders:
+        mail && mail.brevoClickOrders > 0 ? mail.brevoClickOrders : null,
+      weather: r.weatherClass,
+    };
+  });
+
+  const cohortBits = [
+    ...weekdayClaims(bundle.rows),
+    ...periodClaims(bundle.rows),
+  ].slice(0, 2);
 
   return (
     <div>
       <SectionHeader
-        eyebrow="Event-based"
+        eyebrow="Events"
         title="Events"
-        description="Eén rij per editie. Verkoop plus factoren: weer, artiest, prijs, concurrentie, mail. Social (IG) volgt als die koppeling live is."
+        description={`${formatNumber(bundle.totals.editions)} edities · ${formatNumber(bundle.totals.totalSold)} sold`}
         action={
           <div className="flex flex-wrap gap-2">
             <Link
-              href="/dashboard/insights"
+              href="/dashboard/weer"
               className="bg-accent px-3 py-2 text-sm text-accent-contrast"
             >
-              Insights
+              Weer
             </Link>
             <Link
-              href="/koppelingen"
+              href="/dashboard/insights"
               className="border border-border px-3 py-2 text-sm hover:border-text"
             >
-              Bronnen
+              Insights
             </Link>
           </div>
         }
       />
 
       {conflicts.length > 0 && (
-        <div
-          className={`mb-6 border px-4 py-3 text-sm ${
+        <Link
+          href="/dashboard/alerts"
+          className={`mb-5 flex items-center justify-between gap-3 border px-3 py-2 text-sm ${
             conflicts.some((c) => c.kind === "overbooking")
-              ? "border-danger/40 bg-danger/5"
-              : "border-warn/40 bg-warn/10"
+              ? "border-danger/50 bg-danger/5"
+              : "border-warn/50 bg-warn/10"
           }`}
         >
-          <p className="font-medium text-text">
-            {conflicts.length === 1
-              ? "1 editie: Weeztix uitverkocht, secundair kanaal nog actief."
-              : `${conflicts.length} edities: Weeztix uitverkocht, secundair kanaal nog actief.`}
-          </p>
-          <p className="mt-1 text-text-muted">
-            {conflicts
-              .map((c) => `${c.editionName} (${c.channelLabel})`)
-              .join(" · ")}{" "}
-            — overboeking of omzetlek.{" "}
-            <Link href="/dashboard/alerts" className="underline hover:text-text">
-              Naar alerts
-            </Link>
-          </p>
-        </div>
+          <span className="font-medium">
+            {conflicts.length} sold-out · secundair nog open
+          </span>
+          <span className="text-text-muted">Alerts →</span>
+        </Link>
       )}
 
-      <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          label="Events in view"
-          value={formatNumber(bundle.totals.editions)}
-          accent
-        />
-        <MetricCard
-          label="Sold"
-          value={formatNumber(bundle.totals.totalSold)}
-        />
-        <MetricCard
-          label="Mails gekoppeld"
-          value={formatNumber(bundle.totals.campaignsLinked)}
-        />
-        <MetricCard
-          label="Gem. weer op eventdag"
-          value={
-            bundle.totals.avgWeather != null
-              ? `${bundle.totals.avgWeather.toFixed(1)}/10`
-              : "—"
-          }
-          hint="Alleen op editiedagen"
-        />
-      </div>
+      <WeatherStory impact={impact} compact />
 
-      {bundle.lessons.length > 0 && (
-        <section className="mb-6">
-          <h2 className="mb-3 text-sm font-medium tracking-[0.08em] text-text-dim uppercase">
-            Inzichten
-          </h2>
-          <ul className="grid gap-3 md:grid-cols-2">
-            {bundle.lessons.slice(0, 4).map((l) => (
-              <li key={l.id} className="border border-border bg-surface p-4">
-                <p className="text-sm font-medium text-text">{l.title}</p>
-                <p className="mt-1.5 text-sm leading-relaxed text-text-muted">
-                  {l.body}
-                </p>
-                <p className="mt-2 text-[11px] text-text-dim">{l.evidence}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
+      {cohortBits.length > 0 && (
+        <ul className="mb-6 flex flex-wrap gap-3 text-sm">
+          {cohortBits.map((c) => (
+            <li
+              key={c.title}
+              className="border-l-2 border-highlight pl-3"
+              title={c.evidence}
+            >
+              <span className="font-medium text-text">{c.title}</span>
+              <span className="ml-2 text-text-muted">{c.body}</span>
+            </li>
+          ))}
+        </ul>
       )}
-
-      {bundle.recommendations.length > 0 && (
-        <section className="mb-8">
-          <h2 className="mb-3 text-sm font-medium tracking-[0.08em] text-text-dim uppercase">
-            Recommendations
-          </h2>
-          <ul className="grid gap-3 md:grid-cols-2">
-            {bundle.recommendations.map((l) => (
-              <li
-                key={l.id}
-                className="border-l-[3px] border-l-highlight border border-border bg-surface p-4"
-              >
-                <p className="text-sm font-medium text-text">{l.title}</p>
-                <p className="mt-1.5 text-sm leading-relaxed text-text-muted">
-                  {l.body}
-                </p>
-                <p className="mt-2 text-[11px] text-text-dim">{l.evidence}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <section className="mb-4">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-          <h2 className="text-sm font-medium tracking-[0.08em] text-text-dim uppercase">
-            Factoren per event
-          </h2>
-          <p className="text-xs text-text-dim">
-            Weer = score op de eventdag · Mail = gekoppelde Brevo · Social = nog
-            open
-          </p>
-        </div>
-
-        <div className="overflow-x-auto border border-border bg-surface">
-          <table className="w-full min-w-[960px] text-left text-sm">
-            <thead className="border-b border-border text-[11px] tracking-wider text-text-dim uppercase">
-              <tr>
-                <th className="px-3 py-3 font-medium">Event</th>
-                <th className="px-3 py-3 font-medium">Sold</th>
-                <th className="px-3 py-3 font-medium">Prijs</th>
-                <th className="px-3 py-3 font-medium">Weer</th>
-                <th className="px-3 py-3 font-medium">Artiest</th>
-                <th className="px-3 py-3 font-medium">Mail</th>
-                <th className="px-3 py-3 font-medium">Concurrentie</th>
-                <th className="px-3 py-3 font-medium">Social</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bundle.rows.map((r) => (
-                <tr
-                  key={r.id}
-                  className="border-b border-border/70 last:border-0"
-                >
-                  <td className="max-w-[240px] px-3 py-3">
-                    <p className="truncate font-medium text-text">
-                      {r.headliner ?? r.name}
-                    </p>
-                    <p className="text-xs text-text-dim">
-                      {r.day}
-                      {r.kind !== "regular"
-                        ? ` · ${r.kind.replace(/_/g, " ")}`
-                        : ""}
-                      {r.sellThrough != null
-                        ? ` · ${formatPercent(r.sellThrough, 0)} vol`
-                        : ""}
-                    </p>
-                  </td>
-                  <td className="px-3 py-3 font-mono">
-                    {r.sold > 0 ? formatNumber(r.sold) : "—"}
-                  </td>
-                  <td className="px-3 py-3 font-mono text-text-muted">
-                    {r.avgPriceEur != null && r.avgPriceEur > 0
-                      ? formatCurrency(r.avgPriceEur)
-                      : "—"}
-                  </td>
-                  <td className="px-3 py-3">
-                    {r.weather ? (
-                      <StatusBadge tone={festivalWeatherTone(r.weather.band)}>
-                        {r.weather.score}/10
-                      </StatusBadge>
-                    ) : (
-                      <span className="text-text-dim">—</span>
-                    )}
-                  </td>
-                  <td className="max-w-[160px] truncate px-3 py-3 text-text-muted">
-                    {r.artists.slice(0, 2).join(", ") || "—"}
-                  </td>
-                  <td className="px-3 py-3 text-text-muted">
-                    {r.campaigns.length ? (
-                      <span title={r.campaigns.map((c) => c.name).join(", ")}>
-                        {r.campaigns.length}×
-                        {r.campaigns[0]?.openRate != null
-                          ? ` · ${formatPercent(r.campaigns[0].openRate, 0)}`
-                          : ""}
-                      </span>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="max-w-[140px] truncate px-3 py-3 text-xs text-text-dim">
-                    {r.competingFestivals[0] ?? "—"}
-                  </td>
-                  <td className="px-3 py-3">
-                    <StatusBadge tone="neutral">Soon</StatusBadge>
-                  </td>
-                </tr>
-              ))}
-              {!bundle.rows.length && (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="px-3 py-8 text-sm text-text-muted"
-                  >
-                    Nog geen edities. Sync Weeztix via{" "}
-                    <Link href="/koppelingen" className="underline">
-                      Bronnen
-                    </Link>
-                    .
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
 
       {bundle.artistLeaderboard.length > 0 && (
-        <section className="mt-8">
-          <h2 className="mb-3 text-sm font-medium tracking-[0.08em] text-text-dim uppercase">
-            Artiesten · gemiddelde sold (≥2 events)
+        <section className="mb-8">
+          <h2 className="mb-2 text-xs font-medium tracking-[0.12em] text-text-dim uppercase">
+            Draw · ≥2 edities
           </h2>
-          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {bundle.artistLeaderboard.slice(0, 9).map((a) => (
+          <ul className="flex flex-wrap gap-2">
+            {bundle.artistLeaderboard.slice(0, 5).map((a) => (
               <li
                 key={a.artist}
-                className="flex items-center justify-between border border-border bg-surface px-3 py-2"
+                className="border border-border bg-surface px-3 py-2"
               >
-                <span className="text-sm text-text">{a.artist}</span>
-                <span className="font-mono text-sm text-text-muted">
-                  {formatNumber(a.avgSold)}
+                <span className="text-sm font-medium">{a.artist}</span>
+                <span className="ml-2 font-mono text-xs text-text-muted">
+                  ~{formatNumber(a.avgSold)}
                 </span>
               </li>
             ))}
           </ul>
         </section>
       )}
+
+      <EventsBoard rows={boardRows} totalSold={bundle.totals.totalSold} />
     </div>
   );
 }
