@@ -21,6 +21,8 @@ import {
   type WeatherKind,
 } from "@/lib/weather/classify";
 
+export type FillStatus = "sold_out" | "near" | "room" | "unknown";
+
 export type EventsBoardRow = {
   id: string;
   day: string;
@@ -32,11 +34,24 @@ export type EventsBoardRow = {
   year: number;
   periods: CalendarPeriod[];
   sold: number;
+  capacity: number | null;
+  sellThrough: number | null;
   lastWeekSold: number | null;
   mailOrdersAfter: number | null;
   brevoClickOrders: number | null;
   weather: ClassifiedWeather | null;
 };
+
+/** Weeztix-cap: 100% = uitverkocht; <90% = restcapaciteit (kon beter). */
+export function fillStatus(
+  sellThrough: number | null,
+  capacity: number | null,
+): FillStatus {
+  if (capacity == null || capacity <= 0 || sellThrough == null) return "unknown";
+  if (sellThrough >= 99.5) return "sold_out";
+  if (sellThrough >= 90) return "near";
+  return "room";
+}
 
 const FORMAT_OPTS: Array<{ id: "all" | EditionFormat; label: string }> = [
   { id: "all", label: "Alle formats" },
@@ -80,6 +95,20 @@ const WEATHER_OPTS: Array<{ id: "all" | WeatherKind; label: string }> = [
   ...WEATHER_DEFS.map((d) => ({ id: d.kind, label: d.label })),
 ];
 
+const FILL_OPTS: Array<{ id: "all" | FillStatus; label: string }> = [
+  { id: "all", label: "Alle fill" },
+  { id: "sold_out", label: "Uitverkocht (100%)" },
+  { id: "near", label: "Bijna vol (≥90%)" },
+  { id: "room", label: "Kon beter (<90%)" },
+  { id: "unknown", label: "Geen cap-data" },
+];
+
+const FILL_CHIP: Record<Exclude<FillStatus, "unknown">, string> = {
+  sold_out: "Uitverkocht",
+  near: "Bijna vol",
+  room: "Kon beter",
+};
+
 function SelectField({
   label,
   value,
@@ -117,6 +146,7 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
   const [period, setPeriod] = useState<"all" | CalendarPeriod>("all");
   const [year, setYear] = useState<"all" | number>("all");
   const [weather, setWeather] = useState<"all" | WeatherKind>("all");
+  const [fill, setFill] = useState<"all" | FillStatus>("all");
   const [dj, setDj] = useState("");
   const [djQuery, setDjQuery] = useState("");
   const [djOpen, setDjOpen] = useState(false);
@@ -158,20 +188,35 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
       if (year !== "all" && r.year !== year) return false;
       if (weather !== "all" && (!r.weather || r.weather.kind !== weather))
         return false;
+      if (fill !== "all" && fillStatus(r.sellThrough, r.capacity) !== fill)
+        return false;
       if (dj && !r.artists.some((a) => a.toLowerCase() === dj.toLowerCase()))
         return false;
       return true;
     });
-  }, [rows, format, weekday, period, year, weather, dj]);
+  }, [rows, format, weekday, period, year, weather, fill, dj]);
 
   const stats = useMemo(() => {
     const sold = visible.reduce((s, r) => s + r.sold, 0);
     const withSales = visible.filter((r) => r.sold > 0);
     const avg =
-      withSales.length > 0
-        ? Math.round(sold / withSales.length)
-        : 0;
-    return { sold, avg, n: visible.length };
+      withSales.length > 0 ? Math.round(sold / withSales.length) : 0;
+    const withFill = visible.filter((r) => r.sellThrough != null);
+    const avgFill =
+      withFill.length > 0
+        ? Math.round(
+            withFill.reduce((s, r) => s + (r.sellThrough ?? 0), 0) /
+              withFill.length,
+          )
+        : null;
+    let soldOut = 0;
+    let room = 0;
+    for (const r of visible) {
+      const st = fillStatus(r.sellThrough, r.capacity);
+      if (st === "sold_out") soldOut += 1;
+      if (st === "room") room += 1;
+    }
+    return { sold, avg, n: visible.length, avgFill, soldOut, room };
   }, [visible]);
 
   const activeFilters = useMemo(() => {
@@ -206,6 +251,12 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
         label: WEATHER_DEFS.find((d) => d.kind === weather)?.label ?? weather,
         clear: () => setWeather("all"),
       });
+    if (fill !== "all")
+      chips.push({
+        key: "fill",
+        label: FILL_OPTS.find((o) => o.id === fill)?.label ?? fill,
+        clear: () => setFill("all"),
+      });
     if (dj)
       chips.push({
         key: "dj",
@@ -216,7 +267,18 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
         },
       });
     return chips;
-  }, [format, weekday, period, year, weather, dj]);
+  }, [format, weekday, period, year, weather, fill, dj]);
+
+  function resetFilters() {
+    setFormat("all");
+    setWeekday("all");
+    setPeriod("all");
+    setYear("all");
+    setWeather("all");
+    setFill("all");
+    setDj("");
+    setDjQuery("");
+  }
 
   return (
     <section>
@@ -235,15 +297,27 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
           </p>
           <p>
             <span className="font-display text-xl">
-              {stats.avg > 0 ? formatNumber(stats.avg) : "—"}
+              {stats.avgFill != null ? `${stats.avgFill}%` : "—"}
             </span>
-            <span className="ml-1.5 text-text-dim">gem.</span>
+            <span className="ml-1.5 text-text-dim">gem. fill</span>
+          </p>
+          <p>
+            <span className="font-display text-xl">
+              {formatNumber(stats.soldOut)}
+            </span>
+            <span className="ml-1.5 text-text-dim">uitverkocht</span>
+          </p>
+          <p>
+            <span className="font-display text-xl">
+              {formatNumber(stats.room)}
+            </span>
+            <span className="ml-1.5 text-text-dim">kon beter</span>
           </p>
         </div>
       </div>
 
       <div className="mb-3 border border-border bg-surface p-3">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
           <SelectField
             label="Format"
             value={format}
@@ -269,6 +343,12 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
               setYear(v === "all" ? "all" : (Number(v) as 2025 | 2026))
             }
             options={YEAR_OPTS}
+          />
+          <SelectField
+            label="Fill"
+            value={fill}
+            onChange={(v) => setFill(v as "all" | FillStatus)}
+            options={FILL_OPTS}
           />
           <SelectField
             label="Weer"
@@ -334,15 +414,7 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
             <button
               type="button"
               className="px-2 py-1 text-xs text-text-dim underline"
-              onClick={() => {
-                setFormat("all");
-                setWeekday("all");
-                setPeriod("all");
-                setYear("all");
-                setWeather("all");
-                setDj("");
-                setDjQuery("");
-              }}
+              onClick={resetFilters}
             >
               Reset
             </button>
@@ -351,14 +423,24 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
 
         <details className="mt-2">
           <summary className="cursor-pointer text-[11px] text-text-dim">
-            Wat betekenen de weer-filters?
+            Fill = Weeztix-cap (sold ÷ capaciteit), niet zaalcapaciteit
           </summary>
-          <ul className="mt-2 grid gap-1 sm:grid-cols-2">
-            {WEATHER_DEFS.map((d) => (
-              <li key={d.kind} className="text-[11px] text-text-muted">
-                <span className="text-text">{d.label}</span> — {d.definition}
-              </li>
-            ))}
+          <ul className="mt-2 grid gap-1 text-[11px] text-text-muted sm:grid-cols-2">
+            <li>
+              <span className="text-text">Uitverkocht</span> — ≥99,5% van de
+              ticketcap
+            </li>
+            <li>
+              <span className="text-text">Bijna vol</span> — 90–99%
+            </li>
+            <li>
+              <span className="text-text">Kon beter</span> — &lt;90% fill, dus
+              resttickets
+            </li>
+            <li>
+              <span className="text-text">Geen cap-data</span> — oudere edities
+              zonder Weeztix-inventory
+            </li>
           </ul>
         </details>
       </div>
@@ -366,11 +448,16 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
       <ul className="divide-y divide-border border-y border-border">
         {visible.map((r) => {
           const wx = r.weather;
+          const st = fillStatus(r.sellThrough, r.capacity);
+          const left =
+            r.capacity != null && r.capacity > 0
+              ? Math.max(0, r.capacity - r.sold)
+              : null;
           return (
             <li
               key={r.id}
               className={cn(
-                "grid grid-cols-[4.5rem_1fr_auto] items-center gap-2 px-2 py-2.5 sm:grid-cols-[5rem_1fr_auto_auto] sm:gap-3 sm:px-3",
+                "grid grid-cols-[4.5rem_1fr_auto] items-center gap-2 px-2 py-2.5 sm:grid-cols-[5rem_1fr_minmax(5.5rem,auto)_auto] sm:gap-3 sm:px-3",
                 wx && weatherPanelClass(wx.kind),
               )}
             >
@@ -396,14 +483,35 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
                     : ""}
                 </p>
               </div>
-              <p className="hidden text-right font-display text-xl sm:block">
-                {r.sold > 0 ? formatNumber(r.sold) : "—"}
-              </p>
-              <div className="justify-self-end text-right">
+              <div className="justify-self-end text-right sm:justify-self-auto">
+                <p className="font-display text-lg leading-none sm:text-xl">
+                  {r.sold > 0 ? formatNumber(r.sold) : "—"}
+                </p>
+                {st !== "unknown" && r.sellThrough != null ? (
+                  <p
+                    className={cn(
+                      "mt-0.5 text-[10px] font-medium",
+                      st === "sold_out" && "text-text",
+                      st === "near" && "text-text-muted",
+                      st === "room" && "text-warn",
+                    )}
+                  >
+                    {Math.round(r.sellThrough)}% · {FILL_CHIP[st]}
+                    {st === "room" && left != null && left > 0
+                      ? ` · ${formatNumber(left)} over`
+                      : ""}
+                  </p>
+                ) : (
+                  <p className="mt-0.5 text-[10px] text-text-dim">geen fill</p>
+                )}
+              </div>
+              <div className="hidden justify-self-end text-right sm:block">
                 {wx ? (
                   <>
                     <p className="font-display text-lg leading-none">
-                      {wx.tempMaxC != null ? `${Math.round(wx.tempMaxC)}°` : "—"}
+                      {wx.tempMaxC != null
+                        ? `${Math.round(wx.tempMaxC)}°`
+                        : "—"}
                     </p>
                     <p className="text-[10px] text-text-muted">
                       {wx.precipMm >= 0.5

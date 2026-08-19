@@ -53,6 +53,8 @@ export default async function DashboardPage() {
       year: r.year,
       periods: r.periods,
       sold: r.sold,
+      capacity: r.capacity,
+      sellThrough: r.sellThrough,
       lastWeekSold: r.lastWeekSold,
       mailOrdersAfter:
         mail && mail.totalOrdersAfterMails > 0
@@ -74,7 +76,7 @@ export default async function DashboardPage() {
       <SectionHeader
         eyebrow="Events"
         title="Events"
-        description={`${formatNumber(bundle.totals.editions)} edities`}
+        description={`${formatNumber(bundle.totals.editions)} edities · fill = Weeztix-cap (uitverkocht vs resttickets)`}
         action={
           <div className="flex flex-wrap gap-2">
             <Link
