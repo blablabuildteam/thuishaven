@@ -17,6 +17,7 @@ export type RaEvent = {
   startTime: string | null;
   attending: number;
   isTicketed: boolean;
+  ticketsAvailable: boolean;
   contentUrl: string | null;
 };
 
@@ -107,31 +108,43 @@ export async function listRaVenueEvents(options?: {
   const limit = options?.limit ?? 40;
   const year = options?.year;
   const withYear = type === "ARCHIVE" && year != null;
+  const eventFields = `id title date startTime attending isTicketed contentUrl
+              ticketing { isAnyTicketTierAvailable }`;
   const res = withYear
     ? await raGraphql<{
-        venue: { events: RaEvent[] | null } | null;
+        venue: { events: Array<RaEvent & { ticketing?: { isAnyTicketTierAvailable?: boolean } }> | null } | null;
       }>(
         `query VenueEvents($id: ID!, $type: EventQueryType!, $limit: Int, $year: Int) {
           venue(id: $id) {
             events(type: $type, limit: $limit, year: $year) {
-              id title date startTime attending isTicketed contentUrl
+              ${eventFields}
             }
           }
         }`,
         { id: venueId(), type, limit, year },
       )
     : await raGraphql<{
-        venue: { events: RaEvent[] | null } | null;
+        venue: { events: Array<RaEvent & { ticketing?: { isAnyTicketTierAvailable?: boolean } }> | null } | null;
       }>(
         `query VenueEvents($id: ID!, $type: EventQueryType!, $limit: Int) {
           venue(id: $id) {
             events(type: $type, limit: $limit) {
-              id title date startTime attending isTicketed contentUrl
+              ${eventFields}
             }
           }
         }`,
         { id: venueId(), type, limit },
       );
   if (!res.ok) return res;
-  return { ok: true, events: res.data.venue?.events ?? [] };
+  const events = (res.data.venue?.events ?? []).map((ev) => ({
+    id: ev.id,
+    title: ev.title,
+    date: ev.date,
+    startTime: ev.startTime,
+    attending: ev.attending,
+    isTicketed: ev.isTicketed,
+    ticketsAvailable: Boolean(ev.ticketing?.isAnyTicketTierAvailable),
+    contentUrl: ev.contentUrl,
+  }));
+  return { ok: true, events };
 }

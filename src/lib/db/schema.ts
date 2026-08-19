@@ -39,6 +39,7 @@ export const editions = pgTable("editions", {
   status: text("status").notNull().default("upcoming"),
   weeztixEventId: text("weeztix_event_id"),
   raEventId: text("ra_event_id"),
+  ticketswapEventId: text("ticketswap_event_id"),
   appicEventId: text("appic_event_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -279,6 +280,34 @@ export const ticketSalesDaily = pgTable(
   ],
 );
 
+/**
+ * Order-referrers uit Weeztix statistics (waar kwam de koper vandaan).
+ * Brevo-tracking loopt via r.routage*.arenametrix.fr → channel = brevo.
+ */
+export const ticketSaleReferrers = pgTable(
+  "ticket_sale_referrers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    editionId: uuid("edition_id")
+      .notNull()
+      .references(() => editions.id),
+    platform: ticketPlatformEnum("platform").notNull(),
+    referrer: text("referrer").notNull(),
+    channel: text("channel").notNull().default("other"),
+    orderCount: integer("order_count").notNull().default(0),
+    syncedAt: timestamp("synced_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("ticket_sale_referrers_edition_platform_ref").on(
+      t.editionId,
+      t.platform,
+      t.referrer,
+    ),
+  ],
+);
+
 /** OAuth tokens (Weeztix refresh is éénmalig — niet in env laten staan). */
 export const integrationCredentials = pgTable("integration_credentials", {
   provider: text("provider").primaryKey(),
@@ -327,6 +356,7 @@ export const raListings = pgTable(
     attending: integer("attending").notNull().default(0),
     isTicketed: boolean("is_ticketed").notNull().default(false),
     soldOut: boolean("sold_out").notNull().default(false),
+    ticketsAvailable: boolean("tickets_available").notNull().default(false),
     contentUrl: text("content_url"),
     editionId: uuid("edition_id").references(() => editions.id),
     syncedAt: timestamp("synced_at", { withTimezone: true })
@@ -334,6 +364,24 @@ export const raListings = pgTable(
       .notNull(),
   },
   (t) => [uniqueIndex("ra_listings_ra_event_id").on(t.raEventId)],
+);
+
+/** TicketSwap public listings (secundaire markt). */
+export const ticketswapListings = pgTable(
+  "ticketswap_listings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tsEventId: text("ts_event_id").notNull(),
+    title: text("title").notNull(),
+    startsAt: timestamp("starts_at", { withTimezone: true }),
+    availableCount: integer("available_count").notNull().default(0),
+    contentUrl: text("content_url"),
+    editionId: uuid("edition_id").references(() => editions.id),
+    syncedAt: timestamp("synced_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [uniqueIndex("ticketswap_listings_ts_event_id").on(t.tsEventId)],
 );
 
 export const ticketInventory = pgTable("ticket_inventory", {
@@ -395,6 +443,7 @@ export const emailCampaignMetrics = pgTable("email_campaign_metrics", {
 
 export const alertTypeEnum = pgEnum("alert_type", [
   "ticketswap_after_soldout",
+  "weeztix_soldout_ra_open",
   "sync_failure",
   "custom",
 ]);

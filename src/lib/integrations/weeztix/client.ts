@@ -123,6 +123,74 @@ export async function weeztixGet<T = unknown>(
   }
 }
 
+/**
+ * Elasticsearch-read via POST (orders/tickets aggregaties).
+ * Geen schrijven naar Weeztix-resources.
+ */
+export async function weeztixPost<T = unknown>(options: {
+  path: string;
+  body?: unknown;
+  companyGuid?: string | null;
+}): Promise<
+  { ok: true; data: T; status: number } | { ok: false; error: string; status: number }
+> {
+  const cfg = await resolveWeeztixConfig();
+  if ("error" in cfg) {
+    return { ok: false, error: cfg.error, status: 0 };
+  }
+
+  const url = new URL(
+    options.path.startsWith("http")
+      ? options.path
+      : `${cfg.apiUrl}${options.path.startsWith("/") ? "" : "/"}${options.path}`,
+  );
+
+  assertExternalReadOnly("POST", url.toString(), {
+    allowStatisticsReadPost: true,
+  });
+
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${cfg.accessToken}`,
+  };
+  const company =
+    options.companyGuid === null
+      ? undefined
+      : (options.companyGuid ?? cfg.companyGuid);
+  if (company) headers.Company = company;
+
+  try {
+    const res = await fetch(url.toString(), {
+      method: "POST",
+      headers,
+      body: JSON.stringify(options.body ?? {}),
+      cache: "no-store",
+    });
+    const text = await res.text();
+    let data: unknown = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = { raw: text.slice(0, 500) };
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: res.status,
+        error: `Weeztix HTTP ${res.status}: ${text.slice(0, 240)}`,
+      };
+    }
+    return { ok: true, status: res.status, data: data as T };
+  } catch (e) {
+    return {
+      ok: false,
+      status: 0,
+      error: e instanceof Error ? e.message : "Network error",
+    };
+  }
+}
+
 /** Token-validatie via auth host (GET). */
 export async function weeztixWhoAmI(): Promise<
   | {

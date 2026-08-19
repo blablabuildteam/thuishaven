@@ -6,6 +6,8 @@ import { linkCampaignsToEditions } from "@/lib/editions/link-campaigns";
 import { getEditionAnalysisBundle } from "@/lib/editions/analysis";
 import { festivalWeatherTone } from "@/lib/weather/festival-score";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils";
+import { hasDatabase } from "@/lib/db/client";
+import { listOpenDashboardAlerts } from "@/lib/integrations/alerts";
 
 export const metadata = { title: "Events" };
 export const dynamic = "force-dynamic";
@@ -22,6 +24,14 @@ export default async function DashboardPage() {
   }
 
   const bundle = await getEditionAnalysisBundle({ limit: 150 });
+  const openAlerts = hasDatabase()
+    ? await listOpenDashboardAlerts().catch(() => ({
+        ra: [],
+        ticketswap: [],
+        conflicts: [],
+      }))
+    : { ra: [], ticketswap: [], conflicts: [] };
+  const conflicts = openAlerts.conflicts;
 
   return (
     <div>
@@ -46,6 +56,31 @@ export default async function DashboardPage() {
           </div>
         }
       />
+
+      {conflicts.length > 0 && (
+        <div
+          className={`mb-6 border px-4 py-3 text-sm ${
+            conflicts.some((c) => c.kind === "overbooking")
+              ? "border-danger/40 bg-danger/5"
+              : "border-warn/40 bg-warn/10"
+          }`}
+        >
+          <p className="font-medium text-text">
+            {conflicts.length === 1
+              ? "1 editie: Weeztix uitverkocht, secundair kanaal nog actief."
+              : `${conflicts.length} edities: Weeztix uitverkocht, secundair kanaal nog actief.`}
+          </p>
+          <p className="mt-1 text-text-muted">
+            {conflicts
+              .map((c) => `${c.editionName} (${c.channelLabel})`)
+              .join(" · ")}{" "}
+            — overboeking of omzetlek.{" "}
+            <Link href="/dashboard/alerts" className="underline hover:text-text">
+              Naar alerts
+            </Link>
+          </p>
+        </div>
+      )}
 
       <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard

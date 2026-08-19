@@ -125,7 +125,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     name: "Resident Advisor",
     tool: "dashboard",
     description:
-      "Publieke listings voor club Thuishaven (ra.co/clubs/109027): attending, ticketed, sold-out in de titel. Geen ticket-sold zoals Weeztix — RA heeft geen officiële sales-API.",
+      "Listings + of de RA-shop nog open is. Alert als Weeztix uitverkocht is terwijl RA nog verkoopt. Geen officiële sales-API.",
     envKeys: [],
     optionalEnvKeys: ["RA_VENUE_ID", "RA_API_KEY"],
     askFromClient: [
@@ -140,7 +140,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "appic",
     name: "Appic",
     tool: "dashboard",
-    description: "Ticketverkoop via Appic.",
+    description: "Secundaire ticketverkoop. Zelfde alertregel als RA/TicketSwap: Weeztix sold-out terwijl Appic nog open staat.",
     envKeys: ["APPIC_API_KEY"],
     askFromClient: ["API-key", "Event/product mapping"],
     verifyHint: "Auth + events",
@@ -150,13 +150,19 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "ticketswap",
     name: "TicketSwap",
     tool: "dashboard",
-    description: "Secundaire markt — alerts na sold-out.",
-    envKeys: ["TICKETSWAP_API_KEY"],
-    askFromClient: [
-      "API-toegang of monitoring-afspraak",
-      "Welke events tracken",
+    description: "Secundaire markt — alert als primair uitverkocht is en TicketSwap nog aanbod heeft (omzetlek).",
+    envKeys: [],
+    optionalEnvKeys: [
+      "TICKETSWAP_LOCATION_ID",
+      "TICKETSWAP_LOCATION_SLUG",
+      "TICKETSWAP_API_KEY",
     ],
-    verifyHint: "Event listings / search",
+    askFromClient: [
+      "Venue staat default op location/thuishaven/3517",
+      "Optioneel: partner/developer token als TicketSwap die later geeft",
+    ],
+    verifyHint: "Read-only listings voor venue Thuishaven",
+    docsUrl: "https://www.ticketswap.com/location/thuishaven/3517",
     priority: "high",
   },
   {
@@ -238,11 +244,20 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "alert_notify",
     name: "Dashboard alerts",
     tool: "dashboard",
-    description: "TicketSwap / sync failure notificaties.",
-    envKeys: ["ALERT_NOTIFY_EMAIL"],
-    askFromClient: ["E-mailadressen marketing/management"],
-    verifyHint: "Testmail via Brevo",
-    priority: "medium",
+    description:
+      "E-mail bij Weeztix sold-out terwijl RA/TicketSwap (of Appic) nog open is.",
+    envKeys: ["ALERT_NOTIFY_EMAIL", "ALERT_EMAIL_ENABLED"],
+    optionalEnvKeys: [
+      "ALERT_EMAIL_ALLOWLIST",
+      "ALERT_FROM_EMAIL",
+      "ALERT_FROM_NAME",
+    ],
+    askFromClient: [
+      "E-mailadressen marketing/management (komma-gescheiden)",
+      "Allowlist: alleen die adressen/@domeinen mogen ontvangen",
+    ],
+    verifyHint: "POST /api/integrations/alerts/test-email (admin only + allowlist)",
+    priority: "high",
   },
   {
     id: "linkedin",

@@ -34,25 +34,31 @@ export async function syncBrevoCampaignsReadOnly(): Promise<{
   const pageSize = 50;
   const campaigns: BrevoEmailCampaign[] = [];
 
-  for (let offset = 0; offset < 500; offset += pageSize) {
-    const listed = await listBrevoEmailCampaigns({
-      limit: pageSize,
-      offset,
-    });
-    if (!listed.ok) {
-      return {
-        ok: false,
-        source: "brevo",
-        account: account.data.email ?? account.data.companyName,
-        campaignsFetched: campaigns.length,
-        metricsUpserted: 0,
-        error: listed.error,
-      };
+  for (const type of ["classic", "trigger"] as const) {
+    for (let offset = 0; offset < 2000; offset += pageSize) {
+      const listed = await listBrevoEmailCampaigns({
+        limit: pageSize,
+        offset,
+        type,
+      });
+      if (!listed.ok) {
+        if (campaigns.length === 0) {
+          return {
+            ok: false,
+            source: "brevo",
+            account: account.data.email ?? account.data.companyName,
+            campaignsFetched: 0,
+            metricsUpserted: 0,
+            error: listed.error,
+          };
+        }
+        break;
+      }
+      const batch = listed.data.campaigns ?? [];
+      campaigns.push(...batch);
+      const total = listed.data.count ?? campaigns.length;
+      if (batch.length < pageSize || offset + batch.length >= total) break;
     }
-    const batch = listed.data.campaigns ?? [];
-    campaigns.push(...batch);
-    const total = listed.data.count ?? campaigns.length;
-    if (batch.length < pageSize || campaigns.length >= total) break;
   }
 
   const preview = campaigns.slice(0, 15).map((c) => {

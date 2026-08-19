@@ -18,7 +18,12 @@ export class ReadOnlyViolationError extends Error {
 export function assertExternalReadOnly(
   method: string,
   url: string,
-  options?: { allowAuthTokenPost?: boolean; allowGraphqlReadPost?: boolean },
+  options?: {
+    allowAuthTokenPost?: boolean;
+    allowGraphqlReadPost?: boolean;
+    allowTransactionalEmailPost?: boolean;
+    allowStatisticsReadPost?: boolean;
+  },
 ) {
   const upper = method.toUpperCase();
   if (!WRITE_METHODS.has(upper)) return;
@@ -34,7 +39,24 @@ export function assertExternalReadOnly(
   if (
     options?.allowGraphqlReadPost &&
     upper === "POST" &&
-    /^https:\/\/ra\.co\/graphql\/?$/i.test(url)
+    (/^https:\/\/ra\.co\/graphql\/?$/i.test(url) ||
+      /^https:\/\/api\.ticketswap\.com\/graphql\/public\/?$/i.test(url))
+  ) {
+    return;
+  }
+
+  if (
+    options?.allowStatisticsReadPost &&
+    upper === "POST" &&
+    /^https:\/\/api\.weeztix\.com\/statistics\/(orders|tickets)\//i.test(url)
+  ) {
+    return;
+  }
+
+  if (
+    options?.allowTransactionalEmailPost &&
+    upper === "POST" &&
+    /^https:\/\/api\.brevo\.com\/v3\/smtp\/email\/?$/i.test(url)
   ) {
     return;
   }

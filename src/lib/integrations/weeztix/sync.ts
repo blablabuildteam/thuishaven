@@ -341,6 +341,15 @@ async function upsertTicketInventoryForEvents(
     await Promise.all(batch.map((item) => one(item)));
   }
 
+  try {
+    const { refreshDashboardAlerts } = await import(
+      "@/lib/integrations/alerts"
+    );
+    await refreshDashboardAlerts();
+  } catch {
+    // RA-listings of schema nog niet klaar — Weeztix-sync mag niet falen.
+  }
+
   return {
     ok: failed === 0 || upserted > 0,
     attempted: items.length,

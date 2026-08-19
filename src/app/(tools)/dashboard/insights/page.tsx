@@ -53,7 +53,11 @@ export default async function InsightsPage() {
         <MetricCard
           label="RA listings"
           value={formatNumber(snap.ra.listings)}
-          hint={`${formatNumber(snap.ra.linked)} gekoppeld · attending ≠ sold`}
+          hint={
+            snap.ra.mismatches.length > 0
+              ? `${snap.ra.mismatches.length} Weeztix-uitverkocht / RA-open`
+              : `${formatNumber(snap.ra.linked)} gekoppeld · shop-open ${formatNumber(snap.ra.ticketsAvailable)}`
+          }
         />
       </div>
 

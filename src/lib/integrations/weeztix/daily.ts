@@ -1,11 +1,18 @@
 import { and, desc, eq, gte, isNotNull, lte } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
-import { editions, ticketSalesDaily } from "@/lib/db/schema";
+import {
+  editions,
+  ticketSaleReferrers,
+  ticketSalesDaily,
+} from "@/lib/db/schema";
 import { getWeeztixEventStatistics } from "@/lib/integrations/weeztix/client";
 
 const BUCKET_MINUTES = 20;
+/** Max lookback vanaf eventstart voor timeToBank-buckets (~2 jaar). */
+const MAX_LOOKBACK_DAYS = 800;
 
 type DayPoint = { day: string; sold: number };
+type ReferrerPoint = { referrer: string; channel: string; orderCount: number };
 
 function amsterdamDay(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -16,7 +23,9 @@ function amsterdamDay(d: Date): string {
   }).format(d);
 }
 
-function nestedBuckets(node: unknown): Array<{ key?: unknown; doc_count?: number }> {
+function nestedBuckets(
+  node: unknown,
+): Array<{ key?: unknown; doc_count?: number }> {
   if (!node || typeof node !== "object") return [];
   const obj = node as Record<string, unknown>;
   const stats = obj.statistics;
@@ -31,17 +40,33 @@ function nestedBuckets(node: unknown): Array<{ key?: unknown; doc_count?: number
     : [];
 }
 
+export function classifyReferrer(raw: string): string {
+  const s = raw.toLowerCase();
+  if (!s) return "direct";
+  if (/arenametrix|routage|brevo\.com|sendinblue/i.test(s)) return "brevo";
+  if (/instagram|l\.instagram/i.test(s)) return "instagram";
+  if (/facebook|fb\.com|lm\.facebook/i.test(s)) return "facebook";
+  if (/thuishaven\.nl/i.test(s)) return "website";
+  if (/weeztix|eventix|queue-it/i.test(s)) return "shop";
+  return "other";
+}
+
 /**
- * Weeztix `timeToBank` is een histogram in minuten t.o.v. eventstart (buckets van 20 min).
- * doc_count ≈ orders in die bucket — proxy voor dagelijkse verkoopsnelheid.
+ * Weeztix `timeToBank` = histogram in minuten vóór eventstart (buckets ~20 min).
+ * doc_count ≈ orders — proxy voor dagelijkse verkoop.
  */
 export function dailySalesFromStatistics(
   eventStart: Date,
   data: unknown,
 ): DayPoint[] {
-  const root = data && typeof data === "object" ? (data as Record<string, unknown>) : null;
+  const root =
+    data && typeof data === "object" ? (data as Record<string, unknown>) : null;
   const aggs = root?.aggregations;
-  const buckets = nestedBuckets(aggs && typeof aggs === "object" ? (aggs as Record<string, unknown>).timeToBank : null);
+  const buckets = nestedBuckets(
+    aggs && typeof aggs === "object"
+      ? (aggs as Record<string, unknown>).timeToBank
+      : null,
+  );
   const byDay = new Map<string, number>();
 
   for (const b of buckets) {
@@ -52,7 +77,12 @@ export function dailySalesFromStatistics(
       eventStart.getTime() - (minutesBefore + BUCKET_MINUTES / 2) * 60_000,
     );
     if (!Number.isFinite(when.getTime())) continue;
-    if (when.getTime() < eventStart.getTime() - 400 * 86400000) continue;
+    if (
+      when.getTime() <
+      eventStart.getTime() - MAX_LOOKBACK_DAYS * 86400000
+    ) {
+      continue;
+    }
     if (when.getTime() > eventStart.getTime() + 2 * 86400000) continue;
     const day = amsterdamDay(when);
     byDay.set(day, (byDay.get(day) ?? 0) + n);
@@ -63,15 +93,43 @@ export function dailySalesFromStatistics(
     .sort((a, b) => a.day.localeCompare(b.day));
 }
 
+/** Referrers uit Weeztix statistics — Brevo-klikken via Arenametrix routage. */
+export function referrersFromStatistics(data: unknown): ReferrerPoint[] {
+  const root =
+    data && typeof data === "object" ? (data as Record<string, unknown>) : null;
+  const aggs = root?.aggregations;
+  const buckets = nestedBuckets(
+    aggs && typeof aggs === "object"
+      ? (aggs as Record<string, unknown>).referrer
+      : null,
+  );
+  return buckets
+    .map((b) => {
+      const referrer = String(b.key ?? "");
+      const orderCount = typeof b.doc_count === "number" ? b.doc_count : 0;
+      return {
+        referrer: referrer || "(direct)",
+        channel: classifyReferrer(referrer),
+        orderCount,
+      };
+    })
+    .filter((r) => r.orderCount > 0);
+}
+
 export async function syncWeeztixDailySales(options?: {
   limit?: number;
   daysBack?: number;
+  /** Optioneel: alleen edities met startsAt in [startsFrom, startsTo] */
+  startsFrom?: Date;
+  startsTo?: Date;
   concurrency?: number;
 }): Promise<{
   ok: boolean;
   attempted: number;
   editionsWithCurve: number;
   daysUpserted: number;
+  referrersUpserted: number;
+  brevoOrders: number;
   failed: number;
   errors: string[];
 }> {
@@ -81,6 +139,8 @@ export async function syncWeeztixDailySales(options?: {
       attempted: 0,
       editionsWithCurve: 0,
       daysUpserted: 0,
+      referrersUpserted: 0,
+      brevoOrders: 0,
       failed: 0,
       errors: ["DATABASE_URL ontbreekt"],
     };
@@ -90,10 +150,20 @@ export async function syncWeeztixDailySales(options?: {
   const limit = options?.limit ?? 80;
   const daysBack = options?.daysBack ?? 400;
   const concurrency = Math.max(1, options?.concurrency ?? 3);
-  const from = new Date();
-  from.setUTCDate(from.getUTCDate() - daysBack);
-  const to = new Date();
-  to.setUTCFullYear(to.getUTCFullYear() + 1);
+  const from =
+    options?.startsFrom ??
+    (() => {
+      const d = new Date();
+      d.setUTCDate(d.getUTCDate() - daysBack);
+      return d;
+    })();
+  const to =
+    options?.startsTo ??
+    (() => {
+      const d = new Date();
+      d.setUTCFullYear(d.getUTCFullYear() + 1);
+      return d;
+    })();
 
   const rows = await db
     .select({
@@ -115,6 +185,8 @@ export async function syncWeeztixDailySales(options?: {
 
   let editionsWithCurve = 0;
   let daysUpserted = 0;
+  let referrersUpserted = 0;
+  let brevoOrders = 0;
   let failed = 0;
   const errors: string[] = [];
 
@@ -128,31 +200,60 @@ export async function syncWeeztixDailySales(options?: {
       return;
     }
     const points = dailySalesFromStatistics(row.startsAt, stats.data);
-    if (points.length === 0) return;
-    editionsWithCurve += 1;
-    for (const p of points) {
+    if (points.length > 0) {
+      editionsWithCurve += 1;
+      for (const p of points) {
+        await db
+          .insert(ticketSalesDaily)
+          .values({
+            editionId: row.id,
+            platform: "weeztix",
+            day: p.day,
+            sold: p.sold,
+            revenueCents: 0,
+            syncedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: [
+              ticketSalesDaily.editionId,
+              ticketSalesDaily.platform,
+              ticketSalesDaily.day,
+            ],
+            set: {
+              sold: p.sold,
+              syncedAt: new Date(),
+            },
+          });
+        daysUpserted += 1;
+      }
+    }
+
+    const refs = referrersFromStatistics(stats.data);
+    for (const r of refs) {
       await db
-        .insert(ticketSalesDaily)
+        .insert(ticketSaleReferrers)
         .values({
           editionId: row.id,
           platform: "weeztix",
-          day: p.day,
-          sold: p.sold,
-          revenueCents: 0,
+          referrer: r.referrer.slice(0, 500),
+          channel: r.channel,
+          orderCount: r.orderCount,
           syncedAt: new Date(),
         })
         .onConflictDoUpdate({
           target: [
-            ticketSalesDaily.editionId,
-            ticketSalesDaily.platform,
-            ticketSalesDaily.day,
+            ticketSaleReferrers.editionId,
+            ticketSaleReferrers.platform,
+            ticketSaleReferrers.referrer,
           ],
           set: {
-            sold: p.sold,
+            channel: r.channel,
+            orderCount: r.orderCount,
             syncedAt: new Date(),
           },
         });
-      daysUpserted += 1;
+      referrersUpserted += 1;
+      if (r.channel === "brevo") brevoOrders += r.orderCount;
     }
   }
 
@@ -162,10 +263,12 @@ export async function syncWeeztixDailySales(options?: {
   }
 
   return {
-    ok: failed === 0 || editionsWithCurve > 0,
+    ok: failed === 0 || editionsWithCurve > 0 || referrersUpserted > 0,
     attempted: rows.length,
     editionsWithCurve,
     daysUpserted,
+    referrersUpserted,
+    brevoOrders,
     failed,
     errors,
   };
@@ -213,7 +316,7 @@ export async function recentDailyCurves(limitEditions = 3): Promise<
       )
       .orderBy(ticketSalesDaily.day);
     const points = days.map((d) => ({
-      day: String(d.day),
+      day: String(d.day).slice(0, 10),
       sold: d.sold,
     }));
     out.push({

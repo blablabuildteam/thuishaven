@@ -6,6 +6,7 @@ import {
   raListings,
   ticketInventory,
   ticketSalesDaily,
+  ticketswapListings,
 } from "@/lib/db/schema";
 
 export type InsightsSnapshot = {
@@ -42,7 +43,24 @@ export type InsightsSnapshot = {
     listings: number;
     linked: number;
     soldOut: number;
+    ticketsAvailable: number;
+    mismatches: Array<{
+      editionName: string;
+      raTitle: string;
+      raUrl: string | null;
+      startsAt: string;
+    }>;
     topAttending: Array<{ title: string; attending: number; soldOut: boolean }>;
+  };
+  ticketswap: {
+    listings: number;
+    linked: number;
+    withStock: number;
+    mismatches: Array<{
+      editionName: string;
+      availableCount: number | null;
+      startsAt: string;
+    }>;
   };
   weather: {
     days: number;
@@ -85,7 +103,15 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
       dailyEditions: 0,
       recentCurves: [],
     },
-    ra: { listings: 0, linked: 0, soldOut: 0, topAttending: [] },
+    ra: {
+      listings: 0,
+      linked: 0,
+      soldOut: 0,
+      ticketsAvailable: 0,
+      mismatches: [],
+      topAttending: [],
+    },
+    ticketswap: { listings: 0, linked: 0, withStock: 0, mismatches: [] },
     weather: { days: 0, avgFestivalScore: null, recent: [] },
     notes: ["Geen database — zet DATABASE_URL."],
   };
@@ -126,13 +152,25 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
       title: raListings.title,
       attending: raListings.attending,
       soldOut: raListings.soldOut,
+      ticketsAvailable: raListings.ticketsAvailable,
       editionId: raListings.editionId,
     })
     .from(raListings);
+  const { listOpenSoldOutRaAlerts } = await import(
+    "@/lib/integrations/ra/alerts"
+  );
+  const raMismatches = await listOpenSoldOutRaAlerts().catch(() => []);
   const raBlock = {
     listings: raRows.length,
     linked: raRows.filter((r) => r.editionId).length,
     soldOut: raRows.filter((r) => r.soldOut).length,
+    ticketsAvailable: raRows.filter((r) => r.ticketsAvailable).length,
+    mismatches: raMismatches.map((m) => ({
+      editionName: m.editionName,
+      raTitle: m.raTitle,
+      raUrl: m.raUrl,
+      startsAt: m.startsAt.toISOString(),
+    })),
     topAttending: [...raRows]
       .sort((a, b) => (b.attending ?? 0) - (a.attending ?? 0))
       .slice(0, 5)
@@ -142,6 +180,43 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
         soldOut: Boolean(r.soldOut),
       })),
   };
+  if (raMismatches.length > 0) {
+    notes.push(
+      `${raMismatches.length} editie(s) Weeztix-uitverkocht terwijl RA nog tickets verkoopt.`,
+    );
+  }
+
+  const tsRows = await db
+    .select({
+      title: ticketswapListings.title,
+      availableCount: ticketswapListings.availableCount,
+      editionId: ticketswapListings.editionId,
+    })
+    .from(ticketswapListings);
+  const { listOpenDashboardAlerts } = await import(
+    "@/lib/integrations/alerts"
+  );
+  const dashAlerts = await listOpenDashboardAlerts().catch(() => ({
+    ra: [],
+    ticketswap: [],
+    conflicts: [],
+  }));
+  const tsMismatches = dashAlerts.ticketswap;
+  const tsBlock = {
+    listings: tsRows.length,
+    linked: tsRows.filter((r) => r.editionId).length,
+    withStock: tsRows.filter((r) => (r.availableCount ?? 0) > 0).length,
+    mismatches: tsMismatches.map((m) => ({
+      editionName: m.editionName,
+      availableCount: m.availableCount,
+      startsAt: m.startsAt.toISOString(),
+    })),
+  };
+  if (tsMismatches.length > 0) {
+    notes.push(
+      `${tsMismatches.length} editie(s) Weeztix-uitverkocht met TicketSwap-check (omzetlek).`,
+    );
+  }
 
   const weeztixEditions = await db
     .select({ count: sql<number>`count(*)::int` })
@@ -277,6 +352,7 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
       recentCurves,
     },
     ra: raBlock,
+    ticketswap: tsBlock,
     weather: weatherBlock,
     editions: editionsBlock,
     notes,
@@ -320,12 +396,32 @@ export function snapshotToPromptContext(snap: InsightsSnapshot): string {
 
   lines.push(
     "",
-    "=== Resident Advisor (publieke listings, attending ≠ ticket sold) ===",
-    `Listings: ${snap.ra.listings} · gekoppeld aan editie: ${snap.ra.linked} · sold-out in titel: ${snap.ra.soldOut}`,
+    "=== Resident Advisor ===",
+    "Doel: alert als Weeztix uitverkocht is terwijl de RA-shop nog open is.",
+    `Listings: ${snap.ra.listings} · gekoppeld: ${snap.ra.linked} · titel SOLD OUT: ${snap.ra.soldOut} · RA-shop open: ${snap.ra.ticketsAvailable}`,
+    `Mismatches Weeztix-uitverkocht / RA-open: ${snap.ra.mismatches.length}`,
   );
+  for (const m of snap.ra.mismatches) {
+    lines.push(
+      `- MISMATCH ${m.editionName} | RA=${m.raTitle} | start=${m.startsAt.slice(0, 10)} | ${m.raUrl ?? ""}`,
+    );
+  }
   for (const r of snap.ra.topAttending) {
     lines.push(
       `- ${r.title} | attending=${r.attending}${r.soldOut ? " · SOLD OUT (titel)" : ""}`,
+    );
+  }
+
+  lines.push(
+    "",
+    "=== TicketSwap (secundaire markt) ===",
+    "Doel: alert als Weeztix (primair) uitverkocht is terwijl TicketSwap nog aanbod heeft (omzetlek).",
+    `Listings: ${snap.ticketswap.listings} · gekoppeld: ${snap.ticketswap.linked} · met aanbod: ${snap.ticketswap.withStock}`,
+    `Mismatches sold-out / TicketSwap: ${snap.ticketswap.mismatches.length}`,
+  );
+  for (const m of snap.ticketswap.mismatches) {
+    lines.push(
+      `- MISMATCH ${m.editionName} | available=${m.availableCount ?? "onbekend"} | start=${m.startsAt.slice(0, 10)}`,
     );
   }
 

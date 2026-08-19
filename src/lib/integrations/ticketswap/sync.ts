@@ -1,13 +1,12 @@
 import { eq } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
-import { editions, raListings } from "@/lib/db/schema";
+import { editions, ticketInventory, ticketswapListings } from "@/lib/db/schema";
 import { logIntegration } from "@/lib/integrations/log";
 import { refreshDashboardAlerts } from "@/lib/integrations/alerts";
 import {
-  getRaVenue,
-  listRaVenueEvents,
-  type RaEvent,
-} from "@/lib/integrations/ra/client";
+  listTicketswapLocationEvents,
+  ticketswapVenueUrl,
+} from "@/lib/integrations/ticketswap/client";
 
 function amsterdamDay(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -16,17 +15,6 @@ function amsterdamDay(d: Date): string {
     month: "2-digit",
     day: "2-digit",
   }).format(d);
-}
-
-function soldOutFromTitle(title: string): boolean {
-  return /sold\s*out/i.test(title);
-}
-
-function eventStart(ev: RaEvent): Date | null {
-  const raw = ev.startTime || ev.date;
-  if (!raw) return null;
-  const t = Date.parse(raw);
-  return Number.isFinite(t) ? new Date(t) : null;
 }
 
 function nameOverlap(a: string, b: string): number {
@@ -48,15 +36,16 @@ function nameOverlap(a: string, b: string): number {
   return n / Math.min(A.size, B.size);
 }
 
-export async function syncResidentAdvisorReadOnly(): Promise<{
+export async function syncTicketSwapReadOnly(): Promise<{
   ok: boolean;
-  venue?: string;
   fetched: number;
   upserted: number;
   linked: number;
   mismatches: number;
+  venueUrl: string;
   error?: string;
 }> {
+  const venueUrl = ticketswapVenueUrl();
   if (!hasDatabase()) {
     return {
       ok: false,
@@ -64,53 +53,33 @@ export async function syncResidentAdvisorReadOnly(): Promise<{
       upserted: 0,
       linked: 0,
       mismatches: 0,
+      venueUrl,
       error: "DATABASE_URL ontbreekt",
     };
   }
 
-  const venue = await getRaVenue();
-  if (!venue.ok) {
+  const listed = await listTicketswapLocationEvents();
+  if (!listed.ok) {
     await logIntegration({
-      source: "resident_advisor",
+      source: "ticketswap",
       level: "error",
-      event: "sync.venue_failed",
-      message: venue.error,
+      event: "sync.events_failed",
+      message: listed.error,
     });
+    const mismatches = await refreshDashboardAlerts({
+      ticketswapLive: false,
+    }).catch(() => ({ ra: 0, ticketswap: 0 }));
     return {
       ok: false,
       fetched: 0,
       upserted: 0,
       linked: 0,
-      mismatches: 0,
-      error: venue.error,
+      mismatches: mismatches.ticketswap,
+      venueUrl,
+      error: listed.error,
     };
   }
 
-  const year = new Date().getFullYear();
-  const batches = await Promise.all([
-    listRaVenueEvents({ type: "LATEST", limit: 50 }),
-    ...[0, 1, 2, 3, 4, 5].map((ago) =>
-      listRaVenueEvents({ type: "ARCHIVE", year: year - ago, limit: 80 }),
-    ),
-  ]);
-
-  const byId = new Map<string, RaEvent>();
-  for (const batch of batches) {
-    if (!batch.ok) {
-      await logIntegration({
-        source: "resident_advisor",
-        level: "error",
-        event: "sync.events_failed",
-        message: batch.error,
-      });
-      continue;
-    }
-    for (const ev of batch.events) {
-      if (ev.id) byId.set(ev.id, ev);
-    }
-  }
-
-  const events = [...byId.values()];
   const db = getDb();
   const eds = await db
     .select({
@@ -130,10 +99,10 @@ export async function syncResidentAdvisorReadOnly(): Promise<{
 
   let upserted = 0;
   let linked = 0;
+  const availableByEdition = new Map<string, number>();
 
-  for (const ev of events) {
-    const startsAt = eventStart(ev);
-    const day = startsAt ? amsterdamDay(startsAt) : null;
+  for (const ev of listed.events) {
+    const day = ev.startsAt ? amsterdamDay(ev.startsAt) : null;
     const candidates = day ? (editionsByDay.get(day) ?? []) : [];
     let editionId: string | null = null;
     if (candidates.length === 1) {
@@ -146,66 +115,91 @@ export async function syncResidentAdvisorReadOnly(): Promise<{
     }
 
     const existing = await db
-      .select({ id: raListings.id })
-      .from(raListings)
-      .where(eq(raListings.raEventId, ev.id))
+      .select({ id: ticketswapListings.id })
+      .from(ticketswapListings)
+      .where(eq(ticketswapListings.tsEventId, ev.id))
       .limit(1);
 
     const values = {
-      raEventId: ev.id,
+      tsEventId: ev.id,
       title: ev.title,
-      startsAt,
-      attending: ev.attending ?? 0,
-      isTicketed: Boolean(ev.isTicketed),
-      soldOut: soldOutFromTitle(ev.title),
-      ticketsAvailable: Boolean(ev.ticketsAvailable),
-      contentUrl: ev.contentUrl
-        ? `https://ra.co${ev.contentUrl}`
-        : `https://ra.co/events/${ev.id}`,
+      startsAt: ev.startsAt,
+      availableCount: ev.availableCount,
+      contentUrl: ev.contentUrl,
       editionId,
       syncedAt: new Date(),
     };
 
     if (existing[0]) {
       await db
-        .update(raListings)
+        .update(ticketswapListings)
         .set(values)
-        .where(eq(raListings.id, existing[0].id));
+        .where(eq(ticketswapListings.id, existing[0].id));
     } else {
-      await db.insert(raListings).values(values);
+      await db.insert(ticketswapListings).values(values);
     }
     upserted += 1;
 
     if (editionId) {
       await db
         .update(editions)
-        .set({ raEventId: ev.id })
+        .set({ ticketswapEventId: ev.id })
         .where(eq(editions.id, editionId));
       linked += 1;
+      availableByEdition.set(
+        editionId,
+        (availableByEdition.get(editionId) ?? 0) + ev.availableCount,
+      );
     }
   }
 
-  const alertCounts = await refreshDashboardAlerts().catch(() => ({
-    ra: 0,
-    ticketswap: 0,
-  }));
-  const mismatches = alertCounts.ra;
+  for (const [editionId, available] of availableByEdition) {
+    const inv = await db
+      .select()
+      .from(ticketInventory)
+      .where(eq(ticketInventory.editionId, editionId))
+      .limit(20);
+    const tsRow = inv.find((r) => r.platform === "ticketswap");
+    if (tsRow) {
+      await db
+        .update(ticketInventory)
+        .set({
+          available,
+          isSoldOut: available <= 0,
+          syncedAt: new Date(),
+        })
+        .where(eq(ticketInventory.id, tsRow.id));
+    } else {
+      await db.insert(ticketInventory).values({
+        editionId,
+        platform: "ticketswap",
+        available,
+        sold: 0,
+        isSoldOut: available <= 0,
+      });
+    }
+  }
+
+  const alertCounts = await refreshDashboardAlerts({
+    ticketswapLive: true,
+  }).catch(() => ({ ra: 0, ticketswap: 0 }));
+  const mismatches = alertCounts.ticketswap;
 
   await logIntegration({
-    source: "resident_advisor",
+    source: "ticketswap",
     level: "info",
     event: "sync.ok",
-    message: `RA listings: ${upserted} events, ${linked} gekoppeld, ${mismatches} Weeztix-uitverkocht/RA-open`,
-    detail: { fetched: events.length, upserted, linked, mismatches },
+    message: `TicketSwap listings: ${upserted} events, ${linked} gekoppeld, ${mismatches} sold-out alerts`,
+    detail: { fetched: listed.events.length, upserted, linked, mismatches },
     throttleMs: 0,
   });
 
   return {
     ok: true,
-    venue: venue.venue.name,
-    fetched: events.length,
+    fetched: listed.events.length,
     upserted,
     linked,
     mismatches,
+    venueUrl,
   };
 }

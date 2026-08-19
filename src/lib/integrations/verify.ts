@@ -311,6 +311,45 @@ async function verifyResidentAdvisor(): Promise<VerifyResult> {
   }
 }
 
+async function verifyTicketSwap(): Promise<VerifyResult> {
+  try {
+    const { listTicketswapLocationEvents, ticketswapVenueUrl } = await import(
+      "@/lib/integrations/ticketswap/client"
+    );
+    const events = await listTicketswapLocationEvents();
+    if (!events.ok) {
+      return base(
+        "ticketswap",
+        "TicketSwap",
+        "error",
+        `${events.error} · check ${ticketswapVenueUrl()}`,
+        { venueUrl: ticketswapVenueUrl() },
+      );
+    }
+    const withStock = events.events.filter((e) => e.availableCount > 0).length;
+    return base(
+      "ticketswap",
+      "TicketSwap",
+      "verified",
+      `Read-only listings · ${events.events.length} events · ${withStock} met aanbod`,
+      {
+        venueUrl: ticketswapVenueUrl(),
+        sample: events.events.slice(0, 3).map((e) => ({
+          title: e.title,
+          available: e.availableCount,
+        })),
+      },
+    );
+  } catch (e) {
+    return base(
+      "ticketswap",
+      "TicketSwap",
+      "error",
+      e instanceof Error ? e.message : "Verify mislukt",
+    );
+  }
+}
+
 export async function verifyIntegration(id: string): Promise<VerifyResult> {
   switch (id) {
     case "brevo":
@@ -327,6 +366,8 @@ export async function verifyIntegration(id: string): Promise<VerifyResult> {
       return verifyWeeztix();
     case "resident_advisor":
       return verifyResidentAdvisor();
+    case "ticketswap":
+      return verifyTicketSwap();
     default: {
       const def = INTEGRATIONS.find((i) => i.id === id);
       if (!def) {
@@ -365,11 +406,11 @@ export async function probeConfiguredIntegrations(): Promise<VerifyResult[]> {
       row.status === "configured" ||
       (row.status !== "manual" &&
         row.status !== "missing" &&
-        ["brevo", "weeztix", "database", "open_meteo", "ai", "kvk", "resident_advisor"].includes(
+        ["brevo", "weeztix", "database", "open_meteo", "ai", "kvk", "resident_advisor", "ticketswap"].includes(
           row.id,
         )),
   );
-  const always = ["brevo", "weeztix", "database", "open_meteo", "ai", "resident_advisor"];
+  const always = ["brevo", "weeztix", "database", "open_meteo", "ai", "resident_advisor", "ticketswap"];
   const ids = new Set([
     ...toProbe.map((r) => r.id),
     ...always.filter((id) => {

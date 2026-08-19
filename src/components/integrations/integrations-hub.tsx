@@ -146,24 +146,63 @@ export function IntegrationsHub() {
           error?: string;
           upserted?: number;
           linked?: number;
+          mismatches?: number;
           venue?: string;
         };
         if (!res.ok || !data.ok) {
           throw new Error(data.error ?? "RA sync mislukt");
         }
+        const mismatchBit =
+          (data.mismatches ?? 0) > 0
+            ? ` · ${data.mismatches} Weeztix-uitverkocht/RA-open`
+            : "";
         setRows((prev) =>
           prev.map((row) =>
             row.id === "resident_advisor"
               ? {
                   ...row,
                   status: "verified",
-                  message: `${data.venue ?? "RA"} · ${data.upserted ?? 0} listings · ${data.linked ?? 0} gekoppeld`,
+                  message: `${data.venue ?? "RA"} · ${data.upserted ?? 0} listings · ${data.linked ?? 0} gekoppeld${mismatchBit}`,
                 }
               : row,
           ),
         );
       } catch (e) {
         setError(e instanceof Error ? e.message : "RA sync mislukt");
+      }
+    });
+  }
+
+  function runTicketswapSync() {
+    startTransition(async () => {
+      setError(null);
+      try {
+        const res = await fetch("/api/integrations/ticketswap/sync", {
+          method: "POST",
+        });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          upserted?: number;
+          linked?: number;
+          mismatches?: number;
+        };
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error ?? "TicketSwap sync mislukt");
+        }
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === "ticketswap"
+              ? {
+                  ...row,
+                  status: "verified",
+                  message: `${data.upserted ?? 0} listings · ${data.linked ?? 0} gekoppeld · ${data.mismatches ?? 0} sold-out alerts`,
+                }
+              : row,
+          ),
+        );
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "TicketSwap sync mislukt");
       }
     });
   }
@@ -333,11 +372,11 @@ export function IntegrationsHub() {
                     Sync listings
                   </button>
                 )}
-                {row.id === "resident_advisor" && (
+                {row.id === "ticketswap" && (
                   <button
                     type="button"
                     disabled={pending}
-                    onClick={() => runRaSync()}
+                    onClick={() => runTicketswapSync()}
                     className="border border-border px-3 py-1.5 text-sm hover:border-text disabled:opacity-50"
                   >
                     Sync listings

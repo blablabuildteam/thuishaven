@@ -185,9 +185,9 @@ export const activeAlerts = [
     id: "al-1",
     editionId: "ed-summer-26",
     type: "ticketswap_after_soldout" as const,
-    title: "TicketSwap actief na RA sold-out",
+    title: "TicketSwap actief na Weeztix sold-out",
     message:
-      "Resident Advisor is uitverkocht, maar er staan nog 38 tickets op TicketSwap. Mogelijke omzetlek.",
+      "Weeztix is uitverkocht, maar er staan nog 38 tickets op TicketSwap. Mogelijke omzetlek.",
     isActive: true,
     createdAt: "2026-08-06T14:22:00+02:00",
   },

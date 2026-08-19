@@ -42,10 +42,16 @@ export async function syncAppic(): Promise<SyncResult> {
 }
 
 export async function syncTicketSwap(): Promise<SyncResult> {
-  if (!process.env.TICKETSWAP_API_KEY) {
-    return { source: "ticketswap", ok: false, error: "TICKETSWAP_API_KEY ontbreekt" };
-  }
-  return { source: "ticketswap", ok: false, error: "Nog niet geïmplementeerd" };
+  const { syncTicketSwapReadOnly } = await import(
+    "@/lib/integrations/ticketswap/sync"
+  );
+  const result = await syncTicketSwapReadOnly();
+  return {
+    source: "ticketswap",
+    ok: result.ok,
+    records: result.upserted,
+    error: result.error,
+  };
 }
 
 export async function syncBrevoCampaigns(): Promise<SyncResult> {
