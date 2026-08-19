@@ -76,7 +76,7 @@ export default async function DashboardPage() {
       <SectionHeader
         eyebrow="Events"
         title="Events"
-        description={`${formatNumber(bundle.totals.editions)} edities · fill = Weeztix-cap (uitverkocht vs resttickets)`}
+        description={`${formatNumber(bundle.totals.editions)} edities · fill op Weeztix-cap (komend = nog te verkopen)`}
         action={
           <div className="flex flex-wrap gap-2">
             <Link

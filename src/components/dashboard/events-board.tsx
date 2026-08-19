@@ -8,7 +8,7 @@ import {
   type EditionFormat,
 } from "@/lib/editions/lineup";
 import { weatherPanelClass } from "@/components/dashboard/weather-condition";
-import { formatDayShort } from "@/lib/time/amsterdam";
+import { formatDayShort, amsterdamDay } from "@/lib/time/amsterdam";
 import {
   CALENDAR_PERIOD_LABEL,
   WEEKDAY_LABEL,
@@ -42,7 +42,7 @@ export type EventsBoardRow = {
   weather: ClassifiedWeather | null;
 };
 
-/** Weeztix-cap: 100% = uitverkocht; <90% = restcapaciteit (kon beter). */
+/** Weeztix-cap: 100% = uitverkocht; <90% = restcapaciteit. */
 export function fillStatus(
   sellThrough: number | null,
   capacity: number | null,
@@ -51,6 +51,21 @@ export function fillStatus(
   if (sellThrough >= 99.5) return "sold_out";
   if (sellThrough >= 90) return "near";
   return "room";
+}
+
+function isUpcomingDay(day: string, today: string) {
+  return day >= today;
+}
+
+/** Copy hangt af van of het feest nog moet komen. */
+function fillHeadline(
+  st: FillStatus,
+  upcoming: boolean,
+): string | null {
+  if (st === "sold_out") return "Uitverkocht";
+  if (st === "near") return "Bijna vol";
+  if (st === "room") return upcoming ? "Nog te verkopen" : "Niet vol";
+  return null;
 }
 
 const FORMAT_OPTS: Array<{ id: "all" | EditionFormat; label: string }> = [
@@ -99,15 +114,9 @@ const FILL_OPTS: Array<{ id: "all" | FillStatus; label: string }> = [
   { id: "all", label: "Alle fill" },
   { id: "sold_out", label: "Uitverkocht (100%)" },
   { id: "near", label: "Bijna vol (≥90%)" },
-  { id: "room", label: "Kon beter (<90%)" },
+  { id: "room", label: "Open / niet vol (<90%)" },
   { id: "unknown", label: "Geen cap-data" },
 ];
-
-const FILL_CHIP: Record<Exclude<FillStatus, "unknown">, string> = {
-  sold_out: "Uitverkocht",
-  near: "Bijna vol",
-  room: "Kon beter",
-};
 
 function SelectField({
   label,
@@ -141,6 +150,7 @@ function SelectField({
 }
 
 export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
+  const today = amsterdamDay(new Date());
   const [format, setFormat] = useState<"all" | EditionFormat>("all");
   const [weekday, setWeekday] = useState<"all" | WeekdayKey>("all");
   const [period, setPeriod] = useState<"all" | CalendarPeriod>("all");
@@ -198,9 +208,6 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
 
   const stats = useMemo(() => {
     const sold = visible.reduce((s, r) => s + r.sold, 0);
-    const withSales = visible.filter((r) => r.sold > 0);
-    const avg =
-      withSales.length > 0 ? Math.round(sold / withSales.length) : 0;
     const withFill = visible.filter((r) => r.sellThrough != null);
     const avgFill =
       withFill.length > 0
@@ -210,14 +217,25 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
           )
         : null;
     let soldOut = 0;
-    let room = 0;
+    let stillSelling = 0;
+    let underfilled = 0;
     for (const r of visible) {
       const st = fillStatus(r.sellThrough, r.capacity);
       if (st === "sold_out") soldOut += 1;
-      if (st === "room") room += 1;
+      if (st === "room") {
+        if (isUpcomingDay(r.day, today)) stillSelling += 1;
+        else underfilled += 1;
+      }
     }
-    return { sold, avg, n: visible.length, avgFill, soldOut, room };
-  }, [visible]);
+    return {
+      sold,
+      n: visible.length,
+      avgFill,
+      soldOut,
+      stillSelling,
+      underfilled,
+    };
+  }, [visible, today]);
 
   const activeFilters = useMemo(() => {
     const chips: Array<{ key: string; label: string; clear: () => void }> = [];
@@ -291,12 +309,6 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
           </p>
           <p>
             <span className="font-display text-xl">
-              {formatNumber(stats.sold)}
-            </span>
-            <span className="ml-1.5 text-text-dim">sold</span>
-          </p>
-          <p>
-            <span className="font-display text-xl">
               {stats.avgFill != null ? `${stats.avgFill}%` : "—"}
             </span>
             <span className="ml-1.5 text-text-dim">gem. fill</span>
@@ -309,9 +321,15 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
           </p>
           <p>
             <span className="font-display text-xl">
-              {formatNumber(stats.room)}
+              {formatNumber(stats.stillSelling)}
             </span>
-            <span className="ml-1.5 text-text-dim">kon beter</span>
+            <span className="ml-1.5 text-text-dim">nog te verkopen</span>
+          </p>
+          <p>
+            <span className="font-display text-xl">
+              {formatNumber(stats.underfilled)}
+            </span>
+            <span className="ml-1.5 text-text-dim">niet vol geweest</span>
           </p>
         </div>
       </div>
@@ -423,7 +441,7 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
 
         <details className="mt-2">
           <summary className="cursor-pointer text-[11px] text-text-dim">
-            Fill = Weeztix-cap (sold ÷ capaciteit), niet zaalcapaciteit
+            Fill = Weeztix-ticketcap (sold ÷ capaciteit)
           </summary>
           <ul className="mt-2 grid gap-1 text-[11px] text-text-muted sm:grid-cols-2">
             <li>
@@ -434,12 +452,12 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
               <span className="text-text">Bijna vol</span> — 90–99%
             </li>
             <li>
-              <span className="text-text">Kon beter</span> — &lt;90% fill, dus
-              resttickets
+              <span className="text-text">Nog te verkopen</span> — komend feest
+              onder 90% (nog tickets open)
             </li>
             <li>
-              <span className="text-text">Geen cap-data</span> — oudere edities
-              zonder Weeztix-inventory
+              <span className="text-text">Niet vol</span> — voorbij feest onder
+              90% (restcapaciteit niet verkocht)
             </li>
           </ul>
         </details>
@@ -449,15 +467,19 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
         {visible.map((r) => {
           const wx = r.weather;
           const st = fillStatus(r.sellThrough, r.capacity);
+          const upcoming = isUpcomingDay(r.day, today);
+          const headline = fillHeadline(st, upcoming);
           const left =
             r.capacity != null && r.capacity > 0
               ? Math.max(0, r.capacity - r.sold)
               : null;
+          const pct =
+            r.sellThrough != null ? Math.round(r.sellThrough) : null;
           return (
             <li
               key={r.id}
               className={cn(
-                "grid grid-cols-[4.5rem_1fr_auto] items-center gap-2 px-2 py-2.5 sm:grid-cols-[5rem_1fr_minmax(5.5rem,auto)_auto] sm:gap-3 sm:px-3",
+                "grid grid-cols-[4.5rem_1fr] items-start gap-x-3 gap-y-2 px-2 py-3 sm:grid-cols-[5rem_1fr_minmax(11rem,13rem)_auto] sm:items-center sm:gap-3 sm:px-3",
                 wx && weatherPanelClass(wx.kind),
               )}
             >
@@ -467,10 +489,11 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
                 </p>
                 <p className="mt-0.5 text-[10px] text-text-dim">
                   {WEEKDAY_LABEL[r.weekday]} · {r.year}
+                  {upcoming ? " · komt" : ""}
                 </p>
               </div>
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium">
+                <p className="truncate text-sm font-medium sm:text-base">
                   {r.headliner ?? r.name}
                 </p>
                 <p className="mt-0.5 truncate text-[11px] text-text-muted">
@@ -483,28 +506,65 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
                     : ""}
                 </p>
               </div>
-              <div className="justify-self-end text-right sm:justify-self-auto">
-                <p className="font-display text-lg leading-none sm:text-xl">
-                  {r.sold > 0 ? formatNumber(r.sold) : "—"}
-                </p>
-                {st !== "unknown" && r.sellThrough != null ? (
-                  <p
-                    className={cn(
-                      "mt-0.5 text-[10px] font-medium",
-                      st === "sold_out" && "text-text",
-                      st === "near" && "text-text-muted",
-                      st === "room" && "text-warn",
-                    )}
-                  >
-                    {Math.round(r.sellThrough)}% · {FILL_CHIP[st]}
-                    {st === "room" && left != null && left > 0
-                      ? ` · ${formatNumber(left)} over`
-                      : ""}
-                  </p>
+
+              <div className="col-span-2 min-w-0 sm:col-span-1">
+                {st !== "unknown" && pct != null && r.capacity != null ? (
+                  <div>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <p
+                        className={cn(
+                          "font-display text-2xl leading-none tracking-tight sm:text-3xl",
+                          st === "sold_out" && "text-text",
+                          st === "near" && "text-text",
+                          st === "room" && upcoming && "text-text",
+                          st === "room" && !upcoming && "text-warn",
+                        )}
+                      >
+                        {pct}%
+                      </p>
+                      <p className="text-right text-sm font-medium leading-tight">
+                        {headline}
+                      </p>
+                    </div>
+                    <div
+                      className="mt-1.5 h-1.5 w-full overflow-hidden bg-border"
+                      aria-hidden
+                    >
+                      <div
+                        className={cn(
+                          "h-full",
+                          st === "sold_out" && "bg-text",
+                          st === "near" && "bg-text",
+                          st === "room" && "bg-warn",
+                        )}
+                        style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+                      />
+                    </div>
+                    <p className="mt-1.5 text-xs text-text-muted">
+                      {formatNumber(r.sold)}
+                      {" / "}
+                      {formatNumber(r.capacity)}
+                      {left != null && left > 0
+                        ? upcoming
+                          ? ` · nog ${formatNumber(left)} te verkopen`
+                          : ` · ${formatNumber(left)} niet verkocht`
+                        : st === "sold_out"
+                          ? " · vol"
+                          : ""}
+                    </p>
+                  </div>
                 ) : (
-                  <p className="mt-0.5 text-[10px] text-text-dim">geen fill</p>
+                  <div>
+                    <p className="font-display text-2xl leading-none sm:text-3xl">
+                      {r.sold > 0 ? formatNumber(r.sold) : "—"}
+                    </p>
+                    <p className="mt-1 text-xs text-text-dim">
+                      sold · geen Weeztix-cap
+                    </p>
+                  </div>
                 )}
               </div>
+
               <div className="hidden justify-self-end text-right sm:block">
                 {wx ? (
                   <>
