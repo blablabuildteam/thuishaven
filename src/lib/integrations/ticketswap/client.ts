@@ -132,6 +132,17 @@ function mapEvent(node: GqlEventNode): TicketswapEvent | null {
   };
 }
 
+type ActiveEventsPage = {
+  activeEvents?: {
+    edges?: Array<{ node?: GqlEventNode }>;
+    pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+  };
+};
+
+type TicketswapGraphqlResult =
+  | { ok: true; data: ActiveEventsPage }
+  | { ok: false; error: string; status: number };
+
 export async function listTicketswapLocationEvents(): Promise<
   | { ok: true; events: TicketswapEvent[] }
   | { ok: false; error: string; status: number }
@@ -141,12 +152,7 @@ export async function listTicketswapLocationEvents(): Promise<
   const locationId = globalId("Location", locationNumericId());
 
   for (let page = 0; page < 8; page += 1) {
-    const res = await ticketswapGraphql<{
-      activeEvents?: {
-        edges?: Array<{ node?: GqlEventNode }>;
-        pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
-      };
-    }>(
+    const res: TicketswapGraphqlResult = await ticketswapGraphql<ActiveEventsPage>(
       EVENTS_QUERY,
       {
         after,

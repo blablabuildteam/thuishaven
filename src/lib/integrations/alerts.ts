@@ -106,7 +106,7 @@ export async function listOpenTicketswapAlerts(options?: {
           ? Math.max(available, prev?.availableCount ?? 0)
           : prev?.availableCount ?? null,
       tsUrl: row.tsUrl ?? prev?.tsUrl ?? ticketswapVenueUrl(),
-      tsTitle: row.tsTitle ?? prev?.tsTitle,
+      tsTitle: row.tsTitle ?? prev?.tsTitle ?? null,
     });
   }
 
