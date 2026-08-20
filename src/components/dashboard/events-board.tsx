@@ -586,8 +586,7 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
                       </p>
                     ) : st === "sold_out" ? (
                       <p className="mt-1 text-xs text-text-dim">
-                        Uitverkocht · timing volgt met betere
-                        ticket-update)
+                        Uitverkocht · timing onbekend
                       </p>
                     ) : null}
                   </div>
