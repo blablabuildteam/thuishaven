@@ -1,21 +1,37 @@
 import { amsterdamDay } from "@/lib/time/amsterdam";
 
 export type SoldOutTiming = {
-  /** Calendar day (Amsterdam) when cumulative first hit ~cap. */
+  /** Calendar day (Amsterdam) when sell-out was reached. */
   day: string;
   /** 0 = on the event day; positive = days before start. */
   daysBefore: number;
   /**
-   * measured = curve alone crossed cap;
-   * estimated = gap before curve attributed as early sales.
+   * ticket_types = max(updated_at) of sold-out Weeztix tiers;
+   * curve = daily sales curve (only when usable).
    */
   confidence: "measured" | "estimated";
-  /** Share of final sold covered by the daily curve (0–100). */
-  curveCoveragePct: number;
+  source: "ticket_types" | "curve";
+  /** Share of final sold covered by the daily curve (0–100), if curve used. */
+  curveCoveragePct: number | null;
+};
+
+type TicketLike = {
+  name?: string | null;
+  status?: string | null;
+  sold_count?: number | null;
+  available_stock?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  available_from?: string | null;
 };
 
 function isoDay(value: string | Date): string {
-  if (typeof value === "string") return value.slice(0, 10);
+  if (typeof value === "string") {
+    // "2026-07-21T14:15:28+02:00" → Amsterdam calendar day
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return amsterdamDay(new Date(parsed));
+    return value.slice(0, 10);
+  }
   return amsterdamDay(value);
 }
 
@@ -27,14 +43,61 @@ function daysBetween(earlier: string, later: string): number {
 }
 
 /**
- * When inventory says sold-out, estimate how many days before the event
- * cumulative sales first reached the ticketcap.
- *
- * Only returns a value when the daily curve is usable. Many Weeztix curves
- * dump most volume on the event day — those are rejected so we don't claim
- * “uitverkocht op de dag zelf” incorrectly.
+ * Weeztix timeToBank is payment latency, not sales timeline — unusable for
+ * sold-out day. Instead: among sold-out ticket types with real sales, take the
+ * latest updated_at that moved after create (proxy for when that tier filled).
  */
-export function estimateSoldOutTiming(input: {
+export function estimateSoldOutFromTicketTypes(input: {
+  eventDay: string;
+  sold: number;
+  capacity: number | null;
+  tickets: TicketLike[];
+}): SoldOutTiming | null {
+  const capacity = input.capacity;
+  if (capacity == null || capacity <= 0) return null;
+  if (input.sold < capacity * 0.995) return null;
+
+  const eventDay = isoDay(input.eventDay);
+  let bestDay: string | null = null;
+
+  for (const t of input.tickets) {
+    const name = String(t.name ?? "");
+    if (/\[DATUM\]/i.test(name)) continue;
+    if (String(t.status ?? "").toLowerCase() !== "sold_out") continue;
+    const sold = typeof t.sold_count === "number" ? t.sold_count : 0;
+    const stock =
+      typeof t.available_stock === "number" ? t.available_stock : null;
+    if (sold <= 0) continue;
+    if (stock != null && stock > 0 && sold < stock * 0.9) continue;
+    if (!t.updated_at) continue;
+
+    const updatedMs = Date.parse(t.updated_at);
+    if (!Number.isFinite(updatedMs)) continue;
+    const createdMs = t.created_at ? Date.parse(t.created_at) : NaN;
+    // Skip pure create stamps (config writes). Keep updates ≥1h later.
+    if (Number.isFinite(createdMs) && updatedMs - createdMs < 1 * 3600_000) {
+      continue;
+    }
+
+    const day = amsterdamDay(new Date(updatedMs));
+    if (day > eventDay) continue;
+    if (!bestDay || day > bestDay) bestDay = day;
+  }
+
+  if (!bestDay) return null;
+  return {
+    day: bestDay,
+    daysBefore: Math.max(0, daysBetween(bestDay, eventDay)),
+    confidence: "estimated",
+    source: "ticket_types",
+    curveCoveragePct: null,
+  };
+}
+
+/**
+ * Fallback: daily curve only when not an event-day dump.
+ */
+export function estimateSoldOutFromCurve(input: {
   eventDay: string;
   sold: number;
   capacity: number | null;
@@ -59,10 +122,7 @@ export function estimateSoldOutTiming(input: {
     .filter((p) => p.day === eventDay)
     .reduce((s, p) => s + p.sold, 0);
   const beforeEvent = curveSum - onEventDay;
-  const eventDayShare = onEventDay / curveSum;
-
-  // Reject event-day dumps (typical broken timeToBank harvest).
-  if (eventDayShare > 0.4 || beforeEvent < capacity * 0.35) {
+  if (onEventDay / curveSum > 0.4 || beforeEvent < capacity * 0.35) {
     return null;
   }
 
@@ -72,16 +132,6 @@ export function estimateSoldOutTiming(input: {
   const missingBefore = Math.max(0, input.sold - curveSum);
   const target = capacity * 0.995;
 
-  if (missingBefore >= target) {
-    const first = daily[0]!.day;
-    return {
-      day: first,
-      daysBefore: Math.max(0, daysBetween(first, eventDay)),
-      confidence: "estimated",
-      curveCoveragePct,
-    };
-  }
-
   let cum = missingBefore;
   for (const p of daily) {
     cum += p.sold;
@@ -90,11 +140,39 @@ export function estimateSoldOutTiming(input: {
         day: p.day,
         daysBefore: Math.max(0, daysBetween(p.day, eventDay)),
         confidence: missingBefore > 0 ? "estimated" : "measured",
+        source: "curve",
         curveCoveragePct,
       };
     }
   }
+  return null;
+}
 
+/** Prefer ticket-type timestamps; fall back to a clean daily curve. */
+export function estimateSoldOutTiming(input: {
+  eventDay: string;
+  sold: number;
+  capacity: number | null;
+  daily?: Array<{ day: string; sold: number }>;
+  tickets?: TicketLike[];
+}): SoldOutTiming | null {
+  if (input.tickets?.length) {
+    const fromTickets = estimateSoldOutFromTicketTypes({
+      eventDay: input.eventDay,
+      sold: input.sold,
+      capacity: input.capacity,
+      tickets: input.tickets,
+    });
+    if (fromTickets) return fromTickets;
+  }
+  if (input.daily?.length) {
+    return estimateSoldOutFromCurve({
+      eventDay: input.eventDay,
+      sold: input.sold,
+      capacity: input.capacity,
+      daily: input.daily,
+    });
+  }
   return null;
 }
 

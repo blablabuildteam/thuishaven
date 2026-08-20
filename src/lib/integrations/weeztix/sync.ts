@@ -7,6 +7,8 @@ import {
   type WeeztixEvent,
   type WeeztixTicketType,
 } from "@/lib/integrations/weeztix/client";
+import { amsterdamDay } from "@/lib/time/amsterdam";
+import { estimateSoldOutFromTicketTypes } from "@/lib/editions/sold-out-timing";
 
 function slugify(name: string): string {
   return (
@@ -192,11 +194,21 @@ export async function syncWeeztixReadOnly(options?: {
   if (includeStats) {
     const forStats =
       statsLimit != null ? events.slice(0, statsLimit) : events;
+    const startsAtByEdition = new Map<string, Date>();
+    for (const e of forStats) {
+      const editionId = editionByGuid.get(String(e.guid));
+      if (!editionId) continue;
+      const startsAt = e.start ? new Date(e.start) : new Date();
+      startsAtByEdition.set(editionId, startsAt);
+    }
     const result = await upsertTicketInventoryForEvents(
-      forStats.map((e) => ({
-        guid: String(e.guid),
-        editionId: editionByGuid.get(String(e.guid))!,
-      })).filter((x) => x.editionId),
+      forStats
+        .map((e) => ({
+          guid: String(e.guid),
+          editionId: editionByGuid.get(String(e.guid))!,
+        }))
+        .filter((x) => x.editionId),
+      { startsAtByEdition },
     );
     inventoryUpserted = result.upserted;
   }
@@ -265,14 +277,25 @@ export async function syncWeeztixTicketStatsFromEditions(options?: {
     editionId: t.id,
   }));
 
+  // startsAt needed for sold-out timing
+  const starts = await db
+    .select({ id: editions.id, startsAt: editions.startsAt })
+    .from(editions)
+    .where(isNotNull(editions.weeztixEventId));
+  const startsById = new Map(starts.map((s) => [s.id, s.startsAt]));
+
   return upsertTicketInventoryForEvents(mapped, {
     concurrency: options?.concurrency ?? 4,
+    startsAtByEdition: startsById,
   });
 }
 
 async function upsertTicketInventoryForEvents(
   items: Array<{ guid: string; editionId: string }>,
-  options?: { concurrency?: number },
+  options?: {
+    concurrency?: number;
+    startsAtByEdition?: Map<string, Date>;
+  },
 ): Promise<{
   ok: boolean;
   attempted: number;
@@ -308,9 +331,29 @@ async function upsertTicketInventoryForEvents(
       .limit(20);
     const weeztixRow = inv.find((r) => r.platform === "weeztix");
     const isSoldOut =
-      summary.capacity != null
-        ? summary.available <= 0 && summary.sold > 0
+      summary.capacity != null && summary.capacity > 0
+        ? summary.sold >= summary.capacity * 0.995
         : false;
+
+    const startsAt = options?.startsAtByEdition?.get(item.editionId);
+    const timing =
+      summary.capacity != null &&
+      summary.capacity > 0 &&
+      summary.sold >= summary.capacity * 0.995 &&
+      startsAt
+        ? estimateSoldOutFromTicketTypes({
+            eventDay: amsterdamDay(startsAt),
+            sold: summary.sold,
+            capacity: summary.capacity,
+            tickets: ticketsRes.tickets,
+          })
+        : null;
+
+    const soldOutFields = {
+      soldOutDay: timing?.day ?? null,
+      soldOutDaysBefore: timing?.daysBefore ?? null,
+      soldOutSource: timing?.source ?? null,
+    };
 
     if (weeztixRow) {
       await db
@@ -324,6 +367,7 @@ async function upsertTicketInventoryForEvents(
               ? (summary.avgPriceCents / 100).toFixed(2)
               : weeztixRow.avgPriceEur,
           isSoldOut,
+          ...soldOutFields,
           syncedAt: new Date(),
         })
         .where(eq(ticketInventory.id, weeztixRow.id));
@@ -339,6 +383,7 @@ async function upsertTicketInventoryForEvents(
             ? (summary.avgPriceCents / 100).toFixed(2)
             : null,
         isSoldOut,
+        ...soldOutFields,
       });
     }
     upserted += 1;

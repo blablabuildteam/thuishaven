@@ -52,8 +52,12 @@ export function classifyReferrer(raw: string): string {
 }
 
 /**
- * Weeztix `timeToBank` = histogram in minuten vóór eventstart (buckets ~20 min).
- * doc_count ≈ orders — proxy voor dagelijkse verkoop.
+ * Weeztix `timeToBank` = minuten tussen order en bank-settlement (payment latency),
+ * géén verkoopmoment vóór het event. Gem. ~uren → curves dumpen op de eventdag.
+ * Referrers uit hetzelfde dashboard blijven bruikbaar.
+ *
+ * Sold-out timing komt uit ticket-type `updated_at` (zie sold-out-timing.ts).
+ * Deze dagcurve blijft een ruwe proxy voor mail-lift / late-window volume.
  */
 export function dailySalesFromStatistics(
   eventStart: Date,

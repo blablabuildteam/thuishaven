@@ -468,9 +468,9 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
               90% (restcapaciteit niet verkocht)
             </li>
             <li>
-              <span className="text-text">Uitverkocht-timing</span> — dagen vóór
-              start uit de dagcurve (alleen bij bruikbare curve; eventdag-dumps
-              tellen niet)
+              <span className="text-text">Uitverkocht-timing</span> — laatste
+              Weeztix ticket-type update na create (proxy voor wanneer de
+              laatste tier vol zat)
             </li>
           </ul>
         </details>
@@ -496,7 +496,7 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
             <li
               key={r.id}
               className={cn(
-                "grid grid-cols-[4.5rem_minmax(7rem,9rem)_1fr] items-start gap-x-3 gap-y-2 px-2 py-3 sm:grid-cols-[5rem_minmax(9rem,11rem)_1fr_minmax(11rem,13rem)] sm:items-center sm:gap-3 sm:px-3",
+                "grid grid-cols-[4.5rem_1fr] items-start gap-x-3 gap-y-2 px-2 py-3 sm:grid-cols-[5rem_minmax(9rem,11rem)_1fr_minmax(11rem,13rem)] sm:items-center sm:gap-3 sm:px-3",
                 wx && weatherPanelClass(wx.kind),
               )}
             >
@@ -518,7 +518,7 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
                 )}
               </div>
 
-              <div className="col-span-3 min-w-0 sm:col-span-1">
+              <div className="col-span-2 min-w-0 sm:col-span-1">
                 <p className="truncate text-sm font-medium sm:text-base">
                   {r.headliner ?? r.name}
                 </p>
@@ -533,7 +533,7 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
                 </p>
               </div>
 
-              <div className="col-span-3 min-w-0 sm:col-span-1">
+              <div className="col-span-2 min-w-0 sm:col-span-1">
                 {st !== "unknown" && pct != null && r.capacity != null ? (
                   <div>
                     <div className="flex items-baseline justify-between gap-2">
@@ -587,7 +587,7 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
                     ) : st === "sold_out" ? (
                       <p className="mt-1 text-xs text-text-dim">
                         Uitverkocht · timing volgt met betere
-                        verkopen-curve
+                        ticket-update)
                       </p>
                     ) : null}
                   </div>

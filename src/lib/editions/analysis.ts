@@ -168,6 +168,9 @@ export async function getEditionAnalysisBundle(options?: {
       sold: ticketInventory.sold,
       capacity: ticketInventory.capacity,
       available: ticketInventory.available,
+      soldOutDay: ticketInventory.soldOutDay,
+      soldOutDaysBefore: ticketInventory.soldOutDaysBefore,
+      soldOutSource: ticketInventory.soldOutSource,
       avgPriceEur: ticketInventory.avgPriceEur,
     })
     .from(editions)
@@ -277,12 +280,23 @@ export async function getEditionAnalysisBundle(options?: {
       .filter((p) => p.day >= windowStart && p.day <= day)
       .reduce((s, p) => s + p.sold, 0);
 
-    const soldOutTiming = estimateSoldOutTiming({
-      eventDay: day,
-      sold,
-      capacity,
-      daily: curve,
-    });
+    const soldOutTiming =
+      e.soldOutDay != null && e.soldOutDaysBefore != null
+        ? {
+            day: e.soldOutDay,
+            daysBefore: e.soldOutDaysBefore,
+            confidence: "estimated" as const,
+            source: (e.soldOutSource === "curve" ? "curve" : "ticket_types") as
+              | "ticket_types"
+              | "curve",
+            curveCoveragePct: null,
+          }
+        : estimateSoldOutTiming({
+            eventDay: day,
+            sold,
+            capacity,
+            daily: curve,
+          });
 
     const artists = lineup.artists.filter(isUsableArtistName);
 

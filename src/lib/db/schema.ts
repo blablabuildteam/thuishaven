@@ -396,6 +396,10 @@ export const ticketInventory = pgTable("ticket_inventory", {
   /** Gewogen gem. ticketprijs in EUR (uit Weeztix min_price × sold). */
   avgPriceEur: numeric("avg_price_eur", { precision: 10, scale: 2 }),
   isSoldOut: boolean("is_sold_out").notNull().default(false),
+  /** Amsterdam YYYY-MM-DD when sell-out was reached (from ticket-type timestamps). */
+  soldOutDay: text("sold_out_day"),
+  soldOutDaysBefore: integer("sold_out_days_before"),
+  soldOutSource: text("sold_out_source"),
   syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
