@@ -1,7 +1,7 @@
 /**
- * Weeztix `available_stock` is de toegewezen ticketcap per type (blijft staan
- * bij sold_out). Oudere syncs deden ten onrechte capacity = sold + available.
- * Corrigeer die rijen: cap = oude "available", nog = cap − sold.
+ * Derive remaining from stored capacity. Do not rewrite capacity from
+ * sold+available — that identity always holds after a correct sync and
+ * previously double-shrunk caps (e.g. 3200 → 195).
  */
 export function normalizeWeeztixInventory(input: {
   sold: number | null | undefined;
@@ -10,22 +10,8 @@ export function normalizeWeeztixInventory(input: {
 }): { sold: number; capacity: number | null; available: number } {
   const sold = input.sold ?? 0;
   const capacity = input.capacity ?? null;
-  const available = input.available ?? 0;
 
-  if (
-    capacity != null &&
-    available > 0 &&
-    capacity === sold + available
-  ) {
-    const cap = available;
-    return {
-      sold,
-      capacity: cap,
-      available: Math.max(0, cap - sold),
-    };
-  }
-
-  if (capacity != null) {
+  if (capacity != null && capacity > 0) {
     return {
       sold,
       capacity,
@@ -33,5 +19,9 @@ export function normalizeWeeztixInventory(input: {
     };
   }
 
-  return { sold, capacity: null, available };
+  return {
+    sold,
+    capacity: null,
+    available: input.available ?? 0,
+  };
 }
