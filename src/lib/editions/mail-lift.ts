@@ -7,6 +7,7 @@ import {
   ticketSaleReferrers,
   ticketSalesDaily,
 } from "@/lib/db/schema";
+import { normalizeWeeztixInventory } from "@/lib/integrations/weeztix/inventory";
 
 /** Dagen ná verzending die we als “effect-window” meenemen. */
 const AFTER_DAYS = 7;
@@ -156,6 +157,7 @@ export async function getMailLiftByEdition(options?: {
       startsAt: editions.startsAt,
       sold: ticketInventory.sold,
       capacity: ticketInventory.capacity,
+      available: ticketInventory.available,
     })
     .from(editions)
     .leftJoin(
@@ -247,8 +249,13 @@ export async function getMailLiftByEdition(options?: {
 
     let row = byEdition.get(editionId);
     if (!row) {
-      const sold = ed.sold ?? 0;
-      const capacity = ed.capacity;
+      const inv = normalizeWeeztixInventory({
+        sold: ed.sold,
+        capacity: ed.capacity,
+        available: ed.available,
+      });
+      const sold = inv.sold;
+      const capacity = inv.capacity;
       const ref = refsByEdition.get(editionId);
       row = {
         editionId,

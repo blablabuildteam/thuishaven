@@ -3,7 +3,6 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { InsightsChatPanel } from "@/components/dashboard/insights-chat-panel";
 import {
   loadEditionBundle,
-  loadMailLift,
   loadWeatherImpact,
 } from "@/lib/cache/dashboard";
 import {
@@ -11,82 +10,107 @@ import {
   weekdayClaims,
 } from "@/lib/editions/cohort-claims";
 import { formatNumber } from "@/lib/utils";
+import { WEATHER_DEFS } from "@/lib/weather/classify";
 
 export const metadata = { title: "Insights" };
 export const dynamic = "force-dynamic";
 
+type InsightCard = {
+  kicker: string;
+  title: string;
+  body: string;
+  evidence?: string;
+  href?: string;
+  linkLabel?: string;
+};
+
 export default async function InsightsPage() {
-  const [impact, bundle, mailLift] = await Promise.all([
+  const [impact, bundle] = await Promise.all([
     loadWeatherImpact(),
     loadEditionBundle(),
-    loadMailLift().catch(() => null),
   ]);
 
-  const claims: Array<{ kicker: string; title: string; body: string }> = [];
+  const cards: InsightCard[] = [];
 
-  const wd = weekdayClaims(bundle.rows)[0];
-  if (wd) {
-    claims.push({
+  const weekdays = weekdayClaims(bundle.rows);
+  for (const wd of weekdays.slice(0, 2)) {
+    cards.push({
       kicker: "Weekdag",
       title: wd.title,
-      body: `${wd.body} · ${wd.evidence}`,
+      body: wd.body,
+      evidence: wd.evidence,
     });
   }
 
-  const period = periodClaims(bundle.rows)[0];
-  if (period) {
-    claims.push({
+  const periods = periodClaims(bundle.rows);
+  for (const period of periods.slice(0, 2)) {
+    cards.push({
       kicker: "Periode",
       title: period.title,
-      body: `${period.body} · ${period.evidence}`,
+      body: period.body,
+      evidence: period.evidence,
     });
   }
 
   if (impact.verdict.title) {
-    claims.push({
+    cards.push({
       kicker: "Weer",
       title: impact.verdict.title,
-      body: `${impact.verdict.body} · ${impact.verdict.evidence}`,
+      body: impact.verdict.body,
+      evidence: impact.verdict.evidence,
+      href: "/dashboard/weer",
+      linkLabel: "Weerdetail",
     });
   }
 
-  const after = mailLift?.totals.ordersAfterMails ?? 0;
-  const brevo = mailLift?.totals.brevoClickOrders ?? 0;
-  if (after > 0 || brevo > 0) {
-    claims.push({
-      kicker: "Mail",
-      title:
-        after > 0
-          ? `+${formatNumber(after)} orders in week ná mail`
-          : `${formatNumber(brevo)} via Brevo-klik`,
-      body:
-        after > 0
-          ? `${mailLift?.totals.campaignsMeasured ?? 0} mails gemeten${brevo > 0 ? ` · ${formatNumber(brevo)} via klik` : ""}`
-          : "Trackinglink in de mail → Weeztix-referrer.",
+  for (const b of impact.outdoor.buckets
+    .filter((x) => x.n >= 3 && x.vsComfortPct != null)
+    .sort(
+      (a, b) =>
+        Math.abs(b.vsComfortPct ?? 0) - Math.abs(a.vsComfortPct ?? 0),
+    )
+    .slice(0, 3)) {
+    const pct = Math.round(b.vsComfortPct!);
+    cards.push({
+      kicker: "Weer · cohort",
+      title: `${b.label} ${pct >= 0 ? "+" : ""}${pct}% vs comfort`,
+      body: `Gem. ~${formatNumber(b.avgSold)} sold · fill ${b.avgFill != null ? `${Math.round(b.avgFill)}%` : "n/a"}`,
+      evidence: `n=${b.n} · ${WEATHER_DEFS.find((d) => d.kind === b.kind)?.definition ?? ""}`,
+      href: "/dashboard/weer",
+      linkLabel: "Weer",
     });
   }
 
-  if (bundle.lessons[0] && claims.length < 4) {
-    claims.push({
+  for (const lesson of bundle.lessons.slice(0, 2)) {
+    cards.push({
       kicker: "Format",
-      title: bundle.lessons[0].title,
-      body: bundle.lessons[0].body,
+      title: lesson.title,
+      body: lesson.body,
+      evidence: lesson.evidence,
     });
   }
+
+  const topArtists = bundle.artistLeaderboard.slice(0, 5);
 
   return (
     <div>
       <SectionHeader
         eyebrow="Insights"
         title="Wat telt"
-        description="Korte claims uit weekdag, periode, weer en mail."
+        description="Claims uit weekdag, periode, weer en format — in blokken. Mail-effect staat bij Mailings."
         action={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link
               href="/dashboard"
               className="border border-border px-3 py-2 text-sm hover:border-text"
             >
               Events
+            </Link>
+            <Link
+              href="/dashboard/marketing"
+              className="border border-border px-3 py-2 text-sm hover:border-text"
+            >
+              Mailings
             </Link>
             <Link
               href="/dashboard/weer"
@@ -98,40 +122,65 @@ export default async function InsightsPage() {
         }
       />
 
-      <ol className="mb-12 space-y-8">
-        {claims.slice(0, 4).map((c, i) => (
-          <li key={`${c.kicker}-${c.title}`} className="max-w-2xl">
+      <div className="mb-10 grid gap-4 sm:grid-cols-2">
+        {cards.map((c) => (
+          <article
+            key={`${c.kicker}-${c.title}`}
+            className="flex flex-col border border-border bg-surface p-5"
+          >
             <p className="text-[11px] tracking-[0.16em] text-text-dim uppercase">
-              {String(i + 1).padStart(2, "0")} · {c.kicker}
+              {c.kicker}
             </p>
-            <p className="mt-2 font-display text-3xl tracking-[0.02em] sm:text-4xl">
+            <h2 className="mt-3 font-display text-2xl leading-tight tracking-[0.02em] sm:text-3xl">
               {c.title}
-            </p>
-            <p className="mt-2 text-sm leading-relaxed text-text-muted">
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-text-muted">
               {c.body}
             </p>
-          </li>
+            {c.evidence && (
+              <p className="mt-2 text-xs text-text-dim">{c.evidence}</p>
+            )}
+            {c.href && (
+              <Link
+                href={c.href}
+                className="mt-4 text-sm text-text underline underline-offset-2"
+              >
+                {c.linkLabel ?? "Meer"} →
+              </Link>
+            )}
+          </article>
         ))}
-        {!claims.length && (
-          <li className="text-sm text-text-muted">Nog te weinig data.</li>
+        {!cards.length && (
+          <p className="text-sm text-text-muted sm:col-span-2">
+            Nog te weinig data voor claims.
+          </p>
         )}
-      </ol>
+      </div>
 
-      {bundle.artistLeaderboard[0] && (
-        <section className="mb-10 border-t border-border pt-6">
+      {topArtists.length > 0 && (
+        <section className="mb-10 border border-border bg-surface p-5">
           <p className="text-[11px] tracking-[0.14em] text-text-dim uppercase">
             Top draw
           </p>
-          <p className="mt-2 font-display text-2xl">
-            {bundle.artistLeaderboard[0].artist}
-            <span className="ml-3 text-lg text-text-muted">
-              ~{formatNumber(bundle.artistLeaderboard[0].avgSold)}
-            </span>
-          </p>
+          <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {topArtists.map((a, i) => (
+              <li key={a.artist} className="min-w-0">
+                <p className="text-[11px] text-text-dim">
+                  {String(i + 1).padStart(2, "0")}
+                </p>
+                <p className="truncate font-display text-xl tracking-[0.02em]">
+                  {a.artist}
+                </p>
+                <p className="mt-1 text-sm text-text-muted">
+                  ~{formatNumber(a.avgSold)} sold gem. · {a.editions} edities
+                </p>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
-      <section className="border-t border-border pt-6">
+      <section className="border border-border bg-surface p-5">
         <p className="mb-3 text-[11px] tracking-[0.14em] text-text-dim uppercase">
           Vraag de data
         </p>

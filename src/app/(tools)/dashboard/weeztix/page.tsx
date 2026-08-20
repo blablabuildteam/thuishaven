@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { desc, isNotNull, sql, and, eq } from "drizzle-orm";
 import { SectionHeader } from "@/components/ui/section-header";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { editions, ticketInventory } from "@/lib/db/schema";
 import { formatNumber, formatPercent } from "@/lib/utils";
+import { normalizeWeeztixInventory } from "@/lib/integrations/weeztix/inventory";
 
 export const metadata = { title: "Tickets" };
 export const dynamic = "force-dynamic";
@@ -67,15 +67,7 @@ export default async function WeeztixEventsPage() {
       <SectionHeader
         eyebrow="Weeztix"
         title="Tickets"
-        description="Sold, cap en fill per editie. Mail-effect → Mailings."
-        action={
-          <Link
-            href="/dashboard/marketing"
-            className="bg-accent px-3 py-2 text-sm text-accent-contrast"
-          >
-            Mail-effect
-          </Link>
-        }
+        description="Sold, ticketcap en restcapaciteit per editie."
       />
 
       <div className="mb-6 flex flex-wrap gap-8">
@@ -113,16 +105,22 @@ export default async function WeeztixEventsPage() {
               <th className="px-4 py-3 font-medium">Datum</th>
               <th className="px-4 py-3 font-medium">Sold</th>
               <th className="px-4 py-3 font-medium">Cap</th>
-              <th className="px-4 py-3 font-medium">Fill</th>
               <th className="px-4 py-3 font-medium">Nog</th>
+              <th className="px-4 py-3 font-medium">Fill</th>
             </tr>
           </thead>
           <tbody>
             {rows
               .filter((r) => !/TEMPLATE/i.test(r.name))
               .map((row) => {
-                const sold = row.sold ?? 0;
-                const cap = row.capacity;
+                const inv = normalizeWeeztixInventory({
+                  sold: row.sold,
+                  capacity: row.capacity,
+                  available: row.available,
+                });
+                const sold = inv.sold;
+                const cap = inv.capacity;
+                const nog = inv.available;
                 const st =
                   cap != null && cap > 0 ? (sold / cap) * 100 : null;
                 return (
@@ -141,18 +139,16 @@ export default async function WeeztixEventsPage() {
                       })}
                     </td>
                     <td className="px-4 py-3 font-mono">
-                      {row.sold != null ? formatNumber(row.sold) : "—"}
+                      {row.sold != null ? formatNumber(sold) : "—"}
                     </td>
                     <td className="px-4 py-3 font-mono text-text-muted">
                       {cap != null ? formatNumber(cap) : "—"}
                     </td>
                     <td className="px-4 py-3 font-mono text-text-muted">
-                      {st != null ? formatPercent(st, 0) : "—"}
+                      {cap != null ? formatNumber(nog) : "—"}
                     </td>
                     <td className="px-4 py-3 font-mono text-text-muted">
-                      {row.available != null
-                        ? formatNumber(row.available)
-                        : "—"}
+                      {st != null ? formatPercent(st, 0) : "—"}
                     </td>
                   </tr>
                 );
@@ -161,7 +157,8 @@ export default async function WeeztixEventsPage() {
         </table>
       </div>
       <p className="mt-3 text-xs text-text-dim">
-        Cap = sold + available uit Weeztix-stock (geen zaalcapaciteit).
+        Cap = som van Weeztix ticket-allotments. Nog = cap − sold. Geen
+        zaalcapaciteit.
       </p>
     </div>
   );

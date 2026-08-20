@@ -29,9 +29,9 @@ export function summarizeTicketSales(tickets: WeeztixTicketType[]): {
   ticketTypes: number;
 } {
   let sold = 0;
-  let available = 0;
-  let revenueCents = 0;
+  let capacitySum = 0;
   let hasStock = false;
+  let revenueCents = 0;
 
   for (const t of tickets) {
     const s = typeof t.sold_count === "number" ? t.sold_count : 0;
@@ -43,9 +43,14 @@ export function summarizeTicketSales(tickets: WeeztixTicketType[]): {
     if (price > 0 && s > 0) {
       revenueCents += s * price;
     }
+    /**
+     * Weeztix `available_stock` is de toegewezen ticketcap per type, ook als
+     * status=sold_out (blijft bv. 1050 staan i.p.v. 0). Niet “nog te koop”.
+     * Cap = som van allotments; nog = cap − sold.
+     */
     if (stock != null) {
       hasStock = true;
-      available += Math.max(stock, 0);
+      capacitySum += Math.max(stock, s);
     }
   }
 
@@ -55,11 +60,14 @@ export function summarizeTicketSales(tickets: WeeztixTicketType[]): {
     return price > 0 ? sum + s : sum;
   }, 0);
 
-  const capacity = hasStock ? sold + available : null;
+  const capacity = hasStock ? capacitySum : sold > 0 ? sold : null;
+  const available =
+    capacity != null ? Math.max(0, capacity - sold) : 0;
+
   return {
     sold,
     capacity,
-    available: hasStock ? available : 0,
+    available,
     revenueCents,
     avgPriceCents: paidSold > 0 ? Math.round(revenueCents / paidSold) : null,
     ticketTypes: tickets.length,

@@ -27,6 +27,7 @@ import {
   isOutdoorSeason,
   shiftIsoDay,
 } from "@/lib/time/amsterdam";
+import { normalizeWeeztixInventory } from "@/lib/integrations/weeztix/inventory";
 import {
   periodsForDay,
   weekdayKeyFromIso,
@@ -160,6 +161,7 @@ export async function getEditionAnalysisBundle(options?: {
       startsAt: editions.startsAt,
       sold: ticketInventory.sold,
       capacity: ticketInventory.capacity,
+      available: ticketInventory.available,
       avgPriceEur: ticketInventory.avgPriceEur,
     })
     .from(editions)
@@ -251,8 +253,13 @@ export async function getEditionAnalysisBundle(options?: {
       .filter((f) => overlapsDay(day, f.startsAt, f.endsAt))
       .map((f) => f.name);
 
-    const sold = e.sold ?? 0;
-    const capacity = e.capacity;
+    const inv = normalizeWeeztixInventory({
+      sold: e.sold,
+      capacity: e.capacity,
+      available: e.available,
+    });
+    const sold = inv.sold;
+    const capacity = inv.capacity;
     const avgPriceEur =
       e.avgPriceEur != null ? Number(e.avgPriceEur) : null;
     const sellThrough =

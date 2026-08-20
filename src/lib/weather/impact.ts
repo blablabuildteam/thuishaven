@@ -19,6 +19,7 @@ import {
 } from "@/lib/weather/classify";
 import { parseEditionLineup } from "@/lib/editions/lineup";
 import { ensureEditionWeather, weatherLocationMatch } from "@/lib/weather/store";
+import { normalizeWeeztixInventory } from "@/lib/integrations/weeztix/inventory";
 
 const FROM_YEAR = 2025;
 
@@ -206,6 +207,7 @@ export async function getWeatherImpact(options?: {
       startsAt: editions.startsAt,
       sold: ticketInventory.sold,
       capacity: ticketInventory.capacity,
+      available: ticketInventory.available,
     })
     .from(editions)
     .leftJoin(
@@ -264,8 +266,13 @@ export async function getWeatherImpact(options?: {
       windMaxMps: num(w.windMaxMps),
       weatherCode: w.weatherCode,
     });
-    const sold = e.sold ?? 0;
-    const capacity = e.capacity;
+    const inv = normalizeWeeztixInventory({
+      sold: e.sold,
+      capacity: e.capacity,
+      available: e.available,
+    });
+    const sold = inv.sold;
+    const capacity = inv.capacity;
     const fill =
       capacity != null && capacity > 0 ? (sold / capacity) * 100 : null;
     const windowStart = shiftIsoDay(day, -6);
