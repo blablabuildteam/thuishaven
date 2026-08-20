@@ -148,12 +148,20 @@ export function classifyEventWeather(
   const tempBit =
     tempMax != null ? `${Math.round(tempMax)}°` : "geen temp";
   const rainBit =
-    precip >= 0.5 ? `${precip.toFixed(precip >= 10 ? 0 : 1)} mm regen` : "droog";
+    precip >= 0.5
+      ? `${precip.toFixed(precip >= 10 ? 0 : 1)} mm regen`
+      : "droog";
+  const windBit =
+    wind >= 8
+      ? ` · wind ${Math.round(wind * 3.6)} km/u`
+      : wind >= 5
+        ? ` · bries ${Math.round(wind * 3.6)} km/u`
+        : "";
 
   return {
     kind,
     label: KIND_LABEL[kind],
-    summary: `${tempBit} · ${rainBit}`,
+    summary: `${tempBit} · ${sky} · ${rainBit}${windBit}`,
     sky,
     tempMaxC: tempMax,
     tempMinC: tempMin,

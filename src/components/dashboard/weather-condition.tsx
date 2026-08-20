@@ -51,7 +51,12 @@ export function WeatherCondition({
       </p>
       <p className="text-xs text-text-muted">
         {wx.sky}
-        {wx.precipMm >= 0.5 ? ` · ${wx.precipMm.toFixed(wx.precipMm >= 10 ? 0 : 1)} mm` : " · droog"}
+        {wx.precipMm >= 0.5
+          ? ` · ${wx.precipMm.toFixed(wx.precipMm >= 10 ? 0 : 1)} mm`
+          : " · droog"}
+        {wx.windMaxMps != null && wx.windMaxMps >= 5
+          ? ` · ${Math.round(wx.windMaxMps * 3.6)} km/u`
+          : ""}
       </p>
       {wx.precipMm >= 0.5 && size !== "sm" && (
         <div className="mt-1.5 h-1 w-full max-w-[8rem] bg-black/10 dark:bg-white/15">

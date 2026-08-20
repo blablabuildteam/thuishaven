@@ -56,6 +56,7 @@ export default async function DashboardPage() {
       capacity: r.capacity,
       sellThrough: r.sellThrough,
       lastWeekSold: r.lastWeekSold,
+      soldOutTiming: r.soldOutTiming,
       mailOrdersAfter:
         mail && mail.totalOrdersAfterMails > 0
           ? mail.totalOrdersAfterMails

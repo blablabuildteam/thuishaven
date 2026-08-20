@@ -7,7 +7,10 @@ import {
   EDITION_FORMAT_LABEL,
   type EditionFormat,
 } from "@/lib/editions/lineup";
-import { weatherPanelClass } from "@/components/dashboard/weather-condition";
+import {
+  weatherPanelClass,
+  WeatherCondition,
+} from "@/components/dashboard/weather-condition";
 import { formatDayShort, amsterdamDay } from "@/lib/time/amsterdam";
 import {
   CALENDAR_PERIOD_LABEL,
@@ -20,6 +23,10 @@ import {
   type ClassifiedWeather,
   type WeatherKind,
 } from "@/lib/weather/classify";
+import {
+  soldOutTimingLabel,
+  type SoldOutTiming,
+} from "@/lib/editions/sold-out-timing";
 
 export type FillStatus = "sold_out" | "near" | "room" | "unknown";
 
@@ -37,6 +44,7 @@ export type EventsBoardRow = {
   capacity: number | null;
   sellThrough: number | null;
   lastWeekSold: number | null;
+  soldOutTiming: SoldOutTiming | null;
   mailOrdersAfter: number | null;
   brevoClickOrders: number | null;
   weather: ClassifiedWeather | null;
@@ -459,6 +467,11 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
               <span className="text-text">Niet vol</span> — voorbij feest onder
               90% (restcapaciteit niet verkocht)
             </li>
+            <li>
+              <span className="text-text">Uitverkocht-timing</span> — dagen vóór
+              start uit de dagcurve (alleen bij bruikbare curve; eventdag-dumps
+              tellen niet)
+            </li>
           </ul>
         </details>
       </div>
@@ -475,11 +488,15 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
               : null;
           const pct =
             r.sellThrough != null ? Math.round(r.sellThrough) : null;
+          const soldOutLabel =
+            r.soldOutTiming != null
+              ? soldOutTimingLabel(r.soldOutTiming)
+              : null;
           return (
             <li
               key={r.id}
               className={cn(
-                "grid grid-cols-[4.5rem_1fr] items-start gap-x-3 gap-y-2 px-2 py-3 sm:grid-cols-[5rem_1fr_minmax(11rem,13rem)_auto] sm:items-center sm:gap-3 sm:px-3",
+                "grid grid-cols-[4.5rem_minmax(7rem,9rem)_1fr] items-start gap-x-3 gap-y-2 px-2 py-3 sm:grid-cols-[5rem_minmax(9rem,11rem)_1fr_minmax(11rem,13rem)] sm:items-center sm:gap-3 sm:px-3",
                 wx && weatherPanelClass(wx.kind),
               )}
             >
@@ -492,7 +509,16 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
                   {upcoming ? " · komt" : ""}
                 </p>
               </div>
+
               <div className="min-w-0">
+                {wx ? (
+                  <WeatherCondition wx={wx} size="sm" />
+                ) : (
+                  <p className="text-xs text-text-dim">Geen weerdata</p>
+                )}
+              </div>
+
+              <div className="col-span-3 min-w-0 sm:col-span-1">
                 <p className="truncate text-sm font-medium sm:text-base">
                   {r.headliner ?? r.name}
                 </p>
@@ -507,7 +533,7 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
                 </p>
               </div>
 
-              <div className="col-span-2 min-w-0 sm:col-span-1">
+              <div className="col-span-3 min-w-0 sm:col-span-1">
                 {st !== "unknown" && pct != null && r.capacity != null ? (
                   <div>
                     <div className="flex items-baseline justify-between gap-2">
@@ -537,7 +563,9 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
                           st === "near" && "bg-text",
                           st === "room" && "bg-warn",
                         )}
-                        style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+                        style={{
+                          width: `${Math.min(100, Math.max(0, pct))}%`,
+                        }}
                       />
                     </div>
                     <p className="mt-1.5 text-xs text-text-muted">
@@ -552,6 +580,16 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
                           ? " · vol"
                           : ""}
                     </p>
+                    {soldOutLabel ? (
+                      <p className="mt-1 text-xs font-medium text-text">
+                        {soldOutLabel}
+                      </p>
+                    ) : st === "sold_out" ? (
+                      <p className="mt-1 text-xs text-text-dim">
+                        Uitverkocht · timing volgt met betere
+                        verkopen-curve
+                      </p>
+                    ) : null}
                   </div>
                 ) : (
                   <div>
@@ -562,25 +600,6 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
                       sold · geen Weeztix-cap
                     </p>
                   </div>
-                )}
-              </div>
-
-              <div className="hidden justify-self-end text-right sm:block">
-                {wx ? (
-                  <>
-                    <p className="font-display text-lg leading-none">
-                      {wx.tempMaxC != null
-                        ? `${Math.round(wx.tempMaxC)}°`
-                        : "—"}
-                    </p>
-                    <p className="text-[10px] text-text-muted">
-                      {wx.precipMm >= 0.5
-                        ? `${wx.precipMm.toFixed(wx.precipMm >= 10 ? 0 : 1)} mm`
-                        : "droog"}
-                    </p>
-                  </>
-                ) : (
-                  <span className="text-[10px] text-text-dim">—</span>
                 )}
               </div>
             </li>

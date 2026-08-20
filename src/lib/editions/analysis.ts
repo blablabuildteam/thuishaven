@@ -29,6 +29,10 @@ import {
 } from "@/lib/time/amsterdam";
 import { normalizeWeeztixInventory } from "@/lib/integrations/weeztix/inventory";
 import {
+  estimateSoldOutTiming,
+  type SoldOutTiming,
+} from "@/lib/editions/sold-out-timing";
+import {
   periodsForDay,
   weekdayKeyFromIso,
   yearFromIso,
@@ -57,6 +61,8 @@ export type EditionAnalysisRow = {
   sellThrough: number | null;
   /** Orders in de 7 dagen tot en met eventdag (waar curve bestaat) */
   lastWeekSold: number | null;
+  /** Als inventory uitverkocht is: dagen vóór start (uit verkopen-curve). */
+  soldOutTiming: SoldOutTiming | null;
   weather: FestivalWeatherScore | null;
   weatherClass: ClassifiedWeather | null;
   campaigns: Array<{
@@ -266,9 +272,17 @@ export async function getEditionAnalysisBundle(options?: {
       capacity != null && capacity > 0 ? (sold / capacity) * 100 : null;
 
     const windowStart = shiftIsoDay(day, -6);
-    const lastWeek = (dailyByEdition.get(e.id) ?? [])
+    const curve = dailyByEdition.get(e.id) ?? [];
+    const lastWeek = curve
       .filter((p) => p.day >= windowStart && p.day <= day)
       .reduce((s, p) => s + p.sold, 0);
+
+    const soldOutTiming = estimateSoldOutTiming({
+      eventDay: day,
+      sold,
+      capacity,
+      daily: curve,
+    });
 
     const artists = lineup.artists.filter(isUsableArtistName);
 
@@ -293,6 +307,7 @@ export async function getEditionAnalysisBundle(options?: {
           : null,
       sellThrough,
       lastWeekSold: lastWeek > 0 ? lastWeek : null,
+      soldOutTiming,
       weather,
       weatherClass,
       campaigns: linked.map((c) => {
