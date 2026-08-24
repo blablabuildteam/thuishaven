@@ -2,7 +2,7 @@ import { assertExternalReadOnly } from "@/lib/integrations/read-only";
 
 const BREVO_API = "https://api.brevo.com/v3";
 
-function getBrevoKey(): string | null {
+export function getBrevoKey(): string | null {
   const direct = process.env.BREVO_API_KEY?.trim();
   if (direct) return direct;
   const mcp = process.env.BREVO_MCP_TOKEN?.trim();

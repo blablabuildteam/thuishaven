@@ -50,7 +50,7 @@ export function InsightsChatPanel() {
               role: "assistant",
               content:
                 data.error ||
-                "Kon geen antwoord ophalen. Check OPENAI_API_KEY en of er data gesynchroniseerd is.",
+                "Kon geen antwoord ophalen. Check OPENAI_API_KEY / GEMINI_API_KEY en of er data gesynchroniseerd is.",
             },
           ]);
           return;

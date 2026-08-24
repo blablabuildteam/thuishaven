@@ -28,16 +28,22 @@ function base(
 
 async function verifyBrevo(): Promise<VerifyResult> {
   const def = INTEGRATIONS.find((i) => i.id === "brevo")!;
-  const { missing } = getEnvPresence(def.envKeys);
-  if (missing.length) {
-    return base("brevo", def.name, "missing", `Ontbreekt: ${missing.join(", ")}`);
+  const { getBrevoKey } = await import("@/lib/integrations/brevo/client");
+  const key = getBrevoKey();
+  if (!key) {
+    return base(
+      "brevo",
+      def.name,
+      "missing",
+      "Ontbreekt: BREVO_API_KEY (of BREVO_MCP_TOKEN)",
+    );
   }
 
   try {
     const res = await fetch("https://api.brevo.com/v3/account", {
       headers: {
         accept: "application/json",
-        "api-key": process.env.BREVO_API_KEY!,
+        "api-key": key,
       },
       cache: "no-store",
     });
@@ -67,10 +73,33 @@ async function verifyBrevo(): Promise<VerifyResult> {
 }
 
 async function verifyOpenAI(): Promise<VerifyResult> {
+  const name = "AI (Gemini)";
   const openai = process.env.OPENAI_API_KEY?.trim();
+  const gemini = process.env.GEMINI_API_KEY?.trim();
   const anthropic = process.env.ANTHROPIC_API_KEY?.trim();
-  if (!openai && !anthropic) {
-    return base("ai", "AI (OpenAI / Anthropic)", "missing", "Geen AI-key gezet");
+  if (!openai && !gemini && !anthropic) {
+    return base("ai", name, "missing", "Geen AI-key gezet (GEMINI_API_KEY)");
+  }
+
+  if (gemini) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(gemini)}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) {
+        return base("ai", name, "error", `Gemini HTTP ${res.status}`);
+      }
+      const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.0-flash";
+      return base("ai", name, "verified", `Gemini · ${model}`);
+    } catch (e) {
+      return base(
+        "ai",
+        name,
+        "error",
+        e instanceof Error ? e.message : "Network error",
+      );
+    }
   }
 
   if (openai) {
@@ -80,13 +109,14 @@ async function verifyOpenAI(): Promise<VerifyResult> {
         cache: "no-store",
       });
       if (!res.ok) {
-        return base("ai", "AI (OpenAI / Anthropic)", "error", `OpenAI HTTP ${res.status}`);
+        return base("ai", name, "error", `OpenAI HTTP ${res.status}`);
       }
-      return base("ai", "AI (OpenAI / Anthropic)", "verified", "OpenAI key geldig");
+      const model = process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
+      return base("ai", name, "verified", `OpenAI · ${model}`);
     } catch (e) {
       return base(
         "ai",
-        "AI (OpenAI / Anthropic)",
+        name,
         "error",
         e instanceof Error ? e.message : "Network error",
       );
@@ -95,7 +125,7 @@ async function verifyOpenAI(): Promise<VerifyResult> {
 
   return base(
     "ai",
-    "AI (OpenAI / Anthropic)",
+    name,
     "configured",
     "Anthropic key aanwezig — live verify volgt bij eerste generate",
   );
@@ -350,6 +380,126 @@ async function verifyTicketSwap(): Promise<VerifyResult> {
   }
 }
 
+async function verifyGooglePlaces(): Promise<VerifyResult> {
+  const name = "Google Places";
+  const key = process.env.GOOGLE_PLACES_API_KEY?.trim();
+  if (!key) {
+    return base("google_places", name, "missing", "GOOGLE_PLACES_API_KEY ontbreekt");
+  }
+
+  try {
+    const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": key,
+        "X-Goog-FieldMask": "places.displayName,places.formattedAddress",
+      },
+      body: JSON.stringify({
+        textQuery: "kantoor Amsterdam",
+        maxResultCount: 1,
+        languageCode: "nl",
+        regionCode: "NL",
+      }),
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      return base(
+        "google_places",
+        name,
+        "error",
+        `Places HTTP ${res.status}: ${text.slice(0, 160)}`,
+      );
+    }
+
+    const data = (await res.json()) as {
+      places?: Array<{ displayName?: { text?: string } }>;
+    };
+    const sample = data.places?.[0]?.displayName?.text;
+    return base(
+      "google_places",
+      name,
+      "verified",
+      sample ? `Text Search OK · voorbeeld: ${sample}` : "Text Search OK",
+    );
+  } catch (e) {
+    return base(
+      "google_places",
+      name,
+      "error",
+      e instanceof Error ? e.message : "Network error",
+    );
+  }
+}
+
+async function verifyYouTube(): Promise<VerifyResult> {
+  const name = "YouTube";
+  const key = process.env.YOUTUBE_API_KEY?.trim();
+  const channelId = process.env.YOUTUBE_CHANNEL_ID?.trim();
+  if (!key) {
+    return base("youtube", name, "missing", "YOUTUBE_API_KEY ontbreekt");
+  }
+  if (!channelId) {
+    return base("youtube", name, "missing", "YOUTUBE_CHANNEL_ID ontbreekt");
+  }
+
+  try {
+    const qs = new URLSearchParams({
+      part: "snippet,statistics",
+      id: channelId,
+      key,
+    });
+    const res = await fetch(
+      `https://www.googleapis.com/youtube/v3/channels?${qs}`,
+      { cache: "no-store" },
+    );
+
+    if (!res.ok) {
+      const text = await res.text();
+      return base(
+        "youtube",
+        name,
+        "error",
+        `YouTube HTTP ${res.status}: ${text.slice(0, 160)}`,
+      );
+    }
+
+    const data = (await res.json()) as {
+      items?: Array<{
+        snippet?: { title?: string };
+        statistics?: { subscriberCount?: string; videoCount?: string };
+      }>;
+    };
+    const channel = data.items?.[0];
+    if (!channel) {
+      return base(
+        "youtube",
+        name,
+        "error",
+        "Kanaal niet gevonden — check YOUTUBE_CHANNEL_ID",
+      );
+    }
+
+    const title = channel.snippet?.title ?? "Onbekend kanaal";
+    const subs = channel.statistics?.subscriberCount;
+    const videos = channel.statistics?.videoCount;
+    const stats =
+      subs != null && videos != null
+        ? ` · ${Number(subs).toLocaleString("nl-NL")} subs · ${videos} video's`
+        : "";
+    return base("youtube", name, "verified", `${title}${stats}`);
+  } catch (e) {
+    return base(
+      "youtube",
+      name,
+      "error",
+      e instanceof Error ? e.message : "Network error",
+    );
+  }
+}
+
 export async function verifyIntegration(id: string): Promise<VerifyResult> {
   switch (id) {
     case "brevo":
@@ -368,6 +518,10 @@ export async function verifyIntegration(id: string): Promise<VerifyResult> {
       return verifyResidentAdvisor();
     case "ticketswap":
       return verifyTicketSwap();
+    case "google_places":
+      return verifyGooglePlaces();
+    case "youtube":
+      return verifyYouTube();
     default: {
       const def = INTEGRATIONS.find((i) => i.id === id);
       if (!def) {
@@ -406,11 +560,11 @@ export async function probeConfiguredIntegrations(): Promise<VerifyResult[]> {
       row.status === "configured" ||
       (row.status !== "manual" &&
         row.status !== "missing" &&
-        ["brevo", "weeztix", "database", "open_meteo", "ai", "kvk", "resident_advisor", "ticketswap"].includes(
+        ["brevo", "weeztix", "database", "open_meteo", "ai", "kvk", "resident_advisor", "ticketswap", "google_places", "youtube"].includes(
           row.id,
         )),
   );
-  const always = ["brevo", "weeztix", "database", "open_meteo", "ai", "resident_advisor", "ticketswap"];
+  const always = ["brevo", "weeztix", "database", "open_meteo", "ai", "resident_advisor", "ticketswap", "google_places", "youtube"];
   const ids = new Set([
     ...toProbe.map((r) => r.id),
     ...always.filter((id) => {
@@ -440,18 +594,27 @@ export function listIntegrationStatusSnapshot(): Array<{
         Boolean(process.env.WEEZTIX_ACCESS_TOKEN?.trim()) ||
         Boolean(process.env.WEEZTIX_REFRESH_TOKEN?.trim()) ||
         Boolean(process.env.WEEZTIX_CLIENT_ID?.trim()));
+    const aiOk =
+      def.id === "ai" &&
+      (Boolean(process.env.OPENAI_API_KEY?.trim()) ||
+        Boolean(process.env.GEMINI_API_KEY?.trim()) ||
+        Boolean(process.env.ANTHROPIC_API_KEY?.trim()));
+    const brevoOk =
+      def.id === "brevo" &&
+      (Boolean(process.env.BREVO_API_KEY?.trim()) ||
+        Boolean(process.env.BREVO_MCP_TOKEN?.trim()));
+    const integrationOk = weeztixOk || aiOk || brevoOk;
     let status: IntegrationStatus =
       def.envKeys.length === 0
         ? "configured"
-        : missing.length && !weeztixOk
+        : missing.length && !integrationOk
           ? "missing"
           : "configured";
     if (
       missing.length &&
-      !weeztixOk &&
+      !integrationOk &&
       (def.priority === "later" ||
         def.id === "linkedin" ||
-        def.id === "google_places" ||
         def.id === "enrichment")
     ) {
       status = "manual";
@@ -462,7 +625,7 @@ export function listIntegrationStatusSnapshot(): Array<{
       tool: def.tool,
       priority: def.priority,
       status,
-      missing: weeztixOk ? [] : missing,
+      missing: integrationOk ? [] : missing,
       askFromClient: def.askFromClient,
     };
   });

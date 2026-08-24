@@ -62,7 +62,7 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     name: "4. Genereren",
     description:
       "AI-mail per prospect op basis van variant/groep + live beschikbaarheidsfragment.",
-    dependsOn: ["OPENAI_API_KEY of ANTHROPIC_API_KEY"],
+    dependsOn: ["GEMINI_API_KEY of OPENAI_API_KEY / ANTHROPIC_API_KEY"],
     dataSource: "Mailvarianten + /beschikbaar",
     status: "needs_credentials",
     missing: ["AI-sleutel"],

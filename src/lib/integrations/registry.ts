@@ -74,7 +74,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     description:
       "E-mail metrics + campagnes — eerst read-only (GET account/campagnes). Verzenden later apart aanzetten.",
     envKeys: ["BREVO_API_KEY"],
-    optionalEnvKeys: ["BREVO_SENDER_EMAIL", "BREVO_SENDER_NAME"],
+    optionalEnvKeys: ["BREVO_MCP_TOKEN", "BREVO_SENDER_EMAIL", "BREVO_SENDER_NAME"],
     askFromClient: [
       "API-key met leesrechten (Settings → SMTP & API)",
       "Sender e-mail (later, alleen nodig voor versturen)",
@@ -85,15 +85,18 @@ export const INTEGRATIONS: IntegrationDef[] = [
   },
   {
     id: "ai",
-    name: "AI (OpenAI / Anthropic)",
+    name: "AI (Gemini)",
     tool: "shared",
-    description: "Outreach-personalisatie + dashboard AI-chat.",
-    envKeys: ["OPENAI_API_KEY"],
-    optionalEnvKeys: ["ANTHROPIC_API_KEY"],
+    description:
+      "Dashboard AI-chat en outreach-personalisatie via Google Gemini (alternatief: OpenAI of Anthropic).",
+    envKeys: ["GEMINI_API_KEY"],
+    optionalEnvKeys: ["GEMINI_MODEL", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"],
     askFromClient: [
-      "Voorkeur model/provider, of wij leveren key onder jullie account",
+      "Gemini API-key via Google AI Studio",
+      "Optioneel: voorkeursmodel (standaard gemini-2.0-flash)",
     ],
-    verifyHint: "Models list / ping",
+    verifyHint: "GET generativelanguage.googleapis.com/models",
+    docsUrl: "https://aistudio.google.com/apikey",
     priority: "critical",
   },
   {
@@ -207,10 +210,11 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "youtube",
     name: "YouTube",
     tool: "dashboard",
-    description: "Aftermovies / channel metrics.",
+    description: "Aftermovies / channel metrics (YouTube Data API v3).",
     envKeys: ["YOUTUBE_API_KEY", "YOUTUBE_CHANNEL_ID"],
-    askFromClient: ["Channel ID", "API-key of OAuth"],
+    askFromClient: ["Channel ID", "API-key in Google Cloud (YouTube Data API v3)"],
     verifyHint: "channels.list",
+    docsUrl: "https://developers.google.com/youtube/v3/docs/channels/list",
     priority: "medium",
   },
   {
@@ -278,11 +282,13 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "google_places",
     name: "Google Places",
     tool: "outreach",
-    description: "Aanvullende bedrijven op locatie/categorie in de regio AMS.",
+    description:
+      "Aanvullende bedrijven op locatie/categorie in de regio AMS (Text Search + Place Details).",
     envKeys: ["GOOGLE_PLACES_API_KEY"],
     askFromClient: ["Akkoord Google Places als aanvullende bron"],
-    verifyHint: "Places Text (textsearch)",
-    priority: "later",
+    verifyHint: "Places API (New) · searchText",
+    docsUrl: "https://developers.google.com/maps/documentation/places/web-service/text-search",
+    priority: "medium",
   },
   {
     id: "enrichment",

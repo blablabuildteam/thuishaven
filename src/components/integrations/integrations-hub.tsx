@@ -396,7 +396,12 @@ export function IntegrationsHub() {
                     ))}
                   </ul>
                   <p className="mt-2 font-mono text-[11px] text-text-dim">
-                    {meta.envKeys.join(" · ")}
+                    {row.id === "ai"
+                      ? [
+                          ...meta.envKeys,
+                          ...(meta.optionalEnvKeys ?? []),
+                        ].join(" · ")
+                      : meta.envKeys.join(" · ")}
                   </p>
                   {meta.docsUrl && (
                     <a

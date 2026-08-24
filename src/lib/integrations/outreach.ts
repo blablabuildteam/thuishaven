@@ -30,8 +30,8 @@ export async function generateOutreachEmail(_input: {
   availabilitySummary?: string;
   toneExamples?: string[];
 }): Promise<{ subject: string; body: string } | { error: string }> {
-  if (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
-    return { error: "OPENAI_API_KEY of ANTHROPIC_API_KEY ontbreekt" };
+  if (!process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+    return { error: "OPENAI_API_KEY, GEMINI_API_KEY of ANTHROPIC_API_KEY ontbreekt" };
   }
   return { error: "Nog niet geïmplementeerd — prompt + tone calibratie volgt" };
 }
