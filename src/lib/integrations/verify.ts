@@ -500,6 +500,68 @@ async function verifyYouTube(): Promise<VerifyResult> {
   }
 }
 
+async function verifyInstagram(): Promise<VerifyResult> {
+  const name = "Instagram (Meta)";
+  const token = process.env.META_ACCESS_TOKEN?.trim();
+  const igId = process.env.META_IG_BUSINESS_ID?.trim();
+  const version = process.env.META_GRAPH_API_VERSION?.trim() || "v21.0";
+
+  if (!token) {
+    return base("instagram", name, "missing", "META_ACCESS_TOKEN ontbreekt");
+  }
+  if (!igId) {
+    return base("instagram", name, "missing", "META_IG_BUSINESS_ID ontbreekt");
+  }
+
+  try {
+    const qs = new URLSearchParams({
+      fields: "id,username,name,followers_count,media_count",
+      access_token: token,
+    });
+    const res = await fetch(
+      `https://graph.facebook.com/${version}/${encodeURIComponent(igId)}?${qs}`,
+      { cache: "no-store" },
+    );
+
+    if (!res.ok) {
+      const text = await res.text();
+      return base(
+        "instagram",
+        name,
+        "error",
+        `Meta HTTP ${res.status}: ${text.slice(0, 180)}`,
+      );
+    }
+
+    const data = (await res.json()) as {
+      username?: string;
+      name?: string;
+      followers_count?: number;
+      media_count?: number;
+      error?: { message?: string };
+    };
+    if (data.error?.message) {
+      return base("instagram", name, "error", data.error.message);
+    }
+
+    const handle = data.username ? `@${data.username}` : data.name ?? "Instagram";
+    const followers =
+      data.followers_count != null
+        ? ` · ${data.followers_count.toLocaleString("nl-NL")} volgers`
+        : "";
+    const media =
+      data.media_count != null ? ` · ${data.media_count} posts` : "";
+    return base("instagram", name, "verified", `${handle}${followers}${media}`);
+  } catch (e) {
+    return base(
+      "instagram",
+      name,
+      "error",
+      e instanceof Error ? e.message : "Network error",
+    );
+  }
+}
+
 export async function verifyIntegration(id: string): Promise<VerifyResult> {
   switch (id) {
     case "brevo":
@@ -522,6 +584,8 @@ export async function verifyIntegration(id: string): Promise<VerifyResult> {
       return verifyGooglePlaces();
     case "youtube":
       return verifyYouTube();
+    case "instagram":
+      return verifyInstagram();
     default: {
       const def = INTEGRATIONS.find((i) => i.id === id);
       if (!def) {
@@ -560,11 +624,11 @@ export async function probeConfiguredIntegrations(): Promise<VerifyResult[]> {
       row.status === "configured" ||
       (row.status !== "manual" &&
         row.status !== "missing" &&
-        ["brevo", "weeztix", "database", "open_meteo", "ai", "kvk", "resident_advisor", "ticketswap", "google_places", "youtube"].includes(
+        ["brevo", "weeztix", "database", "open_meteo", "ai", "kvk", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram"].includes(
           row.id,
         )),
   );
-  const always = ["brevo", "weeztix", "database", "open_meteo", "ai", "resident_advisor", "ticketswap", "google_places", "youtube"];
+  const always = ["brevo", "weeztix", "database", "open_meteo", "ai", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram"];
   const ids = new Set([
     ...toProbe.map((r) => r.id),
     ...always.filter((id) => {

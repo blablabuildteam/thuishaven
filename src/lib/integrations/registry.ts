@@ -186,14 +186,24 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "instagram",
     name: "Instagram (Meta)",
     tool: "dashboard",
-    description: "Reach, engagement, posts, assets.",
+    description:
+      "Reach, engagement, posts en media-insights via Instagram Graph API (Business/Creator).",
     envKeys: ["META_ACCESS_TOKEN", "META_IG_BUSINESS_ID"],
-    askFromClient: [
-      "Meta Business / IG Business account toegang",
-      "System user token of app review pad",
+    optionalEnvKeys: [
+      "META_APP_ID",
+      "META_APP_SECRET",
+      "META_GRAPH_API_VERSION",
     ],
-    verifyHint: "GET media insights",
-    docsUrl: "https://developers.facebook.com/docs/instagram-api/",
+    askFromClient: [
+      "Meta Business Manager-toegang voor Thuishaven",
+      "Facebook Page gekoppeld aan Instagram Business-account",
+      "System user token met instagram_basic + instagram_manage_insights",
+      "App Review later voor pages_read_engagement (nu overslaan — dev/test werkt zonder)",
+    ],
+    verifyHint:
+      "GET /{ig-user-id}?fields=username,followers_count · v1 zonder pages_read_engagement",
+    docsUrl:
+      "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/get-started",
     priority: "high",
   },
   {
