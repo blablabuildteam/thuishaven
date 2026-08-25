@@ -6,6 +6,7 @@ import { refreshDashboardAlerts } from "@/lib/integrations/alerts";
 import {
   listTicketswapLocationEvents,
   ticketswapVenueUrl,
+  type TicketswapEvent,
 } from "@/lib/integrations/ticketswap/client";
 
 function amsterdamDay(d: Date): string {
@@ -36,7 +37,9 @@ function nameOverlap(a: string, b: string): number {
   return n / Math.min(A.size, B.size);
 }
 
-export async function syncTicketSwapReadOnly(): Promise<{
+export async function syncTicketSwapReadOnly(options?: {
+  events?: TicketswapEvent[];
+}): Promise<{
   ok: boolean;
   fetched: number;
   upserted: number;
@@ -58,7 +61,9 @@ export async function syncTicketSwapReadOnly(): Promise<{
     };
   }
 
-  const listed = await listTicketswapLocationEvents();
+  const listed = options?.events
+    ? { ok: true as const, events: options.events }
+    : await listTicketswapLocationEvents();
   if (!listed.ok) {
     await logIntegration({
       source: "ticketswap",

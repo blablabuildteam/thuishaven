@@ -21,6 +21,7 @@ export function assertExternalReadOnly(
   options?: {
     allowAuthTokenPost?: boolean;
     allowGraphqlReadPost?: boolean;
+    allowFirecrawlReadPost?: boolean;
     allowTransactionalEmailPost?: boolean;
     allowStatisticsReadPost?: boolean;
   },
@@ -41,6 +42,14 @@ export function assertExternalReadOnly(
     upper === "POST" &&
     (/^https:\/\/ra\.co\/graphql\/?$/i.test(url) ||
       /^https:\/\/api\.ticketswap\.com\/graphql\/public\/?$/i.test(url))
+  ) {
+    return;
+  }
+
+  if (
+    options?.allowFirecrawlReadPost &&
+    upper === "POST" &&
+    /^https:\/\/api\.firecrawl\.dev\/v1\/scrape\/?$/i.test(url)
   ) {
     return;
   }

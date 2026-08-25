@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/ticketswap",
+      "schedule": "0 6,7,11,12,17,18,21,22 * * *"
+    }
+  ]
+}

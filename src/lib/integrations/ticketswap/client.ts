@@ -1,4 +1,5 @@
 import { assertExternalReadOnly } from "@/lib/integrations/read-only";
+import { parseTicketswapLocationHtml } from "@/lib/integrations/ticketswap/parse-location";
 
 const GRAPHQL_URL = "https://api.ticketswap.com/graphql/public";
 const DEFAULT_LOCATION_ID = "3517";
@@ -143,7 +144,7 @@ type TicketswapGraphqlResult =
   | { ok: true; data: ActiveEventsPage }
   | { ok: false; error: string; status: number };
 
-export async function listTicketswapLocationEvents(): Promise<
+async function listViaGraphql(): Promise<
   | { ok: true; events: TicketswapEvent[] }
   | { ok: false; error: string; status: number }
 > {
@@ -175,4 +176,125 @@ export async function listTicketswapLocationEvents(): Promise<
   }
 
   return { ok: true, events };
+}
+
+async function fetchLocationHtml(): Promise<
+  { ok: true; html: string } | { ok: false; error: string; status: number }
+> {
+  const url = ticketswapVenueUrl();
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+        "User-Agent":
+          "Mozilla/5.0 (compatible; ThuishavenDashboard/1.0; +https://thuishaven.nl)",
+        Referer: "https://www.ticketswap.com/",
+      },
+      cache: "no-store",
+    });
+    const html = await res.text();
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: res.status,
+        error: `TicketSwap HTML HTTP ${res.status}`,
+      };
+    }
+    if (html.length < 4000 || /__NEXT_DATA__|club-tickets/.test(html) === false) {
+      return {
+        ok: false,
+        status: res.status,
+        error: "TicketSwap pagina geblokkeerd of leeg (geen event-listings)",
+      };
+    }
+    return { ok: true, html };
+  } catch (e) {
+    return {
+      ok: false,
+      status: 0,
+      error: e instanceof Error ? e.message : "TicketSwap HTML network error",
+    };
+  }
+}
+
+async function listViaFirecrawl(): Promise<
+  | { ok: true; events: TicketswapEvent[] }
+  | { ok: false; error: string; status: number }
+> {
+  const key = process.env.FIRECRAWL_API_KEY?.trim();
+  if (!key) {
+    return { ok: false, status: 0, error: "FIRECRAWL_API_KEY ontbreekt" };
+  }
+  const url = "https://api.firecrawl.dev/v1/scrape";
+  assertExternalReadOnly("POST", url, { allowFirecrawlReadPost: true });
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        url: ticketswapVenueUrl(),
+        formats: ["html"],
+        waitFor: 8000,
+        timeout: 30000,
+      }),
+      cache: "no-store",
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      success?: boolean;
+      data?: { html?: string };
+      error?: string;
+    };
+    const html = json.data?.html;
+    if (!res.ok || !html) {
+      return {
+        ok: false,
+        status: res.status,
+        error: json.error || `Firecrawl HTTP ${res.status}`,
+      };
+    }
+    const events = parseTicketswapLocationHtml(html);
+    if (!events.length) {
+      return { ok: false, status: res.status, error: "Firecrawl: geen events geparsed" };
+    }
+    return { ok: true, events };
+  } catch (e) {
+    return {
+      ok: false,
+      status: 0,
+      error: e instanceof Error ? e.message : "Firecrawl network error",
+    };
+  }
+}
+
+export async function listTicketswapLocationEvents(): Promise<
+  | { ok: true; events: TicketswapEvent[] }
+  | { ok: false; error: string; status: number }
+> {
+  const graphql = await listViaGraphql();
+  if (graphql.ok && graphql.events.length > 0) return graphql;
+
+  const page = await fetchLocationHtml();
+  if (page.ok) {
+    const events = parseTicketswapLocationHtml(page.html);
+    if (events.length > 0) return { ok: true, events };
+  }
+
+  const scraped = await listViaFirecrawl();
+  if (scraped.ok) return scraped;
+
+  return {
+    ok: false,
+    status: graphql.ok ? page.status : graphql.status,
+    error:
+      graphql.ok
+        ? page.ok
+          ? scraped.error
+          : `${page.error}${scraped.error && !scraped.error.includes("ontbreekt") ? ` · ${scraped.error}` : ""}`
+        : `${graphql.error}${page.ok ? "" : ` · ${page.error}`}`,
+  };
 }

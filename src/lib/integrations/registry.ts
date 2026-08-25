@@ -157,18 +157,21 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "ticketswap",
     name: "TicketSwap",
     tool: "dashboard",
-    description: "Secundaire markt — alert als primair uitverkocht is en TicketSwap nog aanbod heeft (omzetlek).",
+    description:
+      "Secundaire markt — alert als primair uitverkocht is en TicketSwap nog aanbod heeft (omzetlek). Sync 4× per dag (08:00, 13:00, 19:00, 23:00 Amsterdam).",
     envKeys: [],
     optionalEnvKeys: [
       "TICKETSWAP_LOCATION_ID",
       "TICKETSWAP_LOCATION_SLUG",
       "TICKETSWAP_API_KEY",
+      "FIRECRAWL_API_KEY",
     ],
     askFromClient: [
       "Venue staat default op location/thuishaven/3517",
       "Optioneel: partner/developer token als TicketSwap die later geeft",
     ],
-    verifyHint: "Read-only listings voor venue Thuishaven",
+    verifyHint:
+      "Read-only listings voor venue Thuishaven (publieke GraphQL is geblokkeerd; HTML/Firecrawl-fallback)",
     docsUrl: "https://www.ticketswap.com/location/thuishaven/3517",
     priority: "high",
   },
