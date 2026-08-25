@@ -232,9 +232,10 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "youtube",
     name: "YouTube",
     tool: "dashboard",
-    description: "Aftermovies / channel metrics (YouTube Data API v3).",
+    description:
+      "Aftermovies / channel metrics van het Thuishaven-kanaal (YouTube Data API v3).",
     envKeys: ["YOUTUBE_API_KEY", "YOUTUBE_CHANNEL_ID"],
-    askFromClient: ["Channel ID", "API-key in Google Cloud (YouTube Data API v3)"],
+    askFromClient: ["API-key in Google Cloud (YouTube Data API v3)"],
     verifyHint: "channels.list",
     docsUrl: "https://developers.google.com/youtube/v3/docs/channels/list",
     priority: "medium",

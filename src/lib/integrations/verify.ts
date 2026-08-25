@@ -434,15 +434,16 @@ async function verifyGooglePlaces(): Promise<VerifyResult> {
   }
 }
 
+/** youtube.com/@Thuishaven — public channel id, not a secret. */
+const THUISHAVEN_YOUTUBE_CHANNEL_ID = "UC2KhiKAhm8wIkjt2chtIUTA";
+
 async function verifyYouTube(): Promise<VerifyResult> {
   const name = "YouTube";
   const key = process.env.YOUTUBE_API_KEY?.trim();
-  const channelId = process.env.YOUTUBE_CHANNEL_ID?.trim();
+  const channelId =
+    process.env.YOUTUBE_CHANNEL_ID?.trim() || THUISHAVEN_YOUTUBE_CHANNEL_ID;
   if (!key) {
     return base("youtube", name, "missing", "YOUTUBE_API_KEY ontbreekt");
-  }
-  if (!channelId) {
-    return base("youtube", name, "missing", "YOUTUBE_CHANNEL_ID ontbreekt");
   }
 
   try {
