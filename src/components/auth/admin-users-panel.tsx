@@ -10,17 +10,31 @@ type UserRow = {
   name: string;
   role: "admin" | "member";
   active: boolean;
+  status: "active" | "pending" | "inactive";
+  inviteSentAt: string | null;
   createdAt: string;
   createdByEmail: string | null;
+};
+
+const statusLabel: Record<UserRow["status"], string> = {
+  active: "Actief",
+  pending: "Uitnodiging verstuurd",
+  inactive: "Gedeactiveerd",
+};
+
+const statusTone: Record<UserRow["status"], "success" | "neutral" | "danger"> = {
+  active: "success",
+  pending: "neutral",
+  inactive: "danger",
 };
 
 export function AdminUsersPanel() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
   const [role, setRole] = useState<"admin" | "member">("member");
 
   const load = useCallback(async () => {
@@ -41,24 +55,44 @@ export function AdminUsersPanel() {
     );
   }, [load]);
 
-  function createUser(e: React.FormEvent) {
+  function inviteUser(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
       setError(null);
+      setSuccess(null);
       const res = await fetch("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, name, password, role }),
+        body: JSON.stringify({ email, name, role }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Aanmaken mislukt");
+        setError(data.error ?? "Uitnodiging mislukt");
         return;
       }
       setEmail("");
       setName("");
-      setPassword("");
       setRole("member");
+      setSuccess(`Uitnodiging verstuurd naar ${data.user.email}`);
+      await load();
+    });
+  }
+
+  function resendInvite(user: UserRow) {
+    startTransition(async () => {
+      setError(null);
+      setSuccess(null);
+      const res = await fetch("/api/admin/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "resend_invite", id: user.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Opnieuw versturen mislukt");
+        return;
+      }
+      setSuccess(`Uitnodiging opnieuw verstuurd naar ${user.email}`);
       await load();
     });
   }
@@ -66,10 +100,15 @@ export function AdminUsersPanel() {
   function toggleActive(user: UserRow) {
     startTransition(async () => {
       setError(null);
+      setSuccess(null);
       const res = await fetch("/api/admin/users", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: user.id, active: !user.active }),
+        body: JSON.stringify({
+          action: "toggle_active",
+          id: user.id,
+          active: !user.active,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -85,7 +124,7 @@ export function AdminUsersPanel() {
       <SectionHeader
         eyebrow="Admin"
         title="Gebruikers"
-        description="Nieuwe medewerkersaccounts kun je alleen hier aanmaken. Er is geen openbare registratie."
+        description="Nodig medewerkers uit per e-mail. Zij stellen zelf een wachtwoord in via de uitnodigingslink."
       />
 
       {error && (
@@ -93,12 +132,17 @@ export function AdminUsersPanel() {
           {error}
         </p>
       )}
+      {success && (
+        <p className="mb-4 border border-success/40 bg-success/10 px-3 py-2 text-sm text-success">
+          {success}
+        </p>
+      )}
 
       <section className="mb-8 border border-border bg-surface p-4">
         <h2 className="font-display text-2xl tracking-[0.06em]">
-          Nieuw account
+          Medewerker uitnodigen
         </h2>
-        <form onSubmit={createUser} className="mt-4 grid gap-3 sm:grid-cols-2">
+        <form onSubmit={inviteUser} className="mt-4 grid gap-3 sm:grid-cols-2">
           <label className="block text-sm">
             <span className="font-display tracking-[0.1em] text-text-muted">
               Naam
@@ -125,19 +169,6 @@ export function AdminUsersPanel() {
           </label>
           <label className="block text-sm">
             <span className="font-display tracking-[0.1em] text-text-muted">
-              Tijdelijk wachtwoord
-            </span>
-            <input
-              type="text"
-              required
-              minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full border border-border bg-bg px-3 py-2 outline-none focus:border-accent"
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="font-display tracking-[0.1em] text-text-muted">
               Rol
             </span>
             <select
@@ -149,13 +180,13 @@ export function AdminUsersPanel() {
               <option value="admin">Admin</option>
             </select>
           </label>
-          <div className="sm:col-span-2">
+          <div className="flex items-end sm:col-span-2">
             <button
               type="submit"
               disabled={pending}
               className="bg-accent px-4 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
             >
-              {pending ? "Bezig…" : "Account aanmaken"}
+              {pending ? "Bezig…" : "Uitnodiging versturen"}
             </button>
           </div>
         </form>
@@ -166,7 +197,7 @@ export function AdminUsersPanel() {
           Alle accounts
         </h2>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-left text-sm">
+          <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="border-b border-border text-[11px] uppercase tracking-wider text-text-muted">
               <tr>
                 <th className="pb-3 font-medium">Naam</th>
@@ -189,19 +220,33 @@ export function AdminUsersPanel() {
                     </StatusBadge>
                   </td>
                   <td className="py-3">
-                    <StatusBadge tone={u.active ? "success" : "danger"}>
-                      {u.active ? "Actief" : "Uit"}
+                    <StatusBadge tone={statusTone[u.status]}>
+                      {statusLabel[u.status]}
                     </StatusBadge>
                   </td>
                   <td className="py-3 text-right">
-                    <button
-                      type="button"
-                      disabled={pending}
-                      onClick={() => toggleActive(u)}
-                      className="border border-border px-2 py-1 font-display text-xs tracking-[0.1em] hover:border-accent disabled:opacity-50"
-                    >
-                      {u.active ? "Deactiveren" : "Activeren"}
-                    </button>
+                    <div className="flex justify-end gap-2">
+                      {u.status === "pending" && (
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => resendInvite(u)}
+                          className="border border-border px-2 py-1 font-display text-xs tracking-[0.1em] hover:border-accent disabled:opacity-50"
+                        >
+                          Opnieuw uitnodigen
+                        </button>
+                      )}
+                      {u.status !== "pending" && (
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => toggleActive(u)}
+                          className="border border-border px-2 py-1 font-display text-xs tracking-[0.1em] hover:border-accent disabled:opacity-50"
+                        >
+                          {u.active ? "Deactiveren" : "Activeren"}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

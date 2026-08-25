@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import {
-  createUser,
+  inviteUser,
   listUsers,
   publicUser,
+  resendInvite,
   setUserActive,
+  createUserWithPassword,
 } from "@/lib/auth/users";
 
 export const dynamic = "force-dynamic";
@@ -36,11 +38,11 @@ export async function GET() {
   });
 }
 
-const createSchema = z.object({
+const inviteSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1),
-  password: z.string().min(8),
   role: z.enum(["admin", "member"]).default("member"),
+  password: z.string().min(8).optional(),
 });
 
 export async function POST(request: Request) {
@@ -48,18 +50,28 @@ export async function POST(request: Request) {
   if ("error" in gate && gate.error) return gate.error;
 
   const body = await request.json();
-  const parsed = createSchema.safeParse(body);
+  const parsed = inviteSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Ongeldige invoer (wachtwoord min. 8 tekens)" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
   }
 
-  const result = await createUser({
-    ...parsed.data,
-    createdByEmail: gate.session!.user.email!,
-  });
+  const allowDevPassword =
+    process.env.AUTH_ALLOW_ADMIN_PASSWORD === "true" && parsed.data.password;
+
+  const result = allowDevPassword
+    ? await createUserWithPassword({
+        email: parsed.data.email,
+        name: parsed.data.name,
+        password: parsed.data.password!,
+        role: parsed.data.role,
+        createdByEmail: gate.session!.user.email!,
+      })
+    : await inviteUser({
+        email: parsed.data.email,
+        name: parsed.data.name,
+        role: parsed.data.role,
+        createdByEmail: gate.session!.user.email!,
+      });
 
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 400 });
@@ -68,10 +80,17 @@ export async function POST(request: Request) {
   return NextResponse.json({ user: publicUser(result.user) }, { status: 201 });
 }
 
-const patchSchema = z.object({
-  id: z.string().uuid(),
-  active: z.boolean(),
-});
+const patchSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("toggle_active"),
+    id: z.string().uuid(),
+    active: z.boolean(),
+  }),
+  z.object({
+    action: z.literal("resend_invite"),
+    id: z.string().uuid(),
+  }),
+]);
 
 export async function PATCH(request: Request) {
   const gate = await requireAdmin();
@@ -83,7 +102,17 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
   }
 
-  // Voorkom dat admin zichzelf deactiveert
+  if (parsed.data.action === "resend_invite") {
+    const result = await resendInvite(
+      parsed.data.id,
+      gate.session!.user.email!,
+    );
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+    return NextResponse.json({ user: publicUser(result.user) });
+  }
+
   if (
     parsed.data.id === gate.session!.user.id &&
     parsed.data.active === false

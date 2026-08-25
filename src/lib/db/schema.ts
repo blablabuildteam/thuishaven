@@ -24,10 +24,37 @@ export const appUsers = pgTable("app_users", {
   passwordHash: text("password_hash").notNull(),
   role: userRoleEnum("role").notNull().default("member"),
   active: boolean("active").notNull().default(true),
+  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+  inviteSentAt: timestamp("invite_sent_at", { withTimezone: true }),
+  passwordSetAt: timestamp("password_set_at", { withTimezone: true }),
   createdByEmail: text("created_by_email"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const authTokenTypeEnum = pgEnum("auth_token_type", [
+  "invite",
+  "password_reset",
+]);
+
+export const authTokens = pgTable(
+  "auth_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => appUsers.id, { onDelete: "cascade" }),
+    type: authTokenTypeEnum("type").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("auth_tokens_user_type_idx").on(table.userId, table.type),
+    index("auth_tokens_hash_idx").on(table.tokenHash),
+  ],
+);
 
 /** Shared: editions / events that link marketing + tickets (+ later outreach). */
 export const editions = pgTable("editions", {

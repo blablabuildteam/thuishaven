@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import Image from "next/image";
 
 export function LoginForm() {
@@ -58,8 +59,8 @@ export function LoginForm() {
         </div>
 
         <p className="mb-6 text-sm text-text-muted">
-          Alleen medewerkers met een bestaand account. Nieuw account nodig?
-          Vraag een admin om je toe te voegen — er is geen openbare registratie.
+          Log in met je Thuishaven- of blablabuild-account. Nog geen toegang?
+          Vraag een admin om een uitnodiging per e-mail.
         </p>
 
         <form onSubmit={onSubmit} className="space-y-4">
@@ -107,6 +108,15 @@ export function LoginForm() {
               {error}
             </p>
           )}
+
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <Link
+              href="/forgot-password"
+              className="text-text-muted underline hover:text-text"
+            >
+              Wachtwoord vergeten?
+            </Link>
+          </div>
 
           <button
             type="submit"

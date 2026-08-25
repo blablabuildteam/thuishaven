@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
 import { authConfig } from "@/auth.config";
-import { findUserByEmail, verifyUserPassword } from "@/lib/auth/users";
+import { findUserByEmailIncludingInactive, isUserLoginReady, verifyUserPassword } from "@/lib/auth/users";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -28,11 +28,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!parsed.success) return null;
 
         const email = parsed.data.email.trim().toLowerCase();
-        const user = await findUserByEmail(email);
-        if (!user || !user.active) return null;
+        const user = await findUserByEmailIncludingInactive(email);
+        if (!user) return null;
 
         const ok = await verifyUserPassword(user, parsed.data.password);
         if (!ok) return null;
+
+        if (!isUserLoginReady(user)) return null;
 
         return {
           id: user.id,

@@ -30,16 +30,18 @@ export const INTEGRATIONS: IntegrationDef[] = [
     name: "Medewerker-login",
     tool: "shared",
     description:
-      "Auth.js sessies voor Thuishaven-medewerkers. Publiek blijft alleen /beschikbaar.",
+      "Medewerker-login via uitnodiging per e-mail (Brevo) + wachtwoord reset.",
     envKeys: ["AUTH_SECRET"],
     optionalEnvKeys: [
       "AUTH_ALLOWED_EMAILS",
-      "AUTH_PASSWORD",
-      "AUTH_PASSWORD_HASH",
-      "AUTH_USERS_JSON",
+      "AUTH_ADMIN_EMAILS",
+      "AUTH_FROM_EMAIL",
+      "BREVO_API_KEY",
+      "BREVO_MCP_TOKEN",
     ],
     askFromClient: [
       "Lijst e-mailadressen van medewerkers die toegang nodig hebben",
+      "Brevo sender (noreply@…) geverifieerd voor uitnodigingsmails",
     ],
     verifyHint: "AUTH_SECRET + users gezet; test /login",
     priority: "critical",

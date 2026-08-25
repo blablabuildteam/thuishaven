@@ -1,8 +1,11 @@
-import { createHash, randomUUID } from "crypto";
+import { createHash, randomBytes, randomUUID } from "crypto";
 import { promises as fs } from "fs";
 import path from "path";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
+import { authEmailDomainError, isAllowedAuthEmail } from "@/lib/auth/domains";
+import { createAuthToken } from "@/lib/auth/tokens";
+import { sendInviteEmail } from "@/lib/auth/mail";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { appUsers } from "@/lib/db/schema";
 
@@ -29,6 +32,9 @@ export type AppUserRecord = {
   passwordHash: string;
   role: UserRole;
   active: boolean;
+  emailVerifiedAt: string | null;
+  inviteSentAt: string | null;
+  passwordSetAt: string | null;
   createdByEmail?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -39,7 +45,13 @@ const FILE_STORE = path.join(process.cwd(), ".data", "users.json");
 async function readFileStore(): Promise<AppUserRecord[]> {
   try {
     const raw = await fs.readFile(FILE_STORE, "utf8");
-    return JSON.parse(raw) as AppUserRecord[];
+    const parsed = JSON.parse(raw) as AppUserRecord[];
+    return parsed.map((u) => ({
+      ...u,
+      emailVerifiedAt: u.emailVerifiedAt ?? (u.active ? u.createdAt : null),
+      inviteSentAt: u.inviteSentAt ?? null,
+      passwordSetAt: u.passwordSetAt ?? null,
+    }));
   } catch {
     return [];
   }
@@ -60,7 +72,6 @@ function parseEmailList(raw: string | undefined): string[] {
 function adminEmailsFromEnv(): Set<string> {
   const admins = parseEmailList(process.env.AUTH_ADMIN_EMAILS);
   if (admins.length) return new Set(admins);
-  // Fallback: eerste allowlist-adres is admin
   const allowed = parseEmailList(process.env.AUTH_ALLOWED_EMAILS);
   return new Set(allowed.slice(0, 1));
 }
@@ -68,8 +79,30 @@ function adminEmailsFromEnv(): Set<string> {
 function allowedEmailsFromEnv(): string[] {
   const allowed = parseEmailList(process.env.AUTH_ALLOWED_EMAILS);
   const admins = parseEmailList(process.env.AUTH_ADMIN_EMAILS);
-  const merged = [...new Set([...admins, ...allowed])];
-  return merged;
+  return [...new Set([...admins, ...allowed])];
+}
+
+function mapDbRow(r: typeof appUsers.$inferSelect): AppUserRecord {
+  const createdAt = r.createdAt.toISOString();
+  return {
+    id: r.id,
+    email: r.email,
+    name: r.name,
+    passwordHash: r.passwordHash,
+    role: r.role,
+    active: r.active,
+    emailVerifiedAt:
+      r.emailVerifiedAt?.toISOString() ?? (r.active ? createdAt : null),
+    inviteSentAt: r.inviteSentAt?.toISOString() ?? null,
+    passwordSetAt: r.passwordSetAt?.toISOString() ?? null,
+    createdByEmail: r.createdByEmail,
+    createdAt,
+    updatedAt: r.updatedAt.toISOString(),
+  };
+}
+
+function randomPlaceholderHash(): string {
+  return bcrypt.hashSync(randomBytes(32).toString("hex"), 10);
 }
 
 /** Env-bootstrap users (alleen als er nog geen opgeslagen users zijn). */
@@ -104,6 +137,9 @@ function envBootstrapUsers(): AppUserRecord[] {
             role:
               u.role ?? (admins.has(email) ? ("admin" as const) : ("member" as const)),
             active: true,
+            emailVerifiedAt: now,
+            inviteSentAt: null,
+            passwordSetAt: now,
             createdAt: now,
             updatedAt: now,
           };
@@ -125,6 +161,9 @@ function envBootstrapUsers(): AppUserRecord[] {
     passwordHash: hash,
     role: (admins.has(email) ? "admin" : "member") as UserRole,
     active: true,
+    emailVerifiedAt: now,
+    inviteSentAt: null,
+    passwordSetAt: now,
     createdAt: now,
     updatedAt: now,
   }));
@@ -133,25 +172,15 @@ function envBootstrapUsers(): AppUserRecord[] {
 async function listFromDb(): Promise<AppUserRecord[]> {
   const db = getDb();
   const rows = await db.select().from(appUsers);
-  return rows.map((r) => ({
-    id: r.id,
-    email: r.email,
-    name: r.name,
-    passwordHash: r.passwordHash,
-    role: r.role,
-    active: r.active,
-    createdByEmail: r.createdByEmail,
-    createdAt: r.createdAt.toISOString(),
-    updatedAt: r.updatedAt.toISOString(),
-  }));
+  return rows.map(mapDbRow);
 }
 
-/** Seed env bootstrap users into Postgres when the table is empty. */
 async function seedEnvUsersToDb(): Promise<AppUserRecord[]> {
   const bootstrap = envBootstrapUsers();
   if (!bootstrap.length) return [];
 
   const db = getDb();
+  const now = new Date();
   for (const user of bootstrap) {
     await db
       .insert(appUsers)
@@ -162,6 +191,8 @@ async function seedEnvUsersToDb(): Promise<AppUserRecord[]> {
         passwordHash: user.passwordHash,
         role: user.role,
         active: true,
+        emailVerifiedAt: now,
+        passwordSetAt: now,
         createdByEmail: "env-bootstrap",
       })
       .onConflictDoNothing({ target: appUsers.email });
@@ -169,9 +200,6 @@ async function seedEnvUsersToDb(): Promise<AppUserRecord[]> {
   return listFromDb();
 }
 
-/**
- * Update password for allowlisted emails (env AUTH_PASSWORD) — recovery pad.
- */
 export async function syncEnvPasswordToDb(): Promise<number> {
   if (!hasDatabase()) return 0;
   const password = process.env.AUTH_PASSWORD?.trim();
@@ -185,7 +213,13 @@ export async function syncEnvPasswordToDb(): Promise<number> {
   for (const email of emails) {
     const result = await db
       .update(appUsers)
-      .set({ passwordHash: hash, updatedAt: new Date(), active: true })
+      .set({
+        passwordHash: hash,
+        updatedAt: new Date(),
+        active: true,
+        emailVerifiedAt: new Date(),
+        passwordSetAt: new Date(),
+      })
       .where(eq(appUsers.email, email))
       .returning({ id: appUsers.id });
     updated += result.length;
@@ -198,7 +232,6 @@ export async function listUsers(): Promise<AppUserRecord[]> {
     try {
       const rows = await listFromDb();
       if (rows.length) return rows;
-      // Lege DB: seed vanuit AUTH_* env zodat login werkt
       const seeded = await seedEnvUsersToDb();
       if (seeded.length) return seeded;
     } catch (e) {
@@ -210,12 +243,29 @@ export async function listUsers(): Promise<AppUserRecord[]> {
   return envBootstrapUsers();
 }
 
-export async function findUserByEmail(
+export async function findUserById(id: string): Promise<AppUserRecord | null> {
+  const users = await listUsers();
+  return users.find((u) => u.id === id) ?? null;
+}
+
+export async function findUserByEmailIncludingInactive(
   email: string,
 ): Promise<AppUserRecord | null> {
   const normalized = email.trim().toLowerCase();
   const users = await listUsers();
-  return users.find((u) => u.email === normalized && u.active) ?? null;
+  return users.find((u) => u.email === normalized) ?? null;
+}
+
+export async function findUserByEmail(
+  email: string,
+): Promise<AppUserRecord | null> {
+  const user = await findUserByEmailIncludingInactive(email);
+  if (!user || !user.active || !user.emailVerifiedAt) return null;
+  return user;
+}
+
+export function isUserLoginReady(user: AppUserRecord): boolean {
+  return user.active && Boolean(user.emailVerifiedAt);
 }
 
 export async function verifyUserPassword(
@@ -225,24 +275,75 @@ export async function verifyUserPassword(
   return bcrypt.compare(password, user.passwordHash);
 }
 
-export async function createUser(input: {
+async function persistUser(record: AppUserRecord): Promise<void> {
+  if (hasDatabase()) {
+    const db = getDb();
+    await db
+      .insert(appUsers)
+      .values({
+        id: record.id,
+        email: record.email,
+        name: record.name,
+        passwordHash: record.passwordHash,
+        role: record.role,
+        active: record.active,
+        emailVerifiedAt: record.emailVerifiedAt
+          ? new Date(record.emailVerifiedAt)
+          : null,
+        inviteSentAt: record.inviteSentAt
+          ? new Date(record.inviteSentAt)
+          : null,
+        passwordSetAt: record.passwordSetAt
+          ? new Date(record.passwordSetAt)
+          : null,
+        createdByEmail: record.createdByEmail,
+      })
+      .onConflictDoUpdate({
+        target: appUsers.email,
+        set: {
+          name: record.name,
+          passwordHash: record.passwordHash,
+          role: record.role,
+          active: record.active,
+          emailVerifiedAt: record.emailVerifiedAt
+            ? new Date(record.emailVerifiedAt)
+            : null,
+          inviteSentAt: record.inviteSentAt
+            ? new Date(record.inviteSentAt)
+            : null,
+          passwordSetAt: record.passwordSetAt
+            ? new Date(record.passwordSetAt)
+            : null,
+          updatedAt: new Date(),
+        },
+      });
+    return;
+  }
+
+  const next = [...(await readFileStore())];
+  const idx = next.findIndex((u) => u.id === record.id || u.email === record.email);
+  if (idx >= 0) next[idx] = { ...next[idx], ...record };
+  else next.push(record);
+  await writeFileStore(next);
+}
+
+export async function inviteUser(input: {
   email: string;
   name: string;
-  password: string;
   role: UserRole;
   createdByEmail: string;
 }): Promise<{ ok: true; user: AppUserRecord } | { ok: false; error: string }> {
   const email = input.email.trim().toLowerCase();
-  if (!email.includes("@")) {
-    return { ok: false, error: "Ongeldig e-mailadres" };
-  }
-  if (input.password.length < 8) {
-    return { ok: false, error: "Wachtwoord minimaal 8 tekens" };
+  if (!isAllowedAuthEmail(email)) {
+    return { ok: false, error: authEmailDomainError() };
   }
 
-  const existing = await listUsers();
-  if (existing.some((u) => u.email === email)) {
-    return { ok: false, error: "Dit e-mailadres bestaat al" };
+  const existing = await findUserByEmailIncludingInactive(email);
+  if (existing?.emailVerifiedAt && existing.active) {
+    return { ok: false, error: "Dit account is al actief" };
+  }
+  if (existing && !existing.emailVerifiedAt) {
+    return resendInvite(existing.id, input.createdByEmail);
   }
 
   const now = new Date().toISOString();
@@ -250,84 +351,139 @@ export async function createUser(input: {
     id: randomUUID(),
     email,
     name: input.name.trim() || email.split("@")[0] || email,
-    passwordHash: await bcrypt.hash(input.password, 10),
+    passwordHash: randomPlaceholderHash(),
     role: input.role,
-    active: true,
+    active: false,
+    emailVerifiedAt: null,
+    inviteSentAt: null,
+    passwordSetAt: null,
     createdByEmail: input.createdByEmail,
     createdAt: now,
     updatedAt: now,
   };
 
-  if (hasDatabase()) {
-    try {
-      const db = getDb();
-      await db.insert(appUsers).values({
-        id: record.id,
-        email: record.email,
-        name: record.name,
-        passwordHash: record.passwordHash,
-        role: record.role,
-        active: true,
-        createdByEmail: record.createdByEmail,
-      });
-      return { ok: true, user: record };
-    } catch (e) {
-      return {
-        ok: false,
-        error: e instanceof Error ? e.message : "Databasefout bij aanmaken",
-      };
-    }
+  try {
+    await persistUser(record);
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Opslaan mislukt",
+    };
   }
 
-  // Lokaal / zonder Postgres: file store
-  const next = [...(await readFileStore())];
-  if (!next.length) {
-    // seed env users first so we don't lose bootstrap admins
-    next.push(...envBootstrapUsers().filter((u) => u.email !== email));
+  return sendInviteForUser(record);
+}
+
+async function sendInviteForUser(
+  user: AppUserRecord,
+): Promise<{ ok: true; user: AppUserRecord } | { ok: false; error: string }> {
+  const { rawToken } = await createAuthToken({ userId: user.id, type: "invite" });
+  const mail = await sendInviteEmail({
+    to: user.email,
+    name: user.name,
+    rawToken,
+  });
+  if (!mail.ok) return { ok: false, error: mail.error };
+
+  const now = new Date().toISOString();
+  const updated: AppUserRecord = {
+    ...user,
+    inviteSentAt: now,
+    updatedAt: now,
+  };
+  await persistUser(updated);
+  return { ok: true, user: updated };
+}
+
+export async function resendInvite(
+  userId: string,
+  _requestedByEmail: string,
+): Promise<{ ok: true; user: AppUserRecord } | { ok: false; error: string }> {
+  const user = await findUserById(userId);
+  if (!user) return { ok: false, error: "Gebruiker niet gevonden" };
+  if (user.emailVerifiedAt && user.active) {
+    return { ok: false, error: "Account is al actief" };
   }
-  next.push(record);
-  await writeFileStore(next);
-  return { ok: true, user: record };
+  return sendInviteForUser(user);
+}
+
+export async function acceptInvite(input: {
+  rawToken: string;
+  password: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (input.password.length < 8) {
+    return { ok: false, error: "Wachtwoord minimaal 8 tekens" };
+  }
+
+  const { consumeAuthToken } = await import("@/lib/auth/tokens");
+  const consumed = await consumeAuthToken(input.rawToken, "invite");
+  if (!consumed.ok) {
+    const msg =
+      consumed.error === "expired"
+        ? "Uitnodiging verlopen — vraag admin om opnieuw uit te nodigen"
+        : consumed.error === "used"
+          ? "Uitnodiging al gebruikt"
+          : "Ongeldige uitnodiging";
+    return { ok: false, error: msg };
+  }
+
+  const user = await findUserById(consumed.userId);
+  if (!user) return { ok: false, error: "Gebruiker niet gevonden" };
+
+  const now = new Date().toISOString();
+  const updated: AppUserRecord = {
+    ...user,
+    passwordHash: await bcrypt.hash(input.password, 10),
+    active: true,
+    emailVerifiedAt: now,
+    passwordSetAt: now,
+    updatedAt: now,
+  };
+  await persistUser(updated);
+  return { ok: true };
+}
+
+export async function setUserPassword(input: {
+  userId: string;
+  password: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (input.password.length < 8) {
+    return { ok: false, error: "Wachtwoord minimaal 8 tekens" };
+  }
+  const user = await findUserById(input.userId);
+  if (!user) return { ok: false, error: "Gebruiker niet gevonden" };
+
+  const now = new Date().toISOString();
+  const updated: AppUserRecord = {
+    ...user,
+    passwordHash: await bcrypt.hash(input.password, 10),
+    passwordSetAt: now,
+    updatedAt: now,
+  };
+  await persistUser(updated);
+  return { ok: true };
 }
 
 export async function setUserActive(
   id: string,
   active: boolean,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (hasDatabase()) {
-    try {
-      const db = getDb();
-      await db
-        .update(appUsers)
-        .set({ active, updatedAt: new Date() })
-        .where(eq(appUsers.id, id));
-      return { ok: true };
-    } catch (e) {
-      return {
-        ok: false,
-        error: e instanceof Error ? e.message : "Databasefout",
-      };
-    }
-  }
+  const user = await findUserById(id);
+  if (!user) return { ok: false, error: "Gebruiker niet gevonden" };
 
-  const users = await readFileStore();
-  const idx = users.findIndex((u) => u.id === id);
-  if (idx < 0) {
-    // might be env-only user — persist all + patch
-    const all = await listUsers();
-    const i = all.findIndex((u) => u.id === id);
-    if (i < 0) return { ok: false, error: "Gebruiker niet gevonden" };
-    all[i] = { ...all[i], active, updatedAt: new Date().toISOString() };
-    await writeFileStore(all);
-    return { ok: true };
-  }
-  users[idx] = {
-    ...users[idx],
+  const updated: AppUserRecord = {
+    ...user,
     active,
     updatedAt: new Date().toISOString(),
   };
-  await writeFileStore(users);
+  await persistUser(updated);
   return { ok: true };
+}
+
+export function userStatus(user: AppUserRecord): "active" | "pending" | "inactive" {
+  if (!user.emailVerifiedAt) return "pending";
+  if (!user.active) return "inactive";
+  return "active";
 }
 
 export function publicUser(user: AppUserRecord) {
@@ -337,7 +493,54 @@ export function publicUser(user: AppUserRecord) {
     name: user.name,
     role: user.role,
     active: user.active,
+    status: userStatus(user),
+    emailVerifiedAt: user.emailVerifiedAt,
+    inviteSentAt: user.inviteSentAt,
     createdAt: user.createdAt,
     createdByEmail: user.createdByEmail ?? null,
   };
+}
+
+/** Dev-only: direct create with password when AUTH_ALLOW_ADMIN_PASSWORD=true */
+export async function createUserWithPassword(input: {
+  email: string;
+  name: string;
+  password: string;
+  role: UserRole;
+  createdByEmail: string;
+}): Promise<{ ok: true; user: AppUserRecord } | { ok: false; error: string }> {
+  const email = input.email.trim().toLowerCase();
+  if (!isAllowedAuthEmail(email)) {
+    return { ok: false, error: authEmailDomainError() };
+  }
+  if (input.password.length < 8) {
+    return { ok: false, error: "Wachtwoord minimaal 8 tekens" };
+  }
+  const existing = await findUserByEmailIncludingInactive(email);
+  if (existing) return { ok: false, error: "Dit e-mailadres bestaat al" };
+
+  const now = new Date().toISOString();
+  const record: AppUserRecord = {
+    id: randomUUID(),
+    email,
+    name: input.name.trim() || email.split("@")[0] || email,
+    passwordHash: await bcrypt.hash(input.password, 10),
+    role: input.role,
+    active: true,
+    emailVerifiedAt: now,
+    inviteSentAt: null,
+    passwordSetAt: now,
+    createdByEmail: input.createdByEmail,
+    createdAt: now,
+    updatedAt: now,
+  };
+  try {
+    await persistUser(record);
+    return { ok: true, user: record };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Databasefout bij aanmaken",
+    };
+  }
 }
