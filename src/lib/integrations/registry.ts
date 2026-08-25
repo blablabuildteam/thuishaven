@@ -33,9 +33,11 @@ export const INTEGRATIONS: IntegrationDef[] = [
       "Medewerker-login via uitnodiging per e-mail (Brevo) + wachtwoord reset.",
     envKeys: ["AUTH_SECRET"],
     optionalEnvKeys: [
+      "AUTH_ALLOWED_DOMAINS",
+      "AUTH_FROM_EMAIL",
+      "AUTH_FROM_NAME",
       "AUTH_ALLOWED_EMAILS",
       "AUTH_ADMIN_EMAILS",
-      "AUTH_FROM_EMAIL",
       "BREVO_API_KEY",
       "BREVO_MCP_TOKEN",
     ],
@@ -43,7 +45,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
       "Lijst e-mailadressen van medewerkers die toegang nodig hebben",
       "Brevo sender (noreply@…) geverifieerd voor uitnodigingsmails",
     ],
-    verifyHint: "AUTH_SECRET + users gezet; test /login",
+    verifyHint: "AUTH_SECRET + users + Brevo transactional mail",
     priority: "critical",
   },
   {

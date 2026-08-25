@@ -562,8 +562,106 @@ async function verifyInstagram(): Promise<VerifyResult> {
   }
 }
 
+async function verifyAuth(): Promise<VerifyResult> {
+  const name = "Medewerker-login";
+
+  const secret = process.env.AUTH_SECRET?.trim();
+  if (!secret) {
+    return base("auth", name, "missing", "AUTH_SECRET ontbreekt");
+  }
+
+  const { getBrevoKey } = await import("@/lib/integrations/brevo/client");
+  const brevoKey = getBrevoKey();
+  if (!brevoKey) {
+    return base(
+      "auth",
+      name,
+      "error",
+      "Brevo ontbreekt — uitnodigings- en resetmails werken niet",
+    );
+  }
+
+  try {
+    const brevoRes = await fetch("https://api.brevo.com/v3/account", {
+      headers: { accept: "application/json", "api-key": brevoKey },
+      cache: "no-store",
+    });
+    if (!brevoRes.ok) {
+      return base(
+        "auth",
+        name,
+        "error",
+        `Brevo mail HTTP ${brevoRes.status} — check API-key`,
+      );
+    }
+  } catch (e) {
+    return base(
+      "auth",
+      name,
+      "error",
+      e instanceof Error ? e.message : "Brevo bereikbaarheid mislukt",
+    );
+  }
+
+  const fromEmail =
+    process.env.AUTH_FROM_EMAIL?.trim() ||
+    process.env.ALERT_FROM_EMAIL?.trim();
+  const fromLabel = fromEmail ?? "noreply@thuishaven.nl (default)";
+
+  const { allowedAuthDomains } = await import("@/lib/auth/domains");
+  const domains = allowedAuthDomains();
+
+  try {
+    const { listUsers, isUserLoginReady } = await import("@/lib/auth/users");
+    const users = await listUsers();
+    const ready = users.filter(isUserLoginReady);
+    const pending = users.filter((u) => !u.emailVerifiedAt);
+    const admins = ready.filter((u) => u.role === "admin");
+
+    if (!ready.length) {
+      if (pending.length) {
+        return base(
+          "auth",
+          name,
+          "configured",
+          `${pending.length} uitnodiging(en) open · wacht op acceptatie`,
+        );
+      }
+      return base(
+        "auth",
+        name,
+        "configured",
+        "Geen actieve gebruikers — nodig medewerkers uit via /admin/gebruikers",
+      );
+    }
+
+    const domainLabel = domains.map((d) => `@${d}`).join(", ");
+    const roleLabel =
+      admins.length > 0
+        ? `${ready.length} kan inloggen (${admins.length} admin${admins.length !== 1 ? "s" : ""})`
+        : `${ready.length} kan inloggen`;
+
+    return base(
+      "auth",
+      name,
+      "verified",
+      `${roleLabel} · ${domainLabel} · mail via ${fromLabel}`,
+      { pending: pending.length, domains, sender: fromLabel },
+    );
+  } catch (e) {
+    return base(
+      "auth",
+      name,
+      "error",
+      e instanceof Error ? e.message : "Users laden mislukt",
+    );
+  }
+}
+
 export async function verifyIntegration(id: string): Promise<VerifyResult> {
   switch (id) {
+    case "auth":
+      return verifyAuth();
     case "brevo":
       return verifyBrevo();
     case "ai":
@@ -624,11 +722,11 @@ export async function probeConfiguredIntegrations(): Promise<VerifyResult[]> {
       row.status === "configured" ||
       (row.status !== "manual" &&
         row.status !== "missing" &&
-        ["brevo", "weeztix", "database", "open_meteo", "ai", "kvk", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram"].includes(
+        ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "kvk", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram"].includes(
           row.id,
         )),
   );
-  const always = ["brevo", "weeztix", "database", "open_meteo", "ai", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram"];
+  const always = ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram"];
   const ids = new Set([
     ...toProbe.map((r) => r.id),
     ...always.filter((id) => {
