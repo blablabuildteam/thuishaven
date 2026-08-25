@@ -5,7 +5,8 @@ export type IntegrationStatus =
   | "configured"
   | "verified"
   | "error"
-  | "manual";
+  | "manual"
+  | "on_hold";
 
 export type IntegrationDef = {
   id: string;
@@ -22,6 +23,8 @@ export type IntegrationDef = {
   verifyHint: string;
   docsUrl?: string;
   priority: "critical" | "high" | "medium" | "later";
+  /** Parked — shown as On hold, not probed or counted as missing */
+  onHold?: boolean;
 };
 
 export const INTEGRATIONS: IntegrationDef[] = [
@@ -60,18 +63,6 @@ export const INTEGRATIONS: IntegrationDef[] = [
     priority: "critical",
   },
   {
-    id: "open_meteo",
-    name: "Open-Meteo (weer)",
-    tool: "dashboard",
-    description:
-      "Dagelijkse weerdata Amsterdam — correlatie met kaartverkoop. Geen API-key nodig.",
-    envKeys: [],
-    askFromClient: [],
-    verifyHint: "Archive/forecast ping AMS",
-    docsUrl: "https://open-meteo.com/",
-    priority: "high",
-  },
-  {
     id: "brevo",
     name: "Brevo",
     tool: "shared",
@@ -108,7 +99,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     name: "Weeztix",
     tool: "dashboard",
     description:
-      "Ticketverkoop + voorraad — read-only. Access token verloopt na ~3 dagen; refresh is éénmalig en wordt in de database bewaard.",
+      "Ticketverkoop + voorraad — read-only. Sync 4× per dag (08:00, 13:00, 19:00, 23:00 Amsterdam). Access token verloopt na ~3 dagen; refresh is éénmalig en wordt in de database bewaard.",
     envKeys: ["WEEZTIX_CLIENT_ID"],
     optionalEnvKeys: [
       "WEEZTIX_ACCESS_TOKEN",
@@ -126,6 +117,18 @@ export const INTEGRATIONS: IntegrationDef[] = [
     verifyHint: "GET auth.weeztix.com/users/me + GET /event",
     docsUrl: "https://docs.weeztix.com/docs/introduction/authentication/",
     priority: "critical",
+  },
+  {
+    id: "open_meteo",
+    name: "Open-Meteo (weer)",
+    tool: "dashboard",
+    description:
+      "Dagelijkse weerdata Amsterdam — correlatie met kaartverkoop. Geen API-key nodig.",
+    envKeys: [],
+    askFromClient: [],
+    verifyHint: "Archive/forecast ping AMS",
+    docsUrl: "https://open-meteo.com/",
+    priority: "high",
   },
   {
     id: "resident_advisor",
@@ -147,11 +150,13 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "appic",
     name: "Appic",
     tool: "dashboard",
-    description: "Secundaire ticketverkoop. Zelfde alertregel als RA/TicketSwap: Weeztix sold-out terwijl Appic nog open staat.",
+    description:
+      "Secundaire ticketverkoop — geparkeerd. Later dezelfde alertregel als TicketSwap: Weeztix sold-out terwijl Appic nog open staat.",
     envKeys: ["APPIC_API_KEY"],
     askFromClient: ["API-key", "Event/product mapping"],
-    verifyHint: "Auth + events",
-    priority: "high",
+    verifyHint: "On hold — geen live check tot we Appic weer oppakken",
+    priority: "later",
+    onHold: true,
   },
   {
     id: "ticketswap",
@@ -266,12 +271,13 @@ export const INTEGRATIONS: IntegrationDef[] = [
     name: "Dashboard alerts",
     tool: "dashboard",
     description:
-      "E-mail bij Weeztix sold-out terwijl RA/TicketSwap (of Appic) nog open is.",
+      "E-mail bij Weeztix sold-out (publieke tickettypes of sold-drempel) terwijl RA, TicketSwap of Appic nog open is.",
     envKeys: ["ALERT_NOTIFY_EMAIL", "ALERT_EMAIL_ENABLED"],
     optionalEnvKeys: [
       "ALERT_EMAIL_ALLOWLIST",
       "ALERT_FROM_EMAIL",
       "ALERT_FROM_NAME",
+      "ALERT_WEEZTIX_SOLD_THRESHOLD",
     ],
     askFromClient: [
       "E-mailadressen marketing/management (komma-gescheiden)",

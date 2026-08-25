@@ -658,7 +658,58 @@ async function verifyAuth(): Promise<VerifyResult> {
   }
 }
 
+async function verifyAlertNotify(): Promise<VerifyResult> {
+  const name = "Dashboard alerts";
+  const { resolveAlertRecipients, isAlertEmailEnabled } = await import(
+    "@/lib/integrations/alerts/recipients"
+  );
+  const { weeztixSoldThreshold } = await import(
+    "@/lib/integrations/weeztix/sold-out"
+  );
+  const { getBrevoKey } = await import("@/lib/integrations/brevo/client");
+
+  if (!isAlertEmailEnabled()) {
+    return base(
+      "alert_notify",
+      name,
+      "configured",
+      "ALERT_EMAIL_ENABLED staat niet op true — detectie werkt, mail is uit",
+    );
+  }
+
+  const recipients = resolveAlertRecipients();
+  if (!recipients.ok) {
+    return base("alert_notify", name, "error", recipients.error);
+  }
+
+  if (!getBrevoKey()) {
+    return base(
+      "alert_notify",
+      name,
+      "error",
+      "BREVO_API_KEY ontbreekt — alertmails kunnen niet weg",
+    );
+  }
+
+  const threshold = weeztixSoldThreshold();
+  const thresholdLabel =
+    threshold != null ? `sold-drempel ${threshold}` : "geen sold-drempel";
+
+  return base(
+    "alert_notify",
+    name,
+    "verified",
+    `Mail klaar · ${recipients.to.join(", ")} · ${thresholdLabel}`,
+    { to: recipients.to, threshold },
+  );
+}
+
 export async function verifyIntegration(id: string): Promise<VerifyResult> {
+  const parked = INTEGRATIONS.find((i) => i.id === id);
+  if (parked?.onHold) {
+    return base(id, parked.name, "on_hold", parked.verifyHint);
+  }
+
   switch (id) {
     case "auth":
       return verifyAuth();
@@ -684,6 +735,8 @@ export async function verifyIntegration(id: string): Promise<VerifyResult> {
       return verifyYouTube();
     case "instagram":
       return verifyInstagram();
+    case "alert_notify":
+      return verifyAlertNotify();
     default: {
       const def = INTEGRATIONS.find((i) => i.id === id);
       if (!def) {
@@ -721,17 +774,23 @@ export async function probeConfiguredIntegrations(): Promise<VerifyResult[]> {
     (row) =>
       row.status === "configured" ||
       (row.status !== "manual" &&
+        row.status !== "on_hold" &&
         row.status !== "missing" &&
-        ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "kvk", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram"].includes(
+        ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "kvk", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "alert_notify"].includes(
           row.id,
         )),
   );
-  const always = ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram"];
+  const always = ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "alert_notify"];
   const ids = new Set([
     ...toProbe.map((r) => r.id),
     ...always.filter((id) => {
       const row = snapshot.find((r) => r.id === id);
-      return row && row.status !== "missing" && row.status !== "manual";
+      return (
+        row &&
+        row.status !== "missing" &&
+        row.status !== "manual" &&
+        row.status !== "on_hold"
+      );
     }),
   ]);
 
@@ -772,7 +831,9 @@ export function listIntegrationStatusSnapshot(): Array<{
         : missing.length && !integrationOk
           ? "missing"
           : "configured";
-    if (
+    if (def.onHold) {
+      status = "on_hold";
+    } else if (
       missing.length &&
       !integrationOk &&
       (def.priority === "later" ||
@@ -787,7 +848,7 @@ export function listIntegrationStatusSnapshot(): Array<{
       tool: def.tool,
       priority: def.priority,
       status,
-      missing: integrationOk ? [] : missing,
+      missing: def.onHold || integrationOk ? [] : missing,
       askFromClient: def.askFromClient,
     };
   });

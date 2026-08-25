@@ -1,7 +1,9 @@
 import { timingSafeEqual } from "crypto";
 
-/** Amsterdam-uren waarop TicketSwap-listings worden gesynchroniseerd. */
-export const TICKETSWAP_CRON_HOURS_AMSTERDAM = [8, 13, 19, 23] as const;
+/** Amsterdam-uren voor dashboard-sync (Weeztix + TicketSwap). */
+export const AMSTERDAM_SYNC_HOURS = [8, 13, 19, 23] as const;
+export const TICKETSWAP_CRON_HOURS_AMSTERDAM = AMSTERDAM_SYNC_HOURS;
+export const WEEZTIX_CRON_HOURS_AMSTERDAM = AMSTERDAM_SYNC_HOURS;
 
 function safeEqual(a: string, b: string): boolean {
   const left = Buffer.from(a);
@@ -28,8 +30,14 @@ export function amsterdamHour(at: Date = new Date()): number {
   return Number(hour);
 }
 
+export function isAmsterdamSyncSlot(at: Date = new Date()): boolean {
+  return (AMSTERDAM_SYNC_HOURS as readonly number[]).includes(amsterdamHour(at));
+}
+
 export function isTicketswapCronSlot(at: Date = new Date()): boolean {
-  return (TICKETSWAP_CRON_HOURS_AMSTERDAM as readonly number[]).includes(
-    amsterdamHour(at),
-  );
+  return isAmsterdamSyncSlot(at);
+}
+
+export function isWeeztixCronSlot(at: Date = new Date()): boolean {
+  return isAmsterdamSyncSlot(at);
 }

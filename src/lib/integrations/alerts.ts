@@ -1,4 +1,5 @@
 import { and, desc, eq, gte, or } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import {
   alerts,
@@ -6,6 +7,9 @@ import {
   ticketInventory,
   ticketswapListings,
 } from "@/lib/db/schema";
+
+const weeztixInv = alias(ticketInventory, "alert_weeztix_inv");
+const appicInv = alias(ticketInventory, "alert_appic_inv");
 import { ticketswapVenueUrl } from "@/lib/integrations/ticketswap/client";
 import {
   listOpenSoldOutRaAlerts,
@@ -124,16 +128,71 @@ async function ticketswapListingsAreLive(): Promise<boolean> {
   return recent.length > 0;
 }
 
+export type AppicSoldOutAlert = {
+  editionId: string;
+  editionName: string;
+  startsAt: Date;
+  availableCount: number | null;
+};
+
+/** Weeztix uitverkocht + Appic-inventory nog aanbod (zodra die sync live is). */
+export async function listOpenAppicAlerts(): Promise<AppicSoldOutAlert[]> {
+  if (!hasDatabase()) return [];
+  const db = getDb();
+  const rows = await db
+    .select({
+      editionId: editions.id,
+      editionName: editions.name,
+      startsAt: editions.startsAt,
+      available: appicInv.available,
+    })
+    .from(editions)
+    .innerJoin(
+      weeztixInv,
+      and(
+        eq(weeztixInv.editionId, editions.id),
+        eq(weeztixInv.platform, "weeztix"),
+        eq(weeztixInv.isSoldOut, true),
+      ),
+    )
+    .innerJoin(
+      appicInv,
+      and(
+        eq(appicInv.editionId, editions.id),
+        eq(appicInv.platform, "appic"),
+      ),
+    )
+    .where(
+      and(gte(editions.startsAt, since()), gte(appicInv.available, 1)),
+    );
+
+  const seen = new Set<string>();
+  return rows.flatMap((row) => {
+    if (seen.has(row.editionId)) return [];
+    seen.add(row.editionId);
+    return [
+      {
+        editionId: row.editionId,
+        editionName: row.editionName,
+        startsAt: row.startsAt,
+        availableCount: row.available,
+      },
+    ];
+  });
+}
+
 export async function listOpenDashboardAlerts(): Promise<{
   ra: SoldOutRaMismatch[];
   ticketswap: TicketswapSoldOutAlert[];
+  appic: AppicSoldOutAlert[];
   /** Flat list voor UI: Weeztix sold-out vs secundair kanaal. */
   conflicts: SecondarySoldOutConflict[];
 }> {
   const live = await ticketswapListingsAreLive();
-  const [ra, ticketswap] = await Promise.all([
+  const [ra, ticketswap, appic] = await Promise.all([
     listOpenSoldOutRaAlerts().catch(() => []),
     listOpenTicketswapAlerts({ requireLiveListings: live }).catch(() => []),
+    listOpenAppicAlerts().catch(() => []),
   ]);
 
   const conflicts: SecondarySoldOutConflict[] = [
@@ -170,10 +229,24 @@ export async function listOpenDashboardAlerts(): Promise<{
         url: m.tsUrl ?? ticketswapVenueUrl(),
       };
     }),
+    ...appic.map(
+      (m): SecondarySoldOutConflict => ({
+        editionId: m.editionId,
+        editionName: m.editionName,
+        startsAt: m.startsAt,
+        channel: "appic",
+        channelLabel: "Appic",
+        kind: "revenue_leak",
+        title: `${m.editionName}: Appic actief na Weeztix sold-out`,
+        message: `Weeztix is uitverkocht, maar Appic toont nog ${m.availableCount === 1 ? "1 ticket" : `${m.availableCount ?? "tickets"}`}. Mogelijke omzetlek.`,
+        availableCount: m.availableCount,
+        url: null,
+      }),
+    ),
   ];
 
   conflicts.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
-  return { ra, ticketswap, conflicts };
+  return { ra, ticketswap, appic, conflicts };
 }
 
 export async function listStoredDashboardAlerts(): Promise<StoredAlert[]> {
@@ -260,11 +333,14 @@ export async function refreshTicketswapAlerts(options?: {
 
 export async function refreshDashboardAlerts(options?: {
   ticketswapLive?: boolean;
-}): Promise<{ ra: number; ticketswap: number; notified: number }> {
+}): Promise<{ ra: number; ticketswap: number; appic: number; notified: number }> {
   const ra = await refreshSoldOutRaAlerts().catch(() => 0);
   const ticketswap = await refreshTicketswapAlerts({
     liveListings: options?.ticketswapLive,
   }).catch(() => 0);
+  const appic = await listOpenAppicAlerts()
+    .then((rows) => rows.length)
+    .catch(() => 0);
   const { notifyUnsentDashboardAlerts } = await import(
     "@/lib/integrations/alerts/notify"
   );
@@ -273,5 +349,5 @@ export async function refreshDashboardAlerts(options?: {
     skipped: null,
     error: e instanceof Error ? e.message : "notify failed",
   }));
-  return { ra, ticketswap, notified: notify.sent };
+  return { ra, ticketswap, appic, notified: notify.sent };
 }

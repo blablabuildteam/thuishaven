@@ -52,10 +52,14 @@ export function estimateSoldOutFromTicketTypes(input: {
   sold: number;
   capacity: number | null;
   tickets: TicketLike[];
+  /** Publieke types / drempel al als uitverkocht gemarkeerd. */
+  assumeSoldOut?: boolean;
 }): SoldOutTiming | null {
   const capacity = input.capacity;
-  if (capacity == null || capacity <= 0) return null;
-  if (input.sold < capacity * 0.995) return null;
+  if (!input.assumeSoldOut) {
+    if (capacity == null || capacity <= 0) return null;
+    if (input.sold < capacity * 0.995) return null;
+  }
 
   const eventDay = isoDay(input.eventDay);
   let bestDay: string | null = null;

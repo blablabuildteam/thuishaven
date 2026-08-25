@@ -25,7 +25,7 @@ type StatusRow = {
   name: string;
   tool: string;
   priority: string;
-  status: "missing" | "configured" | "verified" | "error" | "manual";
+  status: "missing" | "configured" | "verified" | "error" | "manual" | "on_hold";
   missing: string[];
   message?: string;
   checkedAt?: string;
@@ -37,6 +37,7 @@ const statusLabel: Record<StatusRow["status"], string> = {
   verified: "Werkt",
   error: "Fout",
   manual: "Handmatig",
+  on_hold: "On hold",
 };
 
 const SECTIONS: Array<{
@@ -48,7 +49,7 @@ const SECTIONS: Array<{
     id: "dashboard",
     title: "Event-dashboard",
     description:
-      "Ticketing, marketingkanalen, weer en alerts — nodig voor verkoop- en eventinzicht.",
+      "Weeztix is de primaire ticketbron. Daarnaast RA, TicketSwap, marketing, weer en alerts.",
   },
   {
     id: "outreach",
@@ -151,6 +152,42 @@ export function IntegrationsHub() {
     });
   }
 
+  function runWeeztixSync() {
+    startTransition(async () => {
+      setError(null);
+      try {
+        const res = await fetch("/api/integrations/weeztix/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "events" }),
+        });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          eventsFetched?: number;
+          editionsUpserted?: number;
+          inventoryUpserted?: number;
+        };
+        if (!res.ok || data.ok === false) {
+          throw new Error(data.error ?? "Weeztix sync mislukt");
+        }
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === "weeztix"
+              ? {
+                  ...row,
+                  status: "verified",
+                  message: `${data.eventsFetched ?? 0} events · ${data.editionsUpserted ?? 0} edities · ${data.inventoryUpserted ?? 0} voorraad`,
+                }
+              : row,
+          ),
+        );
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Weeztix sync mislukt");
+      }
+    });
+  }
+
   function runRaSync() {
     startTransition(async () => {
       setError(null);
@@ -184,6 +221,38 @@ export function IntegrationsHub() {
         );
       } catch (e) {
         setError(e instanceof Error ? e.message : "RA sync mislukt");
+      }
+    });
+  }
+
+  function runAlertTest() {
+    startTransition(async () => {
+      setError(null);
+      try {
+        const res = await fetch("/api/integrations/alerts/test-email", {
+          method: "POST",
+        });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          to?: string[];
+          error?: string;
+        };
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error ?? "Testmail mislukt");
+        }
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === "alert_notify"
+              ? {
+                  ...row,
+                  status: "verified",
+                  message: `Testmail verstuurd naar ${(data.to ?? []).join(", ")}`,
+                }
+              : row,
+          ),
+        );
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Testmail mislukt");
       }
     });
   }
@@ -224,7 +293,9 @@ export function IntegrationsHub() {
 
   const grouped = useMemo(() => {
     const byTool = {
-      dashboard: rows.filter((r) => r.tool === "dashboard"),
+      dashboard: rows
+        .filter((r) => r.tool === "dashboard")
+        .sort((a, b) => Number(b.id === "weeztix") - Number(a.id === "weeztix")),
       outreach: rows.filter((r) => r.tool === "outreach"),
       shared: rows.filter((r) => r.tool === "shared"),
     };
@@ -298,7 +369,8 @@ export function IntegrationsHub() {
         {SECTIONS.map((section) => {
           const items = grouped[section.id];
           if (items.length === 0) return null;
-          const ok = items.filter((r) => r.status === "verified").length;
+          const active = items.filter((r) => r.status !== "on_hold");
+          const ok = active.filter((r) => r.status === "verified").length;
           return (
             <section key={section.id} aria-labelledby={`bronnen-${section.id}`}>
               <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
@@ -314,7 +386,7 @@ export function IntegrationsHub() {
                   </p>
                 </div>
                 <p className="text-xs text-text-dim">
-                  {ok}/{items.length} werkt
+                  {ok}/{active.length} werkt
                 </p>
               </div>
               <div className="space-y-2">
@@ -325,8 +397,10 @@ export function IntegrationsHub() {
                     meta={catalog.find((c) => c.id === row.id)}
                     pending={pending}
                     onVerify={() => runVerify(row.id)}
+                    onWeeztixSync={runWeeztixSync}
                     onRaSync={runRaSync}
                     onTicketswapSync={runTicketswapSync}
+                    onAlertTest={runAlertTest}
                   />
                 ))}
               </div>
@@ -354,23 +428,29 @@ function IntegrationCard({
   meta,
   pending,
   onVerify,
+  onWeeztixSync,
   onRaSync,
   onTicketswapSync,
+  onAlertTest,
 }: {
   row: StatusRow;
   meta?: CatalogItem;
   pending: boolean;
   onVerify: () => void;
+  onWeeztixSync: () => void;
   onRaSync: () => void;
   onTicketswapSync: () => void;
+  onAlertTest: () => void;
 }) {
   const isOk = row.status === "verified";
+  const isHold = row.status === "on_hold";
   return (
     <article
       className={cn(
         "border border-border bg-surface p-4",
         isOk && "integration-ok",
         row.status === "error" && "border-danger/50",
+        isHold && "opacity-70",
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -383,7 +463,9 @@ function IntegrationCard({
                   ? "success"
                   : row.status === "error" || row.status === "missing"
                     ? "danger"
-                    : "neutral"
+                    : isHold
+                      ? "warn"
+                      : "neutral"
               }
               pulse={isOk}
             >
@@ -408,21 +490,33 @@ function IntegrationCard({
           )}
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={pending}
-            onClick={onVerify}
-            className="border border-border px-3 py-1.5 text-sm hover:border-text disabled:opacity-50"
-          >
-            Test
-          </button>
-          {row.id === "weeztix" && (
-            <a
-              href="/api/integrations/weeztix/oauth/start"
-              className="border border-border px-3 py-1.5 text-sm hover:border-text"
+          {!isHold && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={onVerify}
+              className="border border-border px-3 py-1.5 text-sm hover:border-text disabled:opacity-50"
             >
-              Opnieuw koppelen
-            </a>
+              Test
+            </button>
+          )}
+          {row.id === "weeztix" && (
+            <>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={onWeeztixSync}
+                className="border border-border px-3 py-1.5 text-sm hover:border-text disabled:opacity-50"
+              >
+                Sync events
+              </button>
+              <a
+                href="/api/integrations/weeztix/oauth/start"
+                className="border border-border px-3 py-1.5 text-sm hover:border-text"
+              >
+                Opnieuw koppelen
+              </a>
+            </>
           )}
           {row.id === "resident_advisor" && (
             <button
@@ -444,10 +538,20 @@ function IntegrationCard({
               Sync listings
             </button>
           )}
+          {row.id === "alert_notify" && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={onAlertTest}
+              className="border border-border px-3 py-1.5 text-sm hover:border-text disabled:opacity-50"
+            >
+              Stuur testmail
+            </button>
+          )}
         </div>
       </div>
 
-      {meta && row.status !== "verified" && (
+      {meta && row.status !== "verified" && !isHold && (
         <details className="mt-3 border-t border-border pt-3">
           <summary className="cursor-pointer text-xs text-text-dim">
             Wat is nodig

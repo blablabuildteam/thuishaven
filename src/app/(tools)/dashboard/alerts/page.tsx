@@ -9,6 +9,7 @@ import {
   listStoredDashboardAlerts,
 } from "@/lib/integrations/alerts";
 import { AlertTestMailButton } from "@/components/alerts/test-mail-button";
+import { weeztixSoldThreshold } from "@/lib/integrations/weeztix/sold-out";
 
 export const metadata = { title: "Alerts" };
 export const dynamic = "force-dynamic";
@@ -18,9 +19,10 @@ export default async function AlertsPage() {
     ? await listOpenDashboardAlerts().catch(() => ({
         ra: [],
         ticketswap: [],
+        appic: [],
         conflicts: [],
       }))
-    : { ra: [], ticketswap: [], conflicts: [] };
+    : { ra: [], ticketswap: [], appic: [], conflicts: [] };
   const stored = hasDatabase()
     ? await listStoredDashboardAlerts().catch(() => [])
     : [];
@@ -34,13 +36,14 @@ export default async function AlertsPage() {
     process.env.ALERT_EMAIL_ENABLED?.trim().toLowerCase() === "true";
   const allowlist =
     process.env.ALERT_EMAIL_ALLOWLIST?.trim() || "team@blablabuild.com";
+  const soldThreshold = weeztixSoldThreshold();
 
   return (
     <div>
       <SectionHeader
         eyebrow="Primair vs secundair"
         title="Sold-out alerts"
-        description="Primair is Weeztix. Zodra Weeztix uitverkocht is terwijl RA, TicketSwap of (straks) Appic nog verkopen, verschijnt hier een alert — overboeking of omzetlek."
+        description="Primair is Weeztix (publieke tickettypes, of sold ≥ drempel als er geen cap is). Zodra Weeztix uitverkocht is terwijl RA, TicketSwap of Appic nog verkopen, verschijnt hier een alert — overboeking of omzetlek."
         action={<AlertTestMailButton />}
       />
 
@@ -52,6 +55,9 @@ export default async function AlertsPage() {
           <p className="mt-1 font-display text-lg text-text">Weeztix</p>
           <p className="mt-1 text-xs text-text-muted">
             Bron voor “uitverkocht”
+            {soldThreshold != null
+              ? ` · drempel ${soldThreshold.toLocaleString("nl-NL")} sold als er geen cap is`
+              : ""}
           </p>
         </div>
         <div className="border border-border bg-surface px-4 py-3 sm:col-span-2">
@@ -62,8 +68,10 @@ export default async function AlertsPage() {
             RA · TicketSwap · Appic
           </p>
           <p className="mt-1 text-xs text-text-muted">
-            Alert als Weeztix sold-out is en dit kanaal nog open staat. Appic
-            volgt zodra die koppeling live is.
+            Alert als Weeztix sold-out is en dit kanaal nog open staat. Weekedities
+            tellen als uitverkocht als de publieke types (early bird / regular /
+            late) vol zijn, of als sold de drempel haalt. Appic volgt zodra die
+            koppeling live is.
             {emailEnabled && notifyTo ? (
               <>
                 {" "}

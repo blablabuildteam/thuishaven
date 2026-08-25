@@ -9,6 +9,7 @@ import {
 } from "@/lib/integrations/weeztix/client";
 import { amsterdamDay } from "@/lib/time/amsterdam";
 import { estimateSoldOutFromTicketTypes } from "@/lib/editions/sold-out-timing";
+import { resolveWeeztixSoldOut } from "@/lib/integrations/weeztix/sold-out";
 
 function slugify(name: string): string {
   return (
@@ -330,29 +331,29 @@ async function upsertTicketInventoryForEvents(
       .where(eq(ticketInventory.editionId, item.editionId))
       .limit(20);
     const weeztixRow = inv.find((r) => r.platform === "weeztix");
-    const isSoldOut =
-      summary.capacity != null && summary.capacity > 0
-        ? summary.sold >= summary.capacity * 0.995
-        : false;
+    const verdict = resolveWeeztixSoldOut({
+      tickets: ticketsRes.tickets,
+      sold: summary.sold,
+      capacity: summary.capacity,
+    });
+    const isSoldOut = verdict.soldOut;
 
     const startsAt = options?.startsAtByEdition?.get(item.editionId);
     const timing =
-      summary.capacity != null &&
-      summary.capacity > 0 &&
-      summary.sold >= summary.capacity * 0.995 &&
-      startsAt
+      isSoldOut && startsAt
         ? estimateSoldOutFromTicketTypes({
             eventDay: amsterdamDay(startsAt),
             sold: summary.sold,
             capacity: summary.capacity,
             tickets: ticketsRes.tickets,
+            assumeSoldOut: true,
           })
         : null;
 
     const soldOutFields = {
       soldOutDay: timing?.day ?? null,
       soldOutDaysBefore: timing?.daysBefore ?? null,
-      soldOutSource: timing?.source ?? null,
+      soldOutSource: timing?.source ?? verdict.reason,
     };
 
     if (weeztixRow) {
