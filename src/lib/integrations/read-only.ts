@@ -57,7 +57,9 @@ export function assertExternalReadOnly(
   if (
     options?.allowStatisticsReadPost &&
     upper === "POST" &&
-    /^https:\/\/api\.weeztix\.com\/statistics\/(orders|tickets)\//i.test(url)
+    /^https:\/\/api\.weeztix\.com\/statistics\/(orders|tickets|advanced)\b/i.test(
+      url,
+    )
   ) {
     return;
   }

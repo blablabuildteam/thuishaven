@@ -335,6 +335,37 @@ export const ticketSaleReferrers = pgTable(
   ],
 );
 
+export type DemographicBucket = { key: string; count: number };
+
+/**
+ * Geanonimiseerde Weeztix-demografie per editie (geslacht, leeftijd, stad).
+ * Geen namen, e-mails of exacte geboortedata — alleen tellingen.
+ */
+export const ticketDemographics = pgTable(
+  "ticket_demographics",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    editionId: uuid("edition_id")
+      .notNull()
+      .references(() => editions.id),
+    platform: ticketPlatformEnum("platform").notNull(),
+    gender: jsonb("gender").$type<DemographicBucket[]>().notNull().default([]),
+    age: jsonb("age").$type<DemographicBucket[]>().notNull().default([]),
+    city: jsonb("city").$type<DemographicBucket[]>().notNull().default([]),
+    answered: integer("answered").notNull().default(0),
+    total: integer("total").notNull().default(0),
+    syncedAt: timestamp("synced_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("ticket_demographics_edition_platform").on(
+      t.editionId,
+      t.platform,
+    ),
+  ],
+);
+
 /** OAuth tokens (Weeztix refresh is éénmalig — niet in env laten staan). */
 export const integrationCredentials = pgTable("integration_credentials", {
   provider: text("provider").primaryKey(),
@@ -420,6 +451,12 @@ export const ticketInventory = pgTable("ticket_inventory", {
   capacity: integer("capacity"),
   sold: integer("sold").notNull().default(0),
   available: integer("available").notNull().default(0),
+  /** Betaalde tickets (Weeztix min_price > 0). */
+  paidSold: integer("paid_sold").notNull().default(0),
+  /** Gratis / guestlist (Weeztix min_price = 0). */
+  freeSold: integer("free_sold").notNull().default(0),
+  /** Ticketomzet in centen (Weeztix min_price × sold, geen servicekosten). */
+  revenueCents: integer("revenue_cents").notNull().default(0),
   /** Gewogen gem. ticketprijs in EUR (uit Weeztix min_price × sold). */
   avgPriceEur: numeric("avg_price_eur", { precision: 10, scale: 2 }),
   isSoldOut: boolean("is_sold_out").notNull().default(false),
@@ -479,9 +516,32 @@ export const alertTypeEnum = pgEnum("alert_type", [
   "custom",
 ]);
 
+/** Handmatig ingestelde sold-out / drempel-alerts. */
+export const alertRules = pgTable("alert_rules", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  recipients: jsonb("recipients").$type<string[]>().notNull().default([]),
+  /** Weeztix sold-drempel. Null = alleen bij officiële sold-out. */
+  soldThreshold: integer("sold_threshold"),
+  checkRa: boolean("check_ra").notNull().default(true),
+  checkTicketswap: boolean("check_ticketswap").notNull().default(true),
+  checkAppic: boolean("check_appic").notNull().default(false),
+  createdByEmail: text("created_by_email"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
 export const alerts = pgTable("alerts", {
   id: uuid("id").defaultRandom().primaryKey(),
   editionId: uuid("edition_id").references(() => editions.id),
+  ruleId: uuid("rule_id").references(() => alertRules.id, {
+    onDelete: "set null",
+  }),
   type: alertTypeEnum("type").notNull(),
   title: text("title").notNull(),
   message: text("message").notNull(),

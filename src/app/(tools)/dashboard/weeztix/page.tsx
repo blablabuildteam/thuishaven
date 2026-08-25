@@ -1,8 +1,9 @@
+import Link from "next/link";
 import { desc, isNotNull, sql, and, eq } from "drizzle-orm";
 import { SectionHeader } from "@/components/ui/section-header";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { editions, ticketInventory } from "@/lib/db/schema";
-import { formatNumber, formatPercent } from "@/lib/utils";
+import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils";
 import { normalizeWeeztixInventory } from "@/lib/integrations/weeztix/inventory";
 
 export const metadata = { title: "Tickets" };
@@ -33,12 +34,21 @@ export default async function WeeztixEventsPage() {
       (select count(*)::int from ticket_inventory
         where platform = 'weeztix' and sold > 0) as with_sales,
       (select coalesce(sum(sold),0)::int from ticket_inventory
-        where platform = 'weeztix') as total_sold
+        where platform = 'weeztix') as total_sold,
+      (select coalesce(sum(paid_sold),0)::int from ticket_inventory
+        where platform = 'weeztix') as total_paid,
+      (select coalesce(sum(free_sold),0)::int from ticket_inventory
+        where platform = 'weeztix') as total_free,
+      (select coalesce(sum(revenue_cents),0)::bigint from ticket_inventory
+        where platform = 'weeztix') as total_revenue_cents
   `);
   const t = (totals as unknown as Array<Record<string, number>>)[0] ?? {
     editions: 0,
     with_sales: 0,
     total_sold: 0,
+    total_paid: 0,
+    total_free: 0,
+    total_revenue_cents: 0,
   };
 
   const rows = await db
@@ -47,6 +57,9 @@ export default async function WeeztixEventsPage() {
       name: editions.name,
       startsAt: editions.startsAt,
       sold: ticketInventory.sold,
+      paidSold: ticketInventory.paidSold,
+      freeSold: ticketInventory.freeSold,
+      revenueCents: ticketInventory.revenueCents,
       capacity: ticketInventory.capacity,
       available: ticketInventory.available,
     })
@@ -67,7 +80,7 @@ export default async function WeeztixEventsPage() {
       <SectionHeader
         eyebrow="Weeztix"
         title="Tickets"
-        description="Sold, ticketcap en restcapaciteit per editie."
+        description="Sold, omzet, betaald/gratis en restcapaciteit per editie. Klik een naam voor demografie."
       />
 
       <div className="mb-6 flex flex-wrap gap-8">
@@ -89,21 +102,40 @@ export default async function WeeztixEventsPage() {
         </p>
         <p>
           <span className="font-display text-3xl">
-            {formatNumber(Number(t.with_sales ?? 0))}
+            {formatNumber(Number(t.total_paid ?? 0))}
           </span>
           <span className="mt-1 block text-[11px] tracking-[0.12em] text-text-dim uppercase">
-            met sales
+            betaald
+          </span>
+        </p>
+        <p>
+          <span className="font-display text-3xl">
+            {formatNumber(Number(t.total_free ?? 0))}
+          </span>
+          <span className="mt-1 block text-[11px] tracking-[0.12em] text-text-dim uppercase">
+            gratis
+          </span>
+        </p>
+        <p>
+          <span className="font-display text-3xl">
+            {formatCurrency(Number(t.total_revenue_cents ?? 0) / 100)}
+          </span>
+          <span className="mt-1 block text-[11px] tracking-[0.12em] text-text-dim uppercase">
+            omzet
           </span>
         </p>
       </div>
 
       <div className="overflow-x-auto border border-border">
-        <table className="w-full min-w-[720px] text-left text-sm">
+        <table className="w-full min-w-[920px] text-left text-sm">
           <thead className="border-b border-border text-[11px] tracking-wider text-text-dim uppercase">
             <tr>
               <th className="px-4 py-3 font-medium">Editie</th>
               <th className="px-4 py-3 font-medium">Datum</th>
               <th className="px-4 py-3 font-medium">Sold</th>
+              <th className="px-4 py-3 font-medium">Betaald</th>
+              <th className="px-4 py-3 font-medium">Gratis</th>
+              <th className="px-4 py-3 font-medium">Omzet</th>
               <th className="px-4 py-3 font-medium">Cap</th>
               <th className="px-4 py-3 font-medium">Nog</th>
               <th className="px-4 py-3 font-medium">Fill</th>
@@ -129,7 +161,12 @@ export default async function WeeztixEventsPage() {
                     className="border-b border-border/70 last:border-0"
                   >
                     <td className="max-w-[320px] truncate px-4 py-3">
-                      {row.name}
+                      <Link
+                        href={`/dashboard/weeztix/${row.id}`}
+                        className="hover:underline"
+                      >
+                        {row.name}
+                      </Link>
                     </td>
                     <td className="px-4 py-3 text-text-muted">
                       {row.startsAt.toLocaleDateString("nl-NL", {
@@ -140,6 +177,21 @@ export default async function WeeztixEventsPage() {
                     </td>
                     <td className="px-4 py-3 font-mono">
                       {row.sold != null ? formatNumber(sold) : "—"}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-text-muted">
+                      {row.sold != null
+                        ? formatNumber(row.paidSold ?? 0)
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-text-muted">
+                      {row.sold != null
+                        ? formatNumber(row.freeSold ?? 0)
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-text-muted">
+                      {row.sold != null
+                        ? formatCurrency((row.revenueCents ?? 0) / 100)
+                        : "—"}
                     </td>
                     <td className="px-4 py-3 font-mono text-text-muted">
                       {cap != null ? formatNumber(cap) : "—"}
@@ -157,8 +209,8 @@ export default async function WeeztixEventsPage() {
         </table>
       </div>
       <p className="mt-3 text-xs text-text-dim">
-        Cap = som van Weeztix ticket-allotments. Nog = cap − sold. Geen
-        zaalcapaciteit.
+        Omzet = Weeztix ticketprijs × sold (geen servicekosten). Gratis =
+        tickettypes met prijs 0. Cap = som van allotments. Nog = cap − sold.
       </p>
     </div>
   );

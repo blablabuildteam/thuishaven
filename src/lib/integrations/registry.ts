@@ -272,7 +272,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     name: "Dashboard alerts",
     tool: "dashboard",
     description:
-      "E-mail bij Weeztix sold-out (publieke tickettypes of sold-drempel) terwijl RA, TicketSwap of Appic nog open is.",
+      "Zelf alerts instellen: ontvangers, Weeztix-drempel, en welke kanalen (RA / TicketSwap / Appic) we checken.",
     envKeys: ["ALERT_NOTIFY_EMAIL", "ALERT_EMAIL_ENABLED"],
     optionalEnvKeys: [
       "ALERT_EMAIL_ALLOWLIST",

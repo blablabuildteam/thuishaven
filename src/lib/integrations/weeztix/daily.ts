@@ -6,6 +6,7 @@ import {
   ticketSalesDaily,
 } from "@/lib/db/schema";
 import { getWeeztixEventStatistics } from "@/lib/integrations/weeztix/client";
+import { upsertWeeztixDemographics } from "@/lib/integrations/weeztix/demographics";
 
 const BUCKET_MINUTES = 20;
 /** Max lookback vanaf eventstart voor timeToBank-buckets (~2 jaar). */
@@ -133,6 +134,7 @@ export async function syncWeeztixDailySales(options?: {
   editionsWithCurve: number;
   daysUpserted: number;
   referrersUpserted: number;
+  demographicsUpserted: number;
   brevoOrders: number;
   failed: number;
   errors: string[];
@@ -144,6 +146,7 @@ export async function syncWeeztixDailySales(options?: {
       editionsWithCurve: 0,
       daysUpserted: 0,
       referrersUpserted: 0,
+      demographicsUpserted: 0,
       brevoOrders: 0,
       failed: 0,
       errors: ["DATABASE_URL ontbreekt"],
@@ -190,6 +193,7 @@ export async function syncWeeztixDailySales(options?: {
   let editionsWithCurve = 0;
   let daysUpserted = 0;
   let referrersUpserted = 0;
+  let demographicsUpserted = 0;
   let brevoOrders = 0;
   let failed = 0;
   const errors: string[] = [];
@@ -259,6 +263,13 @@ export async function syncWeeztixDailySales(options?: {
       referrersUpserted += 1;
       if (r.channel === "brevo") brevoOrders += r.orderCount;
     }
+
+    const demoOk = await upsertWeeztixDemographics({
+      editionId: row.id,
+      eventStart: row.startsAt,
+      statistics: stats.data,
+    });
+    if (demoOk) demographicsUpserted += 1;
   }
 
   for (let i = 0; i < rows.length; i += concurrency) {
@@ -272,6 +283,7 @@ export async function syncWeeztixDailySales(options?: {
     editionsWithCurve,
     daysUpserted,
     referrersUpserted,
+    demographicsUpserted,
     brevoOrders,
     failed,
     errors,

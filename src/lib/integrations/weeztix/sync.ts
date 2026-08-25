@@ -25,6 +25,8 @@ function slugify(name: string): string {
 
 export function summarizeTicketSales(tickets: WeeztixTicketType[]): {
   sold: number;
+  paidSold: number;
+  freeSold: number;
   capacity: number | null;
   available: number;
   revenueCents: number;
@@ -32,6 +34,8 @@ export function summarizeTicketSales(tickets: WeeztixTicketType[]): {
   ticketTypes: number;
 } {
   let sold = 0;
+  let paidSold = 0;
+  let freeSold = 0;
   let capacitySum = 0;
   let hasStock = false;
   let revenueCents = 0;
@@ -42,9 +46,11 @@ export function summarizeTicketSales(tickets: WeeztixTicketType[]): {
       typeof t.available_stock === "number" ? t.available_stock : null;
     const price = typeof t.min_price === "number" ? t.min_price : 0;
     sold += s;
-    // Gratis/import barcodes niet meewegen in gem. prijs
-    if (price > 0 && s > 0) {
-      revenueCents += s * price;
+    if (price > 0) {
+      paidSold += s;
+      if (s > 0) revenueCents += s * price;
+    } else {
+      freeSold += s;
     }
     /**
      * Weeztix `available_stock` is de toegewezen ticketcap per type, ook als
@@ -57,18 +63,14 @@ export function summarizeTicketSales(tickets: WeeztixTicketType[]): {
     }
   }
 
-  const paidSold = tickets.reduce((sum, t) => {
-    const s = typeof t.sold_count === "number" ? t.sold_count : 0;
-    const price = typeof t.min_price === "number" ? t.min_price : 0;
-    return price > 0 ? sum + s : sum;
-  }, 0);
-
   const capacity = hasStock ? capacitySum : sold > 0 ? sold : null;
   const available =
     capacity != null ? Math.max(0, capacity - sold) : 0;
 
   return {
     sold,
+    paidSold,
+    freeSold,
     capacity,
     available,
     revenueCents,
@@ -361,6 +363,9 @@ async function upsertTicketInventoryForEvents(
         .update(ticketInventory)
         .set({
           sold: summary.sold,
+          paidSold: summary.paidSold,
+          freeSold: summary.freeSold,
+          revenueCents: summary.revenueCents,
           capacity: summary.capacity,
           available: summary.available,
           avgPriceEur:
@@ -378,6 +383,9 @@ async function upsertTicketInventoryForEvents(
         platform: "weeztix",
         capacity: summary.capacity,
         sold: summary.sold,
+        paidSold: summary.paidSold,
+        freeSold: summary.freeSold,
+        revenueCents: summary.revenueCents,
         available: summary.available,
         avgPriceEur:
           summary.avgPriceCents != null

@@ -43,6 +43,7 @@ export async function GET(request: Request) {
         editionsWithCurve: 0,
         daysUpserted: 0,
         referrersUpserted: 0,
+        demographicsUpserted: 0,
         brevoOrders: 0,
         failed: 1,
         errors: [e instanceof Error ? e.message : "dailySales mislukt"],

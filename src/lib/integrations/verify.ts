@@ -692,16 +692,22 @@ async function verifyAlertNotify(): Promise<VerifyResult> {
     );
   }
 
+  const { listAlertRules } = await import("@/lib/integrations/alerts/rules");
+  const rules = await listAlertRules().catch(() => []);
   const threshold = weeztixSoldThreshold();
   const thresholdLabel =
-    threshold != null ? `sold-drempel ${threshold}` : "geen sold-drempel";
+    threshold != null ? `fallback-drempel ${threshold}` : "geen fallback-drempel";
+  const ruleLabel =
+    rules.length === 1
+      ? "1 ingestelde alert"
+      : `${rules.length} ingestelde alerts`;
 
   return base(
     "alert_notify",
     name,
     "verified",
-    `Mail klaar · ${recipients.to.join(", ")} · ${thresholdLabel}`,
-    { to: recipients.to, threshold },
+    `Mail klaar · ${recipients.to.join(", ")} · ${ruleLabel} · ${thresholdLabel}`,
+    { to: recipients.to, threshold, rules: rules.length },
   );
 }
 

@@ -2,13 +2,13 @@
  * Harde poort voor alert-mails.
  *
  * Regels:
- * 1. Ontvangers komen ALLEEN uit ALERT_NOTIFY_EMAIL (env) — nooit uit request body of functie-args.
+ * 1. Ontvangers komen uit een alert-regel of ALERT_NOTIFY_EMAIL — nooit raw
+ *    adressen uit een request body zonder deze check.
  * 2. Elk adres moet matchen op ALERT_EMAIL_ALLOWLIST (exact e-mail of @domein).
- * 3. Absolute plafond in code: alleen *@thuishaven.nl en *@blablabuild.com — ook als env anders zegt.
+ * 3. Absolute plafond in code: alleen *@thuishaven.nl en *@blablabuild.com.
  * 4. ALERT_EMAIL_ENABLED moet expliciet "true" zijn, anders wordt er niets verstuurd.
  */
 
-/** Domeinen die überhaupt alert-mail mogen ontvangen. Code-plafond, niet via env te verruimen. */
 export const ALERT_EMAIL_HARD_DOMAINS = [
   "thuishaven.nl",
   "blablabuild.com",
@@ -32,24 +32,19 @@ function domainOf(email: string): string {
   return at >= 0 ? email.slice(at + 1) : "";
 }
 
-function matchesAllowEntry(email: string, entry: string): boolean {
+function matchesAllowEntry(email: string, entry: string): string | false {
   const e = normalizeEmail(entry);
   if (e.startsWith("@")) {
-    return domainOf(email) === e.slice(1);
+    return domainOf(email) === e.slice(1) ? email : false;
   }
-  return email === e;
+  return email === e ? email : false;
 }
 
-/** Absolute plafond: alleen toegestane domeinen. */
 export function isWithinHardDomainCeiling(email: string): boolean {
   const domain = domainOf(normalizeEmail(email));
   return (ALERT_EMAIL_HARD_DOMAINS as readonly string[]).includes(domain);
 }
 
-/**
- * Allowlist uit env, of veilige default (alleen team@blablabuild.com)
- * zolang ALERT_EMAIL_ALLOWLIST leeg is.
- */
 export function alertEmailAllowlist(): string[] {
   const fromEnv = parseList(process.env.ALERT_EMAIL_ALLOWLIST).map(normalizeEmail);
   if (fromEnv.length > 0) return fromEnv;
@@ -64,29 +59,25 @@ export type ResolvedAlertRecipients =
   | { ok: true; to: string[] }
   | { ok: false; error: string; blocked?: string[] };
 
+export function parseRecipientInput(raw: string | string[] | undefined): string[] {
+  if (Array.isArray(raw)) {
+    return raw.map(normalizeEmail).filter(Boolean);
+  }
+  return parseList(raw).map(normalizeEmail);
+}
+
 /**
- * Enige plek die bepaalt wie alert-mails mag krijgen.
- * Accepteert géén externe ontvangerslijst.
+ * Filtert een kandidaatlijst door allowlist + hard domeinplafond.
+ * Gebruikt door UI-validatie én versturen.
  */
-export function resolveAlertRecipients(): ResolvedAlertRecipients {
-  if (!isAlertEmailEnabled()) {
-    return {
-      ok: false,
-      error:
-        "ALERT_EMAIL_ENABLED staat niet op true — versturen is geblokkeerd.",
-    };
-  }
-
-  const configured = parseList(process.env.ALERT_NOTIFY_EMAIL).map(normalizeEmail);
-  if (configured.length === 0) {
-    return { ok: false, error: "ALERT_NOTIFY_EMAIL ontbreekt" };
-  }
-
+export function gateAlertRecipients(
+  candidates: string[],
+): ResolvedAlertRecipients {
   const allow = alertEmailAllowlist();
   const blocked: string[] = [];
   const allowed: string[] = [];
 
-  for (const email of configured) {
+  for (const email of candidates.map(normalizeEmail)) {
     if (!EMAIL_RE.test(email)) {
       blocked.push(email);
       continue;
@@ -114,4 +105,46 @@ export function resolveAlertRecipients(): ResolvedAlertRecipients {
   }
 
   return { ok: true, to: allowed };
+}
+
+/**
+ * Enige plek die bepaalt wie een alert-mail mag krijgen.
+ * `requested` = ontvangers van een opgeslagen regel.
+ * Zonder requested: fallback naar ALERT_NOTIFY_EMAIL.
+ */
+export function resolveAlertRecipients(
+  requested?: string[],
+): ResolvedAlertRecipients {
+  if (!isAlertEmailEnabled()) {
+    return {
+      ok: false,
+      error:
+        "ALERT_EMAIL_ENABLED staat niet op true — versturen is geblokkeerd.",
+    };
+  }
+
+  const candidates =
+    requested && requested.length > 0
+      ? requested.map(normalizeEmail)
+      : parseList(process.env.ALERT_NOTIFY_EMAIL).map(normalizeEmail);
+
+  if (candidates.length === 0) {
+    return {
+      ok: false,
+      error: requested
+        ? "Geen ontvangers op deze alert"
+        : "ALERT_NOTIFY_EMAIL ontbreekt",
+    };
+  }
+
+  return gateAlertRecipients(candidates);
+}
+
+export function alertRecipientMeta() {
+  return {
+    enabled: isAlertEmailEnabled(),
+    allowlist: alertEmailAllowlist(),
+    hardDomains: [...ALERT_EMAIL_HARD_DOMAINS],
+    fallbackNotify: parseList(process.env.ALERT_NOTIFY_EMAIL),
+  };
 }

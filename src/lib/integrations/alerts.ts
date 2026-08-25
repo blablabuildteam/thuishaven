@@ -1,27 +1,26 @@
-import { and, desc, eq, gte, or } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { and, desc, eq, or } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
+import { alerts } from "@/lib/db/schema";
 import {
-  alerts,
-  editions,
-  ticketInventory,
-  ticketswapListings,
-} from "@/lib/db/schema";
+  channelToAlertType,
+  loadEditionAlertSnapshots,
+  matchesForRules,
+  type RuleMatch,
+} from "@/lib/integrations/alerts/evaluate";
+import {
+  ensureDefaultAlertRule,
+  listEnabledAlertRules,
+} from "@/lib/integrations/alerts/rules";
+import type {
+  SecondaryChannel,
+  SecondarySoldOutConflict,
+  StoredAlert,
+} from "@/lib/integrations/alerts/types";
 
-const weeztixInv = alias(ticketInventory, "alert_weeztix_inv");
-const appicInv = alias(ticketInventory, "alert_appic_inv");
-import { ticketswapVenueUrl } from "@/lib/integrations/ticketswap/client";
-import {
-  listOpenSoldOutRaAlerts,
-  refreshSoldOutRaAlerts,
-  type SoldOutRaMismatch,
-} from "@/lib/integrations/ra/alerts";
+export type { SecondaryChannel, SecondarySoldOutConflict, StoredAlert };
 
 const TS_ALERT = "ticketswap_after_soldout" as const;
 const RA_ALERT = "weeztix_soldout_ra_open" as const;
-
-/** Primair = Weeztix. Secundair = RA / TicketSwap / Appic. */
-export type SecondaryChannel = "resident_advisor" | "ticketswap" | "appic";
 
 export type TicketswapSoldOutAlert = {
   editionId: string;
@@ -32,102 +31,6 @@ export type TicketswapSoldOutAlert = {
   tsTitle: string | null;
 };
 
-export type SecondarySoldOutConflict = {
-  editionId: string;
-  editionName: string;
-  startsAt: Date;
-  channel: SecondaryChannel;
-  channelLabel: string;
-  /** RA: overboekingsrisico. TicketSwap/Appic: omzetlek. */
-  kind: "overbooking" | "revenue_leak";
-  title: string;
-  message: string;
-  availableCount: number | null;
-  url: string | null;
-};
-
-export type StoredAlert = {
-  id: string;
-  type: string;
-  editionId: string | null;
-  title: string;
-  message: string;
-  isActive: boolean;
-  createdAt: Date;
-  resolvedAt: Date | null;
-};
-
-function since(): Date {
-  return new Date(Date.now() - 12 * 60 * 60 * 1000);
-}
-
-/**
- * Weeztix uitverkocht + TicketSwap nog aanbod (of check als listings niet live zijn).
- * Alleen Weeztix telt als primaire sold-out — niet RA.
- */
-export async function listOpenTicketswapAlerts(options?: {
-  requireLiveListings?: boolean;
-}): Promise<TicketswapSoldOutAlert[]> {
-  if (!hasDatabase()) return [];
-  const db = getDb();
-  const rows = await db
-    .select({
-      editionId: editions.id,
-      editionName: editions.name,
-      startsAt: editions.startsAt,
-      tsAvailable: ticketswapListings.availableCount,
-      tsUrl: ticketswapListings.contentUrl,
-      tsTitle: ticketswapListings.title,
-    })
-    .from(editions)
-    .innerJoin(
-      ticketInventory,
-      and(
-        eq(ticketInventory.editionId, editions.id),
-        eq(ticketInventory.platform, "weeztix"),
-        eq(ticketInventory.isSoldOut, true),
-      ),
-    )
-    .leftJoin(ticketswapListings, eq(ticketswapListings.editionId, editions.id))
-    .where(gte(editions.startsAt, since()));
-
-  const live = options?.requireLiveListings !== false;
-  const byEdition = new Map<string, TicketswapSoldOutAlert>();
-
-  for (const row of rows) {
-    if (live) {
-      if (row.tsAvailable == null || row.tsAvailable <= 0) continue;
-    }
-
-    const prev = byEdition.get(row.editionId);
-    const available = row.tsAvailable ?? prev?.availableCount ?? null;
-    byEdition.set(row.editionId, {
-      editionId: row.editionId,
-      editionName: row.editionName,
-      startsAt: row.startsAt,
-      availableCount:
-        available != null
-          ? Math.max(available, prev?.availableCount ?? 0)
-          : prev?.availableCount ?? null,
-      tsUrl: row.tsUrl ?? prev?.tsUrl ?? ticketswapVenueUrl(),
-      tsTitle: row.tsTitle ?? prev?.tsTitle ?? null,
-    });
-  }
-
-  return [...byEdition.values()];
-}
-
-async function ticketswapListingsAreLive(): Promise<boolean> {
-  if (!hasDatabase()) return false;
-  const db = getDb();
-  const recent = await db
-    .select({ id: ticketswapListings.id })
-    .from(ticketswapListings)
-    .where(gte(ticketswapListings.syncedAt, new Date(Date.now() - 48 * 60 * 60 * 1000)))
-    .limit(1);
-  return recent.length > 0;
-}
-
 export type AppicSoldOutAlert = {
   editionId: string;
   editionName: string;
@@ -135,118 +38,47 @@ export type AppicSoldOutAlert = {
   availableCount: number | null;
 };
 
-/** Weeztix uitverkocht + Appic-inventory nog aanbod (zodra die sync live is). */
-export async function listOpenAppicAlerts(): Promise<AppicSoldOutAlert[]> {
-  if (!hasDatabase()) return [];
-  const db = getDb();
-  const rows = await db
-    .select({
-      editionId: editions.id,
-      editionName: editions.name,
-      startsAt: editions.startsAt,
-      available: appicInv.available,
-    })
-    .from(editions)
-    .innerJoin(
-      weeztixInv,
-      and(
-        eq(weeztixInv.editionId, editions.id),
-        eq(weeztixInv.platform, "weeztix"),
-        eq(weeztixInv.isSoldOut, true),
-      ),
-    )
-    .innerJoin(
-      appicInv,
-      and(
-        eq(appicInv.editionId, editions.id),
-        eq(appicInv.platform, "appic"),
-      ),
-    )
-    .where(
-      and(gte(editions.startsAt, since()), gte(appicInv.available, 1)),
-    );
-
-  const seen = new Set<string>();
-  return rows.flatMap((row) => {
-    if (seen.has(row.editionId)) return [];
-    seen.add(row.editionId);
-    return [
-      {
-        editionId: row.editionId,
-        editionName: row.editionName,
-        startsAt: row.startsAt,
-        availableCount: row.available,
-      },
-    ];
-  });
-}
-
 export async function listOpenDashboardAlerts(): Promise<{
-  ra: SoldOutRaMismatch[];
+  ra: Array<{ editionId: string }>;
   ticketswap: TicketswapSoldOutAlert[];
   appic: AppicSoldOutAlert[];
-  /** Flat list voor UI: Weeztix sold-out vs secundair kanaal. */
   conflicts: SecondarySoldOutConflict[];
 }> {
-  const live = await ticketswapListingsAreLive();
-  const [ra, ticketswap, appic] = await Promise.all([
-    listOpenSoldOutRaAlerts().catch(() => []),
-    listOpenTicketswapAlerts({ requireLiveListings: live }).catch(() => []),
-    listOpenAppicAlerts().catch(() => []),
+  await ensureDefaultAlertRule().catch(() => null);
+  const [snaps, rules] = await Promise.all([
+    loadEditionAlertSnapshots().catch(() => []),
+    listEnabledAlertRules().catch(() => []),
   ]);
-
-  const conflicts: SecondarySoldOutConflict[] = [
-    ...ra.map(
-      (m): SecondarySoldOutConflict => ({
-        editionId: m.editionId,
-        editionName: m.editionName,
-        startsAt: m.startsAt,
-        channel: "resident_advisor",
-        channelLabel: "Resident Advisor",
-        kind: "overbooking",
-        title: `${m.editionName} is bij Weeztix uitverkocht, maar staat nog te koop op RA`,
-        message: `Weeztix is uitverkocht. Op Resident Advisor (${m.raTitle}) zijn nog tickets beschikbaar. Zet de RA-verkoop uit om overboeking te voorkomen.`,
-        availableCount: null,
-        url: m.raUrl,
-      }),
-    ),
-    ...ticketswap.map((m): SecondarySoldOutConflict => {
-      const hasCount = m.availableCount != null && m.availableCount > 0;
-      return {
-        editionId: m.editionId,
-        editionName: m.editionName,
-        startsAt: m.startsAt,
-        channel: "ticketswap",
-        channelLabel: "TicketSwap",
-        kind: "revenue_leak",
-        title: hasCount
-          ? `${m.editionName}: TicketSwap actief na Weeztix sold-out`
-          : `${m.editionName}: check TicketSwap na Weeztix sold-out`,
-        message: hasCount
-          ? `Weeztix is uitverkocht, maar er ${m.availableCount === 1 ? "staat nog 1 ticket" : `staan nog ${m.availableCount} tickets`} op TicketSwap. Mogelijke omzetlek.`
-          : "Weeztix is uitverkocht. Controleer TicketSwap of er nog aanbod is — omzetlek op de secundaire markt.",
-        availableCount: m.availableCount,
-        url: m.tsUrl ?? ticketswapVenueUrl(),
-      };
-    }),
-    ...appic.map(
-      (m): SecondarySoldOutConflict => ({
-        editionId: m.editionId,
-        editionName: m.editionName,
-        startsAt: m.startsAt,
-        channel: "appic",
-        channelLabel: "Appic",
-        kind: "revenue_leak",
-        title: `${m.editionName}: Appic actief na Weeztix sold-out`,
-        message: `Weeztix is uitverkocht, maar Appic toont nog ${m.availableCount === 1 ? "1 ticket" : `${m.availableCount ?? "tickets"}`}. Mogelijke omzetlek.`,
-        availableCount: m.availableCount,
-        url: null,
-      }),
-    ),
-  ];
-
+  const matches = matchesForRules(snaps, rules);
+  const conflicts = matches.map(
+    ({ ruleId: _ruleId, weeztixSold: _sold, ...conflict }) => conflict,
+  );
   conflicts.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
-  return { ra, ticketswap, appic, conflicts };
+
+  return {
+    ra: conflicts
+      .filter((c) => c.channel === "resident_advisor")
+      .map((c) => ({ editionId: c.editionId })),
+    ticketswap: conflicts
+      .filter((c) => c.channel === "ticketswap")
+      .map((c) => ({
+        editionId: c.editionId,
+        editionName: c.editionName,
+        startsAt: c.startsAt,
+        availableCount: c.availableCount,
+        tsUrl: c.url,
+        tsTitle: null,
+      })),
+    appic: conflicts
+      .filter((c) => c.channel === "appic")
+      .map((c) => ({
+        editionId: c.editionId,
+        editionName: c.editionName,
+        startsAt: c.startsAt,
+        availableCount: c.availableCount,
+      })),
+    conflicts,
+  };
 }
 
 export async function listStoredDashboardAlerts(): Promise<StoredAlert[]> {
@@ -256,91 +88,129 @@ export async function listStoredDashboardAlerts(): Promise<StoredAlert[]> {
     .select({
       id: alerts.id,
       type: alerts.type,
+      ruleId: alerts.ruleId,
       editionId: alerts.editionId,
       title: alerts.title,
       message: alerts.message,
       isActive: alerts.isActive,
       createdAt: alerts.createdAt,
+      notifiedAt: alerts.notifiedAt,
       resolvedAt: alerts.resolvedAt,
     })
     .from(alerts)
-    .where(or(eq(alerts.type, TS_ALERT), eq(alerts.type, RA_ALERT)))
+    .where(
+      or(
+        eq(alerts.type, TS_ALERT),
+        eq(alerts.type, RA_ALERT),
+        eq(alerts.type, "custom"),
+      ),
+    )
     .orderBy(desc(alerts.createdAt))
-    .limit(50);
+    .limit(80);
 }
 
-async function upsertTypedAlerts(
-  type: typeof TS_ALERT | typeof RA_ALERT,
-  editionIds: string[],
-  create: (editionId: string) => { title: string; message: string },
-) {
+function matchKey(m: RuleMatch): string {
+  return `${m.ruleId}:${m.channel}:${m.editionId}`;
+}
+
+async function upsertRuleMatches(matches: RuleMatch[]): Promise<number> {
+  if (!hasDatabase()) return 0;
   const db = getDb();
+  const wanted = new Set(matches.map(matchKey));
+
   const open = await db
     .select()
     .from(alerts)
-    .where(and(eq(alerts.type, type), eq(alerts.isActive, true)));
-  const wanted = new Set(editionIds);
+    .where(
+      and(
+        eq(alerts.isActive, true),
+        or(
+          eq(alerts.type, TS_ALERT),
+          eq(alerts.type, RA_ALERT),
+          eq(alerts.type, "custom"),
+        ),
+      ),
+    );
+
+  const channelOf = (type: string): SecondaryChannel =>
+    type === RA_ALERT
+      ? "resident_advisor"
+      : type === TS_ALERT
+        ? "ticketswap"
+        : "appic";
 
   for (const row of open) {
-    if (!row.editionId || !wanted.has(row.editionId)) {
+    const key =
+      row.ruleId && row.editionId
+        ? `${row.ruleId}:${channelOf(row.type)}:${row.editionId}`
+        : null;
+    const orphanStillWanted =
+      !row.ruleId &&
+      row.editionId &&
+      matches.some(
+        (m) =>
+          m.editionId === row.editionId && m.channel === channelOf(row.type),
+      );
+    if ((key && wanted.has(key)) || orphanStillWanted) continue;
+    await db
+      .update(alerts)
+      .set({ isActive: false, resolvedAt: new Date() })
+      .where(eq(alerts.id, row.id));
+  }
+
+  const openKeys = new Set(
+    open
+      .filter((row) => row.ruleId && row.editionId && row.isActive)
+      .map(
+        (row) =>
+          `${row.ruleId}:${channelOf(row.type)}:${row.editionId}`,
+      ),
+  );
+
+  for (const match of matches) {
+    if (openKeys.has(matchKey(match))) continue;
+    const orphan = open.find(
+      (row) =>
+        row.isActive &&
+        !row.ruleId &&
+        row.editionId === match.editionId &&
+        channelOf(row.type) === match.channel,
+    );
+    if (orphan) {
       await db
         .update(alerts)
-        .set({ isActive: false, resolvedAt: new Date() })
-        .where(eq(alerts.id, row.id));
+        .set({
+          ruleId: match.ruleId,
+          title: match.title,
+          message: match.message,
+        })
+        .where(eq(alerts.id, orphan.id));
+      continue;
     }
-  }
-
-  const openIds = new Set(open.filter((a) => a.editionId).map((a) => a.editionId as string));
-  for (const editionId of editionIds) {
-    if (openIds.has(editionId)) continue;
-    const payload = create(editionId);
     await db.insert(alerts).values({
-      type,
+      type: channelToAlertType(match.channel),
+      ruleId: match.ruleId,
       isActive: true,
-      editionId,
-      title: payload.title,
-      message: payload.message,
+      editionId: match.editionId,
+      title: match.title,
+      message: match.message,
     });
   }
+
+  return matches.length;
 }
 
-export async function refreshTicketswapAlerts(options?: {
-  liveListings?: boolean;
-}): Promise<number> {
-  if (!hasDatabase()) return 0;
-  const live =
-    options?.liveListings ?? (await ticketswapListingsAreLive());
-  const mismatches = await listOpenTicketswapAlerts({
-    requireLiveListings: live,
-  });
-  const byId = new Map(mismatches.map((m) => [m.editionId, m]));
-  await upsertTypedAlerts(TS_ALERT, mismatches.map((m) => m.editionId), (id) => {
-    const m = byId.get(id)!;
-    if (m.availableCount != null && m.availableCount > 0) {
-      return {
-        title: `${m.editionName}: TicketSwap actief na Weeztix sold-out`,
-        message: `Weeztix is uitverkocht, maar er ${m.availableCount === 1 ? "staat nog 1 ticket" : `staan nog ${m.availableCount} tickets`} op TicketSwap. Mogelijke omzetlek.`,
-      };
-    }
-    return {
-      title: `${m.editionName}: check TicketSwap na Weeztix sold-out`,
-      message:
-        "Weeztix is uitverkocht. Controleer TicketSwap of er nog aanbod is (omzetlek op de secundaire markt).",
-    };
-  });
-  return mismatches.length;
-}
-
-export async function refreshDashboardAlerts(options?: {
+export async function refreshDashboardAlerts(_options?: {
   ticketswapLive?: boolean;
 }): Promise<{ ra: number; ticketswap: number; appic: number; notified: number }> {
-  const ra = await refreshSoldOutRaAlerts().catch(() => 0);
-  const ticketswap = await refreshTicketswapAlerts({
-    liveListings: options?.ticketswapLive,
-  }).catch(() => 0);
-  const appic = await listOpenAppicAlerts()
-    .then((rows) => rows.length)
-    .catch(() => 0);
+  await ensureDefaultAlertRule().catch(() => null);
+  const [snaps, rules] = await Promise.all([
+    loadEditionAlertSnapshots().catch(() => []),
+    listEnabledAlertRules().catch(() => []),
+  ]);
+  const matches = matchesForRules(snaps, rules);
+  await upsertRuleMatches(matches).catch(() => 0);
+
   const { notifyUnsentDashboardAlerts } = await import(
     "@/lib/integrations/alerts/notify"
   );
@@ -349,5 +219,11 @@ export async function refreshDashboardAlerts(options?: {
     skipped: null,
     error: e instanceof Error ? e.message : "notify failed",
   }));
-  return { ra, ticketswap, appic, notified: notify.sent };
+
+  return {
+    ra: matches.filter((m) => m.channel === "resident_advisor").length,
+    ticketswap: matches.filter((m) => m.channel === "ticketswap").length,
+    appic: matches.filter((m) => m.channel === "appic").length,
+    notified: notify.sent,
+  };
 }
