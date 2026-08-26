@@ -450,6 +450,8 @@ export const ticketInventory = pgTable("ticket_inventory", {
   platform: ticketPlatformEnum("platform").notNull(),
   capacity: integer("capacity"),
   sold: integer("sold").notNull().default(0),
+  /** Weeztix scanned_count som over tickettypes (check-in). */
+  scanned: integer("scanned").notNull().default(0),
   available: integer("available").notNull().default(0),
   /** Betaalde tickets (Weeztix min_price > 0). */
   paidSold: integer("paid_sold").notNull().default(0),

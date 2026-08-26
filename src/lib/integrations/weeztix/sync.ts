@@ -25,6 +25,7 @@ function slugify(name: string): string {
 
 export function summarizeTicketSales(tickets: WeeztixTicketType[]): {
   sold: number;
+  scanned: number;
   paidSold: number;
   freeSold: number;
   capacity: number | null;
@@ -34,6 +35,7 @@ export function summarizeTicketSales(tickets: WeeztixTicketType[]): {
   ticketTypes: number;
 } {
   let sold = 0;
+  let scanned = 0;
   let paidSold = 0;
   let freeSold = 0;
   let capacitySum = 0;
@@ -42,6 +44,9 @@ export function summarizeTicketSales(tickets: WeeztixTicketType[]): {
 
   for (const t of tickets) {
     const s = typeof t.sold_count === "number" ? t.sold_count : 0;
+    const scannedCount =
+      typeof t.scanned_count === "number" ? t.scanned_count : 0;
+    scanned += scannedCount;
     const stock =
       typeof t.available_stock === "number" ? t.available_stock : null;
     const price = typeof t.min_price === "number" ? t.min_price : 0;
@@ -69,6 +74,7 @@ export function summarizeTicketSales(tickets: WeeztixTicketType[]): {
 
   return {
     sold,
+    scanned,
     paidSold,
     freeSold,
     capacity,
@@ -363,6 +369,7 @@ async function upsertTicketInventoryForEvents(
         .update(ticketInventory)
         .set({
           sold: summary.sold,
+          scanned: summary.scanned,
           paidSold: summary.paidSold,
           freeSold: summary.freeSold,
           revenueCents: summary.revenueCents,
@@ -383,6 +390,7 @@ async function upsertTicketInventoryForEvents(
         platform: "weeztix",
         capacity: summary.capacity,
         sold: summary.sold,
+        scanned: summary.scanned,
         paidSold: summary.paidSold,
         freeSold: summary.freeSold,
         revenueCents: summary.revenueCents,

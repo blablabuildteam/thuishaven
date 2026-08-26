@@ -222,10 +222,18 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "tiktok",
     name: "TikTok",
     tool: "dashboard",
-    description: "Video performance & timing.",
+    description:
+      "Video performance & timing van @thuishaven_amsterdam (Login Kit / Display API).",
     envKeys: ["TIKTOK_ACCESS_TOKEN"],
-    askFromClient: ["TikTok for Business / Display API toegang"],
-    verifyHint: "Video list",
+    optionalEnvKeys: [
+      "TIKTOK_CLIENT_KEY",
+      "TIKTOK_CLIENT_SECRET",
+      "TIKTOK_REFRESH_TOKEN",
+    ],
+    askFromClient: [],
+    verifyHint:
+      "GET /v2/user/info/?fields=username,follower_count,video_count",
+    docsUrl: "https://developers.tiktok.com/doc/tiktok-api-v2-get-user-info",
     priority: "medium",
   },
   {

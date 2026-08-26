@@ -501,6 +501,76 @@ async function verifyYouTube(): Promise<VerifyResult> {
   }
 }
 
+async function verifyTikTok(): Promise<VerifyResult> {
+  const name = "TikTok";
+  const token = process.env.TIKTOK_ACCESS_TOKEN?.trim();
+  if (!token) {
+    return base("tiktok", name, "missing", "TIKTOK_ACCESS_TOKEN ontbreekt");
+  }
+
+  try {
+    const qs = new URLSearchParams({
+      fields:
+        "open_id,display_name,username,follower_count,video_count,likes_count",
+    });
+    const res = await fetch(
+      `https://open.tiktokapis.com/v2/user/info/?${qs}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      },
+    );
+
+    const data = (await res.json()) as {
+      data?: {
+        user?: {
+          display_name?: string;
+          username?: string;
+          follower_count?: number;
+          video_count?: number;
+          likes_count?: number;
+        };
+      };
+      error?: { code?: string; message?: string };
+    };
+
+    const errCode = data.error?.code;
+    if (!res.ok || (errCode && errCode !== "ok")) {
+      const msg = data.error?.message || `TikTok HTTP ${res.status}`;
+      return base("tiktok", name, "error", msg.slice(0, 180));
+    }
+
+    const user = data.data?.user;
+    if (!user) {
+      return base("tiktok", name, "error", "Geen user-object in TikTok-response");
+    }
+
+    const handle = user.username
+      ? `@${user.username}`
+      : user.display_name ?? "TikTok";
+    const followers =
+      user.follower_count != null
+        ? ` · ${user.follower_count.toLocaleString("nl-NL")} volgers`
+        : "";
+    const videos =
+      user.video_count != null ? ` · ${user.video_count} video's` : "";
+    return base("tiktok", name, "verified", `${handle}${followers}${videos}`, {
+      username: user.username,
+      displayName: user.display_name,
+      followerCount: user.follower_count,
+      videoCount: user.video_count,
+      likesCount: user.likes_count,
+    });
+  } catch (e) {
+    return base(
+      "tiktok",
+      name,
+      "error",
+      e instanceof Error ? e.message : "Network error",
+    );
+  }
+}
+
 async function verifyInstagram(): Promise<VerifyResult> {
   const name = "Instagram (Meta)";
   const token = process.env.META_ACCESS_TOKEN?.trim();
@@ -742,6 +812,8 @@ export async function verifyIntegration(id: string): Promise<VerifyResult> {
       return verifyYouTube();
     case "instagram":
       return verifyInstagram();
+    case "tiktok":
+      return verifyTikTok();
     case "alert_notify":
       return verifyAlertNotify();
     default: {
@@ -783,11 +855,11 @@ export async function probeConfiguredIntegrations(): Promise<VerifyResult[]> {
       (row.status !== "manual" &&
         row.status !== "on_hold" &&
         row.status !== "missing" &&
-        ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "kvk", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "alert_notify"].includes(
+        ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "kvk", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "tiktok", "alert_notify"].includes(
           row.id,
         )),
   );
-  const always = ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "alert_notify"];
+  const always = ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "tiktok", "alert_notify"];
   const ids = new Set([
     ...toProbe.map((r) => r.id),
     ...always.filter((id) => {
