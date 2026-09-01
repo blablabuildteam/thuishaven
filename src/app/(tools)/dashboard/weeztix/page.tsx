@@ -35,6 +35,8 @@ export default async function WeeztixEventsPage() {
         where platform = 'weeztix' and sold > 0) as with_sales,
       (select coalesce(sum(sold),0)::int from ticket_inventory
         where platform = 'weeztix') as total_sold,
+      (select coalesce(sum(scanned),0)::int from ticket_inventory
+        where platform = 'weeztix') as total_scanned,
       (select coalesce(sum(paid_sold),0)::int from ticket_inventory
         where platform = 'weeztix') as total_paid,
       (select coalesce(sum(free_sold),0)::int from ticket_inventory
@@ -46,6 +48,7 @@ export default async function WeeztixEventsPage() {
     editions: 0,
     with_sales: 0,
     total_sold: 0,
+    total_scanned: 0,
     total_paid: 0,
     total_free: 0,
     total_revenue_cents: 0,
@@ -57,6 +60,7 @@ export default async function WeeztixEventsPage() {
       name: editions.name,
       startsAt: editions.startsAt,
       sold: ticketInventory.sold,
+      scanned: ticketInventory.scanned,
       paidSold: ticketInventory.paidSold,
       freeSold: ticketInventory.freeSold,
       revenueCents: ticketInventory.revenueCents,
@@ -80,7 +84,7 @@ export default async function WeeztixEventsPage() {
       <SectionHeader
         eyebrow="Weeztix"
         title="Tickets"
-        description="Sold, omzet, betaald/gratis en restcapaciteit per editie. Klik een naam voor demografie."
+        description="Sold, gescand, omzet, betaald/gratis en restcapaciteit per editie. Klik een naam voor demografie."
       />
 
       <div className="mb-6 flex flex-wrap gap-8">
@@ -98,6 +102,14 @@ export default async function WeeztixEventsPage() {
           </span>
           <span className="mt-1 block text-[11px] tracking-[0.12em] text-text-dim uppercase">
             sold
+          </span>
+        </p>
+        <p>
+          <span className="font-display text-3xl">
+            {formatNumber(Number(t.total_scanned ?? 0))}
+          </span>
+          <span className="mt-1 block text-[11px] tracking-[0.12em] text-text-dim uppercase">
+            gescand
           </span>
         </p>
         <p>
@@ -127,12 +139,14 @@ export default async function WeeztixEventsPage() {
       </div>
 
       <div className="overflow-x-auto border border-border">
-        <table className="w-full min-w-[920px] text-left text-sm">
+        <table className="w-full min-w-[1040px] text-left text-sm">
           <thead className="border-b border-border text-[11px] tracking-wider text-text-dim uppercase">
             <tr>
               <th className="px-4 py-3 font-medium">Editie</th>
               <th className="px-4 py-3 font-medium">Datum</th>
               <th className="px-4 py-3 font-medium">Sold</th>
+              <th className="px-4 py-3 font-medium">Gescand</th>
+              <th className="px-4 py-3 font-medium">Scan</th>
               <th className="px-4 py-3 font-medium">Betaald</th>
               <th className="px-4 py-3 font-medium">Gratis</th>
               <th className="px-4 py-3 font-medium">Omzet</th>
@@ -151,6 +165,8 @@ export default async function WeeztixEventsPage() {
                   available: row.available,
                 });
                 const sold = inv.sold;
+                const scanned = row.scanned ?? 0;
+                const scanRate = sold > 0 ? (scanned / sold) * 100 : null;
                 const cap = inv.capacity;
                 const nog = inv.available;
                 const st =
@@ -177,6 +193,14 @@ export default async function WeeztixEventsPage() {
                     </td>
                     <td className="px-4 py-3 font-mono">
                       {row.sold != null ? formatNumber(sold) : "—"}
+                    </td>
+                    <td className="px-4 py-3 font-mono">
+                      {row.sold != null ? formatNumber(scanned) : "—"}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-text-muted">
+                      {row.sold != null && scanRate != null
+                        ? formatPercent(scanRate, 0)
+                        : "—"}
                     </td>
                     <td className="px-4 py-3 font-mono text-text-muted">
                       {row.sold != null
@@ -209,8 +233,10 @@ export default async function WeeztixEventsPage() {
         </table>
       </div>
       <p className="mt-3 text-xs text-text-dim">
-        Omzet = Weeztix ticketprijs × sold (geen servicekosten). Gratis =
-        tickettypes met prijs 0. Cap = som van allotments. Nog = cap − sold.
+        Gescand = som van Weeztix scanned_count per tickettype (check-in).
+        Scan = gescand / sold. Omzet = Weeztix ticketprijs × sold (geen
+        servicekosten). Gratis = tickettypes met prijs 0. Cap = som van
+        allotments. Nog = cap − sold.
       </p>
     </div>
   );

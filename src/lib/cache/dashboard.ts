@@ -15,3 +15,10 @@ export const loadWeatherImpact = cache(async () =>
 export const loadMailLift = cache(async () =>
   getMailLiftByEdition({ limit: 40 }),
 );
+
+export { loadRecentMarketingPosts, loadMarketingPostsBundle } from "@/lib/marketing/posts";
+export { getReferrerChannelTotals } from "@/lib/insights/referrers";
+export {
+  loadMarketingTimeline,
+  loadChannelImpact,
+} from "@/lib/marketing/timeline";

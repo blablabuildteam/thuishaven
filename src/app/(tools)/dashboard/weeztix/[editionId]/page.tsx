@@ -106,6 +106,7 @@ export default async function WeeztixEditionPage({
       name: editions.name,
       startsAt: editions.startsAt,
       sold: ticketInventory.sold,
+      scanned: ticketInventory.scanned,
       paidSold: ticketInventory.paidSold,
       freeSold: ticketInventory.freeSold,
       revenueCents: ticketInventory.revenueCents,
@@ -143,6 +144,8 @@ export default async function WeeztixEditionPage({
     capacity: edition.capacity,
     available: edition.available,
   });
+  const scanned = edition.scanned ?? 0;
+  const scanRate = inv.sold > 0 ? (scanned / inv.sold) * 100 : null;
   const fill =
     inv.capacity != null && inv.capacity > 0
       ? (inv.sold / inv.capacity) * 100
@@ -177,6 +180,20 @@ export default async function WeeztixEditionPage({
           <span className="font-display text-3xl">{formatNumber(inv.sold)}</span>
           <span className="mt-1 block text-[11px] tracking-[0.12em] text-text-dim uppercase">
             sold
+          </span>
+        </p>
+        <p>
+          <span className="font-display text-3xl">{formatNumber(scanned)}</span>
+          <span className="mt-1 block text-[11px] tracking-[0.12em] text-text-dim uppercase">
+            gescand
+          </span>
+        </p>
+        <p>
+          <span className="font-display text-3xl">
+            {scanRate != null ? formatPercent(scanRate, 0) : "—"}
+          </span>
+          <span className="mt-1 block text-[11px] tracking-[0.12em] text-text-dim uppercase">
+            scan
           </span>
         </p>
         <p>

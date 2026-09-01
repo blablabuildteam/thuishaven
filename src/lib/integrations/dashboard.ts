@@ -68,22 +68,40 @@ export async function syncBrevoCampaigns(): Promise<SyncResult> {
 }
 
 export async function syncInstagram(): Promise<SyncResult> {
-  if (!process.env.META_ACCESS_TOKEN) {
-    return { source: "instagram", ok: false, error: "META_ACCESS_TOKEN ontbreekt" };
-  }
-  return { source: "instagram", ok: false, error: "Nog niet geïmplementeerd" };
+  const { syncInstagramReadOnly } = await import(
+    "@/lib/integrations/instagram/sync"
+  );
+  const result = await syncInstagramReadOnly();
+  return {
+    source: "instagram",
+    ok: result.ok,
+    records: result.upserted || result.fetched,
+    error: result.error,
+  };
 }
 
 export async function syncTikTok(): Promise<SyncResult> {
-  if (!process.env.TIKTOK_ACCESS_TOKEN) {
-    return { source: "tiktok", ok: false, error: "TIKTOK_ACCESS_TOKEN ontbreekt" };
-  }
-  return { source: "tiktok", ok: false, error: "Nog niet geïmplementeerd" };
+  const { syncTikTokReadOnly } = await import(
+    "@/lib/integrations/tiktok/sync"
+  );
+  const result = await syncTikTokReadOnly();
+  return {
+    source: "tiktok",
+    ok: result.ok,
+    records: result.upserted || result.fetched,
+    error: result.error,
+  };
 }
 
 export async function syncYouTube(): Promise<SyncResult> {
-  if (!process.env.YOUTUBE_API_KEY) {
-    return { source: "youtube", ok: false, error: "YOUTUBE_API_KEY ontbreekt" };
-  }
-  return { source: "youtube", ok: false, error: "Nog niet geïmplementeerd" };
+  const { syncYouTubeReadOnly } = await import(
+    "@/lib/integrations/youtube/sync"
+  );
+  const result = await syncYouTubeReadOnly();
+  return {
+    source: "youtube",
+    ok: result.ok,
+    records: result.upserted || result.fetched,
+    error: result.error,
+  };
 }

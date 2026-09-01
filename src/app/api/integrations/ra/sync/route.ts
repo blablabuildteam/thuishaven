@@ -13,6 +13,12 @@ export async function POST() {
   }
 
   const result = await syncResidentAdvisorReadOnly();
+  if (result.ok) {
+    const { invalidateEventInsightsCache } = await import(
+      "@/lib/insights/event-insights"
+    );
+    await invalidateEventInsightsCache();
+  }
   return NextResponse.json(
     { readOnly: true, ...result },
     { status: result.ok ? 200 : 502 },

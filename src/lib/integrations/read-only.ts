@@ -24,6 +24,8 @@ export function assertExternalReadOnly(
     allowFirecrawlReadPost?: boolean;
     allowTransactionalEmailPost?: boolean;
     allowStatisticsReadPost?: boolean;
+    /** TikTok Display API video list/query are POST reads. */
+    allowTikTokReadPost?: boolean;
   },
 ) {
   const upper = method.toUpperCase();
@@ -32,7 +34,18 @@ export function assertExternalReadOnly(
   if (
     options?.allowAuthTokenPost &&
     upper === "POST" &&
-    /auth\.weeztix\.com\/tokens\/?$/i.test(url)
+    (/auth\.weeztix\.com\/tokens\/?$/i.test(url) ||
+      /^https:\/\/open\.tiktokapis\.com\/v2\/oauth\/token\/?$/i.test(url))
+  ) {
+    return;
+  }
+
+  if (
+    options?.allowTikTokReadPost &&
+    upper === "POST" &&
+    /^https:\/\/open\.tiktokapis\.com\/v2\/video\/(list|query)\/?(?:\?|$)/i.test(
+      url,
+    )
   ) {
     return;
   }

@@ -7,9 +7,11 @@ import {
   BarChart3,
   Bell,
   Home,
+  Camera,
   CloudSun,
+  Film,
   LayoutDashboard,
-  MessageSquare,
+  Music2,
   Plug,
   ScrollText,
   Send,
@@ -30,38 +32,113 @@ type NavItem = {
   icon: React.ComponentType<{ className?: string }>;
 };
 
-/** Event-first: minder tabs, duidelijkere namen */
-const dashboardNav: NavItem[] = [
-  { href: "/dashboard", label: "Events", icon: LayoutDashboard },
-  { href: "/dashboard/weer", label: "Weer", icon: CloudSun },
-  { href: "/dashboard/marketing", label: "Mailings", icon: BarChart3 },
-  { href: "/dashboard/weeztix", label: "Tickets", icon: Ticket },
-  { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
-  { href: "/dashboard/insights", label: "Insights", icon: MessageSquare },
+type NavSection = {
+  id: string;
+  label: string;
+  items: NavItem[];
+};
+
+/**
+ * Dashboard tool nav — grouped by job:
+ * inzichten → operationeel → social → systeem (dev).
+ */
+const dashboardSections: NavSection[] = [
+  {
+    id: "insights",
+    label: "Inzichten",
+    items: [
+      {
+        href: "/dashboard/dashboards",
+        label: "Inzichten",
+        icon: LineChart,
+      },
+    ],
+  },
+  {
+    id: "ops",
+    label: "Overzicht",
+    items: [
+      { href: "/dashboard", label: "Events", icon: LayoutDashboard },
+      { href: "/dashboard/weer", label: "Weer", icon: CloudSun },
+      { href: "/dashboard/marketing", label: "Mailings", icon: BarChart3 },
+      { href: "/dashboard/weeztix", label: "Tickets", icon: Ticket },
+      { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
+    ],
+  },
+  {
+    id: "social",
+    label: "Social",
+    items: [
+      { href: "/dashboard/meta", label: "Meta", icon: Camera },
+      { href: "/dashboard/tiktok", label: "TikTok", icon: Music2 },
+      { href: "/dashboard/youtube", label: "YouTube", icon: Film },
+    ],
+  },
+];
+
+const dashboardSystemNav: NavItem[] = [
   { href: "/dashboard/logs", label: "Log", icon: ScrollText },
   { href: "/koppelingen", label: "Bronnen", icon: Plug },
 ];
 
-const outreachNav: NavItem[] = [
-  { href: "/outreach", label: "Overzicht", icon: Send },
-  { href: "/outreach/prospects", label: "Prospects", icon: Users },
-  { href: "/outreach/campaigns", label: "Campagnes", icon: Sparkles },
-  { href: "/outreach/emails", label: "E-mails", icon: Mail },
-  { href: "/outreach/analytics", label: "Wat werkt", icon: LineChart },
-  { href: "/outreach/pipeline", label: "Pipeline", icon: Workflow },
-  { href: "/outreach/kosten", label: "Kosten", icon: BarChart3 },
+const outreachSections: NavSection[] = [
+  {
+    id: "outreach",
+    label: "Outreach",
+    items: [
+      { href: "/outreach", label: "Overzicht", icon: Send },
+      { href: "/outreach/prospects", label: "Prospects", icon: Users },
+      { href: "/outreach/campaigns", label: "Campagnes", icon: Sparkles },
+      { href: "/outreach/emails", label: "E-mails", icon: Mail },
+      { href: "/outreach/analytics", label: "Wat werkt", icon: LineChart },
+      { href: "/outreach/pipeline", label: "Pipeline", icon: Workflow },
+      { href: "/outreach/kosten", label: "Kosten", icon: BarChart3 },
+    ],
+  },
+];
+
+const outreachSystemNav: NavItem[] = [
   { href: "/koppelingen", label: "Bronnen", icon: Plug },
 ];
+
+function isNavActive(pathname: string, href: string) {
+  return (
+    pathname === href ||
+    (href !== "/dashboard" &&
+      href !== "/outreach" &&
+      pathname.startsWith(href))
+  );
+}
+
+function NavLink({
+  item,
+  active,
+}: {
+  item: NavItem;
+  active: boolean;
+}) {
+  const Icon = item.icon;
+  return (
+    <Link
+      href={item.href}
+      className={cn(
+        "flex items-center gap-2.5 px-2.5 py-2 text-sm transition-colors",
+        active
+          ? "bg-accent text-accent-contrast"
+          : "text-text-muted hover:bg-surface hover:text-text",
+      )}
+    >
+      <Icon className="size-4 shrink-0 opacity-70" />
+      <span>{item.label}</span>
+    </Link>
+  );
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isOutreach = pathname.startsWith("/outreach");
-  const nav = isOutreach ? outreachNav : dashboardNav;
-  const toolLabel = isOutreach
-    ? "Outreach"
-    : pathname.startsWith("/koppelingen")
-      ? "Bronnen"
-      : "Events";
+  const sections = isOutreach ? outreachSections : dashboardSections;
+  const systemNav = isOutreach ? outreachSystemNav : dashboardSystemNav;
 
   return (
     <div className="relative z-0 flex min-h-screen bg-bg">
@@ -88,7 +165,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="border-b border-border px-3 py-3">
           <div className="grid grid-cols-2 gap-1 bg-bg-elevated p-1">
             <ToolSwitch
-              href="/dashboard"
+              href="/dashboard/dashboards"
               active={!isOutreach}
               label="Dashboard"
             />
@@ -100,35 +177,40 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-2 py-4">
-          <p className="mb-2 px-2 text-[11px] font-medium tracking-[0.12em] text-text-dim uppercase">
-            {toolLabel}
-          </p>
-          <nav className="space-y-0.5">
-            {nav.map((item) => {
-              const active =
-                pathname === item.href ||
-                (item.href !== "/dashboard" &&
-                  item.href !== "/outreach" &&
-                  pathname.startsWith(item.href));
-              const Icon = item.icon;
-              return (
-                <Link
+        <div className="flex flex-1 flex-col overflow-y-auto px-2 py-4">
+          <div className="space-y-5">
+            {sections.map((section) => (
+              <div key={section.id}>
+                <p className="mb-1.5 px-2 text-[11px] font-medium tracking-[0.12em] text-text-dim uppercase">
+                  {section.label}
+                </p>
+                <nav className="space-y-0.5">
+                  {section.items.map((item) => (
+                    <NavLink
+                      key={item.href}
+                      item={item}
+                      active={isNavActive(pathname, item.href)}
+                    />
+                  ))}
+                </nav>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-auto border-t border-border pt-4">
+            <p className="mb-1.5 px-2 text-[11px] font-medium tracking-[0.12em] text-text-dim uppercase">
+              Systeem
+            </p>
+            <nav className="space-y-0.5">
+              {systemNav.map((item) => (
+                <NavLink
                   key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center gap-2.5 px-2.5 py-2 text-sm transition-colors",
-                    active
-                      ? "bg-accent text-accent-contrast"
-                      : "text-text-muted hover:bg-surface hover:text-text",
-                  )}
-                >
-                  <Icon className="size-4 shrink-0 opacity-70" />
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
-          </nav>
+                  item={item}
+                  active={isNavActive(pathname, item.href)}
+                />
+              ))}
+            </nav>
+          </div>
         </div>
 
         <div className="space-y-3 border-t border-border px-4 py-4">
@@ -161,19 +243,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-1">
             <ThemeToggle compact />
             <div className="flex gap-1 bg-surface p-1">
-              <ToolSwitch href="/dashboard" active={!isOutreach} label="Dash" />
+              <ToolSwitch href="/dashboard/dashboards" active={!isOutreach} label="Dash" />
               <ToolSwitch href="/outreach" active={isOutreach} label="Out" />
             </div>
           </div>
         </header>
 
         <nav className="flex gap-1 overflow-x-auto border-b border-border px-3 py-2 lg:hidden">
-          {nav.map((item) => {
-            const active =
-              pathname === item.href ||
-              (item.href !== "/dashboard" &&
-                item.href !== "/outreach" &&
-                pathname.startsWith(item.href));
+          {[
+            ...sections.flatMap((s) => s.items),
+            ...systemNav,
+          ].map((item) => {
+            const active = isNavActive(pathname, item.href);
             return (
               <Link
                 key={item.href}

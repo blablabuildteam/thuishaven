@@ -51,6 +51,12 @@ export async function GET(request: Request) {
     : null;
 
   const ok = events.ok && (daily == null || daily.ok);
+  if (ok) {
+    const { invalidateEventInsightsCache } = await import(
+      "@/lib/insights/event-insights"
+    );
+    await invalidateEventInsightsCache();
+  }
   await logIntegration({
     source: "weeztix",
     level: ok ? "info" : "error",

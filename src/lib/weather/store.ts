@@ -232,16 +232,24 @@ export async function syncWeatherForEditionDays(options?: {
  */
 export async function ensureEditionWeather(options?: {
   fromYear?: number;
+  /** Inclusief forecast voor aankomende eventdagen (default 16). */
+  forecastDays?: number;
 }): Promise<{
   needed: number;
   missing: number;
   upserted: number;
 }> {
   const fromYear = options?.fromYear ?? 2025;
-  const today = new Date().toISOString().slice(0, 10);
+  const forecastDays = options?.forecastDays ?? 16;
+  const today = amsterdamDay(new Date()) || new Date().toISOString().slice(0, 10);
+  const horizon = (() => {
+    const d = new Date(`${today}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + forecastDays);
+    return d.toISOString().slice(0, 10);
+  })();
   const allDays = (await listEditionEventDays()).filter((d) => {
     const y = Number(d.slice(0, 4));
-    return y >= fromYear && d <= today;
+    return y >= fromYear && d <= horizon;
   });
 
   if (!allDays.length) {

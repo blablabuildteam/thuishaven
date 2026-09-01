@@ -501,48 +501,144 @@ async function verifyYouTube(): Promise<VerifyResult> {
   }
 }
 
+async function fetchTikTokUser(token: string) {
+  const qs = new URLSearchParams({
+    fields:
+      "open_id,display_name,username,follower_count,video_count,likes_count",
+  });
+  const res = await fetch(`https://open.tiktokapis.com/v2/user/info/?${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  const data = (await res.json()) as {
+    data?: {
+      user?: {
+        display_name?: string;
+        username?: string;
+        follower_count?: number;
+        video_count?: number;
+        likes_count?: number;
+      };
+    };
+    error?: { code?: string; message?: string };
+  };
+  return { res, data };
+}
+
+async function verifyTikTok(): Promise<VerifyResult> {
+  const name = "TikTok";
+  const { ensureTikTokAccessToken } = await import(
+    "@/lib/integrations/tiktok/tokens"
+  );
+
+  const ensured = await ensureTikTokAccessToken();
+  if (!ensured.ok) {
+    const missingEnv =
+      !process.env.TIKTOK_ACCESS_TOKEN?.trim() &&
+      !process.env.TIKTOK_REFRESH_TOKEN?.trim();
+    return base(
+      "tiktok",
+      name,
+      missingEnv ? "missing" : "error",
+      ensured.error,
+    );
+  }
+
+  try {
+    let { res, data } = await fetchTikTokUser(ensured.token);
+    const expired =
+      data.error?.code === "access_token_invalid" || res.status === 401;
+    if (expired) {
+      const retried = await ensureTikTokAccessToken({ force: true });
+      if (!retried.ok) {
+        return base("tiktok", name, "error", retried.error);
+      }
+      ({ res, data } = await fetchTikTokUser(retried.token));
+    }
+
+    const errCode = data.error?.code;
+    if (!res.ok || (errCode && errCode !== "ok")) {
+      const msg = data.error?.message || `TikTok HTTP ${res.status}`;
+      return base("tiktok", name, "error", msg.slice(0, 180));
+    }
+
+    const user = data.data?.user;
+    if (!user) {
+      return base("tiktok", name, "error", "Geen user-object in TikTok-response");
+    }
+
+    const handle = user.username
+      ? `@${user.username}`
+      : user.display_name ?? "TikTok";
+    const followers =
+      user.follower_count != null
+        ? ` · ${user.follower_count.toLocaleString("nl-NL")} volgers`
+        : "";
+    const videos =
+      user.video_count != null ? ` · ${user.video_count} video's` : "";
+    return base("tiktok", name, "verified", `${handle}${followers}${videos}`, {
+      username: user.username,
+      displayName: user.display_name,
+      followerCount: user.follower_count,
+      videoCount: user.video_count,
+      likesCount: user.likes_count,
+    });
+  } catch (e) {
+    return base(
+      "tiktok",
+      name,
+      "error",
+      e instanceof Error ? e.message : "Network error",
+    );
+  }
+}
+
 async function verifyInstagram(): Promise<VerifyResult> {
   const name = "Instagram (Meta)";
-  const token = process.env.META_ACCESS_TOKEN?.trim();
   const igId = process.env.META_IG_BUSINESS_ID?.trim();
-  const version = process.env.META_GRAPH_API_VERSION?.trim() || "v21.0";
+  const { ensureMetaAccessToken, explainMetaError } = await import(
+    "@/lib/integrations/meta/tokens"
+  );
 
-  if (!token) {
+  if (!process.env.META_ACCESS_TOKEN?.trim()) {
     return base("instagram", name, "missing", "META_ACCESS_TOKEN ontbreekt");
   }
   if (!igId) {
     return base("instagram", name, "missing", "META_IG_BUSINESS_ID ontbreekt");
   }
 
+  const ensured = await ensureMetaAccessToken();
+  if (!ensured.ok) {
+    return base("instagram", name, "error", ensured.error);
+  }
+
   try {
+    const version = process.env.META_GRAPH_API_VERSION?.trim() || "v21.0";
     const qs = new URLSearchParams({
       fields: "id,username,name,followers_count,media_count",
-      access_token: token,
+      access_token: ensured.token,
     });
     const res = await fetch(
       `https://graph.facebook.com/${version}/${encodeURIComponent(igId)}?${qs}`,
       { cache: "no-store" },
     );
-
-    if (!res.ok) {
-      const text = await res.text();
-      return base(
-        "instagram",
-        name,
-        "error",
-        `Meta HTTP ${res.status}: ${text.slice(0, 180)}`,
-      );
-    }
-
     const data = (await res.json()) as {
       username?: string;
       name?: string;
       followers_count?: number;
       media_count?: number;
-      error?: { message?: string };
+      error?: { message?: string; code?: number };
     };
-    if (data.error?.message) {
-      return base("instagram", name, "error", data.error.message);
+    if (!res.ok || data.error?.message) {
+      return base(
+        "instagram",
+        name,
+        "error",
+        explainMetaError(
+          data.error?.message || `Meta HTTP ${res.status}`,
+          data.error?.code,
+        ).slice(0, 220),
+      );
     }
 
     const handle = data.username ? `@${data.username}` : data.name ?? "Instagram";
@@ -742,6 +838,8 @@ export async function verifyIntegration(id: string): Promise<VerifyResult> {
       return verifyYouTube();
     case "instagram":
       return verifyInstagram();
+    case "tiktok":
+      return verifyTikTok();
     case "alert_notify":
       return verifyAlertNotify();
     default: {
@@ -783,11 +881,11 @@ export async function probeConfiguredIntegrations(): Promise<VerifyResult[]> {
       (row.status !== "manual" &&
         row.status !== "on_hold" &&
         row.status !== "missing" &&
-        ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "kvk", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "alert_notify"].includes(
+        ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "kvk", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "tiktok", "alert_notify"].includes(
           row.id,
         )),
   );
-  const always = ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "alert_notify"];
+  const always = ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "tiktok", "alert_notify"];
   const ids = new Set([
     ...toProbe.map((r) => r.id),
     ...always.filter((id) => {
