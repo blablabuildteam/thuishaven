@@ -416,6 +416,8 @@ export const raListings = pgTable(
     soldOut: boolean("sold_out").notNull().default(false),
     ticketsAvailable: boolean("tickets_available").notNull().default(false),
     contentUrl: text("content_url"),
+    /** DJ / artist names from RA event.artists */
+    artists: jsonb("artists").$type<string[]>().notNull().default([]),
     editionId: uuid("edition_id").references(() => editions.id),
     syncedAt: timestamp("synced_at", { withTimezone: true })
       .defaultNow()

@@ -1,22 +1,32 @@
 # Thuishaven to-do
 
+## Access
+
 - [ ] Connect with Start Moving for Paid ads data
 - [ ] Get access to the Looker dashboard
-- [ ] Figure out if Weeztix demographic stats are pre- or post-personalisation *(working assumption: post-personalisation via order_ticket.metadata; coverage % shown in Insights)*
-- [ ] Figure out how to best assign the amount when events are sold out
-- [ ] Contact Appic for an API/developers token *(needed to fill Appic sold/available on Insights capacity split)*
-- [ ] Clarify Wingame Appic vs Appic — separate inventory source? *(shell row on Insights until defined)*
+- [ ] Contact Appic for an API/developers token
 - [ ] Invite once the tool is done: Quinty (quinty@thuishaven.nl), Bas (bas@thuishaven.nl), Kasper (Kasper@thuishaven.nl), Tim (Tim@thuishaven.nl), Bas A (Basamro@thuishaven.nl), Roxy (roxy@thuishaven.nl)
-- [x] Add a statistic for the amount of tickets that have been scanned *(Weeztix scanned_count via API — shown on Tickets + Insights)*
-- [x] Build in visual recognition of social posts — Instagram ingest + Gemini vision + ±48u ticketlift
-- [x] Platform views Meta/TikTok/YouTube + correlatie-timeline op Dashboards
-- [ ] Pull prices for DJs *(shell on Insights expand: Line-up · fee & populariteit)*
-- [ ] Pull total ad spend per event
-- [ ] Add SoundCloud integration to get follower counts for DJs on the event *(feeds popularity shell)*
-- [ ] Pull the DJs that are playing on an event *(partial: parsed from edition name; full lineup source TBD)*
-- [ ] Find a way to see what other events (big festivals) and parties are happening in Amsterdam *(done via RA area GraphQL → `external_events`; shown on Insights. Refine filters as needed)*
-- [x] Pull and use the Weeztix demographics data *(gender/city full via API; age = top-~15 DOB buckets only — no fuller public endpoint found; CSV export is complete)*
-- [x] Pull the amount of tickets that have been scanned *(same as scanned_count above)*
-- [ ] Sync Instagram after Meta token install *(token in .env.local; run IG sync via Bronnen)*
+
+## Tickets
+
+- [ ] Figure out if Weeztix demographic stats are pre- or post-personalisation
 - [ ] Ask Weeztix whether DOB aggregation size can be raised / export API for full age distribution
+- [ ] Figure out how to best assign the amount when events are sold out
+- [ ] Clarify Wingame Appic vs Appic — separate inventory source?
+
+## Line-up
+
+- [ ] Pull the DJs that are playing on an event
+- [ ] Pull prices for DJs
+- [ ] Add SoundCloud integration to get follower counts for DJs on the event
+
+## Marketing
+
+- [ ] Pull total ad spend per event
+- [ ] Sync Instagram after Meta token install
 - [ ] Narrow down which social posts count toward an event’s sales (e.g. exclude posts after the event)
+- [ ] Add a graph on Insights that shows marketing activities versus ticket sales
+
+## Context
+
+- [ ] Find a way to see what other events (big festivals) and parties are happening in Amsterdam

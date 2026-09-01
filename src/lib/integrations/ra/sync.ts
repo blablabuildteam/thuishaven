@@ -165,6 +165,7 @@ export async function syncResidentAdvisorReadOnly(): Promise<{
       contentUrl: ev.contentUrl
         ? `https://ra.co${ev.contentUrl}`
         : `https://ra.co/events/${ev.id}`,
+      artists: ev.artists ?? [],
       editionId,
       syncedAt: new Date(),
     };

@@ -26,6 +26,7 @@ export type RaEvent = {
   isTicketed: boolean;
   ticketsAvailable: boolean;
   contentUrl: string | null;
+  artists: string[];
 };
 
 function venueId(): string {
@@ -116,10 +117,22 @@ export async function listRaVenueEvents(options?: {
   const year = options?.year;
   const withYear = type === "ARCHIVE" && year != null;
   const eventFields = `id title date startTime attending isTicketed contentUrl
+              artists { name }
               ticketing { isAnyTicketTierAvailable }`;
+  type VenueEventRaw = {
+    id: string;
+    title: string;
+    date: string | null;
+    startTime: string | null;
+    attending: number;
+    isTicketed: boolean;
+    contentUrl: string | null;
+    artists?: Array<{ name?: string | null } | null> | null;
+    ticketing?: { isAnyTicketTierAvailable?: boolean };
+  };
   const res = withYear
     ? await raGraphql<{
-        venue: { events: Array<RaEvent & { ticketing?: { isAnyTicketTierAvailable?: boolean } }> | null } | null;
+        venue: { events: VenueEventRaw[] | null } | null;
       }>(
         `query VenueEvents($id: ID!, $type: EventQueryType!, $limit: Int, $year: Int) {
           venue(id: $id) {
@@ -131,7 +144,7 @@ export async function listRaVenueEvents(options?: {
         { id: venueId(), type, limit, year },
       )
     : await raGraphql<{
-        venue: { events: Array<RaEvent & { ticketing?: { isAnyTicketTierAvailable?: boolean } }> | null } | null;
+        venue: { events: VenueEventRaw[] | null } | null;
       }>(
         `query VenueEvents($id: ID!, $type: EventQueryType!, $limit: Int) {
           venue(id: $id) {
@@ -143,7 +156,7 @@ export async function listRaVenueEvents(options?: {
         { id: venueId(), type, limit },
       );
   if (!res.ok) return res;
-  const events = (res.data.venue?.events ?? []).map((ev) => ({
+  const events: RaEvent[] = (res.data.venue?.events ?? []).map((ev) => ({
     id: ev.id,
     title: ev.title,
     date: ev.date,
@@ -152,6 +165,9 @@ export async function listRaVenueEvents(options?: {
     isTicketed: ev.isTicketed,
     ticketsAvailable: Boolean(ev.ticketing?.isAnyTicketTierAvailable),
     contentUrl: ev.contentUrl,
+    artists: (ev.artists ?? [])
+      .map((a) => a?.name?.trim())
+      .filter((n): n is string => Boolean(n)),
   }));
   return { ok: true, events };
 }
