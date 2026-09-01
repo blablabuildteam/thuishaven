@@ -3,9 +3,9 @@ import { auth } from "@/auth";
 import { syncResidentAdvisorReadOnly } from "@/lib/integrations/ra/sync";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
-/** POST /api/integrations/ra/sync — read-only listings voor club 109027. */
+/** POST /api/integrations/ra/sync — read-only listings voor club 109027 + AMS area. */
 export async function POST() {
   const session = await auth();
   if (!session?.user) {

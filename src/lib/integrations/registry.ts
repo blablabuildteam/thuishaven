@@ -135,7 +135,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     name: "Resident Advisor",
     tool: "dashboard",
     description:
-      "Listings + of de RA-shop nog open is. Alert als Weeztix uitverkocht is terwijl RA nog verkoopt. Geen officiële sales-API.",
+      "Venue listings + Amsterdam concurrenten (genres). Sync 4× per dag via cron (08:00, 13:00, 19:00, 23:00 Amsterdam). Alert als Weeztix uitverkocht is terwijl RA nog verkoopt.",
     envKeys: [],
     optionalEnvKeys: ["RA_VENUE_ID", "RA_API_KEY"],
     askFromClient: [

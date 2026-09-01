@@ -5,10 +5,19 @@ import {
   listRaAreaEvents,
   type RaAreaEvent,
 } from "@/lib/integrations/ra/client";
+import {
+  encodeRaImpactNote,
+  isElectronicUmbrella,
+} from "@/lib/integrations/ra/genres";
 import { amsterdamDay, shiftIsoDay } from "@/lib/time/amsterdam";
 
 const MIN_PARTY_ATTENDING = 200;
 const HOME_VENUE_ID = process.env.RA_VENUE_ID?.trim() || "109027";
+/** RA paginates within a date filter — wide windows only return early pages. */
+const CHUNK_DAYS = 14;
+const PAGES_PER_CHUNK = 3;
+/** Parallel date-window fetches (keeps total sync under ~1 min typically). */
+const CHUNK_CONCURRENCY = 4;
 
 function eventStart(ev: { date: string | null; startTime: string | null }): Date | null {
   const raw = ev.startTime || ev.date;
@@ -27,18 +36,35 @@ function keepListing(ev: {
   isFestival: boolean;
   venueId: string | null;
   venueName: string | null;
+  genres: string[];
 }): boolean {
   if (isHomeVenue(ev.venueId, ev.venueName)) return false;
-  return ev.isFestival || ev.attending >= MIN_PARTY_ATTENDING;
+  // Festivals always (city-wide pull); parties need size + electronic umbrella.
+  if (ev.isFestival) return true;
+  if (ev.attending < MIN_PARTY_ATTENDING) return false;
+  return isElectronicUmbrella(ev.genres);
 }
 
 function rowKey(name: string, day: string): string {
   return `${name.toLowerCase()}|${day}`;
 }
 
+function dateChunks(fromDay: string, toDay: string): Array<[string, string]> {
+  const chunks: Array<[string, string]> = [];
+  let start = fromDay;
+  while (start <= toDay) {
+    const end = shiftIsoDay(start, CHUNK_DAYS - 1);
+    chunks.push([start, end > toDay ? toDay : end]);
+    start = shiftIsoDay(end, 1);
+  }
+  return chunks;
+}
+
 /**
  * Pull Amsterdam-area RA listings into external_events (not Thuishaven itself).
- * Festivals always; club nights only from 200 attending up.
+ * Festivals always; club nights from 200 attending up under a broad electronic
+ * genre umbrella (RA genres; empty tags still kept).
+ * Fetches in short date chunks so pagination covers the full horizon.
  */
 export async function syncRaAmsterdamAreaEvents(): Promise<{
   ok: boolean;
@@ -52,31 +78,52 @@ export async function syncRaAmsterdamAreaEvents(): Promise<{
 
   const today = amsterdamDay(new Date());
   const fromDay = shiftIsoDay(today, -45);
-  const toDay = shiftIsoDay(today, 75);
+  const toDay = shiftIsoDay(today, 90);
 
   const seenIds = new Set<string>();
   const fetched: RaAreaEvent[] = [];
+  let lastError: string | undefined;
 
-  for (const page of [1, 2, 3, 4]) {
-    const batch = await listRaAreaEvents({
-      fromDay,
-      toDay,
-      pageSize: 50,
-      page,
-    });
-    if (!batch.ok) {
-      if (fetched.length === 0) {
-        return { ok: false, fetched: 0, upserted: 0, error: batch.error };
+  async function fetchChunk(
+    chunkFrom: string,
+    chunkTo: string,
+  ): Promise<RaAreaEvent[]> {
+    const out: RaAreaEvent[] = [];
+    for (let page = 1; page <= PAGES_PER_CHUNK; page += 1) {
+      const batch = await listRaAreaEvents({
+        fromDay: chunkFrom,
+        toDay: chunkTo,
+        pageSize: 50,
+        page,
+      });
+      if (!batch.ok) {
+        lastError = batch.error;
+        break;
       }
-      break;
+      if (batch.events.length === 0) break;
+      out.push(...batch.events);
+      if (batch.events.length < 50) break;
     }
-    if (batch.events.length === 0) break;
-    for (const ev of batch.events) {
-      if (seenIds.has(ev.id)) continue;
-      seenIds.add(ev.id);
-      fetched.push(ev);
+    return out;
+  }
+
+  const chunks = dateChunks(fromDay, toDay);
+  for (let i = 0; i < chunks.length; i += CHUNK_CONCURRENCY) {
+    const slice = chunks.slice(i, i + CHUNK_CONCURRENCY);
+    const batches = await Promise.all(
+      slice.map(([from, to]) => fetchChunk(from, to)),
+    );
+    for (const batch of batches) {
+      for (const ev of batch) {
+        if (seenIds.has(ev.id)) continue;
+        seenIds.add(ev.id);
+        fetched.push(ev);
+      }
     }
-    if (batch.events.length < 50) break;
+  }
+
+  if (fetched.length === 0 && lastError) {
+    return { ok: false, fetched: 0, upserted: 0, error: lastError };
   }
 
   const keep = fetched.filter(keepListing);
@@ -90,7 +137,17 @@ export async function syncRaAmsterdamAreaEvents(): Promise<{
     existing.map((e) => [rowKey(e.name, amsterdamDay(e.startsAt)), e.id]),
   );
 
+  const toInsert: Array<{
+    name: string;
+    type: "festival" | "other";
+    startsAt: Date;
+    endsAt: null;
+    region: string;
+    impactNote: string;
+    source: string;
+  }> = [];
   let upserted = 0;
+
   for (const ev of keep) {
     const startsAt = eventStart(ev);
     if (!startsAt) continue;
@@ -100,22 +157,29 @@ export async function syncRaAmsterdamAreaEvents(): Promise<{
       name: ev.title,
       type: ev.isFestival ? ("festival" as const) : ("other" as const),
       startsAt,
-      endsAt: null,
+      endsAt: null as null,
       region: ev.venueName?.trim() || "Amsterdam",
-      impactNote: `attending:${ev.attending}`,
+      impactNote: encodeRaImpactNote(ev.attending, ev.genres),
       source: "resident_advisor",
     };
     const prevId = byKey.get(key);
-    if (prevId) {
+    if (prevId && prevId !== "inserted") {
       await db
         .update(externalEvents)
         .set(values)
         .where(eq(externalEvents.id, prevId));
-    } else {
-      await db.insert(externalEvents).values(values);
+      upserted += 1;
+    } else if (!prevId) {
+      toInsert.push(values);
       byKey.set(key, "inserted");
     }
-    upserted += 1;
+  }
+
+  const INSERT_BATCH = 40;
+  for (let i = 0; i < toInsert.length; i += INSERT_BATCH) {
+    const batch = toInsert.slice(i, i + INSERT_BATCH);
+    await db.insert(externalEvents).values(batch);
+    upserted += batch.length;
   }
 
   return { ok: true, fetched: fetched.length, upserted };

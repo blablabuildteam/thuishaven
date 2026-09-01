@@ -182,6 +182,7 @@ export type RaAreaEvent = {
   contentUrl: string | null;
   venueId: string | null;
   venueName: string | null;
+  genres: string[];
 };
 
 /**
@@ -210,6 +211,7 @@ export async function listRaAreaEvents(options: {
           attending?: number | null;
           contentUrl?: string | null;
           isFestival?: boolean | null;
+          genres?: Array<{ name?: string | null } | null> | null;
           venue?: { id?: string; name?: string } | null;
         } | null;
       } | null>;
@@ -227,6 +229,7 @@ export async function listRaAreaEvents(options: {
             attending
             contentUrl
             isFestival
+            genres { name }
             venue { id name }
           }
         }
@@ -256,6 +259,9 @@ export async function listRaAreaEvents(options: {
       contentUrl: ev.contentUrl ?? null,
       venueId: ev.venue?.id ?? null,
       venueName: ev.venue?.name ?? null,
+      genres: (ev.genres ?? [])
+        .map((g) => g?.name?.trim())
+        .filter((n): n is string => Boolean(n)),
     });
   }
   return { ok: true, events };

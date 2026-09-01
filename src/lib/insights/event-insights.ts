@@ -26,6 +26,16 @@ import {
 import { weatherLocationMatch } from "@/lib/weather/store";
 import { normalizeWeeztixInventory } from "@/lib/integrations/weeztix/inventory";
 import {
+  competeSizeFromAttending,
+  competitionLevelLabel,
+  genreLabel,
+  isElectronicUmbrella,
+  parseRaImpactNote,
+  summarizeCompetition,
+  type CompeteSize,
+  type CompetitionLevel,
+} from "@/lib/integrations/ra/genres";
+import {
   amsterdamDay,
   isOutdoorSeason,
   shiftIsoDay,
@@ -45,6 +55,10 @@ const EVENT_LIST_STALE_MS = 6 * 60 * 60 * 1000;
 /** Process-local throttle so warm instances don't re-hit Weeztix every request. */
 let lastEventListEnsureAt = 0;
 let eventListEnsureInFlight: Promise<void> | null = null;
+
+/** Bootstrap RA competitors if the DB has none yet (cron owns ongoing refresh). */
+let lastRaEnsureAt = 0;
+let raEnsureInFlight: Promise<void> | null = null;
 
 /**
  * Keep editions in sync without blocking Insights.
@@ -95,6 +109,45 @@ async function ensureWeeztixEvents(): Promise<void> {
   }
 }
 
+/**
+ * If competition table has no RA rows yet, kick off one background sync.
+ * Ongoing refresh is owned by /api/cron/ra — this only avoids an empty first visit.
+ */
+async function ensureRaCompetition(): Promise<void> {
+  if (!hasDatabase()) return;
+  if (raEnsureInFlight) return;
+  if (Date.now() - lastRaEnsureAt < 60 * 60 * 1000) return;
+
+  try {
+    const db = getDb();
+    const count = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(externalEvents)
+      .where(eq(externalEvents.source, "resident_advisor"))
+      .then((r) => Number(r[0]?.count ?? 0));
+    if (count > 0) {
+      lastRaEnsureAt = Date.now();
+      return;
+    }
+
+    raEnsureInFlight = (async () => {
+      try {
+        const { syncResidentAdvisorReadOnly } = await import(
+          "@/lib/integrations/ra/sync"
+        );
+        await syncResidentAdvisorReadOnly();
+        lastRaEnsureAt = Date.now();
+      } catch (err) {
+        console.error("[ensureRaCompetition] background sync", err);
+      } finally {
+        raEnsureInFlight = null;
+      }
+    })();
+  } catch (err) {
+    console.error("[ensureRaCompetition]", err);
+  }
+}
+
 async function safeQuery<T>(label: string, run: () => Promise<T>, fallback: T): Promise<T> {
   try {
     return await run();
@@ -107,7 +160,14 @@ async function safeQuery<T>(label: string, run: () => Promise<T>, fallback: T): 
 export type CompetingEvent = {
   name: string;
   venue: string | null;
+  /** RA interest count — used for sorting / size band only, not shown raw. */
   attending: number | null;
+  /** Relative size band (from RA attending). */
+  size: CompeteSize | null;
+  /** RA genre tags (electronic umbrella); null/empty when unknown. */
+  genres: string[];
+  /** Short display label, e.g. "House · Techno". */
+  genreLabel: string | null;
   kind: "festival" | "holiday" | "party";
   source: string;
 };
@@ -126,6 +186,8 @@ export type EventInsightHeadline = {
     | "referrer";
   /** Short explanation shown as title/tooltip on the closed-row chip. */
   hint?: string;
+  /** For compete chips — drives the bar visual. */
+  competeLevel?: CompetitionLevel;
 };
 
 export type EventInsightSocial = {
@@ -228,6 +290,8 @@ export type EventInsight = {
   emailCampaigns: EventInsightMail[];
   referrers: Array<{ channel: string; orders: number }>;
   competingFestivals: CompetingEvent[];
+  /** Overall same-day competition pressure (from listed competitors). */
+  competitionLevel: CompetitionLevel | null;
 };
 
 function weatherTone(kind: WeatherKind): "positive" | "neutral" | "caution" {
@@ -244,6 +308,7 @@ function buildHeadlines(e: EventInsight): EventInsightHeadline[] {
     emailCampaigns,
     referrers,
     competingFestivals,
+    competitionLevel,
   } = e;
 
   if (tickets.fillPct != null) {
@@ -368,21 +433,25 @@ function buildHeadlines(e: EventInsight): EventInsightHeadline[] {
     });
   }
 
-  if (competingFestivals.length > 0) {
-    const festivals = competingFestivals.filter((c) => c.kind === "festival");
-    const parties = competingFestivals.filter((c) => c.kind !== "festival");
-    const label =
-      festivals.length > 0
-        ? `${festivals.length} festival${festivals.length > 1 ? "s" : ""}`
-        : `${parties.length} AMS party${parties.length > 1 ? "'s" : ""}`;
+  if (competitionLevel) {
+    const tone =
+      competitionLevel === "high"
+        ? "caution"
+        : competitionLevel === "medium"
+          ? "neutral"
+          : "positive";
     out.push({
-      text: label,
-      tone: "caution",
+      text: competitionLevelLabel(competitionLevel),
+      tone,
       kind: "compete",
-      hint: `Zelfde dag in Amsterdam via RA: ${competingFestivals
-        .slice(0, 3)
-        .map((c) => c.name)
-        .join(", ")}`,
+      competeLevel: competitionLevel,
+      hint:
+        competingFestivals.length > 0
+          ? `Zelfde dag in Amsterdam: ${competingFestivals
+              .slice(0, 3)
+              .map((c) => c.name)
+              .join(", ")}${competingFestivals.length > 3 ? "…" : ""}`
+          : "Geen noemenswaardige RA-concurrenten op deze dag.",
     });
   }
 
@@ -667,10 +736,11 @@ export async function loadEventInsightsFresh(options?: {
     );
 
     function overlapsDay(dayIso: string, start: Date, end: Date | null): boolean {
-      const t = new Date(`${dayIso}T12:00:00`).getTime();
-      const s = start.getTime();
-      const e = end ? end.getTime() : s + 86400000;
-      return t >= s && t <= e;
+      const day = dayIso.slice(0, 10);
+      const startDay = amsterdamDay(start);
+      if (!end) return day === startDay;
+      const endDay = amsterdamDay(end);
+      return day >= startDay && day <= endDay;
     }
 
     const insights: EventInsight[] = filtered.map((e) => {
@@ -829,11 +899,18 @@ export async function loadEventInsightsFresh(options?: {
 
       const competing = festivals
         .filter((f) => overlapsDay(day, f.startsAt, f.endsAt))
-        .map((f): CompetingEvent => {
-          const attendingMatch = /^attending:(\d+)/.exec(f.impactNote ?? "");
-          const attending = attendingMatch
-            ? Number(attendingMatch[1])
-            : null;
+        .map((f): CompetingEvent | null => {
+          const meta = parseRaImpactNote(f.impactNote);
+          const genres = meta.genres;
+          // RA parties: drop clear non-electronic once genres are known.
+          if (
+            f.source === "resident_advisor" &&
+            f.type !== "festival" &&
+            f.type !== "holiday" &&
+            !isElectronicUmbrella(genres)
+          ) {
+            return null;
+          }
           const venue =
             f.region &&
             f.region !== "Amsterdam" &&
@@ -843,7 +920,17 @@ export async function loadEventInsightsFresh(options?: {
           return {
             name: f.name,
             venue,
-            attending,
+            attending: meta.attending,
+            size: competeSizeFromAttending(
+              meta.attending,
+              f.type === "festival"
+                ? "festival"
+                : f.type === "holiday"
+                  ? "holiday"
+                  : "party",
+            ),
+            genres,
+            genreLabel: genreLabel(genres),
             kind:
               f.type === "festival"
                 ? "festival"
@@ -853,6 +940,7 @@ export async function loadEventInsightsFresh(options?: {
             source: f.source,
           };
         })
+        .filter((c): c is CompetingEvent => c != null)
         .sort((a, b) => {
           const rank = (k: CompetingEvent["kind"]) =>
             k === "holiday" ? 0 : k === "festival" ? 1 : 2;
@@ -911,6 +999,7 @@ export async function loadEventInsightsFresh(options?: {
         emailCampaigns,
         referrers,
         competingFestivals: competing,
+        competitionLevel: summarizeCompetition(competing).level,
       };
 
       insight.headlines = buildHeadlines(insight);
@@ -967,7 +1056,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v3"],
+  ["event-insights-upcoming-v8"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -983,7 +1072,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v3"],
+  ["event-insights-past-v8"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],
@@ -1006,6 +1095,7 @@ export async function loadEventInsights(options?: {
 
   // Outside cache: recover empty DB / schedule list refresh
   await ensureWeeztixEvents();
+  await ensureRaCompetition();
 
   const [upcoming, past] = await Promise.all([
     loadUpcomingEventInsightsCached(limit, asOfDay),

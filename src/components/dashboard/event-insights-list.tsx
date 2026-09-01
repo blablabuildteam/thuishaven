@@ -32,6 +32,12 @@ import type {
   EventInsightHeadline,
   CompetingEvent,
 } from "@/lib/insights/event-insights";
+import {
+  competeSizeLabel,
+  competitionLevelLabel,
+  type CompeteSize,
+  type CompetitionLevel,
+} from "@/lib/integrations/ra/genres";
 import type { WeatherKind } from "@/lib/weather/classify";
 import type { DemographicBucket } from "@/lib/db/schema";
 
@@ -101,7 +107,11 @@ function HeadlineChip({ h }: { h: EventInsightHeadline }) {
         colors[h.tone],
       )}
     >
-      <Icon className="size-3.5 shrink-0 opacity-80" strokeWidth={1.75} />
+      {h.kind === "compete" && h.competeLevel ? (
+        <CompetitionLevelBars level={h.competeLevel} />
+      ) : (
+        <Icon className="size-3.5 shrink-0 opacity-80" strokeWidth={1.75} />
+      )}
       {h.text}
     </span>
   );
@@ -182,7 +192,6 @@ function WeatherIcon({
   kind: WeatherKind;
   size?: "sm" | "lg";
 }) {
-  const coldWet = isColdOrWet(kind);
   const box = size === "lg" ? "size-14" : "size-11";
   const img = size === "lg" ? "size-12" : "size-9";
   const label: Record<WeatherKind, string> = {
@@ -198,11 +207,9 @@ function WeatherIcon({
   return (
     <span
       className={cn(
-        "flex shrink-0 items-center justify-center border",
+        // GIFs have an opaque white backdrop — match container so no gray frame shows
+        "flex shrink-0 items-center justify-center border border-white bg-white",
         box,
-        coldWet
-          ? "border-info/50 bg-info/15"
-          : "border-border bg-bg-elevated",
       )}
       title={label[kind]}
       aria-label={label[kind]}
@@ -670,6 +677,7 @@ function EventDetail({ event }: { event: EventInsight }) {
               festivals={festivals}
               parties={parties}
               holidays={holidays}
+              level={event.competitionLevel}
             />
 
             <SectionDivider label="Marketing · organic" />
@@ -767,26 +775,35 @@ function CompetitionBlock({
   festivals,
   parties,
   holidays,
+  level,
 }: {
   festivals: CompetingEvent[];
   parties: CompetingEvent[];
   holidays: CompetingEvent[];
+  level: EventInsight["competitionLevel"];
 }) {
   const total = festivals.length + parties.length + holidays.length;
+  const resolved = level ?? "low";
+
   if (total === 0) {
     return (
-      <div className="border border-dashed border-border px-3 py-2.5 text-xs text-text-dim">
-        Geen RA-concurrenten op deze datum (of AMS-area nog niet gesyncet via
-        Bronnen → Resident Advisor).
+      <div className="space-y-2">
+        <CompetitionVerdict level="low" empty />
+        <div className="border border-dashed border-border px-3 py-2.5 text-xs text-text-dim">
+          Geen RA-concurrenten op deze datum (electronic umbrella · ≥200 op RA
+          voor parties).
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
+      <CompetitionVerdict level={resolved} />
       <p className="text-[10px] leading-relaxed text-text-dim">
-        Amsterdam via Resident Advisor — festivals + house/techno parties (≥200
-        attending). Excl. Thuishaven.
+        Zelfde Amsterdam-dag via Resident Advisor. Streepjes per event =
+        relatieve omvang; oordeel hierboven weegt festivals zwaarder dan
+        clubnights. Geen echte headcount.
       </p>
       {festivals.length > 0 && (
         <CompeteList
@@ -805,6 +822,29 @@ function CompetitionBlock({
       {holidays.length > 0 && (
         <CompeteList title="Feestdagen" events={holidays} />
       )}
+    </div>
+  );
+}
+
+function CompetitionVerdict({
+  level,
+  empty,
+}: {
+  level: NonNullable<EventInsight["competitionLevel"]> | "low";
+  empty?: boolean;
+}) {
+  const label = competitionLevelLabel(level);
+  return (
+    <div className="flex items-center gap-2.5">
+      <CompetitionLevelBars level={level} />
+      <div className="min-w-0">
+        <p className="text-xs font-medium capitalize text-text">{label}</p>
+        <p className="text-[10px] text-text-dim">
+          {empty
+            ? "Geen noemenswaardige concurrenten gevonden"
+            : "Conclusie op basis van aantal + omvang dezelfde dag"}
+        </p>
+      </div>
     </div>
   );
 }
@@ -835,16 +875,73 @@ function CompeteList({
               {e.venue && (
                 <span className="text-text-dim"> · {e.venue}</span>
               )}
+              {e.genreLabel && (
+                <span className="text-text-dim"> · {e.genreLabel}</span>
+              )}
             </span>
-            {e.attending != null && e.attending > 0 && (
-              <span className="shrink-0 font-mono text-text-muted">
-                {formatNumber(e.attending)}
-              </span>
-            )}
+            {e.size && <CompeteSizeBars size={e.size} />}
           </li>
         ))}
       </ul>
     </div>
+  );
+}
+
+/** Three rising bars — filled count encodes small / medium / large. */
+function CompeteSizeBars({ size }: { size: CompeteSize }) {
+  const filled = size === "large" ? 3 : size === "medium" ? 2 : 1;
+  const label = competeSizeLabel(size);
+  const heights = ["h-1.5", "h-2.5", "h-3.5"] as const;
+  return (
+    <span
+      className="inline-flex h-3.5 shrink-0 items-end gap-0.5"
+      title={`Relatieve omvang: ${label} (RA-interesse, geen echte bezoekers)`}
+      aria-label={`Omvang ${label}`}
+      role="img"
+    >
+      {heights.map((h, i) => (
+        <span
+          key={h}
+          className={cn(
+            "w-1 rounded-[1px]",
+            h,
+            i < filled ? "bg-text-muted" : "bg-border",
+          )}
+        />
+      ))}
+    </span>
+  );
+}
+
+/** Overall competition pressure — same bar language, stronger fill for high. */
+function CompetitionLevelBars({ level }: { level: CompetitionLevel }) {
+  const filled = level === "high" ? 3 : level === "medium" ? 2 : 1;
+  const label = competitionLevelLabel(level);
+  const heights = ["h-2", "h-3", "h-4"] as const;
+  const fill =
+    level === "high"
+      ? "bg-warn"
+      : level === "medium"
+        ? "bg-text-muted"
+        : "bg-success/70";
+  return (
+    <span
+      className="inline-flex h-4 shrink-0 items-end gap-0.5"
+      title={label}
+      aria-label={label}
+      role="img"
+    >
+      {heights.map((h, i) => (
+        <span
+          key={h}
+          className={cn(
+            "w-1.5 rounded-[1px]",
+            h,
+            i < filled ? fill : "bg-border",
+          )}
+        />
+      ))}
+    </span>
   );
 }
 
@@ -968,7 +1065,7 @@ export function EventInsightsList({
 }) {
   const [showAllUpcoming, setShowAllUpcoming] = useState(false);
   const [showAllPast, setShowAllPast] = useState(false);
-  const visibleUpcoming = showAllUpcoming ? upcoming : upcoming.slice(0, 3);
+  const visibleUpcoming = showAllUpcoming ? upcoming : upcoming.slice(0, 8);
   const visiblePast = showAllPast ? past : past.slice(0, 8);
   const upcomingMonths = groupByMonth(visibleUpcoming);
   const pastMonths = groupByMonth(visiblePast);
@@ -994,13 +1091,13 @@ export function EventInsightsList({
               </div>
             ))}
           </div>
-          {upcoming.length > 3 && !showAllUpcoming && (
+          {upcoming.length > 8 && !showAllUpcoming && (
             <button
               type="button"
               onClick={() => setShowAllUpcoming(true)}
               className="mt-3 text-sm underline underline-offset-2 hover:text-text"
             >
-              Toon {upcoming.length - 3} meer komende events
+              Toon {upcoming.length - 8} meer komende events
             </button>
           )}
         </div>
