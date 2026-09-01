@@ -41,23 +41,29 @@ export async function fetchOpenMeteoRange(options: {
   const lon = options.longitude ?? AMS.longitude;
 
   async function once(startDate: string, endDate: string): Promise<WeatherDayRow[]> {
-    const params = new URLSearchParams({
-      latitude: String(lat),
-      longitude: String(lon),
-      start_date: startDate,
-      end_date: endDate,
-      daily:
-        "temperature_2m_min,temperature_2m_max,precipitation_sum,wind_speed_10m_max,weather_code",
-      timezone: "Europe/Amsterdam",
-      wind_speed_unit: "ms",
-    });
+    const today = new Date().toISOString().slice(0, 10);
+    // Archive lags ~2–5 dagen; recent + toekomst → forecast API.
+    const archiveSafeEnd = shiftDay(today, -5);
+    const useForecast = endDate > archiveSafeEnd;
 
-    const res = await fetch(
-      `https://archive-api.open-meteo.com/v1/archive?${params}`,
-      { cache: "no-store" },
-    );
-    if (res.ok) {
-      return parseDaily((await res.json()) as OpenMeteoDaily);
+    if (!useForecast) {
+      const params = new URLSearchParams({
+        latitude: String(lat),
+        longitude: String(lon),
+        start_date: startDate,
+        end_date: endDate,
+        daily:
+          "temperature_2m_min,temperature_2m_max,precipitation_sum,wind_speed_10m_max,weather_code",
+        timezone: "Europe/Amsterdam",
+        wind_speed_unit: "ms",
+      });
+      const res = await fetch(
+        `https://archive-api.open-meteo.com/v1/archive?${params}`,
+        { cache: "no-store" },
+      );
+      if (res.ok) {
+        return parseDaily((await res.json()) as OpenMeteoDaily);
+      }
     }
 
     const forecast = new URLSearchParams({
@@ -75,9 +81,33 @@ export async function fetchOpenMeteoRange(options: {
       { cache: "no-store" },
     );
     if (!fres.ok) {
-      throw new Error(`Open-Meteo HTTP ${res.status}/${fres.status}`);
+      // Laatste poging: archive voor het verleden-deel
+      const params = new URLSearchParams({
+        latitude: String(lat),
+        longitude: String(lon),
+        start_date: startDate,
+        end_date: endDate < archiveSafeEnd ? endDate : archiveSafeEnd,
+        daily:
+          "temperature_2m_min,temperature_2m_max,precipitation_sum,wind_speed_10m_max,weather_code",
+        timezone: "Europe/Amsterdam",
+        wind_speed_unit: "ms",
+      });
+      const res = await fetch(
+        `https://archive-api.open-meteo.com/v1/archive?${params}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) {
+        throw new Error(`Open-Meteo HTTP ${fres.status}/${res.status}`);
+      }
+      return parseDaily((await res.json()) as OpenMeteoDaily);
     }
     return parseDaily((await fres.json()) as OpenMeteoDaily);
+  }
+
+  function shiftDay(iso: string, delta: number): string {
+    const d = new Date(`${iso}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + delta);
+    return d.toISOString().slice(0, 10);
   }
 
   // Grote ranges soms 4xx/5xx — split in ~90-daagse chunks

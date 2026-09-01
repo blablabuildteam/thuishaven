@@ -501,38 +501,60 @@ async function verifyYouTube(): Promise<VerifyResult> {
   }
 }
 
+async function fetchTikTokUser(token: string) {
+  const qs = new URLSearchParams({
+    fields:
+      "open_id,display_name,username,follower_count,video_count,likes_count",
+  });
+  const res = await fetch(`https://open.tiktokapis.com/v2/user/info/?${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  const data = (await res.json()) as {
+    data?: {
+      user?: {
+        display_name?: string;
+        username?: string;
+        follower_count?: number;
+        video_count?: number;
+        likes_count?: number;
+      };
+    };
+    error?: { code?: string; message?: string };
+  };
+  return { res, data };
+}
+
 async function verifyTikTok(): Promise<VerifyResult> {
   const name = "TikTok";
-  const token = process.env.TIKTOK_ACCESS_TOKEN?.trim();
-  if (!token) {
-    return base("tiktok", name, "missing", "TIKTOK_ACCESS_TOKEN ontbreekt");
+  const { ensureTikTokAccessToken } = await import(
+    "@/lib/integrations/tiktok/tokens"
+  );
+
+  const ensured = await ensureTikTokAccessToken();
+  if (!ensured.ok) {
+    const missingEnv =
+      !process.env.TIKTOK_ACCESS_TOKEN?.trim() &&
+      !process.env.TIKTOK_REFRESH_TOKEN?.trim();
+    return base(
+      "tiktok",
+      name,
+      missingEnv ? "missing" : "error",
+      ensured.error,
+    );
   }
 
   try {
-    const qs = new URLSearchParams({
-      fields:
-        "open_id,display_name,username,follower_count,video_count,likes_count",
-    });
-    const res = await fetch(
-      `https://open.tiktokapis.com/v2/user/info/?${qs}`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
-      },
-    );
-
-    const data = (await res.json()) as {
-      data?: {
-        user?: {
-          display_name?: string;
-          username?: string;
-          follower_count?: number;
-          video_count?: number;
-          likes_count?: number;
-        };
-      };
-      error?: { code?: string; message?: string };
-    };
+    let { res, data } = await fetchTikTokUser(ensured.token);
+    const expired =
+      data.error?.code === "access_token_invalid" || res.status === 401;
+    if (expired) {
+      const retried = await ensureTikTokAccessToken({ force: true });
+      if (!retried.ok) {
+        return base("tiktok", name, "error", retried.error);
+      }
+      ({ res, data } = await fetchTikTokUser(retried.token));
+    }
 
     const errCode = data.error?.code;
     if (!res.ok || (errCode && errCode !== "ok")) {
@@ -573,46 +595,50 @@ async function verifyTikTok(): Promise<VerifyResult> {
 
 async function verifyInstagram(): Promise<VerifyResult> {
   const name = "Instagram (Meta)";
-  const token = process.env.META_ACCESS_TOKEN?.trim();
   const igId = process.env.META_IG_BUSINESS_ID?.trim();
-  const version = process.env.META_GRAPH_API_VERSION?.trim() || "v21.0";
+  const { ensureMetaAccessToken, explainMetaError } = await import(
+    "@/lib/integrations/meta/tokens"
+  );
 
-  if (!token) {
+  if (!process.env.META_ACCESS_TOKEN?.trim()) {
     return base("instagram", name, "missing", "META_ACCESS_TOKEN ontbreekt");
   }
   if (!igId) {
     return base("instagram", name, "missing", "META_IG_BUSINESS_ID ontbreekt");
   }
 
+  const ensured = await ensureMetaAccessToken();
+  if (!ensured.ok) {
+    return base("instagram", name, "error", ensured.error);
+  }
+
   try {
+    const version = process.env.META_GRAPH_API_VERSION?.trim() || "v21.0";
     const qs = new URLSearchParams({
       fields: "id,username,name,followers_count,media_count",
-      access_token: token,
+      access_token: ensured.token,
     });
     const res = await fetch(
       `https://graph.facebook.com/${version}/${encodeURIComponent(igId)}?${qs}`,
       { cache: "no-store" },
     );
-
-    if (!res.ok) {
-      const text = await res.text();
-      return base(
-        "instagram",
-        name,
-        "error",
-        `Meta HTTP ${res.status}: ${text.slice(0, 180)}`,
-      );
-    }
-
     const data = (await res.json()) as {
       username?: string;
       name?: string;
       followers_count?: number;
       media_count?: number;
-      error?: { message?: string };
+      error?: { message?: string; code?: number };
     };
-    if (data.error?.message) {
-      return base("instagram", name, "error", data.error.message);
+    if (!res.ok || data.error?.message) {
+      return base(
+        "instagram",
+        name,
+        "error",
+        explainMetaError(
+          data.error?.message || `Meta HTTP ${res.status}`,
+          data.error?.code,
+        ).slice(0, 220),
+      );
     }
 
     const handle = data.username ? `@${data.username}` : data.name ?? "Instagram";

@@ -1,9 +1,10 @@
 import { snapshotToPromptContext, type InsightsSnapshot } from "./data";
 
 const SYSTEM = `Je bent de data-assistent voor Thuishaven Tools.
-Je helpt het team met vragen over e-mailcampagnes (Brevo), edities/tickets (Weeztix) en wat er in de snapshot staat.
+Je helpt het team met vragen over e-mailcampagnes (Brevo), edities/tickets (Weeztix), social creatives (Instagram + visual tags) en wat er in de snapshot staat.
 Antwoord altijd in het Nederlands, bondig, met cijfers uit de context.
 Geen marketingjargon. Geen verzinnen van data die niet in de context staat.
+Ticketlift rond posts is correlatie (±48u), geen bewezen causaliteit — zeg dat erbij.
 Als iets niet in de data zit, zeg dat eerlijk.`;
 
 export async function askInsightsLlm(input: {

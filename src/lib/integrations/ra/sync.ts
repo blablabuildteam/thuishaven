@@ -8,6 +8,7 @@ import {
   listRaVenueEvents,
   type RaEvent,
 } from "@/lib/integrations/ra/client";
+import { syncRaAmsterdamAreaEvents } from "@/lib/integrations/ra/area-sync";
 
 function amsterdamDay(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -55,6 +56,8 @@ export async function syncResidentAdvisorReadOnly(): Promise<{
   upserted: number;
   linked: number;
   mismatches: number;
+  areaFetched?: number;
+  areaUpserted?: number;
   error?: string;
 }> {
   if (!hasDatabase()) {
@@ -191,12 +194,27 @@ export async function syncResidentAdvisorReadOnly(): Promise<{
   }));
   const mismatches = alertCounts.ra;
 
+  const area = await syncRaAmsterdamAreaEvents().catch((e) => ({
+    ok: false as const,
+    fetched: 0,
+    upserted: 0,
+    error: e instanceof Error ? e.message : "area sync failed",
+  }));
+
   await logIntegration({
     source: "resident_advisor",
     level: "info",
     event: "sync.ok",
-    message: `RA listings: ${upserted} events, ${linked} gekoppeld, ${mismatches} Weeztix-uitverkocht/RA-open`,
-    detail: { fetched: events.length, upserted, linked, mismatches },
+    message: `RA listings: ${upserted} events, ${linked} gekoppeld, ${mismatches} Weeztix-uitverkocht/RA-open · AMS ${area.upserted} concurrenten`,
+    detail: {
+      fetched: events.length,
+      upserted,
+      linked,
+      mismatches,
+      areaFetched: area.fetched,
+      areaUpserted: area.upserted,
+      areaError: area.error,
+    },
     throttleMs: 0,
   });
 
@@ -207,5 +225,7 @@ export async function syncResidentAdvisorReadOnly(): Promise<{
     upserted,
     linked,
     mismatches,
+    areaFetched: area.fetched,
+    areaUpserted: area.upserted,
   };
 }

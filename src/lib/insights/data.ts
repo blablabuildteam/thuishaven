@@ -97,6 +97,25 @@ export type InsightsSnapshot = {
     topArtists: Array<{ artist: string; avgSold: number; editions: number }>;
     campaignsLinked: number;
   };
+  creatives?: {
+    posts: number;
+    analyzed: number;
+    top: Array<{
+      title: string;
+      channel: string;
+      offer: string | null;
+      artists: string[];
+      hasTextOverlay: boolean | null;
+      ticketsAroundPublish: number | null;
+      engagement: number;
+      publishedAt: string | null;
+    }>;
+    aggregates: Array<{
+      label: string;
+      n: number;
+      avgLift: number;
+    }>;
+  };
   notes: string[];
 };
 
@@ -357,6 +376,38 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
     notes.push("Editie-analyse kon niet geladen worden.");
   }
 
+  let creativesBlock: InsightsSnapshot["creatives"];
+  try {
+    const { loadMarketingPostsBundle } = await import(
+      "@/lib/marketing/posts"
+    );
+    const creatives = await loadMarketingPostsBundle({
+      limit: 16,
+      withLift: true,
+    });
+    creativesBlock = {
+      posts: creatives.posts.length,
+      analyzed: creatives.analyzedCount,
+      top: creatives.posts.slice(0, 10).map((p) => ({
+        title: p.title || "(zonder caption)",
+        channel: p.channel,
+        offer: p.visualFeatures?.offer ?? null,
+        artists: p.visualFeatures?.artists ?? [],
+        hasTextOverlay: p.visualFeatures?.hasTextOverlay ?? null,
+        ticketsAroundPublish: p.ticketLift?.sold ?? null,
+        engagement: p.engagement,
+        publishedAt: p.publishedAt,
+      })),
+      aggregates: creatives.aggregates.slice(0, 6).map((a) => ({
+        label: a.label,
+        n: a.measured,
+        avgLift: Math.round(a.avgLift),
+      })),
+    };
+  } catch {
+    notes.push("Creatives/vision kon niet geladen worden.");
+  }
+
   return {
     generatedAt: new Date().toISOString(),
     brevo: {
@@ -379,6 +430,7 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
     ticketswap: tsBlock,
     weather: weatherBlock,
     editions: editionsBlock,
+    creatives: creativesBlock,
     notes,
   };
 }
@@ -488,6 +540,27 @@ export function snapshotToPromptContext(snap: InsightsSnapshot): string {
       lines.push(
         `- ${a.artist}: avg ${a.avgSold} over ${a.editions} edities`,
       );
+    }
+  }
+
+  if (snap.creatives) {
+    lines.push(
+      "",
+      "=== Creatives / social posts (visual recognition) ===",
+      `Posts: ${snap.creatives.posts} · geanalyseerd: ${snap.creatives.analyzed}`,
+      "ticketsAroundPublish = Weeztix-orders in ±1 kalenderdag rond publicatie (±48u met dagdata). Geen harde causaliteit.",
+      "Recente posts:",
+    );
+    for (const p of snap.creatives.top) {
+      lines.push(
+        `- ${p.title} | ${p.channel} | offer=${p.offer ?? "n/a"} | artists=${p.artists.join(", ") || "n/a"} | overlay=${p.hasTextOverlay == null ? "n/a" : p.hasTextOverlay} | tickets±48u=${p.ticketsAroundPublish ?? "geen curve"} | eng=${p.engagement} | published=${p.publishedAt?.slice(0, 10) ?? "n/a"}`,
+      );
+    }
+    if (snap.creatives.aggregates.length) {
+      lines.push("Aggregates (gem. ticketlift, n≥2):");
+      for (const a of snap.creatives.aggregates) {
+        lines.push(`- ${a.label}: avgLift=${a.avgLift} n=${a.n}`);
+      }
     }
   }
 

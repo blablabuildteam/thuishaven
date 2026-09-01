@@ -2,6 +2,13 @@ import { assertExternalReadOnly } from "@/lib/integrations/read-only";
 
 const GRAPHQL_URL = "https://ra.co/graphql";
 const DEFAULT_VENUE_ID = "109027";
+/** RA area id for Amsterdam (https://ra.co/events/nl/amsterdam). */
+const DEFAULT_AREA_ID = 29;
+
+function areaId(): number {
+  const raw = Number(process.env.RA_AREA_ID?.trim());
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_AREA_ID;
+}
 
 export type RaVenue = {
   id: string;
@@ -146,5 +153,94 @@ export async function listRaVenueEvents(options?: {
     ticketsAvailable: Boolean(ev.ticketing?.isAnyTicketTierAvailable),
     contentUrl: ev.contentUrl,
   }));
+  return { ok: true, events };
+}
+
+export type RaAreaEvent = {
+  id: string;
+  title: string;
+  date: string | null;
+  startTime: string | null;
+  attending: number;
+  isFestival: boolean;
+  contentUrl: string | null;
+  venueId: string | null;
+  venueName: string | null;
+};
+
+/**
+ * Read-only: Amsterdam (or RA_AREA_ID) listings for a date window.
+ * Same public GraphQL we already use for the Thuishaven venue.
+ */
+export async function listRaAreaEvents(options: {
+  fromDay: string;
+  toDay: string;
+  pageSize?: number;
+  page?: number;
+}): Promise<
+  { ok: true; events: RaAreaEvent[] } | { ok: false; error: string; status: number }
+> {
+  const pageSize = options.pageSize ?? 50;
+  const page = options.page ?? 1;
+  const res = await raGraphql<{
+    eventListings?: {
+      data?: Array<{
+        listingDate?: string | null;
+        event?: {
+          id?: string;
+          title?: string;
+          date?: string | null;
+          startTime?: string | null;
+          attending?: number | null;
+          contentUrl?: string | null;
+          isFestival?: boolean | null;
+          venue?: { id?: string; name?: string } | null;
+        } | null;
+      } | null>;
+    } | null;
+  }>(
+    `query AreaEventListings($filters: FilterInputDtoInput, $pageSize: Int, $page: Int) {
+      eventListings(filters: $filters, pageSize: $pageSize, page: $page) {
+        data {
+          listingDate
+          event {
+            id
+            title
+            date
+            startTime
+            attending
+            contentUrl
+            isFestival
+            venue { id name }
+          }
+        }
+      }
+    }`,
+    {
+      filters: {
+        areas: { eq: areaId() },
+        listingDate: { gte: options.fromDay, lte: options.toDay },
+      },
+      pageSize,
+      page,
+    },
+  );
+  if (!res.ok) return res;
+  const events: RaAreaEvent[] = [];
+  for (const row of res.data.eventListings?.data ?? []) {
+    const ev = row?.event;
+    if (!ev?.id || !ev.title) continue;
+    events.push({
+      id: ev.id,
+      title: ev.title,
+      date: ev.date ?? row?.listingDate ?? null,
+      startTime: ev.startTime ?? null,
+      attending: ev.attending ?? 0,
+      isFestival: Boolean(ev.isFestival),
+      contentUrl: ev.contentUrl ?? null,
+      venueId: ev.venue?.id ?? null,
+      venueName: ev.venue?.name ?? null,
+    });
+  }
   return { ok: true, events };
 }

@@ -199,21 +199,17 @@ export const INTEGRATIONS: IntegrationDef[] = [
     name: "Instagram (Meta)",
     tool: "dashboard",
     description:
-      "Reach, engagement, posts en media-insights via Instagram Graph API (Business/Creator).",
+      "Reach, engagement, posts en media → marketing_posts (sync handmatig of cron). Optioneel Blob voor duurzame beelden.",
     envKeys: ["META_ACCESS_TOKEN", "META_IG_BUSINESS_ID"],
     optionalEnvKeys: [
       "META_APP_ID",
       "META_APP_SECRET",
       "META_GRAPH_API_VERSION",
+      "BLOB_READ_WRITE_TOKEN",
     ],
-    askFromClient: [
-      "Meta Business Manager-toegang voor Thuishaven",
-      "Facebook Page gekoppeld aan Instagram Business-account",
-      "System user token met instagram_basic + instagram_manage_insights",
-      "App Review later voor pages_read_engagement (nu overslaan — dev/test werkt zonder)",
-    ],
+    askFromClient: [],
     verifyHint:
-      "GET /{ig-user-id}?fields=username,followers_count · v1 zonder pages_read_engagement",
+      "GET /{ig-user-id} · system-user token (never expire) + META_APP_ID/SECRET",
     docsUrl:
       "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/get-started",
     priority: "high",
@@ -232,7 +228,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     ],
     askFromClient: [],
     verifyHint:
-      "GET /v2/user/info/?fields=username,follower_count,video_count",
+      "GET /v2/user/info · access token 24u, refresh via TIKTOK_REFRESH_TOKEN",
     docsUrl: "https://developers.tiktok.com/doc/tiktok-api-v2-get-user-info",
     priority: "medium",
   },

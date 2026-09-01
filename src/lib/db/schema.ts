@@ -477,27 +477,63 @@ export const marketingChannelEnum = pgEnum("marketing_channel", [
   "other",
 ]);
 
-export const marketingPosts = pgTable("marketing_posts", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  editionId: uuid("edition_id").references(() => editions.id),
-  channel: marketingChannelEnum("channel").notNull(),
-  externalId: text("external_id"),
-  title: text("title"),
-  publishedAt: timestamp("published_at", { withTimezone: true }),
-  reach: integer("reach").default(0),
-  impressions: integer("impressions").default(0),
-  engagement: integer("engagement").default(0),
-  clicks: integer("clicks").default(0),
-  mediaUrl: text("media_url"),
-  thumbnailUrl: text("thumbnail_url"),
-  visualFeatures: jsonb("visual_features").$type<{
-    dominantColors?: string[];
-    hasTextOverlay?: boolean;
-    format?: string;
-    composition?: string;
-  }>(),
-  syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export type MarketingVisualFeatures = {
+  dominantColors?: string[];
+  hasTextOverlay?: boolean;
+  format?: string;
+  composition?: string | null;
+  /** Gemini / vision fields (fase D) */
+  subjects?: string[];
+  textInImage?: string | null;
+  artists?: string[];
+  offer?:
+    | "lineup"
+    | "early_bird"
+    | "sold_out"
+    | "aftermovie"
+    | "recap"
+    | "door"
+    | "other";
+  mood?: string | null;
+  palette?: string[];
+  editionGuess?: string | null;
+};
+
+export const marketingPosts = pgTable(
+  "marketing_posts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    editionId: uuid("edition_id").references(() => editions.id),
+    channel: marketingChannelEnum("channel").notNull(),
+    externalId: text("external_id"),
+    title: text("title"),
+    caption: text("caption"),
+    permalink: text("permalink"),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    reach: integer("reach").default(0),
+    impressions: integer("impressions").default(0),
+    engagement: integer("engagement").default(0),
+    clicks: integer("clicks").default(0),
+    likeCount: integer("like_count").default(0),
+    commentCount: integer("comment_count").default(0),
+    shareCount: integer("share_count").default(0),
+    mediaUrl: text("media_url"),
+    thumbnailUrl: text("thumbnail_url"),
+    /** Duurzame kopie (Vercel Blob); Instagram CDN verloopt. */
+    storedMediaUrl: text("stored_media_url"),
+    /** Speelbare video-URL (IG video/reel); YouTube/TikTok gebruiken embed via externalId. */
+    videoUrl: text("video_url"),
+    visualFeatures: jsonb("visual_features").$type<MarketingVisualFeatures>(),
+    analyzedAt: timestamp("analyzed_at", { withTimezone: true }),
+    syncedAt: timestamp("synced_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("marketing_posts_channel_external").on(t.channel, t.externalId),
+    index("marketing_posts_published_at").on(t.publishedAt),
+  ],
+);
 
 export const emailCampaignMetrics = pgTable("email_campaign_metrics", {
   id: uuid("id").defaultRandom().primaryKey(),

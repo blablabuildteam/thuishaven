@@ -291,6 +291,148 @@ export function IntegrationsHub() {
     });
   }
 
+  function runInstagramSync() {
+    startTransition(async () => {
+      setError(null);
+      try {
+        const res = await fetch("/api/integrations/instagram/sync", {
+          method: "POST",
+        });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          fetched?: number;
+          upserted?: number;
+          blobStored?: number;
+          insightsOk?: number;
+          analyzed?: number;
+        };
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error ?? "Instagram sync mislukt");
+        }
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === "instagram"
+              ? {
+                  ...row,
+                  status: "verified",
+                  message: `${data.upserted ?? 0}/${data.fetched ?? 0} posts · ${data.blobStored ?? 0} blob · ${data.insightsOk ?? 0} insights · ${data.analyzed ?? 0} vision`,
+                }
+              : row,
+          ),
+        );
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Instagram sync mislukt");
+      }
+    });
+  }
+
+  function runInstagramAnalyze() {
+    startTransition(async () => {
+      setError(null);
+      try {
+        const res = await fetch("/api/integrations/instagram/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ limit: 8 }),
+        });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          attempted?: number;
+          analyzed?: number;
+        };
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error ?? "Vision-analyse mislukt");
+        }
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === "instagram"
+              ? {
+                  ...row,
+                  status: "verified",
+                  message: `Vision: ${data.analyzed ?? 0}/${data.attempted ?? 0} posts geanalyseerd`,
+                }
+              : row,
+          ),
+        );
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Vision-analyse mislukt");
+      }
+    });
+  }
+
+  function runYouTubeSync() {
+    startTransition(async () => {
+      setError(null);
+      try {
+        const res = await fetch("/api/integrations/youtube/sync", {
+          method: "POST",
+        });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          fetched?: number;
+          upserted?: number;
+          blobStored?: number;
+          analyzed?: number;
+          channelTitle?: string;
+        };
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error ?? "YouTube sync mislukt");
+        }
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === "youtube"
+              ? {
+                  ...row,
+                  status: "verified",
+                  message: `${data.upserted ?? 0}/${data.fetched ?? 0} video's · ${data.analyzed ?? 0} vision${data.channelTitle ? ` · ${data.channelTitle}` : ""}`,
+                }
+              : row,
+          ),
+        );
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "YouTube sync mislukt");
+      }
+    });
+  }
+
+  function runTikTokSync() {
+    startTransition(async () => {
+      setError(null);
+      try {
+        const res = await fetch("/api/integrations/tiktok/sync", {
+          method: "POST",
+        });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          fetched?: number;
+          upserted?: number;
+          blobStored?: number;
+          analyzed?: number;
+        };
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error ?? "TikTok sync mislukt");
+        }
+        setRows((prev) =>
+          prev.map((row) =>
+            row.id === "tiktok"
+              ? {
+                  ...row,
+                  status: "verified",
+                  message: `${data.upserted ?? 0}/${data.fetched ?? 0} video's · ${data.blobStored ?? 0} blob · ${data.analyzed ?? 0} vision`,
+                }
+              : row,
+          ),
+        );
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "TikTok sync mislukt");
+      }
+    });
+  }
+
   const grouped = useMemo(() => {
     const byTool = {
       dashboard: rows
@@ -400,6 +542,10 @@ export function IntegrationsHub() {
                     onWeeztixSync={runWeeztixSync}
                     onRaSync={runRaSync}
                     onTicketswapSync={runTicketswapSync}
+                    onInstagramSync={runInstagramSync}
+                    onInstagramAnalyze={runInstagramAnalyze}
+                    onYouTubeSync={runYouTubeSync}
+                    onTikTokSync={runTikTokSync}
                     onAlertTest={runAlertTest}
                   />
                 ))}
@@ -410,9 +556,9 @@ export function IntegrationsHub() {
       </div>
 
       <p className="mt-8 text-sm text-text-muted">
-        Dashboard-bronnen voeden Insights.{" "}
-        <Link href="/dashboard/insights" className="underline hover:text-text">
-          Naar Insights →
+        Dashboard-bronnen voeden Dashboards.{" "}
+        <Link href="/dashboard/dashboards" className="underline hover:text-text">
+          Naar Dashboards →
         </Link>
         {" · "}
         <Link href="/outreach" className="underline hover:text-text">
@@ -431,6 +577,10 @@ function IntegrationCard({
   onWeeztixSync,
   onRaSync,
   onTicketswapSync,
+  onInstagramSync,
+  onInstagramAnalyze,
+  onYouTubeSync,
+  onTikTokSync,
   onAlertTest,
 }: {
   row: StatusRow;
@@ -440,6 +590,10 @@ function IntegrationCard({
   onWeeztixSync: () => void;
   onRaSync: () => void;
   onTicketswapSync: () => void;
+  onInstagramSync: () => void;
+  onInstagramAnalyze: () => void;
+  onYouTubeSync: () => void;
+  onTikTokSync: () => void;
   onAlertTest: () => void;
 }) {
   const isOk = row.status === "verified";
@@ -536,6 +690,46 @@ function IntegrationCard({
               className="border border-border px-3 py-1.5 text-sm hover:border-text disabled:opacity-50"
             >
               Sync listings
+            </button>
+          )}
+          {row.id === "instagram" && (
+            <>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={onInstagramSync}
+                className="border border-border px-3 py-1.5 text-sm hover:border-text disabled:opacity-50"
+              >
+                Sync posts
+              </button>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={onInstagramAnalyze}
+                className="border border-border px-3 py-1.5 text-sm hover:border-text disabled:opacity-50"
+              >
+                Analyseer
+              </button>
+            </>
+          )}
+          {row.id === "youtube" && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={onYouTubeSync}
+              className="border border-border px-3 py-1.5 text-sm hover:border-text disabled:opacity-50"
+            >
+              Sync videos
+            </button>
+          )}
+          {row.id === "tiktok" && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={onTikTokSync}
+              className="border border-border px-3 py-1.5 text-sm hover:border-text disabled:opacity-50"
+            >
+              Sync videos
             </button>
           )}
           {row.id === "alert_notify" && (

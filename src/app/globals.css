@@ -190,6 +190,39 @@ html.dark body::before {
   animation: pulse-soft 2s ease-in-out infinite;
 }
 
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton-bone {
+  background-image: linear-gradient(
+    90deg,
+    var(--bg-elevated) 0%,
+    var(--surface-hover) 42%,
+    var(--bg-elevated) 84%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.35s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-bone {
+    animation: pulse-soft 2s ease-in-out infinite;
+    background-image: none;
+    background-color: var(--bg-elevated);
+  }
+
+  .animate-fade-up,
+  .stagger > * {
+    animation: none;
+  }
+}
+
 .stagger > * {
   animation: fade-up 0.45s ease-out both;
 }
