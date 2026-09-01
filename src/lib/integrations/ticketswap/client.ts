@@ -289,7 +289,11 @@ export async function listTicketswapLocationEvents(): Promise<
 
   return {
     ok: false,
-    status: graphql.ok ? page.status : graphql.status,
+    status: !graphql.ok
+      ? graphql.status
+      : !page.ok
+        ? page.status
+        : scraped.status,
     error:
       graphql.ok
         ? page.ok
