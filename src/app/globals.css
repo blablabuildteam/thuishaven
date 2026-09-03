@@ -494,13 +494,10 @@ html.dark .wx-ideal {
   }
 }
 
-/* —— Public /beschikbaar — thuishaven.nl agenda sfeer —— */
+/* —— Public /beschikbaar — cream + sunburst, compact header, card grid —— */
 .th-public-agenda {
   --th-cream: #f1eee7;
   --th-cream-deep: #e4dfd4;
-  --th-blue: #79cae5;
-  --th-red: #d22624;
-  --th-open: #1a1a1a;
   background: var(--th-cream);
   color: #000;
   color-scheme: light;
@@ -514,7 +511,7 @@ html.dark .wx-ideal {
     repeating-conic-gradient(
       from 0deg at 50% -8%,
       transparent 0deg 6deg,
-      rgba(0, 0, 0, 0.035) 6deg 12deg
+      rgba(255, 242, 1, 0.07) 6deg 12deg
     ),
     radial-gradient(
       ellipse 90% 55% at 50% 0%,
@@ -522,7 +519,6 @@ html.dark .wx-ideal {
       var(--th-cream) 55%,
       var(--th-cream-deep) 100%
     );
-  opacity: 1;
 }
 
 .th-public-agenda-grain {
@@ -530,123 +526,73 @@ html.dark .wx-ideal {
   position: absolute;
   inset: 0;
   background-image: var(--grain);
-  opacity: 0.04;
+  opacity: 0.035;
   mix-blend-mode: multiply;
 }
 
-.th-agenda-banner {
-  background: #000;
-  color: #fff;
-  text-align: center;
-  padding: 0.85rem 1.25rem;
-  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.12);
-}
-
-.th-agenda-banner h1 {
-  margin: 0;
-  font-family: var(--font-display), "Arial Narrow", sans-serif;
-  font-weight: 700;
-  font-size: clamp(1.75rem, 5vw, 2.5rem);
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-}
-
-.th-agenda-month-title {
-  margin: 0;
-  font-family: var(--font-display), "Arial Narrow", sans-serif;
-  font-weight: 700;
-  font-size: clamp(1.6rem, 4vw, 2.1rem);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.th-public-agenda .th-public-cal h2 {
   color: #000;
+  font-size: clamp(1.5rem, 3.5vw, 2rem);
 }
 
-.th-agenda-month-title span {
-  background: var(--th-blue);
-  padding: 0.1em 0.35em 0.15em;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-}
-
-.th-agenda-row {
-  display: flex;
-  align-items: stretch;
-  gap: 0;
-  animation: fade-up 0.45s ease-out both;
-}
-
-.th-agenda-bar {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  min-width: 0;
+.th-public-agenda .th-public-cal article {
   background: #fff;
-  border: 1.5px solid #000;
-  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.12);
-  padding: 0.85rem 1rem;
-}
-
-.th-agenda-bar-title {
-  margin: 0;
-  font-family: var(--font-display), "Arial Narrow", sans-serif;
-  font-weight: 700;
-  font-size: clamp(0.95rem, 2.6vw, 1.15rem);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #000;
-  line-height: 1.2;
-}
-
-.th-agenda-badge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  min-width: 5.5rem;
-  padding: 0 0.85rem 0 1.1rem;
-  font-family: var(--font-display), "Arial Narrow", sans-serif;
-  font-weight: 700;
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #fff;
-  clip-path: polygon(12% 0, 100% 0, 100% 100%, 12% 100%, 0 50%);
-  margin-left: -2px;
-}
-
-.th-agenda-badge--blocked {
-  background: var(--th-red);
-}
-
-.th-agenda-badge--hold {
-  background: #c9a227;
+  border-color: #000;
+  border-width: 1.5px;
   color: #000;
 }
 
-.th-agenda-badge--open {
+.th-public-agenda .th-public-cal article .text-text {
+  color: #000;
+}
+
+.th-public-agenda .th-public-cal article .text-text-muted,
+.th-public-agenda .th-public-cal article .text-text-dim {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.th-public-agenda .th-public-cal article .text-accent {
+  color: #000;
+}
+
+.th-public-agenda .th-public-cal [class*="bg-accent-soft"],
+.th-public-agenda .th-public-cal [class*="border-accent"] {
+  background: #fff;
+  border-color: #000;
+}
+
+.th-public-agenda .th-public-cal [class*="bg-warn"] {
+  background: rgba(241, 196, 15, 0.2);
+  border-color: #c9a227;
+}
+
+.th-public-agenda .th-public-cal [class*="opacity-60"],
+.th-public-agenda .th-public-cal [class*="opacity-50"] {
+  background: #faf6f4;
+  opacity: 1;
+}
+
+.th-public-agenda .th-public-cal .bg-accent {
   background: #000;
-  color: #fff201;
+  color: #fff;
 }
 
-@media (max-width: 520px) {
-  .th-agenda-row {
-    flex-direction: column;
-    gap: 0;
-  }
-
-  .th-agenda-badge {
-    clip-path: none;
-    margin-left: 0;
-    margin-top: -1.5px;
-    min-height: 2.25rem;
-    border: 1.5px solid #000;
-    border-top: 0;
-  }
+.th-public-agenda .th-public-cal .bg-danger {
+  background: #d22624;
+  color: #fff;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .th-agenda-row {
-    animation: none;
-  }
+.th-public-agenda .th-public-cal .bg-warn {
+  background: #f1c40f;
+  color: #000;
 }
+
+.th-public-agenda ul.text-text-muted {
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.th-public-agenda ul .text-text {
+  color: #000;
+}
+
 
