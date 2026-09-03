@@ -23,9 +23,9 @@ import {
   ScanLine,
   Share2,
   Swords,
-  Megaphone,
   Euro,
   TrendingUp,
+  Clock,
   BadgeEuro,
   Heart,
   MessageCircle,
@@ -37,7 +37,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SocialChannelIcon } from "@/components/ui/social-channel-icon";
 import type {
   EventInsight,
-  EventInsightHeadline,
+  AnomalyInsight,
   EventInsightMail,
   EventInsightSocial,
   EventInsightSocialVariant,
@@ -109,85 +109,47 @@ function weatherIcon(kind: WeatherKind) {
   return CloudSun;
 }
 
-function HeadlineChip({ h }: { h: EventInsightHeadline }) {
+function InsightChip({ insight }: { insight: AnomalyInsight }) {
   const Icon =
-    h.kind === "tickets"
+    insight.dimension === "fill"
       ? Ticket
-      : h.kind === "scan"
-        ? ScanLine
-        : h.kind === "social"
-          ? Share2
-          : h.kind === "demo"
-            ? Users
-            : h.kind === "compete"
-              ? Swords
-              : h.kind === "referrer"
-                ? Megaphone
-                : Ticket;
+      : insight.dimension === "weather"
+        ? CloudRain
+        : insight.dimension === "competition"
+          ? Swords
+          : insight.dimension === "scan"
+            ? ScanLine
+            : insight.dimension === "social"
+              ? Share2
+              : insight.dimension === "pricing"
+                ? Euro
+                : insight.dimension === "soldout"
+                  ? TrendingUp
+                  : insight.dimension === "same_day"
+                    ? Clock
+                    : Ticket;
 
-  const colors: Record<EventInsightHeadline["tone"], string> = {
+  const colors: Record<AnomalyInsight["tone"], string> = {
     positive: "border-success/35 bg-success/10 text-success",
     neutral: "border-border bg-surface-hover text-text",
     caution: "border-warn/40 bg-warn/10 text-warn",
     danger: "border-danger/40 bg-danger/10 text-danger",
-    cold: "border-info/50 bg-info/15 text-text",
   };
 
   return (
     <span
-      title={h.hint}
+      title={insight.detail}
       className={cn(
-        "inline-flex items-center gap-1.5 border px-2.5 py-1 text-xs font-medium tracking-wide",
-        colors[h.tone],
+        "inline-flex max-w-full items-center gap-1.5 border px-2.5 py-1 text-xs font-medium tracking-wide",
+        colors[insight.tone],
       )}
     >
-      {h.kind === "mail" ? (
+      {insight.dimension === "email" ? (
         <SocialChannelIcon channel="mail" size={14} alt="" />
       ) : (
         <Icon className="size-3.5 shrink-0 opacity-80" strokeWidth={1.75} />
       )}
-      {h.text}
-    </span>
-  );
-}
-
-function WeatherChip({
-  weather,
-}: {
-  weather: NonNullable<EventInsight["weather"]>;
-}) {
-  const Icon = weatherIcon(weather.kind);
-  const coldWet = isColdOrWet(weather.kind);
-  const temp =
-    weather.tempMinC != null && weather.tempMaxC != null
-      ? `${Math.round(weather.tempMinC)}–${Math.round(weather.tempMaxC)}°`
-      : weather.tempMaxC != null
-        ? `${Math.round(weather.tempMaxC)}°`
-        : null;
-
-  return (
-    <span
-      title={`${weather.label}${temp ? ` · ${temp}` : ""} · ${
-        weather.tone === "positive"
-          ? "Gunstig voor outdoor"
-          : weather.tone === "caution"
-            ? "Ongunstig voor outdoor"
-            : "Neutraal"
-      }`}
-      className={cn(
-        "inline-flex items-center gap-1.5 border px-2.5 py-1 text-xs font-medium",
-        coldWet
-          ? "border-info/50 bg-info/15 text-text"
-          : weather.tone === "positive"
-            ? "border-success/35 bg-success/10 text-success"
-            : weather.tone === "caution"
-              ? "border-warn/40 bg-warn/10 text-warn"
-              : "border-border bg-surface-hover text-text",
-      )}
-    >
-      <Icon className="size-3.5 shrink-0" strokeWidth={1.75} />
-      <span>{weather.label}</span>
-      {temp && <span className="font-mono text-text-muted">{temp}</span>}
+      <span className="min-w-0">{insight.text}</span>
     </span>
   );
 }
@@ -828,12 +790,13 @@ function EventRow({ event }: { event: EventInsight }) {
               </span>
             )}
           </div>
-          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            {event.weather && <WeatherChip weather={event.weather} />}
-            {event.headlines.map((h, i) => (
-              <HeadlineChip key={i} h={h} />
-            ))}
-          </div>
+          {event.insights.length > 0 && (
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              {event.insights.map((insight, i) => (
+                <InsightChip key={`${insight.dimension}-${i}`} insight={insight} />
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-3">
           <CompactTicketMetrics

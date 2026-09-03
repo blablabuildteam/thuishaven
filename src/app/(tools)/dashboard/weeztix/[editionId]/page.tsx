@@ -9,6 +9,7 @@ import {
   ticketInventory,
   type DemographicBucket,
 } from "@/lib/db/schema";
+import { displayEditionName } from "@/lib/editions/lineup";
 import { normalizeWeeztixInventory } from "@/lib/integrations/weeztix/inventory";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils";
 
@@ -166,7 +167,7 @@ export default async function WeeztixEditionPage({
       </p>
       <SectionHeader
         eyebrow="Weeztix"
-        title={edition.name}
+        title={displayEditionName(edition.name)}
         description={edition.startsAt.toLocaleDateString("nl-NL", {
           weekday: "long",
           day: "numeric",

@@ -7,8 +7,6 @@ import {
   BarChart3,
   Bell,
   Home,
-  CloudSun,
-  LayoutDashboard,
   Plug,
   ScrollText,
   Send,
@@ -44,35 +42,23 @@ type NavSection = {
 
 /**
  * Dashboard tool nav — grouped by job:
- * inzichten → operationeel → social → systeem (dev).
+ * overzicht → marketing → systeem (dev).
  */
 const dashboardSections: NavSection[] = [
-  {
-    id: "insights",
-    label: "Inzichten",
-    items: [
-      {
-        href: "/dashboard/dashboards",
-        label: "Inzichten",
-        icon: LineChart,
-      },
-    ],
-  },
   {
     id: "ops",
     label: "Overzicht",
     items: [
-      { href: "/dashboard", label: "Events", icon: LayoutDashboard },
-      { href: "/dashboard/weer", label: "Weer", icon: CloudSun },
-      { href: "/dashboard/marketing", label: "Mailings", brand: "mail" },
+      { href: "/dashboard/dashboards", label: "Inzichten", icon: LineChart },
       { href: "/dashboard/weeztix", label: "Tickets", icon: Ticket },
       { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
     ],
   },
   {
-    id: "social",
-    label: "Social",
+    id: "marketing",
+    label: "Marketing (organic)",
     items: [
+      { href: "/dashboard/marketing", label: "Mailings", brand: "mail" },
       { href: "/dashboard/meta", label: "Meta", brand: "instagram" },
       { href: "/dashboard/tiktok", label: "TikTok", brand: "tiktok" },
       { href: "/dashboard/youtube", label: "YouTube", brand: "youtube" },

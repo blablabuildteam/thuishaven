@@ -31,7 +31,6 @@ import {
 import { normalizeWeeztixInventory } from "@/lib/integrations/weeztix/inventory";
 import {
   competeSizeFromAttending,
-  competitionLevelLabel,
   genreLabel,
   isElectronicUmbrella,
   parseRaImpactNote,
@@ -63,6 +62,10 @@ import {
   WEEKDAY_LABEL,
   CALENDAR_PERIOD_LABEL,
 } from "@/lib/time/nl-calendar";
+import {
+  annotateAnomalies,
+  type AnomalyInsight,
+} from "@/lib/insights/anomaly-engine";
 
 /** How often we re-check Weeztix for *new* events (background, non-blocking). */
 const EVENT_LIST_STALE_MS = 6 * 60 * 60 * 1000;
@@ -187,23 +190,10 @@ export type CompetingEvent = {
   source: string;
 };
 
-export type EventInsightHeadline = {
-  text: string;
-  tone: "positive" | "neutral" | "caution" | "danger" | "cold";
-  kind:
-    | "tickets"
-    | "scan"
-    | "social"
-    | "mail"
-    | "weather"
-    | "demo"
-    | "compete"
-    | "referrer";
-  /** Short explanation shown as title/tooltip on the closed-row chip. */
-  hint?: string;
-  /** For compete chips — drives the bar visual. */
-  competeLevel?: CompetitionLevel;
-};
+export type {
+  AnomalyInsight,
+  AnomalyDimension,
+} from "@/lib/insights/anomaly-engine";
 
 export type EventInsightSocialVariant = {
   postId: string;
@@ -303,7 +293,7 @@ export type EventInsight = {
   isOutdoor: boolean;
   status: "upcoming" | "past";
 
-  headlines: EventInsightHeadline[];
+  insights: AnomalyInsight[];
 
   tickets: {
     sold: number;
@@ -351,179 +341,6 @@ function weatherTone(kind: WeatherKind): "positive" | "neutral" | "caution" {
   return "caution";
 }
 
-function buildHeadlines(e: EventInsight): EventInsightHeadline[] {
-  const out: EventInsightHeadline[] = [];
-  const {
-    tickets,
-    socialPosts,
-    emailCampaigns,
-    referrers,
-    competingFestivals,
-    competitionLevel,
-    organicImpactLevel,
-  } = e;
-
-  if (tickets.fillPct != null) {
-    const fillPct = Math.round(tickets.fillPct);
-    const tone =
-      fillPct >= 85 ? "positive" : fillPct >= 50 ? "neutral" : "caution";
-    const soldOut =
-      fillPct >= 98 ||
-      (tickets.capacity != null &&
-        tickets.capacity > 0 &&
-        tickets.sold >= tickets.capacity);
-
-    let text = `${fillPct}% bezetting`;
-    let hint =
-      "Verkochte tickets t.o.v. capaciteit (Weeztix).";
-
-    if (soldOut) {
-      if (tickets.soldOutDaysBefore != null && tickets.soldOutDaysBefore > 0) {
-        text += ` · uitverkocht ${tickets.soldOutDaysBefore}d vóór`;
-        hint +=
-          " Uitverkocht X dagen vóór start (geschat op basis van Weeztix-voorraad).";
-      } else if (tickets.soldOutDaysBefore === 0) {
-        text += " · uitverkocht op de dag";
-        hint += " Uitverkocht op de eventdag zelf.";
-      } else {
-        text += " · uitverkocht";
-        hint += " Event is uitverkocht.";
-      }
-    } else {
-      text += " · niet uitverkocht";
-      hint += " Nog niet uitverkocht.";
-    }
-
-    out.push({
-      text,
-      tone: soldOut ? "positive" : tone,
-      kind: "tickets",
-      hint,
-    });
-
-    if (tickets.lastWeekSold != null && tickets.lastWeekSold > 0) {
-      out.push({
-        text: `+${tickets.lastWeekSold.toLocaleString("nl-NL")} in laatste 7 dagen`,
-        tone: tickets.lastWeekSold > 200 ? "positive" : "neutral",
-        kind: "tickets",
-        hint: "Aantal Weeztix-tickets verkocht in de 7 dagen tot en met de eventdag.",
-      });
-    }
-  } else if (tickets.sold > 0) {
-    out.push({
-      text: `${tickets.sold.toLocaleString("nl-NL")} tickets`,
-      tone: "neutral",
-      kind: "tickets",
-      hint: "Verkochte tickets (geen capaciteit bekend).",
-    });
-  }
-
-  if (tickets.scanned > 0 && tickets.scanRatePct != null) {
-    out.push({
-      text: `${Math.round(tickets.scanRatePct)}% gescand`,
-      tone: tickets.scanRatePct >= 70 ? "positive" : "neutral",
-      kind: "scan",
-      hint: `Check-ins: ${tickets.scanned.toLocaleString("nl-NL")} van ${tickets.sold.toLocaleString("nl-NL")} verkochte tickets.`,
-    });
-  }
-
-  const promoOrSameDay = socialPosts.filter(
-    (p) => p.salesImpactRole === "promo" || p.salesImpactRole === "same_day",
-  );
-  if (organicImpactLevel && promoOrSameDay.length > 0) {
-    const label =
-      organicImpactLevel === "high"
-        ? "hoge organic"
-        : organicImpactLevel === "medium"
-          ? "middel organic"
-          : "lage organic";
-    const measured = promoOrSameDay.filter(
-      (p) => p.ticketLiftSold != null && p.ticketLiftSold > 0,
-    );
-    const totalLift = measured.reduce(
-      (s, p) => s + (p.ticketLiftSold ?? 0),
-      0,
-    );
-    out.push({
-      text:
-        totalLift > 0
-          ? `${label} · +${totalLift.toLocaleString("nl-NL")} tickets`
-          : `${label} · ${promoOrSameDay.length} posts`,
-      tone:
-        organicImpactLevel === "high"
-          ? "positive"
-          : organicImpactLevel === "low"
-            ? "caution"
-            : "neutral",
-      kind: "social",
-      hint: "Organic impact = gecombineerde score van bereik, engagement en ticketlift per promo/eventdag-post (aftermovies uitgesloten).",
-    });
-  } else if (socialPosts.length > 0) {
-    out.push({
-      text: `${socialPosts.length} organic (geen promo)`,
-      tone: "neutral",
-      kind: "social",
-      hint: "Alleen aftermovies / posts ná het event — geen sales-impact.",
-    });
-  }
-
-  const mailsWithOrders = emailCampaigns.filter(
-    (m) => (m.ordersAfter ?? 0) > 0,
-  );
-  if (mailsWithOrders.length > 0) {
-    const totalOrders = mailsWithOrders.reduce(
-      (s, m) => s + (m.ordersAfter ?? 0),
-      0,
-    );
-    out.push({
-      text: `${mailsWithOrders.length} mail · ~${totalOrders} orders`,
-      tone: totalOrders > 30 ? "positive" : "neutral",
-      kind: "mail",
-      hint: "Orders in de week ná mailverzending (correlatie, geen harde attributie).",
-    });
-  } else if (emailCampaigns.length > 0) {
-    out.push({
-      text: `${emailCampaigns.length} mail gekoppeld`,
-      tone: "neutral",
-      kind: "mail",
-      hint: "Brevo-campagnes gekoppeld aan dit event.",
-    });
-  }
-
-  const brevoRef = referrers.find((r) => r.channel === "brevo");
-  if (brevoRef && brevoRef.orders > 0) {
-    out.push({
-      text: `${brevoRef.orders} via Brevo-klik`,
-      tone: "positive",
-      kind: "referrer",
-      hint: "Orders met Brevo/mail als HTTP-referrer in Weeztix.",
-    });
-  }
-
-  if (competitionLevel) {
-    const tone =
-      competitionLevel === "high"
-        ? "danger"
-        : competitionLevel === "medium"
-          ? "caution"
-          : "positive";
-    out.push({
-      text: competitionLevelLabel(competitionLevel),
-      tone,
-      kind: "compete",
-      competeLevel: competitionLevel,
-      hint:
-        competingFestivals.length > 0
-          ? `Zelfde dag in Amsterdam: ${competingFestivals
-              .slice(0, 3)
-              .map((c) => c.name)
-              .join(", ")}${competingFestivals.length > 3 ? "…" : ""}`
-          : "Geen noemenswaardige RA-concurrenten op deze dag.",
-    });
-  }
-
-  return out;
-}
 
 const AFTER_DAYS = 7;
 
@@ -1129,7 +946,7 @@ export async function loadEventInsightsFresh(options?: {
         periodLabels: periods.map((p) => CALENDAR_PERIOD_LABEL[p]),
         isOutdoor: outdoor,
         status,
-        headlines: [],
+        insights: [],
         tickets: {
           sold,
           capacity,
@@ -1159,7 +976,6 @@ export async function loadEventInsightsFresh(options?: {
       const organic0 = summarizeOrganicImpact(socialPosts);
       insight.organicImpactLevel = organic0.level;
       insight.organicImpactScore = organic0.score;
-      insight.headlines = buildHeadlines(insight);
       return insight;
     });
 
@@ -1229,9 +1045,13 @@ export async function loadEventInsightsFresh(options?: {
       const organic = summarizeOrganicImpact(event.socialPosts);
       event.organicImpactLevel = organic.level;
       event.organicImpactScore = organic.score;
-      event.headlines = buildHeadlines(event);
     }
 
+  // Upcoming/past are cached separately — annotate after merge so cohorts
+  // include the full set. Mode "all" (recovery path) annotates here.
+  if (mode === "all") {
+    applyAnomalies(insights);
+  }
   if (mode === "upcoming") {
     return insights.filter((e) => e.status === "upcoming");
   }
@@ -1239,6 +1059,13 @@ export async function loadEventInsightsFresh(options?: {
     return insights.filter((e) => e.status === "past");
   }
   return insights;
+}
+
+function applyAnomalies(events: EventInsight[]): void {
+  const rows = annotateAnomalies(events);
+  events.forEach((event, i) => {
+    event.insights = rows[i] ?? [];
+  });
 }
 
 /** Upcoming events: refresh often (ticket velocity changes). */
@@ -1256,7 +1083,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v16"],
+  ["event-insights-upcoming-v17"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1272,7 +1099,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v16"],
+  ["event-insights-past-v17"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],
@@ -1302,7 +1129,9 @@ export async function loadEventInsights(options?: {
     loadPastEventInsightsCached(limit, asOfDay),
   ]);
 
-  return [...upcoming, ...past];
+  const merged = [...upcoming, ...past];
+  applyAnomalies(merged);
+  return merged;
 }
 
 /** Bust Insights data cache after a Weeztix (or related) sync. */
