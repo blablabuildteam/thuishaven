@@ -37,8 +37,10 @@ export default async function OutreachPlanningPage() {
             "Versturen geblokkeerd. Marketing/visitor-Brevo blijft onaangeroerd."}
         </p>
         <p className="mt-2 text-xs text-text-dim">
-          Later: aparte <code>BREVO_OUTREACH_API_KEY</code> + afzender (niet hetzelfde
-          als bezoekersmailings).
+          Afzender later: <code>zakelijk@thuishaven.nl</code> · reply-to{" "}
+          <code>evenement@thuishaven.nl</code> · bestaande Brevo-API (geen nieuw
+          account nodig). Visitor-mailings via <code>postduif@</code> blijven
+          gescheiden.
         </p>
       </div>
 

@@ -1,22 +1,37 @@
 /**
  * Outreach send policy — default: niets versturen.
- * Visitor/marketing Brevo blijft gescheiden via aparte outreach-credentials.
+ *
+ * Isolatie t.o.v. visitor-mailings:
+ * - From: zakelijk@ (niet postduif@)
+ * - Reply-To: evenement@
+ * - tags: outreach
+ * - OUTREACH_SEND_ENABLED hard off tot jullie groen licht geven
+ *
+ * Zelfde Brevo-account/API mag; aparte key is optioneel (revoke), geen must.
  */
+
+import { getBrevoKey } from "@/lib/integrations/brevo/client";
 
 export function isOutreachSendEnabled(): boolean {
   return process.env.OUTREACH_SEND_ENABLED?.trim() === "true";
 }
 
-/** Dedicated outreach Brevo key — never fall back to marketing MCP token. */
+/**
+ * Prefer dedicated outreach key; otherwise reuse existing Brevo API
+ * (BREVO_API_KEY / BREVO_MCP_TOKEN).
+ */
 export function getOutreachBrevoKey(): string | null {
-  return process.env.BREVO_OUTREACH_API_KEY?.trim() || null;
+  return (
+    process.env.BREVO_OUTREACH_API_KEY?.trim() ||
+    getBrevoKey()
+  );
 }
 
 export function getOutreachSender(): { email: string; name: string } {
   return {
     email:
       process.env.BREVO_OUTREACH_SENDER_EMAIL?.trim() ||
-      "b2b@thuishaven.nl",
+      "zakelijk@thuishaven.nl",
     name:
       process.env.BREVO_OUTREACH_SENDER_NAME?.trim() ||
       "Thuishaven Events",
@@ -31,7 +46,7 @@ export function getOutreachReplyTo(): { email: string; name: string } {
       "evenement@thuishaven.nl",
     name:
       process.env.BREVO_OUTREACH_REPLY_TO_NAME?.trim() ||
-      "Thuishaven Events",
+      "Yoram & Reijner",
   };
 }
 
@@ -40,7 +55,7 @@ export function outreachSendBlockReason(): string | null {
     return "Versturen staat uit (OUTREACH_SEND_ENABLED ≠ true). Alleen drafts + planning.";
   }
   if (!getOutreachBrevoKey()) {
-    return "BREVO_OUTREACH_API_KEY ontbreekt — outreach gebruikt niet de marketing-Brevo sleutel.";
+    return "Geen Brevo API-key (BREVO_OUTREACH_API_KEY of BREVO_API_KEY / MCP).";
   }
   return null;
 }

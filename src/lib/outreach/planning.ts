@@ -25,7 +25,7 @@ export const DEFAULT_AGENCY_CADENCE: CadencePlan = {
     "Alleen bureaus met e-mail, niet op uitsluitingslijst.",
     "Geen automatische send — jij keurt batches goed in dit dashboard.",
     "Max 3 mails/dag · di & do → ~6/week, rustig opbouwen.",
-    "Afzender later via geïsoleerde Brevo outreach-key (niet visitor-mail).",
+    "Afzender later via zakelijk@thuishaven.nl (bestaande Brevo), reply-to evenement@ — niet postduif@.",
   ],
 };
 

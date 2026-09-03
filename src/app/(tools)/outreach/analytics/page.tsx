@@ -45,9 +45,11 @@ export default async function OutreachAnalyticsPage() {
         <div className="mb-6 border border-border bg-surface px-4 py-3 text-sm text-text-muted">
           <p className="font-medium text-text">Nog geen live verzending</p>
           <p className="mt-1">
-            Dit dashboard vult zich zodra mails via de geïsoleerde outreach-Brevo
-            gaan en de webhook open/click events terugstuurt. Reply-to:{" "}
-            <code className="text-accent">evenement@thuishaven.nl</code>.
+            Dit dashboard vult zich zodra mails via{" "}
+            <code className="text-accent">zakelijk@thuishaven.nl</code> gaan
+            (reply-to <code className="text-accent">evenement@thuishaven.nl</code>
+            ) en de webhook open/click events terugstuurt. Zelfde Brevo-API mag;
+            visitor-mailings blijven op postduif@.
           </p>
         </div>
       )}
