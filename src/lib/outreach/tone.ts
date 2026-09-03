@@ -1,6 +1,6 @@
 /**
  * Tone-of-voice + mailvarianten voor B2B outreach.
- * Basis: voorbeeldmail van Reijner (Thuishaven Events).
+ * Basis: voorbeeldmail van Reijner — persoonlijk, niet salesy.
  */
 
 export const REIJNER_TONE_EXAMPLE = `Hi,
@@ -20,6 +20,22 @@ Graag plan ik met jou een bezichtiging in om de mogelijkheden samen op locatie t
 
 Mocht je vragen hebben dan hoor ik het graag!`;
 
+/** Plain-text signature appended to every outreach mail. */
+export const OUTREACH_SIGNATURE = `Reijner
+Thuishaven
+Festival locatie voor zakelijke events
+evenement@thuishaven.nl · +31 6 83 63 37 25
+Contactweg 68, 1014 BW Amsterdam
+thuishavenb2b.nl`;
+
+export function appendOutreachSignature(body: string): string {
+  const trimmed = body.trim().replace(/\n*(Groet|Groeten|Met vriendelijke groet|Cheers)[,!]?\s*\n*Thuishaven Events\s*$/i, "");
+  if (/^Reijner\s*$/m.test(trimmed) && /Festival locatie voor zakelijke events/i.test(trimmed)) {
+    return trimmed;
+  }
+  return `${trimmed}\n\n${OUTREACH_SIGNATURE}`;
+}
+
 export type OutreachVariantId =
   | "warm_tour"
   | "open_dates"
@@ -34,7 +50,6 @@ export type OutreachVariant = {
   audience: "company" | "agency" | "both";
   description: string;
   guidance: string;
-  /** A/B onderwerpregels — stats worden hierop gegroepeerd */
   subjects: Record<OutreachSubjectArm, string>;
 };
 
@@ -43,48 +58,48 @@ export const OUTREACH_VARIANTS: OutreachVariant[] = [
     id: "warm_tour",
     name: "Warm · bezichtiging",
     audience: "both",
-    description: "Dicht bij Reijners stijl: warm, locatie als beleving, soft CTA tour.",
+    description: "Persoonlijk, dicht bij Reijners stijl — soft uitnodiging voor een rondleiding.",
     guidance:
-      "Open warm. Schets 2–3 areas met karakter (niet de hele lijst). Noem huur + cateringpakket kort. Soft CTA: bezichtiging plannen. Geen hard sales-push.",
+      "Schrijf alsof Reijner zelf mailt. Warm en rustig. Max 2–3 area's met karakter. Geen sales-taal, geen 'unieke kans', geen druk. Soft: zin om even langs te komen.",
     subjects: {
-      a: "Bezichtiging Thuishaven — even kennismaken op locatie?",
-      b: "Thuishaven voor jullie volgende bedrijfsevent",
+      a: "Even kennismaken op Thuishaven?",
+      b: "Thuishaven als locatie — zin in een rondleiding?",
     },
   },
   {
     id: "open_dates",
     name: "Open data · bureau",
     audience: "agency",
-    description: "Update voor eventbureaus met link naar live beschikbaarheid.",
+    description: "Korte, behulpzame update voor eventbureaus.",
     guidance:
-      "Kort en praktisch voor bureaus. Focus op open doordeweekse slots + live agenda-link. Bied floorplans/capacity aan. Geen jubileum-taal.",
+      "Alsof je een bekende belt: kort, behulpzaam, geen pitch. Deel open data + link. Bied floorplans alleen aan als ze willen. Geen jubileum-taal.",
     subjects: {
-      a: "Open data Thuishaven — handig voor je pitches",
-      b: "Actuele doordeweekse slots bij Thuishaven",
+      a: "Open data bij Thuishaven",
+      b: "Even doorgeven — doordeweekse slots",
     },
   },
   {
     id: "jubileum",
     name: "Jubileum · bedrijf",
     audience: "company",
-    description: "Proactief voor 5/10/25-jarig jubileum, nog steeds warm (niet pushy).",
+    description: "Oprechte felicitatie, geen hard pitch.",
     guidance:
-      "Gefeliciteerd kort en oprecht. Koppel jubileum aan een avond die bij hun cultuur past. Soft CTA tour + beschikbaarheid. Geen 'meer dan een taart op kantoor'-clichés.",
+      "Gefeliciteerd kort en oprecht. Geen clichés. Soft vraag of ze ergens over nadenken voor een avond. Nodig uit voor een bezichtiging zonder druk.",
     subjects: {
-      a: "Gefeliciteerd — een avond die bij jullie past",
-      b: "Jubileum vieren op Thuishaven?",
+      a: "Gefeliciteerd — en een klein idee",
+      b: "Jullie jubileum · Thuishaven",
     },
   },
   {
     id: "short_checkin",
     name: "Korte check-in",
     audience: "both",
-    description: "3–5 zinnen, minimale locatiepitch, sterke soft CTA.",
+    description: "3–5 zinnen, persoonlijk, geen verkooppraatje.",
     guidance:
-      "Maximaal 5 zinnen. Geen area-opsomming. Vraag of er een bedrijfsevent speelt en bied bezichtiging + agenda-link.",
+      "Max 4 zinnen. Geen area-opsomming. Gewoon vragen of er iets speelt en of een korte rondleiding zinvol is.",
     subjects: {
-      a: "Korte vraag over jullie volgende event",
-      b: "Even checken — speelt er iets bij jullie?",
+      a: "Korte vraag",
+      b: "Even checken",
     },
   },
 ];
@@ -103,14 +118,14 @@ export function pickSubjectArm(seed?: string): OutreachSubjectArm {
 }
 
 export function buildOutreachSystemPrompt(): string {
-  return `Je schrijft outbound e-mails voor Thuishaven (Amsterdam), een festivalterrein voor bedrijfsevents.
+  return `Je schrijft outbound e-mails namens Reijner van Thuishaven (Amsterdam).
 
 Tone of voice (verplicht):
-- Warm, persoonlijk, toegankelijk — zoals de voorbeeldmail van het Thuishaven Events-team
-- Geen corporate jargon, geen hype, geen emoji's
-- Soft CTA: bezichtiging / tour, nooit hard pushen
-- Commercieel model: huur per area + cateringpakket
-- Areas met karakter: Mainstage (outdoor/damwand), Circustent, Romneyloods, Barhuisje, Thuishaven Café, Tempel (winter)
+- Persoonlijk en rustig — alsof Reijner zelf typt
+- Geen salesy taal, geen hype, geen emoji's, geen "unieke kans"
+- Soft CTA: bezichtiging / rondleiding
+- Commercieel model alleen als het past: huur per area + cateringpakket
+- Areas met karakter (max 2–3): Mainstage, Circustent, Romneyloods, Barhuisje, Café, Tempel
 
 Voorbeeldmail (stijlanker):
 ---
@@ -120,9 +135,7 @@ ${REIJNER_TONE_EXAMPLE}
 Outputregels:
 - Antwoord ALLEEN met JSON: {"subject":"...","body":"..."}
 - Body in plain text (geen HTML), Nederlandse spreektaal
-- Onderwerp max ~60 tekens, geen ALL CAPS
-- Gebruik de voornaam/bedrijfsnaam natuurlijk
-- Als availabilityUrl gegeven is: zet die als aparte regel in de body
-- Eindig met een korte groet (Thuishaven Events of alleen voornaam als die gegeven is)
+- Onderwerp max ~60 tekens
+- Eindig de body met een korte groet ("Groet," of "Spreek je snel,") — ZONDER handtekening; die wordt apart toegevoegd
 - Geen placeholders zoals [naam]`;
 }

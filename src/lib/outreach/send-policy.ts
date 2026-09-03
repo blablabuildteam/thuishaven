@@ -27,7 +27,7 @@ export function getOutreachSender(): { email: string; name: string } {
       "zakelijk@thuishaven.nl",
     name:
       process.env.BREVO_OUTREACH_SENDER_NAME?.trim() ||
-      "Thuishaven Events",
+      "Reijner · Thuishaven",
   };
 }
 

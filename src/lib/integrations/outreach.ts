@@ -17,6 +17,7 @@ import {
   outreachTestSendBlockReason,
 } from "@/lib/outreach/send-policy";
 import {
+  appendOutreachSignature,
   buildOutreachSystemPrompt,
   getOutreachVariant,
   pickSubjectArm,
@@ -191,12 +192,14 @@ export async function generateOutreachEmail(input: {
     Boolean(process.env.GEMINI_API_KEY?.trim());
 
   if (!hasAi) {
-    const body = templateOutreachBody({
-      variantId: variant.id,
-      companyName: input.companyName,
-      availabilityUrl,
-      availability,
-    });
+    const body = appendOutreachSignature(
+      templateOutreachBody({
+        variantId: variant.id,
+        companyName: input.companyName,
+        availabilityUrl,
+        availability,
+      }),
+    );
     return {
       subject,
       body,
@@ -249,7 +252,7 @@ Gebruik exact dit subject.`;
 
   return {
     subject,
-    body: parsed.body,
+    body: appendOutreachSignature(parsed.body),
     variantId: variant.id,
     subjectKey,
   };
@@ -262,40 +265,51 @@ function templateOutreachBody(input: {
   availability: string;
 }): string {
   if (input.variantId === "open_dates") {
-    return `Hoi ${input.companyName},
+    return `Hoi,
 
-Even een update van onze open doordeweekse slots — altijd actueel:
+Hopelijk alles goed bij ${input.companyName}. Even kort doorgeven: we hebben weer een paar doordeweekse data openstaan.
 
 ${input.availabilityUrl}
 
-Handig voor client pitches die deze week lopen. Floorplans of capacity? Stuur ik meteen mee.
+Handig als je ergens een pitch voor maakt. Mocht je floorplans of capacity willen, hoor ik het graag.
 
-Groet,
-Thuishaven Events`;
+Spreek je snel,`;
   }
   if (input.variantId === "short_checkin") {
     return `Hoi,
 
-Speelt er bij jullie een bedrijfsevent of borrel? Thuishaven is doordeweeks beschikbaar — even een bezichtiging plannen is vaak het snelst om te zien of het past.
+Speelt er bij jullie binnenkort iets — borrel, teamdag, bedrijfsevent? Dan is het misschien leuk om even langs te komen op Thuishaven.
 
 Live agenda: ${input.availabilityUrl}
 
-Groet,
-Thuishaven Events`;
+Laat maar weten of een korte rondleiding zinvol is.
+
+Groet,`;
+  }
+  if (input.variantId === "jubileum") {
+    return `Hoi,
+
+Gefeliciteerd met het jubileum van ${input.companyName} — mooie mijlpaal.
+
+Mocht je ergens over nadenken voor een avond met het team: Thuishaven is doordeweeks beschikbaar. Geen druk, gewoon even kijken of de sfeer past.
+
+${input.availabilityUrl}
+
+Zin om een keertje langs te komen?
+
+Groet,`;
   }
   return `Hoi,
 
-Leuk om ${input.companyName} te bereiken over een mogelijke locatie voor jullie evenement.
+Ik dacht aan ${input.companyName} — misschien speelt er ergens een bedrijfsevent of borrel?
 
-Thuishaven is een festivalterrein in Amsterdam met in- en outdoor area's met elk een eigen karakter (Mainstage, Circustent, Romneyloods, en meer). Verhuur is simpel: huur voor de area's die jullie inzetten + een cateringpakket.
+Thuishaven is een festivalterrein in Amsterdam-West met een paar areas met echt karakter (Mainstage, Circustent, Loods). Doordeweeks zijn we vaak beschikbaar; een korte rondleiding zegt meestal meer dan een lange mail.
 
-Bekijk actuele data:
 ${input.availabilityUrl}
 
-Graag plan ik een bezichtiging in om de mogelijkheden op locatie te bespreken.
+Laat maar weten of dat interessant is.
 
-Groet,
-Thuishaven Events`;
+Groet,`;
 }
 
 export function resolveOutreachRecipients(intended: string[]): {
@@ -612,7 +626,7 @@ export async function sendStoredDraft(input: {
     (Array.isArray(meta.contacts) ? meta.contacts[0] : undefined);
   if (!intended) return { error: "Geen e-mailadres op prospect" };
 
-  const html = `<div style="font-family:system-ui,sans-serif;white-space:pre-wrap;line-height:1.5">${escapeHtml(row.body)}</div>`;
+  const html = `<div style="font-family:Georgia,serif;font-size:15px;line-height:1.55;color:#1a1a1a;white-space:pre-wrap">${escapeHtml(row.body)}</div>`;
   const tags = [
     "outreach",
     "thuishaven-b2b",
