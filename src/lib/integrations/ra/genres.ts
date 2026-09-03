@@ -130,7 +130,7 @@ export function competeSizeLabel(size: CompeteSize): string {
   return "klein";
 }
 
-export type CompetitionLevel = "low" | "medium" | "high";
+export type CompetitionLevel = 1 | 2 | 3 | 4 | 5;
 
 export type CompeteLike = {
   kind: "festival" | "holiday" | "party";
@@ -168,13 +168,17 @@ export function summarizeCompetition(events: CompeteLike[]): {
   if (events.length >= 8 || festivals >= 2) score += 4;
   else if (events.length >= 4) score += 2;
 
-  if (score >= 8) return { level: "high", score };
-  if (score >= 3) return { level: "medium", score };
-  return { level: "low", score };
+  if (score >= 15) return { level: 5, score };
+  if (score >= 10) return { level: 4, score };
+  if (score >= 6) return { level: 3, score };
+  if (score >= 3) return { level: 2, score };
+  return { level: 1, score };
 }
 
 export function competitionLevelLabel(level: CompetitionLevel): string {
-  if (level === "high") return "hoge concurrentie";
-  if (level === "medium") return "middel concurrentie";
-  return "lage concurrentie";
+  if (level === 5) return "zeer hoge concurrentie";
+  if (level === 4) return "hoge concurrentie";
+  if (level === 3) return "middel concurrentie";
+  if (level === 2) return "lage concurrentie";
+  return "zeer lage concurrentie";
 }

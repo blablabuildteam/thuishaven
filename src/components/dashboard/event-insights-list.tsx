@@ -32,6 +32,7 @@ import {
   Eye,
   ExternalLink,
 } from "lucide-react";
+import { formatPoolUsage } from "@/lib/integrations/weeztix/channels";
 import { cn, formatNumber, formatPercent } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SocialChannelIcon } from "@/components/ui/social-channel-icon";
@@ -65,6 +66,11 @@ import type {
   WeatherHourRow,
 } from "@/lib/weather/open-meteo";
 import { displayEditionName } from "@/lib/editions/lineup";
+import {
+  IMPACT_BAR_HEIGHTS,
+  competitionBarFill,
+  organicBarFill,
+} from "@/lib/insights/impact-scale";
 import type { DemographicBucket } from "@/lib/db/schema";
 
 const COLLAPSE_MS = 380;
@@ -109,25 +115,22 @@ function weatherIcon(kind: WeatherKind) {
   return CloudSun;
 }
 
+function insightChipIcon(insight: AnomalyInsight) {
+  if (insight.dimension === "weather") {
+    return weatherIcon(insight.weatherKind ?? "ok");
+  }
+  if (insight.dimension === "fill") return Ticket;
+  if (insight.dimension === "competition") return Swords;
+  if (insight.dimension === "scan") return ScanLine;
+  if (insight.dimension === "social") return Share2;
+  if (insight.dimension === "pricing") return Euro;
+  if (insight.dimension === "soldout") return TrendingUp;
+  if (insight.dimension === "same_day") return Clock;
+  return Ticket;
+}
+
 function InsightChip({ insight }: { insight: AnomalyInsight }) {
-  const Icon =
-    insight.dimension === "fill"
-      ? Ticket
-      : insight.dimension === "weather"
-        ? CloudRain
-        : insight.dimension === "competition"
-          ? Swords
-          : insight.dimension === "scan"
-            ? ScanLine
-            : insight.dimension === "social"
-              ? Share2
-              : insight.dimension === "pricing"
-                ? Euro
-                : insight.dimension === "soldout"
-                  ? TrendingUp
-                  : insight.dimension === "same_day"
-                    ? Clock
-                    : Ticket;
+  const Icon = insightChipIcon(insight);
 
   const colors: Record<AnomalyInsight["tone"], string> = {
     positive: "border-success/35 bg-success/10 text-success",
@@ -852,11 +855,16 @@ function EventDetail({ event }: { event: EventInsight }) {
   const holidays = competingFestivals.filter((e) => e.kind === "holiday");
 
   const liveSources = tickets.sources.filter(
-    (s) => s.status === "live" && s.sold != null,
+    (s) =>
+      s.status === "live" &&
+      s.sold != null &&
+      (s.reserved != null ? s.reserved > 0 : s.sold > 0),
   );
   const sourceMax = Math.max(
     tickets.capacity ?? 0,
-    ...liveSources.map((s) => s.sold ?? 0),
+    ...liveSources.map((s) =>
+      s.reserved != null && s.reserved > 0 ? s.reserved : (s.sold ?? 0),
+    ),
     1,
   );
 
@@ -882,10 +890,24 @@ function EventDetail({ event }: { event: EventInsight }) {
             <SectionDivider label="Verkoop per bron" />
             <div className="space-y-2.5">
               {tickets.sources.map((s, i) => {
+                const barValue =
+                  s.reserved != null && s.reserved > 0
+                    ? (s.sold ?? 0)
+                    : (s.sold ?? 0);
+                const barMax =
+                  s.reserved != null && s.reserved > 0
+                    ? s.reserved
+                    : sourceMax;
                 const pct =
-                  s.status === "live" && s.sold != null
-                    ? (s.sold / sourceMax) * 100
+                  s.status === "live" && s.sold != null && barMax > 0
+                    ? (barValue / barMax) * 100
                     : 0;
+                const valueLabel =
+                  s.status === "shell" || s.status === "empty"
+                    ? (s.note ?? "—")
+                    : s.reserved != null && s.reserved > 0
+                      ? formatPoolUsage(s.sold ?? 0, s.reserved)
+                      : formatNumber(s.sold ?? 0);
                 return (
                   <div key={s.id} className="text-xs">
                     <div className="mb-1 flex items-center justify-between gap-2">
@@ -897,9 +919,7 @@ function EventDetail({ event }: { event: EventInsight }) {
                         {s.label}
                       </span>
                       <span className="font-mono text-text-muted">
-                        {s.status === "shell" || s.status === "empty"
-                          ? (s.note ?? "—")
-                          : formatNumber(s.sold ?? 0)}
+                        {valueLabel}
                       </span>
                     </div>
                     <div className="h-1.5 w-full bg-border">
@@ -1130,7 +1150,7 @@ function OrganicMarketingBlock({
       ) : (
         <div className="space-y-3">
           <OrganicImpactVerdict
-            level={impactLevel ?? "low"}
+            level={impactLevel ?? 1}
             score={impactScore}
             empty={
               socialPosts.every((p) => p.salesImpactRole === "after") &&
@@ -1462,26 +1482,23 @@ function OrganicPostWeightBars({ weight }: { weight: OrganicPostWeight }) {
 }
 
 function OrganicImpactLevelBars({ level }: { level: OrganicImpactLevel }) {
-  const filled = level === "high" ? 3 : level === "medium" ? 2 : 1;
   const label = organicImpactLevelLabel(level);
-  const heights = ["h-2", "h-3", "h-4"] as const;
-  const fill =
-    level === "high"
-      ? "bg-success"
-      : level === "medium"
-        ? "bg-accent"
-        : "bg-text-dim";
+  const fill = organicBarFill(level);
   return (
     <span
-      className="inline-flex h-4 shrink-0 items-end gap-0.5"
+      className="inline-flex h-3 shrink-0 items-end gap-0.5"
       title={label}
       aria-label={label}
       role="img"
     >
-      {heights.map((h, i) => (
+      {IMPACT_BAR_HEIGHTS.map((h, i) => (
         <span
           key={h}
-          className={cn("w-1.5 rounded-[1px]", h, i < filled ? fill : "bg-border")}
+          className={cn(
+            "w-1 rounded-[1px]",
+            h,
+            i < level ? fill : "bg-border",
+          )}
         />
       ))}
     </span>
@@ -1500,12 +1517,12 @@ function CompetitionBlock({
   level: EventInsight["competitionLevel"];
 }) {
   const total = festivals.length + parties.length + holidays.length;
-  const resolved = level ?? "low";
+  const resolved = level ?? 1;
 
   if (total === 0) {
     return (
       <div className="space-y-2">
-        <CompetitionVerdict level="low" empty />
+        <CompetitionVerdict level={1} empty />
         <div className="border border-dashed border-border px-3 py-2.5 text-xs text-text-dim">
           Geen RA-concurrenten op deze datum (electronic umbrella · ≥200 op RA
           voor parties).
@@ -1542,7 +1559,7 @@ function CompetitionVerdict({
   level,
   empty,
 }: {
-  level: NonNullable<EventInsight["competitionLevel"]> | "low";
+  level: CompetitionLevel;
   empty?: boolean;
 }) {
   const label = competitionLevelLabel(level);
@@ -1627,29 +1644,22 @@ function CompeteSizeBars({ size }: { size: CompeteSize }) {
 
 /** Overall competition pressure — same bar language, stronger fill for high. */
 function CompetitionLevelBars({ level }: { level: CompetitionLevel }) {
-  const filled = level === "high" ? 3 : level === "medium" ? 2 : 1;
   const label = competitionLevelLabel(level);
-  const heights = ["h-2", "h-3", "h-4"] as const;
-  const fill =
-    level === "high"
-      ? "bg-danger"
-      : level === "medium"
-        ? "bg-warn"
-        : "bg-success";
+  const fill = competitionBarFill(level);
   return (
     <span
-      className="inline-flex h-4 shrink-0 items-end gap-0.5"
+      className="inline-flex h-3 shrink-0 items-end gap-0.5"
       title={label}
       aria-label={label}
       role="img"
     >
-      {heights.map((h, i) => (
+      {IMPACT_BAR_HEIGHTS.map((h, i) => (
         <span
           key={h}
           className={cn(
-            "w-1.5 rounded-[1px]",
+            "w-1 rounded-[1px]",
             h,
-            i < filled ? fill : "bg-border",
+            i < level ? fill : "bg-border",
           )}
         />
       ))}

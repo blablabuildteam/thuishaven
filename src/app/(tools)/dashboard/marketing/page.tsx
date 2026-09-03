@@ -31,7 +31,7 @@ export default async function MarketingPage() {
       <SectionHeader
         eyebrow="Mailings"
         title="Mail & ticket-effect"
-        description="Brevo-metrics plus wat er in de week ná de mail verkocht werd."
+        description="Brevo-metrics plus tickets die in de 7 dagen ná verzending verkocht werden (samenvallend, geen harde attributie)."
       />
 
       <div className="mb-8 flex flex-wrap gap-8">
@@ -62,7 +62,7 @@ export default async function MarketingPage() {
                 {formatNumber(mailLift.totals.ordersAfterMails)}
               </span>
               <span className="mt-1 block text-[11px] tracking-[0.12em] text-text-dim uppercase">
-                orders week ná mail
+                tickets in de week na mail
               </span>
             </p>
             <p>
@@ -82,8 +82,11 @@ export default async function MarketingPage() {
           Effect per editie
         </h2>
         <p className="mb-4 max-w-xl text-sm text-text-muted">
-          Orders in de 7 dagen ná verzending (alleen als Weeztix die dagen heeft).
-          “Via Brevo-klik” = koper kwam binnen via trackinglink in de mail.
+          Per editie: hoeveel tickets verkocht werden in de 7 dagen ná elke mail
+          (verzenddag t/m 6 dagen later). Alleen dagen waar Weeztix een
+          dagcurve heeft tellen mee. Dit is samenhang met de mail, geen
+          harde toewijzing. “Via Brevo-klik” = koper kwam binnen via
+          trackinglink in de mail.
         </p>
 
         {!mailLift?.editions.length ? (
@@ -122,7 +125,8 @@ export default async function MarketingPage() {
                     )}
                     {ed.totalOrdersAfterMails > 0 && (
                       <StatusBadge tone="accent">
-                        {formatNumber(ed.totalOrdersAfterMails)} week ná mail
+                        {formatNumber(ed.totalOrdersAfterMails)} tickets in de
+                        week na mail
                       </StatusBadge>
                     )}
                   </div>
@@ -135,7 +139,9 @@ export default async function MarketingPage() {
                         <th className="pb-2 pr-3 font-medium">Mailing</th>
                         <th className="pb-2 pr-3 font-medium">Datum</th>
                         <th className="pb-2 pr-3 font-medium">Open</th>
-                        <th className="pb-2 pr-3 font-medium">Orders week erna</th>
+                        <th className="pb-2 pr-3 font-medium">
+                          Tickets in de week na mail
+                        </th>
                         <th className="pb-2 font-medium">Meting</th>
                       </tr>
                     </thead>

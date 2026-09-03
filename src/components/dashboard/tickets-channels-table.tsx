@@ -2,6 +2,15 @@ import Link from "next/link";
 import { displayEditionName } from "@/lib/editions/lineup";
 import { cn, formatDate, formatNumber } from "@/lib/utils";
 
+export type TicketPoolCell = {
+  /** Check-ins (gebruikt). */
+  used: number;
+  /** Pool allotment (gereserveerd). */
+  reserved: number;
+  /** Issued into pool — for event total math. */
+  issued: number;
+} | null;
+
 export type TicketChannelRow = {
   id: string;
   name: string;
@@ -9,34 +18,40 @@ export type TicketChannelRow = {
   day: string;
   weeztix: number | null;
   deurverkoop: number | null;
-  ra: number | null;
-  appic: number | null;
-  wingame: number | null;
+  ra: TicketPoolCell;
+  appic: TicketPoolCell;
+  wingame: TicketPoolCell;
   vrienden: number | null;
   scanned: number | null;
 };
 
-const CHANNELS = [
-  { key: "weeztix", label: "Weeztix", pending: false },
-  { key: "deurverkoop", label: "Deurverkoop", pending: false },
-  { key: "ra", label: "Resident Advisor", pending: false },
-  { key: "appic", label: "Appic", pending: true },
-  { key: "wingame", label: "Wingame Appic", pending: true },
-  { key: "vrienden", label: "Vriendentickets", pending: true },
-] as const;
+function channelIssued(value: number | TicketPoolCell | null): number | null {
+  if (value == null) return null;
+  if (typeof value === "number") return value;
+  return value.issued;
+}
 
 export function totalTicketsSold(row: TicketChannelRow): number | null {
   const parts = [
     row.weeztix,
     row.deurverkoop,
-    row.ra,
-    row.appic,
-    row.wingame,
+    channelIssued(row.ra),
+    channelIssued(row.appic),
+    channelIssued(row.wingame),
     row.vrienden,
   ];
   if (parts.every((n) => n == null)) return null;
   return parts.reduce((sum, n) => sum + (n ?? 0), 0);
 }
+
+const CHANNELS = [
+  { key: "weeztix", label: "Weeztix", pending: false, pool: false },
+  { key: "deurverkoop", label: "Deurverkoop", pending: false, pool: false },
+  { key: "ra", label: "Resident Advisor", pending: false, pool: true },
+  { key: "appic", label: "Appic", pending: false, pool: true },
+  { key: "wingame", label: "Wingame Appic", pending: true, pool: true },
+  { key: "vrienden", label: "Vriendentickets", pending: true, pool: false },
+] as const;
 
 function monthKey(day: string): string {
   return day.slice(0, 7);
@@ -72,7 +87,7 @@ function ChannelCell({
   value,
   pending,
 }: {
-  value: number | null;
+  value: number | TicketPoolCell;
   pending?: boolean;
 }) {
   if (value == null) {
@@ -82,21 +97,59 @@ function ChannelCell({
       </span>
     );
   }
+  if (typeof value === "object") {
+    return (
+      <span title="Gebruikt / gereserveerd">
+        {formatNumber(value.used)}
+        <span className="text-text-dim"> / {formatNumber(value.reserved)}</span>
+      </span>
+    );
+  }
   return <>{formatNumber(value)}</>;
+}
+
+function sumChannelValue(
+  value: number | TicketPoolCell | null,
+): { used: number; reserved: number; issued: number } | null {
+  if (value == null) return null;
+  if (typeof value === "number") {
+    return { used: value, reserved: value, issued: value };
+  }
+  return {
+    used: value.used,
+    reserved: value.reserved,
+    issued: value.issued,
+  };
 }
 
 function sumChannel(
   rows: TicketChannelRow[],
   key: (typeof CHANNELS)[number]["key"] | "scanned" | "total",
-): number | null {
+): number | TicketPoolCell | null {
   if (key === "total") {
     const values = rows.map(totalTicketsSold);
     if (values.every((n) => n == null)) return null;
     return values.reduce((sum, n) => sum + (n ?? 0), 0);
   }
-  const values = rows.map((row) => row[key]);
+  if (key === "scanned") {
+    const values = rows.map((row) => row.scanned);
+    if (values.every((n) => n == null)) return null;
+    return values.reduce((sum, n) => sum + (n ?? 0), 0);
+  }
+
+  const col = CHANNELS.find((c) => c.key === key);
+  const values = rows.map((row) => sumChannelValue(row[key]));
   if (values.every((n) => n == null)) return null;
-  return values.reduce((sum, n) => sum + (n ?? 0), 0);
+
+  if (col?.pool) {
+    return {
+      used: values.reduce((sum, n) => sum + (n?.used ?? 0), 0),
+      reserved: values.reduce((sum, n) => sum + (n?.reserved ?? 0), 0),
+      issued: values.reduce((sum, n) => sum + (n?.issued ?? 0), 0),
+    };
+  }
+
+  return values.reduce((sum, n) => sum + (n?.used ?? 0), 0);
 }
 
 function TicketsTable({ rows }: { rows: TicketChannelRow[] }) {
@@ -113,6 +166,11 @@ function TicketsTable({ rows }: { rows: TicketChannelRow[] }) {
             {CHANNELS.map((col) => (
               <th key={col.key} className="px-4 py-3 text-right font-medium">
                 {col.label}
+                {col.pool && (
+                  <span className="mt-0.5 block font-normal tracking-normal text-text-dim normal-case">
+                    gebruikt / geres.
+                  </span>
+                )}
                 {col.pending && (
                   <span className="mt-0.5 block font-normal tracking-normal text-text-dim normal-case">
                     binnenkort

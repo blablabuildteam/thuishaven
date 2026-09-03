@@ -256,7 +256,10 @@ export type SalesSourceId =
 export type SalesSourceRow = {
   id: SalesSourceId;
   label: string;
+  /** Sold (shop) or used/check-ins (barcode pools). */
   sold: number | null;
+  /** Reserved pool size for barcode channels. */
+  reserved: number | null;
   available: number | null;
   /** live | shell | empty */
   status: "live" | "shell" | "empty";
@@ -434,7 +437,7 @@ export async function loadEventInsightsFresh(options?: {
   const minDay = filtered[filtered.length - 1]!.startsAt;
   const maxDay = filtered[0]!.startsAt;
 
-  const [weatherRows, camps, festivals, dailyRows, posts, refs, appicRows, raRows, demoRows] =
+  const [weatherRows, camps, festivals, dailyRows, posts, refs, appicRows, raInvRows, raRows, demoRows] =
     await Promise.all([
       safeQuery(
         "weather",
@@ -519,12 +522,34 @@ export async function loadEventInsightsFresh(options?: {
             .select({
               editionId: ticketInventory.editionId,
               sold: ticketInventory.sold,
+              scanned: ticketInventory.scanned,
+              capacity: ticketInventory.capacity,
               available: ticketInventory.available,
             })
             .from(ticketInventory)
             .where(
               and(
                 eq(ticketInventory.platform, "appic"),
+                inArray(ticketInventory.editionId, editionIds),
+              ),
+            ),
+        [],
+      ),
+      safeQuery(
+        "raInventory",
+        () =>
+          db
+            .select({
+              editionId: ticketInventory.editionId,
+              sold: ticketInventory.sold,
+              scanned: ticketInventory.scanned,
+              capacity: ticketInventory.capacity,
+              available: ticketInventory.available,
+            })
+            .from(ticketInventory)
+            .where(
+              and(
+                eq(ticketInventory.platform, "resident_advisor"),
                 inArray(ticketInventory.editionId, editionIds),
               ),
             ),
@@ -620,6 +645,9 @@ export async function loadEventInsightsFresh(options?: {
     const appicByEdition = new Map(
       appicRows.map((r) => [r.editionId, r]),
     );
+    const raInvByEdition = new Map(
+      raInvRows.map((r) => [r.editionId, r]),
+    );
     const raByEdition = new Map(
       raRows
         .filter((r): r is typeof r & { editionId: string } => r.editionId != null)
@@ -661,27 +689,37 @@ export async function loadEventInsightsFresh(options?: {
       const scanRatePct = sold > 0 ? (scanned / sold) * 100 : null;
 
       const appic = appicByEdition.get(e.id);
-      const ra = raByEdition.get(e.id);
+      const raInv = raInvByEdition.get(e.id);
+      const raListing = raByEdition.get(e.id);
+      const splitIssued =
+        (appic?.sold ?? 0) + (raInv?.sold ?? 0);
+      const shopSold = Math.max(0, sold - splitIssued);
       const sources: SalesSourceRow[] = [
         {
           id: "weeztix",
           label: "Weeztix",
-          sold,
+          sold: shopSold,
+          reserved: null,
           available: inv.available,
           status: "live",
         },
         {
           id: "appic",
           label: "Appic",
-          sold: appic ? (appic.sold ?? 0) : null,
-          available: appic ? (appic.available ?? 0) : null,
-          status: appic ? "live" : "shell",
-          note: appic ? undefined : "API nog niet gekoppeld",
+          sold: appic != null ? (appic.scanned ?? 0) : null,
+          reserved:
+            appic != null
+              ? (appic.capacity ?? appic.sold ?? 0) || null
+              : null,
+          available: appic != null ? (appic.available ?? 0) : null,
+          status: appic != null ? "live" : "empty",
+          note: appic != null ? "Gebruikt / gereserveerd (Weeztix)" : undefined,
         },
         {
           id: "wingame",
           label: "Wingame Appic",
           sold: null,
+          reserved: null,
           available: null,
           status: "shell",
           note: "Nog geen integratie",
@@ -689,18 +727,18 @@ export async function loadEventInsightsFresh(options?: {
         {
           id: "resident_advisor",
           label: "Resident Advisor",
-          sold: ra ? (ra.attending ?? 0) : null,
-          available: ra
-            ? ra.soldOut
-              ? 0
-              : ra.ticketsAvailable
-                ? null
-                : 0
-            : null,
-          status: ra ? "live" : "empty",
-          note: ra
-            ? "RA ‘attending’ (geen harde sold)"
-            : "Geen RA-listing gekoppeld",
+          sold: raInv != null ? (raInv.scanned ?? 0) : null,
+          reserved:
+            raInv != null
+              ? (raInv.capacity ?? raInv.sold ?? 0) || null
+              : null,
+          available: raInv != null ? (raInv.available ?? 0) : null,
+          status: raInv != null ? "live" : raListing ? "empty" : "empty",
+          note: raInv
+            ? "RA daytickets · gebruikt / gereserveerd"
+            : raListing
+              ? "Geen dayticket-pool op deze editie"
+              : "Geen RA-listing gekoppeld",
         },
       ];
 
@@ -918,7 +956,7 @@ export async function loadEventInsightsFresh(options?: {
         })
         .slice(0, 10);
 
-      const raArtists = (ra?.artists ?? []).filter(Boolean);
+      const raArtists = (raListing?.artists ?? []).filter(Boolean);
       const artists =
         raArtists.length > 0
           ? raArtists

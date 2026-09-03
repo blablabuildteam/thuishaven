@@ -1,12 +1,12 @@
 /**
  * Organic social impact for an edition — same pattern as competition:
- * score each promo/eventdag post, combine, map to low | medium | high.
+ * score each promo/eventdag post, combine, map to 1–5 impact level.
  * Aftermovies do not count toward sales impact.
  */
 
 import type { SalesImpactRole } from "@/lib/marketing/sales-impact";
 
-export type OrganicImpactLevel = "low" | "medium" | "high";
+export type OrganicImpactLevel = 1 | 2 | 3 | 4 | 5;
 /** Per-post heaviness (like compete small/medium/large). */
 export type OrganicPostWeight = "light" | "medium" | "heavy";
 
@@ -249,9 +249,11 @@ export function summarizeOrganicImpact(posts: OrganicImpactPost[]): {
   const heavyCount = scored.filter((s) => s.weight === "heavy").length;
 
   let level: OrganicImpactLevel;
-  if (score >= 14) level = "high";
-  else if (score >= 6) level = "medium";
-  else level = "low";
+  if (score >= 22) level = 5;
+  else if (score >= 15) level = 4;
+  else if (score >= 8) level = 3;
+  else if (score >= 4) level = 2;
+  else level = 1;
 
   return {
     level,
@@ -262,7 +264,9 @@ export function summarizeOrganicImpact(posts: OrganicImpactPost[]): {
 }
 
 export function organicImpactLevelLabel(level: OrganicImpactLevel): string {
-  if (level === "high") return "hoge organic impact";
-  if (level === "medium") return "middel organic impact";
-  return "lage organic impact";
+  if (level === 5) return "zeer hoge organic impact";
+  if (level === 4) return "hoge organic impact";
+  if (level === 3) return "middel organic impact";
+  if (level === 2) return "lage organic impact";
+  return "zeer lage organic impact";
 }

@@ -13,6 +13,12 @@
  */
 
 import type { EditionFormat } from "@/lib/editions/lineup";
+import {
+  IMPACT_LEVELS,
+  isHighImpact,
+  isLowImpact,
+  type ImpactLevel,
+} from "@/lib/insights/impact-scale";
 import type { CompetitionLevel } from "@/lib/integrations/ra/genres";
 import type { OrganicImpactLevel } from "@/lib/marketing/organic-impact";
 import type { WeekdayKey } from "@/lib/time/nl-calendar";
@@ -39,6 +45,8 @@ export type AnomalyInsight = {
   dimension: AnomalyDimension;
   significance: number;
   detail?: string;
+  /** Present on weather insights so the chip can match heat / rain / wind. */
+  weatherKind?: WeatherKind;
 };
 
 export type AnomalyEventInput = {
@@ -303,12 +311,13 @@ function sigFromPp(deltaPp: number, scale = 25): number {
   return Math.min(1, Math.abs(deltaPp) / scale);
 }
 
-function fmtPp(n: number): string {
-  return `${Math.round(Math.abs(n))}`;
-}
-
 function fmtPct(n: number): string {
   return `${Math.round(n)}%`;
+}
+
+/** Short vs-line for tooltips: "dit event 92%, vergelijkbaar 75%". */
+function vsPct(actual: number, peer: number): string {
+  return `dit event ${fmtPct(actual)}, vergelijkbaar ${fmtPct(peer)}`;
 }
 
 function fmtEur(n: number): string {
@@ -358,32 +367,24 @@ export function computeBaselines(
     statsByKey.set(key, buildCohortStats(bucket.events, bucket.label));
   }
 
-  const fillByCompetition: Record<CompetitionLevel, number | null> = {
-    low: null,
-    medium: null,
-    high: null,
-  };
-  const fillByOrganic: Record<OrganicImpactLevel, number | null> = {
-    low: null,
-    medium: null,
-    high: null,
-  };
+  const fillByCompetition = Object.fromEntries(
+    IMPACT_LEVELS.map((level) => [level, null]),
+  ) as Record<CompetitionLevel, number | null>;
+  const fillByOrganic = Object.fromEntries(
+    IMPACT_LEVELS.map((level) => [level, null]),
+  ) as Record<OrganicImpactLevel, number | null>;
   const fillByWeatherOutdoor: Record<WeatherBand, number | null> = {
     ideal: null,
     ok: null,
     poor: null,
   };
 
-  const competeBuckets: Record<CompetitionLevel, number[]> = {
-    low: [],
-    medium: [],
-    high: [],
-  };
-  const organicBuckets: Record<OrganicImpactLevel, number[]> = {
-    low: [],
-    medium: [],
-    high: [],
-  };
+  const competeBuckets = Object.fromEntries(
+    IMPACT_LEVELS.map((level) => [level, [] as number[]]),
+  ) as Record<CompetitionLevel, number[]>;
+  const organicBuckets = Object.fromEntries(
+    IMPACT_LEVELS.map((level) => [level, [] as number[]]),
+  ) as Record<OrganicImpactLevel, number[]>;
   const weatherBuckets: Record<WeatherBand, number[]> = {
     ideal: [],
     ok: [],
@@ -421,7 +422,7 @@ export function computeBaselines(
     }
   }
 
-  for (const level of ["low", "medium", "high"] as const) {
+  for (const level of IMPACT_LEVELS) {
     fillByCompetition[level] = mean(competeBuckets[level]);
     fillByOrganic[level] = mean(organicBuckets[level]);
   }
@@ -489,18 +490,18 @@ function detectFill(
 
   const text = soldOut
     ? above && Math.abs(delta) >= 6
-      ? `Uitverkocht · ${fmtPp(delta)}pp boven ${label}`
-      : `Uitverkocht · in lijn met ${label}`
+      ? `Uitverkocht — voller dan vergelijkbare ${label}`
+      : `Uitverkocht — vergelijkbaar met andere ${label}`
     : above
-      ? `${fmtPp(delta)}pp boven gem. voor ${label}`
-      : `${fmtPp(delta)}pp onder gem. voor ${label}`;
+      ? `Voller dan vergelijkbare ${label}`
+      : `Minder vol dan vergelijkbare ${label}`;
 
   return {
     text,
     tone,
     dimension: "fill",
     significance: soldOut ? Math.min(1, significance + 0.1) : significance,
-    detail: `Bezetting ${fmtPct(fill)} vs. mediaan ${fmtPct(cohort.fill.median)} voor ${label} (n=${cohort.fill.n}).`,
+    detail: `${vsPct(fill, cohort.fill.median)} (${label}).`,
   };
 }
 
@@ -533,28 +534,31 @@ function detectWeather(
           : `${fmtPct(fill)} bezetting ondanks ${e.weather.label.toLowerCase()}`,
         tone: "positive",
         dimension: "weather",
+        weatherKind: e.weather.kind,
         significance: Math.min(1, 0.55 + sigFromPp(delta, 30) * 0.4),
-        detail: `Outdoor events met slecht weer gem. ${fmtPct(peer)} bezetting.`,
+        detail: `Bij slecht weer zitten outdoor events meestal rond ${fmtPct(peer)} vol.`,
       };
     }
 
     return {
-      text: `${e.weather.label} · ${fmtPp(peer - fill)}pp onder outdoor-regen`,
+      text: `${e.weather.label} — minder vol dan gebruikelijk bij slecht weer`,
       tone: "caution",
       dimension: "weather",
+      weatherKind: e.weather.kind,
       significance: sigFromPp(peer - fill, 20),
-      detail: `Bezetting ${fmtPct(fill)} vs. ${fmtPct(peer)} bij vergelijkbaar weer.`,
+      detail: `${vsPct(fill, peer)} bij vergelijkbaar weer.`,
     };
   }
 
   if (band === "ideal" && idealFill != null && !soldOut && fill <= idealFill - 10) {
     const delta = idealFill - fill;
     return {
-      text: `Ideaal weer, toch ${fmtPp(delta)}pp onder outdoor-ideaal`,
+      text: "Ideaal weer, toch minder vol dan andere mooie dagen",
       tone: "caution",
       dimension: "weather",
+      weatherKind: e.weather.kind,
       significance: sigFromPp(delta, 22),
-      detail: `Weer was geen rem: outdoor-ideaal gem. ${fmtPct(idealFill)}.`,
+      detail: `Het weer was geen rem. ${vsPct(fill, idealFill)}.`,
     };
   }
 
@@ -571,12 +575,22 @@ function detectCompetition(
   if (e.status === "upcoming" && !isSoldOut(e) && fill < 70) return null;
 
   const peer = baselines.fillByCompetition[e.competitionLevel];
-  const highPeer = baselines.fillByCompetition.high;
-  const lowPeer = baselines.fillByCompetition.low;
+  const highPeer = mean(
+    ([4, 5] as ImpactLevel[]).flatMap((l) => {
+      const v = baselines.fillByCompetition[l];
+      return v == null ? [] : [v];
+    }),
+  );
+  const lowPeer = mean(
+    ([1, 2] as ImpactLevel[]).flatMap((l) => {
+      const v = baselines.fillByCompetition[l];
+      return v == null ? [] : [v];
+    }),
+  );
   const festivals = e.competingFestivals.filter((c) => c.kind === "festival");
   const soldOut = isSoldOut(e);
 
-  if (e.competitionLevel === "high") {
+  if (isHighImpact(e.competitionLevel)) {
     const expected = highPeer ?? peer;
     if (expected == null) return null;
     const beat = soldOut || fill >= expected + 8;
@@ -585,33 +599,35 @@ function detectCompetition(
 
     const nFest = festivals.length;
     const festBit = nFest > 0 ? `${nFest} festival${nFest === 1 ? "" : "s"}` : "drukke dag";
+    const competeLabel =
+      e.competitionLevel === 5 ? "Zeer hoge concurrentie" : "Hoge concurrentie";
 
     if (beat) {
       return {
-        text: `Hoge concurrentie (${festBit}) maar ${soldOut ? "uitverkocht" : fmtPct(fill)}`,
+        text: `${competeLabel} (${festBit}) maar ${soldOut ? "uitverkocht" : fmtPct(fill)}`,
         tone: "positive",
         dimension: "competition",
         significance: Math.min(1, 0.62 + (soldOut ? 0.15 : 0)),
-        detail: `Events met hoge concurrentie gem. ${fmtPct(expected)} bezetting.`,
+        detail: `Op drukke avonden zitten events meestal rond ${fmtPct(expected)} vol.`,
       };
     }
 
     return {
-      text: `Hoge concurrentie · ${fmtPp(expected - fill)}pp onder die nachten`,
+      text: `${competeLabel} — minder vol dan andere drukke avonden`,
       tone: "caution",
       dimension: "competition",
       significance: sigFromPp(expected - fill, 20),
-      detail: `${festBit} dezelfde dag. Hoge-concurrentie nachten gem. ${fmtPct(expected)}.`,
+      detail: `${festBit} dezelfde dag. ${vsPct(fill, expected)}.`,
     };
   }
 
-  if (e.competitionLevel === "low" && lowPeer != null && !soldOut && fill <= lowPeer - 12) {
+  if (isLowImpact(e.competitionLevel) && lowPeer != null && !soldOut && fill <= lowPeer - 12) {
     return {
-      text: `Lage concurrentie, toch ${fmtPp(lowPeer - fill)}pp onder rustige dagen`,
+      text: "Weinig concurrentie, toch minder vol dan rustige avonden",
       tone: "caution",
       dimension: "competition",
       significance: sigFromPp(lowPeer - fill, 22),
-      detail: "Weinig RA-concurrentie — uitblijvende verkoop heeft een andere oorzaak.",
+      detail: `Er speelde weinig mee in de stad — de mindere verkoop heeft een andere oorzaak. ${vsPct(fill, lowPeer)}.`,
     };
   }
 
@@ -635,18 +651,18 @@ function detectScan(
 
   const weatherHint =
     e.isOutdoor && e.weather && isPoorWeather(e.weather.kind) && delta < 0
-      ? `, mogelijk ${e.weather.label.toLowerCase()}`
+      ? ` — mogelijk door ${e.weather.label.toLowerCase()}`
       : "";
 
   return {
     text:
       delta < 0
-        ? `${fmtPct(scan)} gescand · ${fmtPp(delta)}pp onder gem.${weatherHint}`
-        : `${fmtPct(scan)} gescand · ${fmtPp(delta)}pp boven gem.`,
+        ? `Minder bezoekers binnen dan gebruikelijk${weatherHint}`
+        : "Meer bezoekers binnen dan gebruikelijk",
     tone: delta < 0 ? (scan < 55 ? "caution" : "neutral") : "positive",
     dimension: "scan",
     significance,
-    detail: `Check-ins ${fmtCount(e.tickets.scanned)} / ${fmtCount(e.tickets.sold)}. Mediaan ${fmtPct(cohort.scan.median)} voor ${cohort.label}.`,
+    detail: `${fmtPct(scan)} gescand (${fmtCount(e.tickets.scanned)} van ${fmtCount(e.tickets.sold)}). Vergelijkbare ${cohort.label} meestal ${fmtPct(cohort.scan.median)}.`,
   };
 }
 
@@ -659,57 +675,72 @@ function detectSocial(
   const lift = posts.reduce((s, p) => s + (p.ticketLiftSold ?? 0), 0);
   const reach = posts.reduce((s, p) => s + Math.max(p.reach, p.impressions), 0);
   const level = e.organicImpactLevel;
-  const highFill = baselines.fillByOrganic.high;
-  const lowFill = baselines.fillByOrganic.low;
+  const highFill = mean(
+    ([4, 5] as ImpactLevel[]).flatMap((l) => {
+      const v = baselines.fillByOrganic[l];
+      return v == null ? [] : [v];
+    }),
+  );
+  const lowFill = mean(
+    ([1, 2] as ImpactLevel[]).flatMap((l) => {
+      const v = baselines.fillByOrganic[l];
+      return v == null ? [] : [v];
+    }),
+  );
 
-  if (level === "high" && posts.length > 0) {
+  if (level != null && isHighImpact(level) && posts.length > 0) {
+    const organicLabel =
+      level === 5 ? "Sterke social push" : "Duidelijke social push";
     if (lift >= 40) {
       return {
-        text: `Hoge organic · +${fmtCount(lift)} tickets in window`,
+        text: `${organicLabel} — rond die posts +${fmtCount(lift)} tickets`,
         tone: "positive",
         dimension: "social",
         significance: Math.min(1, 0.5 + Math.min(0.4, lift / 400)),
-        detail: `${posts.length} promo/eventdag-posts, ${fmtCount(reach)} reach. Ticketlift = som in ±-windows (correlatie).`,
+        detail: `${posts.length} posts vóór/op de eventdag, ${fmtCount(reach)} mensen bereikt. Extra tickets in de dagen rond die posts (samenhang, geen harde toewijzing).`,
       };
     }
     if (fill != null && highFill != null && fill <= highFill - 12 && e.status === "past") {
       return {
-        text: "Hoge organic, ticketverkoop bleef achter",
+        text: `${organicLabel}, maar de verkoop bleef achter`,
         tone: "caution",
         dimension: "social",
         significance: sigFromPp(highFill - fill, 22),
-        detail: `Events met hoge organic gem. ${fmtPct(highFill)} bezetting vs. ${fmtPct(fill)} hier.`,
+        detail: `Events met een sterke social push zitten meestal rond ${fmtPct(highFill)} vol. ${vsPct(fill, highFill)}.`,
       };
     }
     if (posts.length >= 2) {
       return {
-        text: `Hoge organic · ${posts.length} promo-posts`,
+        text: `${organicLabel} — ${posts.length} posts vóór het event`,
         tone: "positive",
         dimension: "social",
         significance: 0.4,
-        detail: `${fmtCount(reach)} gecombineerd bereik. Geen meetbare ticketlift in de curve.`,
+        detail: `${fmtCount(reach)} mensen bereikt. Geen duidelijke extra verkoop in de dagen rond die posts.`,
       };
     }
   }
 
   if (
-    (level === "low" || level == null) &&
+    (level == null || isLowImpact(level)) &&
     posts.length === 0 &&
     fill != null &&
     e.status === "past" &&
     lowFill != null &&
     fill <= lowFill - 8
   ) {
-    const withOrganic = baselines.fillByOrganic.medium ?? highFill;
+    const withOrganic =
+      baselines.fillByOrganic[3] ??
+      baselines.fillByOrganic[4] ??
+      highFill;
     if (withOrganic == null) return null;
     const delta = withOrganic - fill;
     if (delta < 8) return null;
     return {
-      text: `Geen organic push · events mét posts gem. ${fmtPct(withOrganic)}`,
+      text: "Geen social vooraf — events mét posts verkopen beter",
       tone: "caution",
       dimension: "social",
       significance: sigFromPp(delta, 24),
-      detail: "Geen promo/eventdag-posts gekoppeld. Aftermovies tellen niet mee.",
+      detail: `Geen promo-posts vóór het event gekoppeld (aftermovies tellen niet mee). Events mét posts zitten meestal rond ${fmtPct(withOrganic)} vol.`,
     };
   }
 
@@ -732,11 +763,11 @@ function detectEmail(
     if (deltaMail == null || deltaMail < 6) return null;
     if (fill >= withMail - 4) return null;
     return {
-      text: `Geen mail · events mét mail gem. ${fmtPp(deltaMail)}pp hoger`,
+      text: "Geen mail verstuurd — events mét mail verkopen beter",
       tone: "caution",
       dimension: "email",
       significance: sigFromPp(deltaMail, 20),
-      detail: `Bezetting ${fmtPct(fill)} vs. ${fmtPct(withMail)} bij events met Brevo-campagne.`,
+      detail: `${vsPct(fill, withMail)}. Events met een mailcampagne zitten meestal voller.`,
     };
   }
 
@@ -746,7 +777,7 @@ function detectEmail(
       tone: "positive",
       dimension: "email",
       significance: Math.min(1, 0.42 + Math.min(0.35, orders / 200)),
-      detail: "Orders in de week ná verzending (correlatie, geen harde attributie).",
+      detail: "Tickets in de week ná de mail. Dat is een samenhang, geen harde toewijzing.",
     };
   }
 
@@ -791,41 +822,41 @@ function detectPricing(
 
   if (cheaper && !soldOut && e.status === "past" && fill < 85) {
     return {
-      text: `${fmtEur(price)} · ${fmtPp(rel)}% onder normaal, niet uitverkocht`,
+      text: `${fmtEur(price)} per kaart — goedkoper dan gebruikelijk, toch niet vol`,
       tone: "caution",
       dimension: "pricing",
       significance: Math.max(significance, 0.4),
-      detail: `Prijs was geen rem (mediaan ${fmtEur(cohort.price.median)} voor ${cohort.label}).`,
+      detail: `Prijs was geen rem. Vergelijkbare ${cohort.label} liggen rond ${fmtEur(cohort.price.median)}.`,
     };
   }
 
   if (!cheaper && soldOut) {
     return {
-      text: `Uitverkocht bij ${fmtEur(price)} · ${fmtPp(rel)}% boven gem.`,
+      text: `Uitverkocht bij ${fmtEur(price)} — duurder dan gebruikelijk`,
       tone: "positive",
       dimension: "pricing",
       significance: Math.max(significance, 0.48),
-      detail: `Vraag hield ${fmtPp(rel)}% hogere prijs vol vs. ${cohort.label}.`,
+      detail: `Kaarten gingen weg ondanks een hogere prijs (vergelijkbaar ${fmtEur(cohort.price.median)}).`,
     };
   }
 
   if (!cheaper && e.status === "past" && fill <= 70) {
     return {
-      text: `${fmtEur(price)} · ${fmtPp(rel)}% duurder, ${fmtPct(fill)} bezetting`,
+      text: `${fmtEur(price)} per kaart — duurder, en niet vol`,
       tone: "caution",
       dimension: "pricing",
       significance: significance,
-      detail: `Mediaanprijs ${fmtEur(cohort.price.median)} voor ${cohort.label}.`,
+      detail: `Vergelijkbare ${cohort.label} liggen rond ${fmtEur(cohort.price.median)}. Dit event ${fmtPct(fill)} vol.`,
     };
   }
 
   if (cheaper && soldOut) {
     return {
-      text: `Uitverkocht · prijs ${fmtPp(rel)}% onder ${cohort.label}`,
+      text: `Uitverkocht — kaarten goedkoper dan bij vergelijkbare ${cohort.label}`,
       tone: "neutral",
       dimension: "pricing",
       significance: significance * 0.85,
-      detail: `Gem. ${fmtEur(price)} vs. mediaan ${fmtEur(cohort.price.median)}.`,
+      detail: `Gemiddeld ${fmtEur(price)} hier, ${fmtEur(cohort.price.median)} bij vergelijkbare events.`,
     };
   }
 
@@ -844,11 +875,11 @@ function detectSoldout(
     // Similar events often sell out, this one didn't — only if most peers did.
     if (cohort.soldOutDays.median < 1) return null;
     return {
-      text: `Niet uitverkocht · peers gem. ${Math.round(cohort.soldOutDays.median)}d eerder vol`,
+      text: `Niet uitverkocht — vergelijkbare events waren eerder vol`,
       tone: "caution",
       dimension: "soldout",
       significance: 0.42,
-      detail: `Vergelijkbare ${cohort.label} die wél uitverkochten, mediaan ${Math.round(cohort.soldOutDays.median)} dagen vóór start.`,
+      detail: `Vergelijkbare ${cohort.label} die wél uitverkochten, gemiddeld ${Math.round(cohort.soldOutDays.median)} dagen vóór start.`,
     };
   }
 
@@ -899,7 +930,7 @@ function detectSoldout(
     tone: delta > 0 ? "positive" : "neutral",
     dimension: "soldout",
     significance: Math.min(1, 0.35 + Math.abs(delta) / 20),
-    detail: `Mediaan ${Math.round(cohort.soldOutDays.median)}d vóór voor uitverkochte ${cohort.label}.`,
+    detail: `Uitverkochte ${cohort.label} zijn meestal ${Math.round(cohort.soldOutDays.median)} dagen van tevoren vol.`,
   };
 }
 
@@ -921,12 +952,12 @@ function detectSameDay(
   return {
     text:
       delta > 0
-        ? `${fmtPct(share)} dag-verkoop · ${fmtPp(delta)}pp boven gem.`
-        : `${fmtPct(share)} dag-verkoop · vooral presale`,
+        ? "Meer last-minute verkoop dan gebruikelijk"
+        : "Bijna alles vooraf verkocht — weinig aan de deur",
     tone: delta > 0 ? "neutral" : "positive",
     dimension: "same_day",
     significance,
-    detail: `Mediaan ${fmtPct(cohort.sameDayShare.median)} same-day aandeel voor ${cohort.label}.`,
+    detail: `${fmtPct(share)} van de kaarten ging op de eventdag zelf weg. Bij vergelijkbare ${cohort.label} is dat meestal ${fmtPct(cohort.sameDayShare.median)}.`,
   };
 }
 

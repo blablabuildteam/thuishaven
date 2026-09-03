@@ -1,18 +1,38 @@
-import { desc, isNotNull, sql, and, eq, inArray } from "drizzle-orm";
-import { SectionHeader } from "@/components/ui/section-header";
+import Link from "next/link";
+import { displayEditionName } from "@/lib/editions/lineup";
 import {
+  type TicketChannelRow,
+  type TicketPoolCell,
   TicketsChannelsList,
   totalTicketsSold,
-  type TicketChannelRow,
 } from "@/components/dashboard/tickets-channels-table";
+import { SectionHeader } from "@/components/ui/section-header";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { editions, ticketInventory } from "@/lib/db/schema";
-import { formatCurrency, formatNumber } from "@/lib/utils";
 import { normalizeWeeztixInventory } from "@/lib/integrations/weeztix/inventory";
 import { amsterdamDay } from "@/lib/time/amsterdam";
+import { formatCurrency, formatNumber } from "@/lib/utils";
+import { desc, isNotNull, sql, and, eq, inArray } from "drizzle-orm";
 
 export const metadata = { title: "Tickets" };
 export const dynamic = "force-dynamic";
+
+type PoolInventory = {
+  sold: number;
+  scanned: number;
+  capacity: number | null;
+};
+
+function poolCell(row: PoolInventory | undefined): TicketPoolCell {
+  if (!row) return null;
+  const reserved = row.capacity ?? row.sold;
+  if (reserved <= 0 && row.scanned <= 0) return null;
+  return {
+    used: row.scanned,
+    reserved,
+    issued: row.sold,
+  };
+}
 
 /**
  * Ticketsheet: verkoop per kanaal, totaal + scans, komend vs afgelopen.
@@ -69,6 +89,8 @@ export default async function WeeztixEventsPage() {
         editionId: ticketInventory.editionId,
         platform: ticketInventory.platform,
         sold: ticketInventory.sold,
+        scanned: ticketInventory.scanned,
+        capacity: ticketInventory.capacity,
       })
       .from(ticketInventory)
       .where(
@@ -87,13 +109,33 @@ export default async function WeeztixEventsPage() {
     total_revenue_cents: 0,
   };
 
-  const extraByEdition = new Map<string, { ra?: number; appic?: number; internal?: number }>();
+  const extraByEdition = new Map<
+    string,
+    {
+      ra?: PoolInventory;
+      appic?: PoolInventory;
+      internal?: number;
+    }
+  >();
   for (const row of extraInv) {
     const current = extraByEdition.get(row.editionId) ?? {};
-    if (row.platform === "resident_advisor") current.ra = row.sold;
-    if (row.platform === "appic") current.appic = row.sold;
-    if (row.platform === "internal") current.internal = row.sold;
+    const pool: PoolInventory = {
+      sold: row.sold ?? 0,
+      scanned: row.scanned ?? 0,
+      capacity: row.capacity,
+    };
+    if (row.platform === "resident_advisor") current.ra = pool;
+    if (row.platform === "appic") current.appic = pool;
+    if (row.platform === "internal") current.internal = row.sold ?? 0;
     extraByEdition.set(row.editionId, current);
+  }
+
+  function splitChannelIssued(extra?: {
+    ra?: PoolInventory;
+    appic?: PoolInventory;
+  }): number {
+    if (!extra) return 0;
+    return (extra.ra?.sold ?? 0) + (extra.appic?.sold ?? 0);
   }
 
   const today = amsterdamDay(new Date());
@@ -107,15 +149,17 @@ export default async function WeeztixEventsPage() {
         capacity: row.capacity,
         available: row.available,
       });
+      const splitIssued = splitChannelIssued(extra);
+      const shopSold = hasWeeztix ? Math.max(0, inv.sold - splitIssued) : null;
       return {
         id: row.id,
         name: row.name,
         startsAt: row.startsAt,
         day: amsterdamDay(row.startsAt),
-        weeztix: hasWeeztix ? inv.sold : null,
+        weeztix: shopSold,
         deurverkoop: extra?.internal ?? null,
-        ra: extra?.ra ?? null,
-        appic: extra?.appic ?? null,
+        ra: poolCell(extra?.ra),
+        appic: poolCell(extra?.appic),
         wingame: null,
         vrienden: null,
         scanned: hasWeeztix ? (row.scanned ?? 0) : null,
@@ -186,10 +230,11 @@ export default async function WeeztixEventsPage() {
       <TicketsChannelsList upcoming={upcoming} past={past} />
 
       <p className="mt-3 text-xs text-text-dim">
-        Weeztix en scans komen live binnen. Deurverkoop en Resident Advisor
-        vullen mee zodra die cijfers in de voorraad staan. Appic, Wingame Appic
-        en vriendentickets volgen nog. Totaal = som van de kanalen. Gescand =
-        Weeztix check-in.
+        Weeztix = shop (exclusief barcode-pools). Appic en Resident Advisor tonen
+        gebruikt / gereserveerd uit Weeztix (check-ins vs poolgrootte). Deurverkoop
+        volgt zodra die cijfers in de voorraad staan. Wingame Appic en
+        vriendentickets volgen nog. Totaal = som van de kanalen. Gescand = Weeztix
+        check-in.
       </p>
     </div>
   );

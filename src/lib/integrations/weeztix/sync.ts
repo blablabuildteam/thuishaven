@@ -9,6 +9,13 @@ import {
 } from "@/lib/integrations/weeztix/client";
 import { amsterdamDay } from "@/lib/time/amsterdam";
 import { estimateSoldOutFromTicketTypes } from "@/lib/editions/sold-out-timing";
+import {
+  channelHasTicketTypes,
+  summarizeWeeztixChannels,
+  WEEZTIX_DERIVED_PLATFORMS,
+  type ChannelInventorySummary,
+  type WeeztixDerivedPlatform,
+} from "@/lib/integrations/weeztix/channels";
 import { resolveWeeztixSoldOut } from "@/lib/integrations/weeztix/sold-out";
 
 function slugify(name: string): string {
@@ -299,6 +306,45 @@ export async function syncWeeztixTicketStatsFromEditions(options?: {
   });
 }
 
+async function upsertDerivedChannelInventory(
+  db: ReturnType<typeof getDb>,
+  editionId: string,
+  platform: WeeztixDerivedPlatform,
+  summary: ChannelInventorySummary,
+  persist: boolean,
+  existingRows: Array<{ id: string; platform: string }>,
+) {
+  const existing = existingRows.find((r) => r.platform === platform);
+  if (!persist && !existing) return;
+
+  const values = {
+    sold: summary.sold,
+    scanned: summary.scanned,
+    capacity: summary.capacity,
+    available: summary.available,
+    paidSold: 0,
+    freeSold: summary.sold,
+    revenueCents: 0,
+    syncedAt: new Date(),
+  };
+
+  if (existing) {
+    await db
+      .update(ticketInventory)
+      .set(values)
+      .where(eq(ticketInventory.id, existing.id));
+    return;
+  }
+
+  if (!persist) return;
+
+  await db.insert(ticketInventory).values({
+    editionId,
+    platform,
+    ...values,
+  });
+}
+
 async function upsertTicketInventoryForEvents(
   items: Array<{ guid: string; editionId: string }>,
   options?: {
@@ -330,17 +376,19 @@ async function upsertTicketInventoryForEvents(
       return;
     }
 
-    const summary = summarizeTicketSales(ticketsRes.tickets);
+    const tickets = ticketsRes.tickets;
+    const summary = summarizeTicketSales(tickets);
+    const channels = summarizeWeeztixChannels(tickets);
     totalSold += summary.sold;
 
     const inv = await db
-      .select()
+      .select({ id: ticketInventory.id, platform: ticketInventory.platform })
       .from(ticketInventory)
       .where(eq(ticketInventory.editionId, item.editionId))
       .limit(20);
     const weeztixRow = inv.find((r) => r.platform === "weeztix");
     const verdict = resolveWeeztixSoldOut({
-      tickets: ticketsRes.tickets,
+      tickets,
       sold: summary.sold,
       capacity: summary.capacity,
     });
@@ -353,7 +401,7 @@ async function upsertTicketInventoryForEvents(
             eventDay: amsterdamDay(startsAt),
             sold: summary.sold,
             capacity: summary.capacity,
-            tickets: ticketsRes.tickets,
+            tickets,
             assumeSoldOut: true,
           })
         : null;
@@ -378,7 +426,7 @@ async function upsertTicketInventoryForEvents(
           avgPriceEur:
             summary.avgPriceCents != null
               ? (summary.avgPriceCents / 100).toFixed(2)
-              : weeztixRow.avgPriceEur,
+              : null,
           isSoldOut,
           ...soldOutFields,
           syncedAt: new Date(),
@@ -403,6 +451,20 @@ async function upsertTicketInventoryForEvents(
         ...soldOutFields,
       });
     }
+
+    for (const platform of WEEZTIX_DERIVED_PLATFORMS) {
+      const channel =
+        platform === "appic" ? "appic" : ("resident_advisor" as const);
+      await upsertDerivedChannelInventory(
+        db,
+        item.editionId,
+        platform,
+        channels[channel],
+        channelHasTicketTypes(tickets, channel),
+        inv,
+      );
+    }
+
     upserted += 1;
   }
 
