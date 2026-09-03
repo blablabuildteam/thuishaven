@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { editions, marketingPosts, raListings } from "@/lib/db/schema";
 import {
@@ -307,7 +307,8 @@ export async function linkPostsToEditions(options?: {
 
   const persist = options?.persist ?? true;
   const minConfidence = options?.minConfidence ?? 0.55;
-  const limit = Math.min(Math.max(options?.limit ?? 80, 1), 200);
+  // High enough to clear backlog; sync used to pass 40 and starved older matches.
+  const limit = Math.min(Math.max(options?.limit ?? 250, 1), 500);
   const onlyUnlinked = options?.onlyUnlinked !== false;
   const db = getDb();
 
@@ -372,12 +373,43 @@ export async function linkPostsToEditions(options?: {
     });
 
   const posts = onlyUnlinked
-    ? await db
-        .select()
-        .from(marketingPosts)
-        .where(and(isNull(marketingPosts.editionId), isNotNull(marketingPosts.publishedAt)))
-        .orderBy(desc(marketingPosts.publishedAt))
-        .limit(limit)
+    ? await (async () => {
+        // Mix newest + oldest so a pile of unmatched recent posts can't starve
+        // older matches (e.g. June Toman TikToks behind 100+ newer unlinked).
+        const half = Math.ceil(limit / 2);
+        const [newest, oldest] = await Promise.all([
+          db
+            .select()
+            .from(marketingPosts)
+            .where(
+              and(
+                isNull(marketingPosts.editionId),
+                isNotNull(marketingPosts.publishedAt),
+              ),
+            )
+            .orderBy(desc(marketingPosts.publishedAt))
+            .limit(half),
+          db
+            .select()
+            .from(marketingPosts)
+            .where(
+              and(
+                isNull(marketingPosts.editionId),
+                isNotNull(marketingPosts.publishedAt),
+              ),
+            )
+            .orderBy(asc(marketingPosts.publishedAt))
+            .limit(half),
+        ]);
+        const seen = new Set<string>();
+        const merged = [];
+        for (const p of [...newest, ...oldest]) {
+          if (seen.has(p.id)) continue;
+          seen.add(p.id);
+          merged.push(p);
+        }
+        return merged;
+      })()
     : await db
         .select()
         .from(marketingPosts)

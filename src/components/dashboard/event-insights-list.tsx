@@ -23,6 +23,10 @@ import {
   Euro,
   TrendingUp,
   BadgeEuro,
+  Heart,
+  MessageCircle,
+  Eye,
+  ExternalLink,
 } from "lucide-react";
 import { cn, formatNumber, formatPercent } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -32,12 +36,19 @@ import type {
   EventInsightHeadline,
   EventInsightMail,
   EventInsightSocial,
+  EventInsightSocialVariant,
   CompetingEvent,
 } from "@/lib/insights/event-insights";
 import {
   SALES_IMPACT_ROLE_HINT,
   type SalesImpactRole,
 } from "@/lib/marketing/sales-impact";
+import {
+  organicImpactLevelLabel,
+  organicPostWeightLabel,
+  type OrganicImpactLevel,
+  type OrganicPostWeight,
+} from "@/lib/marketing/organic-impact";
 import {
   competeSizeLabel,
   competitionLevelLabel,
@@ -109,6 +120,7 @@ function HeadlineChip({ h }: { h: EventInsightHeadline }) {
     positive: "border-success/35 bg-success/10 text-success",
     neutral: "border-border bg-surface-hover text-text",
     caution: "border-warn/40 bg-warn/10 text-warn",
+    danger: "border-danger/40 bg-danger/10 text-danger",
     cold: "border-info/50 bg-info/15 text-text",
   };
 
@@ -308,13 +320,17 @@ function EventDetailSkeleton() {
               <Skeleton className="h-1.5 w-full" />
             </div>
           ))}
-        </div>
-        <div className="space-y-3">
-          <Skeleton className="h-2.5 w-16" />
+          <Skeleton className="mt-2 h-2.5 w-16" />
           <Skeleton className="h-14 w-full" />
           <Skeleton className="h-2.5 w-40" />
           <Skeleton className="h-20 w-full" />
+        </div>
+        <div className="space-y-3">
           <Skeleton className="h-2.5 w-36" />
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-2.5 w-28" />
+          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-2.5 w-20" />
           <Skeleton className="h-16 w-full" />
         </div>
       </div>
@@ -493,6 +509,13 @@ function EventDetail({ event }: { event: EventInsight }) {
               hint="Verkoop in de 7 dagen vóór/op eventdag"
             />
           )}
+          {tickets.sameDaySold != null && tickets.sameDaySold > 0 && (
+            <StatPill
+              label="Eventdag"
+              value={`+${formatNumber(tickets.sameDaySold)}`}
+              hint="Tickets verkocht op de eventdag zelf (Weeztix)"
+            />
+          )}
           {tickets.soldOutDaysBefore != null && (
             <StatPill
               label="Uitverkocht"
@@ -638,9 +661,7 @@ function EventDetail({ event }: { event: EventInsight }) {
                 )}
               </>
             )}
-          </div>
 
-          <div>
             {weather && (
               <>
                 <SectionDivider label="Weer" />
@@ -699,11 +720,16 @@ function EventDetail({ event }: { event: EventInsight }) {
               holidays={holidays}
               level={event.competitionLevel}
             />
+          </div>
 
+          <div>
             <SectionDivider label="Marketing · organic" />
             <OrganicMarketingBlock
               socialPosts={socialPosts}
               emailCampaigns={emailCampaigns}
+              impactLevel={event.organicImpactLevel}
+              impactScore={event.organicImpactScore}
+              sameDaySold={tickets.sameDaySold}
             />
 
             <SectionDivider label="Marketing · paid" />
@@ -733,7 +759,7 @@ function EventDetail({ event }: { event: EventInsight }) {
             </div>
 
             <SectionDivider label="Line-up" />
-            <LineupBlock artists={event.artists} source={event.artistsSource} />
+            <LineupBlock artists={event.artists} />
           </div>
         </div>
 
@@ -753,9 +779,15 @@ function EventDetail({ event }: { event: EventInsight }) {
 function OrganicMarketingBlock({
   socialPosts,
   emailCampaigns,
+  impactLevel,
+  impactScore,
+  sameDaySold,
 }: {
   socialPosts: EventInsightSocial[];
   emailCampaigns: EventInsightMail[];
+  impactLevel: EventInsight["organicImpactLevel"];
+  impactScore: number;
+  sameDaySold: number | null;
 }) {
   const mails = emailCampaigns.slice(0, 2);
   const byRole: Record<SalesImpactRole, EventInsightSocial[]> = {
@@ -768,10 +800,14 @@ function OrganicMarketingBlock({
     const posts = byRole[role];
     const groupMails = role === "promo" ? mails : [];
     if (posts.length === 0 && groupMails.length === 0) return [];
+    const label =
+      role === "same_day" && sameDaySold != null && sameDaySold > 0
+        ? `${ORGANIC_GROUP_LABEL[role]} · +${formatNumber(sameDaySold)} tickets`
+        : ORGANIC_GROUP_LABEL[role];
     return [
       {
         key: role,
-        label: ORGANIC_GROUP_LABEL[role],
+        label,
         posts,
         mails: groupMails,
       },
@@ -783,88 +819,363 @@ function OrganicMarketingBlock({
       {blocks.length === 0 ? (
         <p className="text-text-dim">Geen organic gekoppeld</p>
       ) : (
-        <div>
-          {blocks.map((block, i) => (
-            <div key={block.key}>
-              {i > 0 && <div className="my-2.5 h-px bg-border" />}
-              <p className="mb-1.5 text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
-                {block.label}
-              </p>
-              <div className="space-y-1">
-                {block.posts.map((p) => {
-                  const role = p.salesImpactRole;
-                  const liftLabel =
-                    role === "after"
-                      ? "n.v.t."
-                      : p.ticketLiftSold != null
-                        ? `+${formatNumber(p.ticketLiftSold)}`
-                        : "—";
-                  const body = (
+        <div className="space-y-3">
+          <OrganicImpactVerdict
+            level={impactLevel ?? "low"}
+            score={impactScore}
+            empty={
+              socialPosts.every((p) => p.salesImpactRole === "after") &&
+              mails.length === 0
+            }
+          />
+          <div>
+            {blocks.map((block, i) => (
+              <div key={block.key}>
+                {i > 0 && <div className="my-2.5 h-px bg-border" />}
+                <p className="mb-1.5 text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
+                  {block.label}
+                </p>
+                <div className="space-y-1">
+                  {block.posts.map((p) => (
+                    <OrganicPostRow key={p.postId} post={p} />
+                  ))}
+                  {block.mails.map((m) => (
                     <div
-                      className="flex items-center justify-between gap-2"
-                      title={SALES_IMPACT_ROLE_HINT[role]}
+                      key={m.campaignId}
+                      className="flex items-center justify-between gap-2 py-1"
                     >
                       <span className="flex min-w-0 items-center gap-1.5 truncate">
-                        <SocialChannelIcon
-                          channel={p.channel}
-                          size={14}
-                          alt=""
-                        />
+                        <SocialChannelIcon channel="mail" size={14} alt="" />
                         <span className="truncate text-text-muted">
-                          {p.title?.slice(0, 36) || p.channel}
+                          {m.name.slice(0, 30)}
                         </span>
                       </span>
-                      <span
-                        className="shrink-0 font-mono text-text-muted"
-                        title={
-                          role === "after"
-                            ? "Geen sales-impact"
-                            : `Tickets in window (${p.liftWindowLabel})`
-                        }
-                      >
-                        {liftLabel}
+                      <span className="shrink-0 font-mono text-text-muted">
+                        {m.ordersAfter != null
+                          ? `~${formatNumber(m.ordersAfter)}`
+                          : `${formatNumber(m.sent)} sent`}
                       </span>
                     </div>
-                  );
-                  if (p.permalink) {
-                    return (
-                      <a
-                        key={p.postId}
-                        href={p.permalink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block hover:text-text"
-                      >
-                        {body}
-                      </a>
-                    );
-                  }
-                  return <div key={p.postId}>{body}</div>;
-                })}
-                {block.mails.map((m) => (
-                  <div
-                    key={m.campaignId}
-                    className="flex items-center justify-between gap-2"
-                  >
-                    <span className="flex min-w-0 items-center gap-1.5 truncate">
-                      <SocialChannelIcon channel="mail" size={14} alt="" />
-                      <span className="truncate text-text-muted">
-                        {m.name.slice(0, 30)}
-                      </span>
-                    </span>
-                    <span className="shrink-0 font-mono text-text-muted">
-                      {m.ordersAfter != null
-                        ? `~${formatNumber(m.ordersAfter)}`
-                        : `${formatNumber(m.sent)} sent`}
-                    </span>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
     </div>
+  );
+}
+
+function OrganicEngagementMetrics({
+  impressions,
+  reach,
+  likeCount,
+  commentCount,
+  shareCount,
+  engagement,
+  className,
+}: {
+  impressions: number;
+  reach: number;
+  likeCount: number;
+  commentCount: number;
+  shareCount: number;
+  engagement: number;
+  className?: string;
+}) {
+  const views = impressions > 0 ? impressions : reach > 0 ? reach : 0;
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[10px] text-text-dim",
+        className,
+      )}
+    >
+      {views > 0 && (
+        <span className="inline-flex items-center gap-0.5">
+          <Eye className="size-2.5" aria-hidden />
+          {formatNumber(views)}
+        </span>
+      )}
+      {likeCount > 0 && (
+        <span className="inline-flex items-center gap-0.5">
+          <Heart className="size-2.5" aria-hidden />
+          {formatNumber(likeCount)}
+        </span>
+      )}
+      {commentCount > 0 && (
+        <span className="inline-flex items-center gap-0.5">
+          <MessageCircle className="size-2.5" aria-hidden />
+          {formatNumber(commentCount)}
+        </span>
+      )}
+      {shareCount > 0 && (
+        <span className="inline-flex items-center gap-0.5">
+          <Share2 className="size-2.5" aria-hidden />
+          {formatNumber(shareCount)}
+        </span>
+      )}
+      {views === 0 &&
+        likeCount === 0 &&
+        commentCount === 0 &&
+        shareCount === 0 &&
+        engagement > 0 && <span>{formatNumber(engagement)} eng.</span>}
+      {views === 0 &&
+        likeCount === 0 &&
+        commentCount === 0 &&
+        shareCount === 0 &&
+        engagement === 0 && (
+          <span title="Nog geen metrics van Meta/TikTok/YouTube">
+            geen metrics
+          </span>
+        )}
+    </div>
+  );
+}
+
+function OrganicPostRow({ post }: { post: EventInsightSocial }) {
+  const [open, setOpen] = useState(false);
+  const role = post.salesImpactRole;
+  const hasVariants = post.variants.length > 1;
+  const liftLabel =
+    role === "after"
+      ? "n.v.t."
+      : post.ticketLiftSold != null
+        ? `+${formatNumber(post.ticketLiftSold)}`
+        : "—";
+
+  return (
+    <div className="py-0.5">
+      <div className="group -mx-1.5 rounded-sm px-1.5 py-1 transition-colors hover:bg-surface-hover">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <SocialChannelIcon channel={post.channel} size={14} alt="" />
+              {post.permalink ? (
+                <a
+                  href={post.permalink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="min-w-0 truncate text-text-muted transition-colors hover:text-text hover:underline hover:underline-offset-2"
+                  title={`${SALES_IMPACT_ROLE_HINT[role]} · Open post`}
+                >
+                  {post.title?.slice(0, 36) || post.channel}
+                </a>
+              ) : (
+                <span
+                  className="truncate text-text-muted"
+                  title={SALES_IMPACT_ROLE_HINT[role]}
+                >
+                  {post.title?.slice(0, 36) || post.channel}
+                </span>
+              )}
+              {post.permalink && (
+                <ExternalLink
+                  className="size-3 shrink-0 text-text-dim opacity-0 transition-opacity group-hover:opacity-100"
+                  aria-hidden
+                />
+              )}
+            </div>
+            <OrganicEngagementMetrics
+              impressions={post.impressions}
+              reach={post.reach}
+              likeCount={post.likeCount}
+              commentCount={post.commentCount}
+              shareCount={post.shareCount}
+              engagement={post.engagement}
+              className="pl-[18px]"
+            />
+          </div>
+          <div className="flex shrink-0 items-center gap-2 pt-0.5">
+            {hasVariants && (
+              <button
+                type="button"
+                onClick={() => setOpen((v) => !v)}
+                className="inline-flex items-center gap-0.5 text-[10px] font-medium tracking-wide text-text-dim uppercase transition-colors hover:text-text"
+                aria-expanded={open}
+              >
+                {post.variants.length} variants
+                <ChevronDown
+                  className={cn(
+                    "size-3 transition-transform",
+                    open && "rotate-180",
+                  )}
+                  aria-hidden
+                />
+              </button>
+            )}
+            {role !== "after" && (
+              <OrganicPostWeightBars weight={post.impactWeight} />
+            )}
+            <span
+              className="font-mono text-text-muted"
+              title={
+                role === "after"
+                  ? "Geen sales-impact"
+                  : `Tickets in window (${post.liftWindowLabel})`
+              }
+            >
+              {liftLabel}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {hasVariants && open && (
+        <ul className="mt-1 space-y-1 border-l border-border pl-3 ml-[7px]">
+          {post.variants.map((v, i) => (
+            <OrganicVariantRow
+              key={v.postId}
+              variant={v}
+              channel={post.channel}
+              index={i + 1}
+            />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function OrganicVariantRow({
+  variant,
+  channel,
+  index,
+}: {
+  variant: EventInsightSocialVariant;
+  channel: string;
+  index: number;
+}) {
+  const label = `Variant ${index}`;
+  const inner = (
+    <div className="space-y-0.5 py-0.5">
+      <div className="flex items-center gap-1.5">
+        <SocialChannelIcon channel={channel} size={12} alt="" />
+        <span className="truncate text-[11px] text-text-muted">
+          {label}
+          {variant.publishedAt && (
+            <span className="text-text-dim">
+              {" "}
+              ·{" "}
+              {new Date(variant.publishedAt).toLocaleDateString("nl-NL", {
+                day: "numeric",
+                month: "short",
+              })}
+            </span>
+          )}
+        </span>
+        {variant.permalink && (
+          <ExternalLink
+            className="size-2.5 shrink-0 text-text-dim opacity-0 transition-opacity group-hover:opacity-100"
+            aria-hidden
+          />
+        )}
+      </div>
+      <OrganicEngagementMetrics
+        impressions={variant.impressions}
+        reach={variant.reach}
+        likeCount={variant.likeCount}
+        commentCount={variant.commentCount}
+        shareCount={variant.shareCount}
+        engagement={variant.engagement}
+        className="pl-[16px]"
+      />
+    </div>
+  );
+
+  if (variant.permalink) {
+    return (
+      <li>
+        <a
+          href={variant.permalink}
+          target="_blank"
+          rel="noreferrer"
+          className="group -mx-1 block rounded-sm px-1 transition-colors hover:bg-surface-hover"
+        >
+          {inner}
+        </a>
+      </li>
+    );
+  }
+  return <li>{inner}</li>;
+}
+
+function OrganicImpactVerdict({
+  level,
+  score,
+  empty,
+}: {
+  level: OrganicImpactLevel;
+  score: number;
+  empty?: boolean;
+}) {
+  const label = organicImpactLevelLabel(level);
+  return (
+    <div className="flex items-center gap-2.5">
+      <OrganicImpactLevelBars level={level} />
+      <div className="min-w-0">
+        <p className="text-xs font-medium capitalize text-text">{label}</p>
+        <p className="text-[10px] text-text-dim">
+          {empty
+            ? "Geen promo-posts die meetellen voor sales"
+            : `Conclusie op bereik, engagement en ticketlift · score ${score}`}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** Per-post heaviness — same rising-bar language as concurrentie-omvang. */
+function OrganicPostWeightBars({ weight }: { weight: OrganicPostWeight }) {
+  const filled = weight === "heavy" ? 3 : weight === "medium" ? 2 : 1;
+  const label = organicPostWeightLabel(weight);
+  const heights = ["h-1.5", "h-2.5", "h-3.5"] as const;
+  return (
+    <span
+      className="inline-flex h-3.5 shrink-0 items-end gap-0.5"
+      title={`Impact per post: ${label}`}
+      aria-label={`Impact ${label}`}
+      role="img"
+    >
+      {heights.map((h, i) => (
+        <span
+          key={h}
+          className={cn(
+            "w-1 rounded-[1px]",
+            h,
+            i < filled ? "bg-text-muted" : "bg-border",
+          )}
+        />
+      ))}
+    </span>
+  );
+}
+
+function OrganicImpactLevelBars({ level }: { level: OrganicImpactLevel }) {
+  const filled = level === "high" ? 3 : level === "medium" ? 2 : 1;
+  const label = organicImpactLevelLabel(level);
+  const heights = ["h-2", "h-3", "h-4"] as const;
+  const fill =
+    level === "high"
+      ? "bg-success"
+      : level === "medium"
+        ? "bg-accent"
+        : "bg-text-dim";
+  return (
+    <span
+      className="inline-flex h-4 shrink-0 items-end gap-0.5"
+      title={label}
+      aria-label={label}
+      role="img"
+    >
+      {heights.map((h, i) => (
+        <span
+          key={h}
+          className={cn("w-1.5 rounded-[1px]", h, i < filled ? fill : "bg-border")}
+        />
+      ))}
+    </span>
   );
 }
 
@@ -897,11 +1208,6 @@ function CompetitionBlock({
   return (
     <div className="space-y-3">
       <CompetitionVerdict level={resolved} />
-      <p className="text-[10px] leading-relaxed text-text-dim">
-        Zelfde Amsterdam-dag via Resident Advisor. Streepjes per event =
-        relatieve omvang; oordeel hierboven weegt festivals zwaarder dan
-        clubnights. Geen echte headcount.
-      </p>
       {festivals.length > 0 && (
         <CompeteList
           title="Festivals"
@@ -1017,10 +1323,10 @@ function CompetitionLevelBars({ level }: { level: CompetitionLevel }) {
   const heights = ["h-2", "h-3", "h-4"] as const;
   const fill =
     level === "high"
-      ? "bg-warn"
+      ? "bg-danger"
       : level === "medium"
-        ? "bg-text-muted"
-        : "bg-success/70";
+        ? "bg-warn"
+        : "bg-success";
   return (
     <span
       className="inline-flex h-4 shrink-0 items-end gap-0.5"
@@ -1042,24 +1348,10 @@ function CompetitionLevelBars({ level }: { level: CompetitionLevel }) {
   );
 }
 
-function LineupBlock({
-  artists,
-  source,
-}: {
-  artists: string[];
-  source: EventInsight["artistsSource"];
-}) {
+function LineupBlock({ artists }: { artists: string[] }) {
   const names = artists.length > 0 ? artists : [];
   return (
     <div className="space-y-2">
-      <p className="text-[10px] leading-relaxed text-text-dim">
-        {source === "resident_advisor"
-          ? "Line-up uit Resident Advisor."
-          : source === "edition_name"
-            ? "Line-up afgeleid uit de eventnaam (RA nog niet gekoppeld)."
-            : "Nog geen line-up — sync RA via Bronnen."}{" "}
-        Fee blijft leeg tot we DJ-prijzen kunnen koppelen.
-      </p>
       {names.length === 0 ? (
         <div className="border border-dashed border-border px-3 py-2 text-xs text-text-dim">
           Geen DJs bekend

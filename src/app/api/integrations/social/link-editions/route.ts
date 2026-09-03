@@ -19,7 +19,7 @@ export async function POST(request: Request) {
 
   const result = await linkPostsToEditions({
     persist: body.persist !== false,
-    limit: body.limit ?? 80,
+    limit: body.limit ?? 250,
   });
 
   return NextResponse.json(result, { status: result.ok ? 200 : 502 });

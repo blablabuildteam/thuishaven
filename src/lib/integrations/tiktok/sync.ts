@@ -208,7 +208,7 @@ export async function syncTikTokReadOnly(options?: {
       const { linkPostsToEditions } = await import(
         "@/lib/marketing/edition-link"
       );
-      const linked = await linkPostsToEditions({ limit: 40 });
+      const linked = await linkPostsToEditions({ limit: 250 });
       if (linked.linked > 0) {
         notes.push(`${linked.linked} posts → edities`);
       }

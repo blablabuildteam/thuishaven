@@ -24,7 +24,7 @@
 - [ ] Pull total ad spend per event
 - [ ] Sync Instagram after Meta token install
 - [x] Narrow down which social posts count toward an event’s sales (exclude aftermovies / posts after the event; same-day = eventdag only)
-- [ ] Engagement-weighted impact score per promo post (Phase B)
+- [x] Organic impact score per event (low/medium/high from bereik + engagement + ticketlift)
 - [ ] Add a graph on Insights that shows marketing activities versus ticket sales
 
 ## Context

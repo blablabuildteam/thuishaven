@@ -45,6 +45,13 @@ import {
   salesLiftWindow,
 } from "@/lib/marketing/sales-impact";
 import {
+  dedupeOrganicCreativeVariants,
+  scoreOrganicPost,
+  summarizeOrganicImpact,
+  type OrganicImpactLevel,
+  type OrganicPostWeight,
+} from "@/lib/marketing/organic-impact";
+import {
   periodsForDay,
   weekdayKeyFromIso,
   type CalendarPeriod,
@@ -178,7 +185,7 @@ export type CompetingEvent = {
 
 export type EventInsightHeadline = {
   text: string;
-  tone: "positive" | "neutral" | "caution" | "cold";
+  tone: "positive" | "neutral" | "caution" | "danger" | "cold";
   kind:
     | "tickets"
     | "scan"
@@ -194,6 +201,19 @@ export type EventInsightHeadline = {
   competeLevel?: CompetitionLevel;
 };
 
+export type EventInsightSocialVariant = {
+  postId: string;
+  title: string | null;
+  engagement: number;
+  impressions: number;
+  reach: number;
+  likeCount: number;
+  commentCount: number;
+  shareCount: number;
+  permalink: string | null;
+  publishedAt: string | null;
+};
+
 export type EventInsightSocial = {
   postId: string;
   channel: string;
@@ -203,15 +223,24 @@ export type EventInsightSocial = {
   reach: number;
   likeCount: number;
   commentCount: number;
+  shareCount: number;
   ticketLiftSold: number | null;
   /** promo | same_day | after — aftermovies never get ticket lift. */
   salesImpactRole: "promo" | "same_day" | "after";
   /** ±48u | eventdag | n.v.t. */
   liftWindowLabel: string;
+  /** Per-post heaviness for the organic impact score. */
+  impactWeight: OrganicPostWeight;
+  impactPoints: number;
   permalink: string | null;
   publishedAt: string | null;
   format: string | null;
   offer: string | null;
+  /**
+   * Same-caption creative variants (esp. TikTok). Empty when this row is a
+   * single upload; otherwise the individual posts behind the group totals.
+   */
+  variants: EventInsightSocialVariant[];
 };
 
 export type EventInsightMail = {
@@ -278,6 +307,8 @@ export type EventInsight = {
     fillPct: number | null;
     avgPriceEur: number | null;
     lastWeekSold: number | null;
+    /** Tickets sold on the event day itself (Weeztix daily curve). */
+    sameDaySold: number | null;
     soldOutDaysBefore: number | null;
     scanned: number;
     scanRatePct: number | null;
@@ -303,6 +334,9 @@ export type EventInsight = {
   competingFestivals: CompetingEvent[];
   /** Overall same-day competition pressure (from listed competitors). */
   competitionLevel: CompetitionLevel | null;
+  /** Combined organic promo impact (engagement + lift correlation). */
+  organicImpactLevel: OrganicImpactLevel | null;
+  organicImpactScore: number;
 };
 
 function weatherTone(kind: WeatherKind): "positive" | "neutral" | "caution" {
@@ -320,6 +354,7 @@ function buildHeadlines(e: EventInsight): EventInsightHeadline[] {
     referrers,
     competingFestivals,
     competitionLevel,
+    organicImpactLevel,
   } = e;
 
   if (tickets.fillPct != null) {
@@ -389,31 +424,33 @@ function buildHeadlines(e: EventInsight): EventInsightHeadline[] {
   const promoOrSameDay = socialPosts.filter(
     (p) => p.salesImpactRole === "promo" || p.salesImpactRole === "same_day",
   );
-  const measured = promoOrSameDay.filter(
-    (p) => p.ticketLiftSold != null && p.ticketLiftSold > 0,
-  );
-  if (measured.length > 0) {
+  if (organicImpactLevel && promoOrSameDay.length > 0) {
+    const label =
+      organicImpactLevel === "high"
+        ? "hoge organic"
+        : organicImpactLevel === "medium"
+          ? "middel organic"
+          : "lage organic";
+    const measured = promoOrSameDay.filter(
+      (p) => p.ticketLiftSold != null && p.ticketLiftSold > 0,
+    );
     const totalLift = measured.reduce(
       (s, p) => s + (p.ticketLiftSold ?? 0),
       0,
     );
-    const channels = [...new Set(measured.map((p) => p.channel))];
-    const promoCount = socialPosts.filter(
-      (p) => p.salesImpactRole === "promo",
-    ).length;
     out.push({
-      text: `${promoCount} promo · +${totalLift.toLocaleString("nl-NL")} tickets`,
-      tone: totalLift > 50 ? "positive" : "neutral",
+      text:
+        totalLift > 0
+          ? `${label} · +${totalLift.toLocaleString("nl-NL")} tickets`
+          : `${label} · ${promoOrSameDay.length} posts`,
+      tone:
+        organicImpactLevel === "high"
+          ? "positive"
+          : organicImpactLevel === "low"
+            ? "caution"
+            : "neutral",
       kind: "social",
-      hint: `Organische promo/eventdag-posts (${channels.join(", ")}). Lift = Weeztix-verkopen in het role-window (correlatie). Aftermovies uitgesloten.`,
-    });
-  } else if (promoOrSameDay.length > 0) {
-    const channels = [...new Set(promoOrSameDay.map((p) => p.channel))];
-    out.push({
-      text: `${promoOrSameDay.length} promo (${channels.join(", ")})`,
-      tone: "neutral",
-      kind: "social",
-      hint: "Organische promo-posts gekoppeld; nog geen meetbare ticketlift.",
+      hint: "Organic impact = gecombineerde score van bereik, engagement en ticketlift per promo/eventdag-post (aftermovies uitgesloten).",
     });
   } else if (socialPosts.length > 0) {
     out.push({
@@ -460,9 +497,9 @@ function buildHeadlines(e: EventInsight): EventInsightHeadline[] {
   if (competitionLevel) {
     const tone =
       competitionLevel === "high"
-        ? "caution"
+        ? "danger"
         : competitionLevel === "medium"
-          ? "neutral"
+          ? "caution"
           : "positive";
     out.push({
       text: competitionLevelLabel(competitionLevel),
@@ -840,6 +877,9 @@ export async function loadEventInsightsFresh(options?: {
       for (const [d, n] of curve) {
         if (d >= windowStart && d <= day) lastWeekSold += n;
       }
+      const sameDayRaw = curve.get(day);
+      const sameDaySold =
+        sameDayRaw != null && sameDayRaw > 0 ? sameDayRaw : null;
 
       const w = weatherByDay.get(day);
       let weather: EventInsight["weather"] = null;
@@ -901,6 +941,17 @@ export async function loadEventInsightsFresh(options?: {
             role,
             publishedAt: p.publishedAt,
           });
+          const scored = scoreOrganicPost({
+            channel: p.channel,
+            salesImpactRole: role,
+            impressions: p.impressions ?? 0,
+            reach: p.reach ?? 0,
+            likeCount: p.likeCount ?? 0,
+            commentCount: p.commentCount ?? 0,
+            shareCount: p.shareCount ?? 0,
+            engagement: p.engagement ?? 0,
+            ticketLiftSold: null,
+          });
           return {
             postId: p.id,
             channel: p.channel,
@@ -910,13 +961,17 @@ export async function loadEventInsightsFresh(options?: {
             reach: p.reach ?? 0,
             likeCount: p.likeCount ?? 0,
             commentCount: p.commentCount ?? 0,
+            shareCount: p.shareCount ?? 0,
             ticketLiftSold: null,
             salesImpactRole: role,
             liftWindowLabel: window?.label ?? "n.v.t.",
+            impactWeight: scored.weight,
+            impactPoints: scored.points,
             permalink: p.permalink,
             publishedAt: p.publishedAt?.toISOString() ?? null,
             format: p.visualFeatures?.format ?? null,
             offer: p.visualFeatures?.offer ?? null,
+            variants: [],
           };
         })
         .sort((a, b) => {
@@ -1040,6 +1095,7 @@ export async function loadEventInsightsFresh(options?: {
               ? avgPriceEur
               : null,
           lastWeekSold: lastWeekSold > 0 ? lastWeekSold : null,
+          sameDaySold,
           soldOutDaysBefore: e.soldOutDaysBefore ?? null,
           scanned,
           scanRatePct,
@@ -1052,8 +1108,13 @@ export async function loadEventInsightsFresh(options?: {
         referrers,
         competingFestivals: competing,
         competitionLevel: summarizeCompetition(competing).level,
+        organicImpactLevel: null,
+        organicImpactScore: 0,
       };
 
+      const organic0 = summarizeOrganicImpact(socialPosts);
+      insight.organicImpactLevel = organic0.level;
+      insight.organicImpactScore = organic0.score;
       insight.headlines = buildHeadlines(insight);
       return insight;
     });
@@ -1061,43 +1122,70 @@ export async function loadEventInsightsFresh(options?: {
     // Ticket lift from already-loaded daily curves (role-aware windows)
     for (const event of insights) {
       const curve = dailyByEdition.get(event.editionId);
-      if (!curve || event.socialPosts.length === 0) continue;
-      let changed = false;
-      for (const post of event.socialPosts) {
-        if (post.salesImpactRole === "after") {
-          post.ticketLiftSold = null;
-          post.liftWindowLabel = "n.v.t.";
-          continue;
-        }
-        if (!post.publishedAt) continue;
-        const window = salesLiftWindow({
-          role: post.salesImpactRole,
-          publishedAt: post.publishedAt,
-        });
-        if (!window) {
-          post.ticketLiftSold = null;
-          post.liftWindowLabel = "n.v.t.";
-          continue;
-        }
-        post.liftWindowLabel = window.label;
-        let sold = 0;
-        let daysCovered = 0;
-        for (
-          let d = window.dayFrom;
-          d <= window.dayTo;
-          d = shiftIsoDay(d, 1)
-        ) {
-          if (curve.has(d)) {
-            daysCovered += 1;
-            sold += curve.get(d) ?? 0;
+      if (event.socialPosts.length === 0) {
+        event.organicImpactLevel = null;
+        event.organicImpactScore = 0;
+        continue;
+      }
+      if (curve) {
+        for (const post of event.socialPosts) {
+          if (post.salesImpactRole === "after") {
+            post.ticketLiftSold = null;
+            post.liftWindowLabel = "n.v.t.";
+            continue;
+          }
+          if (!post.publishedAt) continue;
+          const window = salesLiftWindow({
+            role: post.salesImpactRole,
+            publishedAt: post.publishedAt,
+          });
+          if (!window) {
+            post.ticketLiftSold = null;
+            post.liftWindowLabel = "n.v.t.";
+            continue;
+          }
+          post.liftWindowLabel = window.label;
+          let sold = 0;
+          let daysCovered = 0;
+          for (
+            let d = window.dayFrom;
+            d <= window.dayTo;
+            d = shiftIsoDay(d, 1)
+          ) {
+            if (curve.has(d)) {
+              daysCovered += 1;
+              sold += curve.get(d) ?? 0;
+            }
+          }
+          if (daysCovered > 0) {
+            post.ticketLiftSold = sold;
           }
         }
-        if (daysCovered > 0) {
-          post.ticketLiftSold = sold;
-          changed = true;
-        }
       }
-      if (changed) event.headlines = buildHeadlines(event);
+
+      // TikTok often uploads several variants with the same caption — one row.
+      event.socialPosts = dedupeOrganicCreativeVariants(event.socialPosts);
+
+      for (const post of event.socialPosts) {
+        const scored = scoreOrganicPost(post);
+        post.impactPoints = scored.points;
+        post.impactWeight = scored.weight;
+      }
+      event.socialPosts.sort((a, b) => {
+        const rank = (r: EventInsightSocial["salesImpactRole"]) =>
+          r === "promo" ? 0 : r === "same_day" ? 1 : 2;
+        const rr = rank(a.salesImpactRole) - rank(b.salesImpactRole);
+        if (rr !== 0) return rr;
+        if (b.impactPoints !== a.impactPoints) {
+          return b.impactPoints - a.impactPoints;
+        }
+        return (b.publishedAt ?? "").localeCompare(a.publishedAt ?? "");
+      });
+
+      const organic = summarizeOrganicImpact(event.socialPosts);
+      event.organicImpactLevel = organic.level;
+      event.organicImpactScore = organic.score;
+      event.headlines = buildHeadlines(event);
     }
 
   if (mode === "upcoming") {
@@ -1124,7 +1212,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v10"],
+  ["event-insights-upcoming-v15"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1140,7 +1228,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v10"],
+  ["event-insights-past-v15"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],
