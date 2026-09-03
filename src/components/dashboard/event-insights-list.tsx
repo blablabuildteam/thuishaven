@@ -64,6 +64,7 @@ import type {
   WeatherCodeIconKind,
   WeatherHourRow,
 } from "@/lib/weather/open-meteo";
+import { displayEditionTitle } from "@/lib/editions/lineup";
 import type { DemographicBucket } from "@/lib/db/schema";
 
 const COLLAPSE_MS = 380;
@@ -583,9 +584,35 @@ function TicketMetricsVisual({
           : "text-text"
       : "text-text";
 
+  const miniStats = [
+    avgPriceEur != null && {
+      label: "Gem. prijs",
+      value: `€${avgPriceEur.toFixed(0)}`,
+      hint: "Gemiddelde betaalde ticketprijs",
+    },
+    lastWeekSold != null &&
+      lastWeekSold > 0 && {
+        label: "Laatste week",
+        value: `+${formatNumber(lastWeekSold)}`,
+        hint: "Verkoop in de 7 dagen vóór/op eventdag",
+      },
+    sameDaySold != null &&
+      sameDaySold > 0 && {
+        label: "Eventdag",
+        value: `+${formatNumber(sameDaySold)}`,
+        hint: "Tickets verkocht op de eventdag zelf (Weeztix)",
+      },
+    soldOutDaysBefore != null && {
+      label: "Uitverkocht",
+      value: `${soldOutDaysBefore}d vóór`,
+      hint: "Dagen vóór start dat Weeztix uitverkocht raakte",
+    },
+  ].filter(Boolean) as Array<{ label: string; value: string; hint: string }>;
+
   return (
-    <div className="mb-4 border border-border bg-surface px-3 py-3">
-      <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+    <div className="mb-4 border border-border px-3 py-3">
+      {/* Main metrics row: Beschikbaar | Verkocht | Gescand */}
+      <div className="grid grid-cols-3 gap-4">
         <div title="Nog beschikbare tickets (capaciteit − verkocht)">
           <p className="text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
             Beschikbaar
@@ -597,57 +624,25 @@ function TicketMetricsVisual({
             {capacity != null ? `van ${formatNumber(capacity)}` : "geen capaciteit"}
           </p>
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-            <div title="Verkochte Weeztix-tickets">
-              <p className="text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
-                Verkocht
-              </p>
-              <p
-                className={cn(
-                  "mt-1 font-display text-2xl leading-none tracking-tight",
-                  fillTone,
-                )}
-              >
-                {formatNumber(sold)}
-              </p>
-              <p className="mt-1 text-[10px] text-text-dim">
-                {fillPct != null ? `${formatPercent(fillPct, 0)} vol` : "totaal"}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-start justify-end gap-x-4 gap-y-2">
-              {avgPriceEur != null && (
-                <TicketMiniStat
-                  label="Gem. prijs"
-                  value={`€${avgPriceEur.toFixed(0)}`}
-                  hint="Gemiddelde betaalde ticketprijs"
-                />
-              )}
-              {lastWeekSold != null && lastWeekSold > 0 && (
-                <TicketMiniStat
-                  label="Laatste week"
-                  value={`+${formatNumber(lastWeekSold)}`}
-                  hint="Verkoop in de 7 dagen vóór/op eventdag"
-                />
-              )}
-              {sameDaySold != null && sameDaySold > 0 && (
-                <TicketMiniStat
-                  label="Eventdag"
-                  value={`+${formatNumber(sameDaySold)}`}
-                  hint="Tickets verkocht op de eventdag zelf (Weeztix)"
-                />
-              )}
-              {soldOutDaysBefore != null && (
-                <TicketMiniStat
-                  label="Uitverkocht"
-                  value={`${soldOutDaysBefore}d vóór`}
-                  hint="Dagen vóór start dat Weeztix uitverkocht raakte"
-                />
-              )}
-            </div>
-          </div>
+
+        <div title="Verkochte Weeztix-tickets" className="text-center">
+          <p className="text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
+            Verkocht
+          </p>
+          <p
+            className={cn(
+              "mt-1 font-display text-2xl leading-none tracking-tight",
+              fillTone,
+            )}
+          >
+            {formatNumber(sold)}
+          </p>
+          <p className="mt-1 text-[10px] text-text-dim">
+            {fillPct != null ? `${formatPercent(fillPct, 0)} vol` : "totaal"}
+          </p>
         </div>
-        <div title="Check-ins t.o.v. verkochte tickets">
+
+        <div title="Check-ins t.o.v. verkochte tickets" className="text-right">
           <p className="text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
             Gescand
           </p>
@@ -663,6 +658,22 @@ function TicketMetricsVisual({
           </p>
         </div>
       </div>
+
+      {/* Secondary stats related to Verkocht */}
+      {miniStats.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 border-t border-border pt-3">
+          {miniStats.map((s) => (
+            <div key={s.label} title={s.hint} className="text-center">
+              <p className="text-[9px] font-medium tracking-[0.1em] text-text-dim uppercase">
+                {s.label}
+              </p>
+              <p className="mt-0.5 font-mono text-xs font-medium leading-none">
+                {s.value}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
 
       <TicketCompositionBar
         sold={sold}
@@ -768,10 +779,21 @@ function EventRow({ event }: { event: EventInsight }) {
     return () => window.clearTimeout(unmount);
   }, [open]);
 
-  const dateStr = new Date(`${event.day}T12:00:00`).toLocaleDateString(
-    "nl-NL",
-    { weekday: "short", day: "numeric", month: "short", year: "numeric" },
-  );
+  const eventDate = new Date(`${event.day}T12:00:00`);
+  const dayNum = eventDate.getDate();
+  const weekdayLabel = eventDate.toLocaleDateString("nl-NL", { weekday: "long" });
+  const monthLabel = eventDate
+    .toLocaleDateString("nl-NL", { month: "short" })
+    .replace(".", "")
+    .toUpperCase();
+  const dateLabel = eventDate.toLocaleDateString("nl-NL", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  const artists = event.artists.filter(Boolean);
+  const title = displayEditionTitle(event.name, artists);
 
   return (
     <li className="border border-border bg-surface">
@@ -779,24 +801,34 @@ function EventRow({ event }: { event: EventInsight }) {
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-start gap-4 px-4 py-4 text-left transition-colors hover:bg-surface-hover"
+        className="flex w-full items-center gap-4 px-4 py-4 text-left transition-colors hover:bg-surface-hover"
       >
+        <span
+          className="flex w-12 shrink-0 flex-col items-center text-text-muted"
+          title={dateLabel}
+          aria-label={dateLabel}
+        >
+          <span className="text-[9px] font-medium leading-none tracking-[0.08em] text-text-dim capitalize">
+            {weekdayLabel}
+          </span>
+          <span className="mt-0.5 font-mono text-[2.25rem] font-bold leading-none tabular-nums">
+            {dayNum}
+          </span>
+          <span className="mt-0.5 text-[9px] font-medium leading-none tracking-[0.14em] text-text-dim uppercase">
+            {monthLabel}
+          </span>
+        </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <span className="text-[15px] font-medium leading-snug">
-              {event.name}
+            <span className="text-[15px] font-medium leading-snug" title={event.name}>
+              {title}
             </span>
-            {event.headliner && event.headliner !== event.name && (
-              <span className="text-xs text-text-dim">{event.headliner}</span>
+            {artists.length > 0 && (
+              <span className="text-xs text-text-dim">
+                {artists.join(" · ")}
+              </span>
             )}
           </div>
-          <p className="mt-1 text-xs text-text-muted">
-            {dateStr}
-            {event.isOutdoor ? " · outdoor" : ""}
-            {event.periodLabels.length > 0
-              ? ` · ${event.periodLabels.join(", ")}`
-              : ""}
-          </p>
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
             {event.weather && <WeatherChip weather={event.weather} />}
             {event.headlines.map((h, i) => (
@@ -804,7 +836,7 @@ function EventRow({ event }: { event: EventInsight }) {
             ))}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-3 pt-1">
+        <div className="flex shrink-0 items-center gap-3">
           <CompactTicketMetrics
             key={open ? `fill-${revealKey}` : "fill"}
             sold={event.tickets.sold}
@@ -1760,6 +1792,39 @@ function groupByMonth(events: EventInsight[]): Array<{
   }));
 }
 
+function EventListHeading({
+  id,
+  eyebrow,
+  title,
+  count,
+}: {
+  id: string;
+  eyebrow: string;
+  title: string;
+  count: number;
+}) {
+  return (
+    <div className="mb-5 flex items-end justify-between gap-4 border-b border-border pb-3">
+      <div className="min-w-0">
+        <p className="mb-1 text-[11px] font-medium tracking-[0.14em] text-text-dim uppercase">
+          {eyebrow}
+        </p>
+        <h2 id={id} className="font-display text-2xl tracking-[0.03em] sm:text-3xl">
+          {title}
+        </h2>
+      </div>
+      <p className="shrink-0 text-right">
+        <span className="font-display text-3xl tabular-nums leading-none">
+          {count}
+        </span>
+        <span className="mt-1 block text-[11px] tracking-[0.12em] text-text-dim uppercase">
+          events
+        </span>
+      </p>
+    </div>
+  );
+}
+
 export function EventInsightsList({
   upcoming,
   past,
@@ -1777,10 +1842,13 @@ export function EventInsightsList({
   return (
     <div>
       {upcoming.length > 0 && (
-        <div className="mb-8">
-          <p className="mb-3 text-[11px] font-medium tracking-[0.12em] text-text-dim uppercase">
-            Komende events ({upcoming.length})
-          </p>
+        <section className="mb-8" aria-labelledby="upcoming-events-heading">
+          <EventListHeading
+            id="upcoming-events-heading"
+            eyebrow="Planning"
+            title="Komende events"
+            count={upcoming.length}
+          />
           <div className="space-y-6">
             {upcomingMonths.map((m) => (
               <div key={m.key}>
@@ -1804,14 +1872,20 @@ export function EventInsightsList({
               Toon {upcoming.length - 8} meer komende events
             </button>
           )}
-        </div>
+        </section>
       )}
 
       {past.length > 0 && (
-        <div>
-          <p className="mb-3 text-[11px] font-medium tracking-[0.12em] text-text-dim uppercase">
-            Afgelopen events ({past.length})
-          </p>
+        <section
+          className={cn(upcoming.length > 0 && "mt-12 border-t-2 border-border pt-10")}
+          aria-labelledby="past-events-heading"
+        >
+          <EventListHeading
+            id="past-events-heading"
+            eyebrow="Archief"
+            title="Afgelopen events"
+            count={past.length}
+          />
           <div className="space-y-6">
             {pastMonths.map((m) => (
               <div key={m.key}>
@@ -1835,7 +1909,7 @@ export function EventInsightsList({
               Toon alle {past.length} afgelopen events
             </button>
           )}
-        </div>
+        </section>
       )}
 
       {upcoming.length === 0 && past.length === 0 && (

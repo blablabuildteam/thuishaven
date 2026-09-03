@@ -51,15 +51,27 @@ export function EventInsightsSkeleton({ rows = 5 }: { rows?: number }) {
       aria-label="Event-inzichten laden"
     >
       <div className="mb-8">
-        <Skeleton className="mb-3 h-2.5 w-36" />
+        <div className="mb-5 flex items-end justify-between gap-4 border-b border-border pb-3">
+          <div>
+            <Skeleton className="mb-1 h-2.5 w-16" />
+            <Skeleton className="h-8 w-48 sm:h-9" />
+          </div>
+          <Skeleton className="h-8 w-10" />
+        </div>
         <ul className="space-y-2">
           {Array.from({ length: Math.min(rows, 3) }, (_, i) => (
             <EventRowSkeleton key={`up-${i}`} />
           ))}
         </ul>
       </div>
-      <div>
-        <Skeleton className="mb-3 h-2.5 w-40" />
+      <div className="mt-12 border-t-2 border-border pt-10">
+        <div className="mb-5 flex items-end justify-between gap-4 border-b border-border pb-3">
+          <div>
+            <Skeleton className="mb-1 h-2.5 w-14" />
+            <Skeleton className="h-8 w-52 sm:h-9" />
+          </div>
+          <Skeleton className="h-8 w-10" />
+        </div>
         <ul className="space-y-2">
           {Array.from({ length: Math.max(2, rows - 3) }, (_, i) => (
             <EventRowSkeleton key={`past-${i}`} />

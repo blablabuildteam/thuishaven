@@ -12,6 +12,29 @@ const DATE_PREFIX =
     "i",
   );
 
+const LOOSE_DATE_PREFIX = new RegExp(
+  `^\\s*(?:(?:ma|di|wo|do|vr|za|zo)[a-z.]*\\s+)?(?:\\d{1,2}\\s+(?:${DUTCH_MONTHS}|JAN|FEB|MRT|APR|MEI|JUN|JUL|AUG|SEPT?|OKT|NOV|DEC)\\.?(?:\\s+\\d{4})?|\\d{1,2}\\s*[:./-]\\s*\\d{1,2}(?:\\s*[:./-]\\s*\\d{2,4})?)\\s*[|—–-]?\\s*`,
+  "i",
+);
+
+/** Drop the Weeztix date prefix so the day number can stand alone in the UI. */
+export function stripEditionDatePrefix(name: string): string {
+  const piped = name.replace(DATE_PREFIX, "").trim();
+  if (piped !== name.trim()) return piped;
+  const loose = name.replace(LOOSE_DATE_PREFIX, "").trim();
+  return loose || name.trim();
+}
+
+/** Title without date (and without W/ lineup when artists are shown separately). */
+export function displayEditionTitle(name: string, artists: string[] = []): string {
+  let title = stripEditionDatePrefix(name);
+  if (artists.length > 0) {
+    const withoutLineup = title.replace(/\s*[|—–-]?\s*W\/\s*.+$/i, "").trim();
+    if (withoutLineup) title = withoutLineup;
+  }
+  return title || name;
+}
+
 const ROOM_TAGS = new Set([
   "hou",
   "tec",
@@ -214,7 +237,7 @@ export function parseEditionLineup(name: string): ParsedLineup {
   const isNachtshow = /nachtshow/i.test(name);
 
   // Strip leading date
-  let rest = name.replace(DATE_PREFIX, "").trim();
+  let rest = stripEditionDatePrefix(name);
   // Also strip trailing room codes after |
   rest = rest.replace(/\|\s*(HOU|TEC|HTE|TRA|AHO)(\s+(HOU|TEC|HTE|TRA|AHO))*\s*$/i, "").trim();
 
