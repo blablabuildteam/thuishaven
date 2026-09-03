@@ -23,6 +23,7 @@ export const authConfig = {
         path.startsWith("/beschikbaar/") ||
         path.startsWith("/api/auth") ||
         path.startsWith("/api/cron") ||
+        path.startsWith("/api/outreach/webhooks/") ||
         path === "/favicon.ico" ||
         path === "/icon.png" ||
         path === "/apple-icon.png";

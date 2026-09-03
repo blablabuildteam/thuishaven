@@ -85,7 +85,7 @@ const outreachSections: NavSection[] = [
       { href: "/outreach/campaigns", label: "Campagnes", icon: Sparkles },
       { href: "/outreach/emails", label: "E-mails", icon: Mail },
       { href: "/outreach/beschikbaarheid", label: "Agenda", icon: CalendarDays },
-      { href: "/outreach/analytics", label: "Wat werkt", icon: LineChart },
+      { href: "/outreach/analytics", label: "Resultaten", icon: LineChart },
       { href: "/outreach/pipeline", label: "Pipeline", icon: Workflow },
       { href: "/outreach/kosten", label: "Kosten", icon: BarChart3 },
     ],

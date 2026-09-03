@@ -16,9 +16,21 @@ export function getOutreachSender(): { email: string; name: string } {
   return {
     email:
       process.env.BREVO_OUTREACH_SENDER_EMAIL?.trim() ||
-      "events.outreach@thuishaven.nl",
+      "b2b@thuishaven.nl",
     name:
       process.env.BREVO_OUTREACH_SENDER_NAME?.trim() ||
+      "Thuishaven Events",
+  };
+}
+
+/** Replies from prospects go to the existing B2B inbox. */
+export function getOutreachReplyTo(): { email: string; name: string } {
+  return {
+    email:
+      process.env.BREVO_OUTREACH_REPLY_TO?.trim() ||
+      "evenement@thuishaven.nl",
+    name:
+      process.env.BREVO_OUTREACH_REPLY_TO_NAME?.trim() ||
       "Thuishaven Events",
   };
 }

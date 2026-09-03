@@ -10,6 +10,7 @@ import { availabilitySummaryForEmail } from "@/lib/outreach/availability";
 import { getAgencyCampaignId } from "@/lib/outreach/data";
 import {
   getOutreachBrevoKey,
+  getOutreachReplyTo,
   getOutreachSender,
   outreachSendBlockReason,
 } from "@/lib/outreach/send-policy";
@@ -264,6 +265,7 @@ export async function sendViaBrevo(input: {
     : input.html;
 
   const sender = getOutreachSender();
+  const replyTo = getOutreachReplyTo();
   const url = "https://api.brevo.com/v3/smtp/email";
   assertExternalReadOnly("POST", url, { allowTransactionalEmailPost: true });
 
@@ -277,10 +279,12 @@ export async function sendViaBrevo(input: {
       },
       body: JSON.stringify({
         sender,
+        replyTo,
         to: resolved.to.map((email) => ({ email })),
         subject,
         htmlContent: html,
         textContent: input.text,
+        tags: ["outreach", "thuishaven-b2b"],
       }),
       cache: "no-store",
     });
