@@ -1,34 +1,48 @@
 import Link from "next/link";
 import { ChannelAutoSync } from "@/components/dashboard/channel-auto-sync";
-import { SocialPostCard } from "@/components/dashboard/social-post-card";
+import { ChannelPerformanceCharts } from "@/components/dashboard/channel-performance-charts";
+import { SocialPostsView } from "@/components/dashboard/social-posts-view";
 import { SectionHeader } from "@/components/ui/section-header";
 import { getChannelStats } from "@/lib/integrations/youtube/client";
+import { needsSocialHistoryBackfill } from "@/lib/integrations/social/history-coverage";
 import { loadMarketingPostsBundle } from "@/lib/cache/dashboard";
 import { formatNumber, formatPercent } from "@/lib/utils";
 
 export const metadata = { title: "YouTube" };
 export const dynamic = "force-dynamic";
 
+const emptyBundle = {
+  posts: [],
+  aggregates: [],
+  analyzedCount: 0,
+  lastSyncedAt: null as string | null,
+  hasMore: false,
+  nextCursor: null as string | null,
+};
+
 export default async function YouTubePage() {
   const hasKey = Boolean(process.env.YOUTUBE_API_KEY?.trim());
-  const [channelResult, bundle] = await Promise.all([
-    getChannelStats().catch(
-      (): { ok: false; error: string } => ({
-        ok: false,
-        error: "YouTube kanaal laden mislukt",
-      }),
-    ),
-    loadMarketingPostsBundle({
-      limit: 24,
-      channel: "youtube",
-      withLift: true,
-    }).catch(() => ({
-      posts: [],
-      aggregates: [],
-      analyzedCount: 0,
-      lastSyncedAt: null as string | null,
-    })),
-  ]);
+  const [channelResult, bundle, chartBundle, backfillHistory] =
+    await Promise.all([
+      getChannelStats().catch(
+        (): { ok: false; error: string } => ({
+          ok: false,
+          error: "YouTube kanaal laden mislukt",
+        }),
+      ),
+      loadMarketingPostsBundle({
+        limit: 24,
+        channel: "youtube",
+        withLift: true,
+      }).catch(() => emptyBundle),
+      loadMarketingPostsBundle({
+        limit: 50,
+        channel: "youtube",
+        range: "1y",
+        withLift: false,
+      }).catch(() => emptyBundle),
+      needsSocialHistoryBackfill("youtube").catch(() => true),
+    ]);
 
   const channel = channelResult.ok ? channelResult.channel : null;
   const posts = bundle.posts;
@@ -40,7 +54,7 @@ export default async function YouTubePage() {
     totalViews > 0 ? (totalEngagement / totalViews) * 100 : null;
 
   return (
-    <div>
+    <div className="animate-fade-up">
       <SectionHeader
         eyebrow="YouTube"
         title={channel?.title ?? "Kanaalmetrics"}
@@ -51,27 +65,12 @@ export default async function YouTubePage() {
               ? channelResult.error
               : "Koppel YOUTUBE_API_KEY via Bronnen."
         }
-        action={
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/dashboard/dashboards"
-              className="border border-border px-3 py-2 text-sm hover:border-text"
-            >
-              Dashboards
-            </Link>
-            <Link
-              href="/koppelingen"
-              className="bg-accent px-3 py-2 text-sm text-accent-contrast"
-            >
-              Bronnen
-            </Link>
-          </div>
-        }
       />
 
       <ChannelAutoSync
         channel="youtube"
         lastSyncedAt={bundle.lastSyncedAt}
+        backfillHistory={backfillHistory}
         enabled={hasKey}
       />
 
@@ -90,35 +89,33 @@ export default async function YouTubePage() {
               value={formatNumber(channel.subscriberCount)}
               label="subscribers"
             />
-            <Stat value={formatNumber(totalViews)} label="views (sync)" />
-            <Stat value={formatNumber(totalLikes)} label="likes (sync)" />
+            <Stat value={formatNumber(totalViews)} label="views" />
+            <Stat value={formatNumber(totalLikes)} label="likes" />
             <Stat value={formatNumber(totalComments)} label="comments" />
             <Stat
               value={avgEngRate != null ? formatPercent(avgEngRate, 1) : "—"}
               label="eng. rate"
             />
-            <Stat
-              value={formatNumber(posts.length)}
-              label="in database"
-            />
+            <Stat value={formatNumber(posts.length)} label="posts" />
           </section>
 
-          {posts.length === 0 ? (
-            <p className="border border-border px-4 py-3 text-sm text-text-muted">
-              Nog geen YouTube-video&apos;s — sync loopt bij openen van deze
-              pagina.
-            </p>
-          ) : (
-            <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {posts.map((post) => (
-                <SocialPostCard
-                  key={post.id}
-                  post={post}
-                  aspectClass="aspect-video"
-                />
-              ))}
-            </ul>
-          )}
+          <ChannelPerformanceCharts
+            channel="youtube"
+            initialPosts={chartBundle.posts}
+            impressionsLabel="views"
+          />
+
+          <hr className="my-8 border-border" />
+
+          <SocialPostsView
+            posts={posts}
+            channel="youtube"
+            initialCursor={bundle.nextCursor}
+            initialHasMore={bundle.hasMore}
+            gridClassName="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+            aspectClass="aspect-video"
+            emptyMessage="Nog geen YouTube-video's — sync loopt bij openen van deze pagina."
+          />
         </>
       )}
     </div>

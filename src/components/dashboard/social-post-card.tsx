@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Heart, MessageCircle, Play, Share2 } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
-import type { MarketingPostRow } from "@/lib/marketing/posts";
+import type { MarketingPostRow } from "@/lib/marketing/post-types";
 import { cn, formatDate, formatNumber } from "@/lib/utils";
 
 type Props = {

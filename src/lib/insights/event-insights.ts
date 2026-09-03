@@ -41,6 +41,10 @@ import {
   shiftIsoDay,
 } from "@/lib/time/amsterdam";
 import {
+  classifySalesImpactRole,
+  salesLiftWindow,
+} from "@/lib/marketing/sales-impact";
+import {
   periodsForDay,
   weekdayKeyFromIso,
   type CalendarPeriod,
@@ -197,6 +201,10 @@ export type EventInsightSocial = {
   engagement: number;
   impressions: number;
   ticketLiftSold: number | null;
+  /** promo | same_day | after — aftermovies never get ticket lift. */
+  salesImpactRole: "promo" | "same_day" | "after";
+  /** ±48u | eventdag | n.v.t. */
+  liftWindowLabel: string;
   permalink: string | null;
   publishedAt: string | null;
   format: string | null;
@@ -375,7 +383,10 @@ function buildHeadlines(e: EventInsight): EventInsightHeadline[] {
     });
   }
 
-  const measured = socialPosts.filter(
+  const promoOrSameDay = socialPosts.filter(
+    (p) => p.salesImpactRole === "promo" || p.salesImpactRole === "same_day",
+  );
+  const measured = promoOrSameDay.filter(
     (p) => p.ticketLiftSold != null && p.ticketLiftSold > 0,
   );
   if (measured.length > 0) {
@@ -384,19 +395,29 @@ function buildHeadlines(e: EventInsight): EventInsightHeadline[] {
       0,
     );
     const channels = [...new Set(measured.map((p) => p.channel))];
+    const promoCount = socialPosts.filter(
+      (p) => p.salesImpactRole === "promo",
+    ).length;
     out.push({
-      text: `${measured.length} organic · +${totalLift.toLocaleString("nl-NL")} ±48u`,
+      text: `${promoCount} promo · +${totalLift.toLocaleString("nl-NL")} tickets`,
       tone: totalLift > 50 ? "positive" : "neutral",
       kind: "social",
-      hint: `Organische posts (${channels.join(", ")}) gekoppeld aan dit event. Lift = Weeztix-verkopen ±48u rond publicatie (correlatie).`,
+      hint: `Organische promo/eventdag-posts (${channels.join(", ")}). Lift = Weeztix-verkopen in het role-window (correlatie). Aftermovies uitgesloten.`,
     });
-  } else if (socialPosts.length > 0) {
-    const channels = [...new Set(socialPosts.map((p) => p.channel))];
+  } else if (promoOrSameDay.length > 0) {
+    const channels = [...new Set(promoOrSameDay.map((p) => p.channel))];
     out.push({
-      text: `${socialPosts.length} organic (${channels.join(", ")})`,
+      text: `${promoOrSameDay.length} promo (${channels.join(", ")})`,
       tone: "neutral",
       kind: "social",
-      hint: "Organische social posts gekoppeld; nog geen meetbare ticketlift.",
+      hint: "Organische promo-posts gekoppeld; nog geen meetbare ticketlift.",
+    });
+  } else if (socialPosts.length > 0) {
+    out.push({
+      text: `${socialPosts.length} organic (geen promo)`,
+      tone: "neutral",
+      kind: "social",
+      hint: "Alleen aftermovies / posts ná het event — geen sales-impact.",
     });
   }
 
@@ -862,18 +883,43 @@ export async function loadEventInsightsFresh(options?: {
       }
 
       const edPosts = postsByEdition.get(e.id) ?? [];
-      const socialPosts: EventInsightSocial[] = edPosts.map((p) => ({
-        postId: p.id,
-        channel: p.channel,
-        title: p.title,
-        engagement: p.engagement ?? 0,
-        impressions: p.impressions ?? 0,
-        ticketLiftSold: null,
-        permalink: p.permalink,
-        publishedAt: p.publishedAt?.toISOString() ?? null,
-        format: p.visualFeatures?.format ?? null,
-        offer: p.visualFeatures?.offer ?? null,
-      }));
+      const socialPosts: EventInsightSocial[] = edPosts
+        .map((p) => {
+          const text = [p.title, p.caption, p.visualFeatures?.offer]
+            .filter(Boolean)
+            .join(" ");
+          const role = classifySalesImpactRole({
+            publishedAt: p.publishedAt,
+            eventStartsAt: e.startsAt,
+            offer: p.visualFeatures?.offer,
+            text,
+          });
+          const window = salesLiftWindow({
+            role,
+            publishedAt: p.publishedAt,
+          });
+          return {
+            postId: p.id,
+            channel: p.channel,
+            title: p.title,
+            engagement: p.engagement ?? 0,
+            impressions: p.impressions ?? 0,
+            ticketLiftSold: null,
+            salesImpactRole: role,
+            liftWindowLabel: window?.label ?? "n.v.t.",
+            permalink: p.permalink,
+            publishedAt: p.publishedAt?.toISOString() ?? null,
+            format: p.visualFeatures?.format ?? null,
+            offer: p.visualFeatures?.offer ?? null,
+          };
+        })
+        .sort((a, b) => {
+          const rank = (r: EventInsightSocial["salesImpactRole"]) =>
+            r === "promo" ? 0 : r === "same_day" ? 1 : 2;
+          const rr = rank(a.salesImpactRole) - rank(b.salesImpactRole);
+          if (rr !== 0) return rr;
+          return (b.publishedAt ?? "").localeCompare(a.publishedAt ?? "");
+        });
 
       const linked = campsByEdition.get(e.id) ?? [];
       const emailCampaigns: EventInsightMail[] = linked.map((c) => {
@@ -1006,19 +1052,35 @@ export async function loadEventInsightsFresh(options?: {
       return insight;
     });
 
-    // Ticket lift from already-loaded daily curves (no extra DB round-trip)
+    // Ticket lift from already-loaded daily curves (role-aware windows)
     for (const event of insights) {
       const curve = dailyByEdition.get(event.editionId);
       if (!curve || event.socialPosts.length === 0) continue;
       let changed = false;
       for (const post of event.socialPosts) {
+        if (post.salesImpactRole === "after") {
+          post.ticketLiftSold = null;
+          post.liftWindowLabel = "n.v.t.";
+          continue;
+        }
         if (!post.publishedAt) continue;
-        const center = amsterdamDay(post.publishedAt);
-        const dayFrom = shiftIsoDay(center, -1);
-        const dayTo = shiftIsoDay(center, 1);
+        const window = salesLiftWindow({
+          role: post.salesImpactRole,
+          publishedAt: post.publishedAt,
+        });
+        if (!window) {
+          post.ticketLiftSold = null;
+          post.liftWindowLabel = "n.v.t.";
+          continue;
+        }
+        post.liftWindowLabel = window.label;
         let sold = 0;
         let daysCovered = 0;
-        for (let d = dayFrom; d <= dayTo; d = shiftIsoDay(d, 1)) {
+        for (
+          let d = window.dayFrom;
+          d <= window.dayTo;
+          d = shiftIsoDay(d, 1)
+        ) {
           if (curve.has(d)) {
             daysCovered += 1;
             sold += curve.get(d) ?? 0;
@@ -1056,7 +1118,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v8"],
+  ["event-insights-upcoming-v9"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1072,7 +1134,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v8"],
+  ["event-insights-past-v9"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],

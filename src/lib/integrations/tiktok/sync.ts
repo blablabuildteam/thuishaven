@@ -8,6 +8,7 @@ import {
   hasBlobToken,
   storeRemoteMediaAsBlob,
 } from "@/lib/integrations/social/blob";
+import { socialSyncSince } from "@/lib/integrations/social/sync-window";
 import { logIntegration } from "@/lib/integrations/log";
 
 export type TikTokSyncResult = {
@@ -32,6 +33,7 @@ function titleFromVideo(title: string | null, description: string | null): strin
  */
 export async function syncTikTokReadOnly(options?: {
   limit?: number;
+  since?: Date | null;
   withBlob?: boolean;
   withAnalyze?: boolean;
 }): Promise<TikTokSyncResult> {
@@ -60,7 +62,14 @@ export async function syncTikTokReadOnly(options?: {
     };
   }
 
-  const listed = await listTikTokVideos({ limit: options?.limit ?? 40 });
+  const since =
+    options?.since === null
+      ? undefined
+      : (options?.since ?? socialSyncSince());
+  const listed = await listTikTokVideos({
+    limit: options?.limit,
+    since,
+  });
   if (!listed.ok) {
     await logIntegration({
       source: "tiktok",

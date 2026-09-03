@@ -19,25 +19,28 @@ const CHANNEL_LABEL: Record<SocialChannel, string> = {
   youtube: "YouTube",
 };
 
-/** Skip auto-sync if data is fresher than this (cron covers 4×/day). */
+/** Skip light auto-sync if data is fresher than this (cron covers 4×/day). */
 const STALE_AFTER_MS = 15 * 60 * 1000;
 
 type Props = {
   channel: SocialChannel;
   /** ISO timestamp of newest post sync, or null if empty. */
   lastSyncedAt: string | null;
+  /** True when DB lacks ~6 months of history — trigger one deep sync. */
+  backfillHistory?: boolean;
   /** False when credentials are missing — skip the request. */
   enabled?: boolean;
   className?: string;
 };
 
 /**
- * Stale-while-revalidate for channel pages: show cached posts, refresh in
- * the background when data is older than 15 minutes (or empty).
+ * Stale-while-revalidate for channel pages.
+ * When history is shallow, runs a full ~6-month sync (not the light 24-post refresh).
  */
 export function ChannelAutoSync({
   channel,
   lastSyncedAt,
+  backfillHistory = false,
   enabled = true,
   className,
 }: Props) {
@@ -45,26 +48,37 @@ export function ChannelAutoSync({
   const [pending, startTransition] = useTransition();
   const [status, setStatus] = useState<"idle" | "syncing" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
-  const ran = useRef(false);
+  const lightRan = useRef(false);
+  const backfillRan = useRef(false);
 
   useEffect(() => {
-    if (!enabled || ran.current) return;
+    if (!enabled) return;
 
     const stale =
       !lastSyncedAt ||
       Date.now() - new Date(lastSyncedAt).getTime() >= STALE_AFTER_MS;
-    if (!stale) return;
 
-    ran.current = true;
+    const shouldBackfill = backfillHistory && !backfillRan.current;
+    const shouldLight = !shouldBackfill && stale && !lightRan.current;
+    if (!shouldBackfill && !shouldLight) return;
+
+    if (shouldBackfill) backfillRan.current = true;
+    else lightRan.current = true;
+
+    const light = !shouldBackfill;
     setStatus("syncing");
-    setMessage(`${CHANNEL_LABEL[channel]}-posts verversen…`);
+    setMessage(
+      shouldBackfill
+        ? `${CHANNEL_LABEL[channel]}-geschiedenis laden (6 maanden)…`
+        : `${CHANNEL_LABEL[channel]}-posts verversen…`,
+    );
 
     void (async () => {
       try {
         const res = await fetch(SYNC_PATH[channel], {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ light: true }),
+          body: JSON.stringify({ light }),
         });
         const data = (await res.json().catch(() => ({}))) as {
           ok?: boolean;
@@ -73,6 +87,9 @@ export function ChannelAutoSync({
           fetched?: number;
         };
         if (!res.ok || data.ok === false) {
+          // Allow retry on next mount/navigation.
+          if (shouldBackfill) backfillRan.current = false;
+          else lightRan.current = false;
           setStatus("error");
           setMessage(
             data.error?.slice(0, 160) ||
@@ -81,16 +98,18 @@ export function ChannelAutoSync({
           return;
         }
         setMessage(
-          data.upserted != null
-            ? `${CHANNEL_LABEL[channel]} bijgewerkt · ${data.upserted} posts`
+          data.fetched != null
+            ? `${CHANNEL_LABEL[channel]} bijgewerkt · ${data.fetched} posts opgehaald`
             : `${CHANNEL_LABEL[channel]} bijgewerkt`,
         );
         startTransition(() => {
           router.refresh();
         });
         setStatus("idle");
-        window.setTimeout(() => setMessage(null), 2500);
+        window.setTimeout(() => setMessage(null), 3500);
       } catch (e) {
+        if (shouldBackfill) backfillRan.current = false;
+        else lightRan.current = false;
         setStatus("error");
         setMessage(
           e instanceof Error
@@ -99,7 +118,7 @@ export function ChannelAutoSync({
         );
       }
     })();
-  }, [channel, enabled, lastSyncedAt, router]);
+  }, [backfillHistory, channel, enabled, lastSyncedAt, router]);
 
   if (status === "idle" && !message && !pending) return null;
 

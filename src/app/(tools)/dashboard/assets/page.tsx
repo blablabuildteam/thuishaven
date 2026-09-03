@@ -27,6 +27,8 @@ export default async function AssetsPage() {
     aggregates: [],
     analyzedCount: 0,
     lastSyncedAt: null as string | null,
+    hasMore: false,
+    nextCursor: null as string | null,
   }));
   const usingLive = bundle.posts.length > 0;
 

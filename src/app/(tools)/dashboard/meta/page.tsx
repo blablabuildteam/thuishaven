@@ -1,25 +1,40 @@
 import Link from "next/link";
 import { ChannelAutoSync } from "@/components/dashboard/channel-auto-sync";
-import { SocialPostCard } from "@/components/dashboard/social-post-card";
+import { ChannelPerformanceCharts } from "@/components/dashboard/channel-performance-charts";
+import { SocialPostsView } from "@/components/dashboard/social-posts-view";
 import { SectionHeader } from "@/components/ui/section-header";
 import { loadMarketingPostsBundle } from "@/lib/cache/dashboard";
+import { needsSocialHistoryBackfill } from "@/lib/integrations/social/history-coverage";
 import { formatNumber, formatPercent } from "@/lib/utils";
 
 export const metadata = { title: "Meta" };
 export const dynamic = "force-dynamic";
 
+const emptyBundle = {
+  posts: [],
+  aggregates: [],
+  analyzedCount: 0,
+  lastSyncedAt: null as string | null,
+  hasMore: false,
+  nextCursor: null as string | null,
+};
+
 export default async function MetaPage() {
   const hasToken = Boolean(process.env.META_ACCESS_TOKEN?.trim());
-  const bundle = await loadMarketingPostsBundle({
-    limit: 24,
-    channel: "instagram",
-    withLift: true,
-  }).catch(() => ({
-    posts: [],
-    aggregates: [],
-    analyzedCount: 0,
-    lastSyncedAt: null as string | null,
-  }));
+  const [bundle, chartBundle, backfillHistory] = await Promise.all([
+    loadMarketingPostsBundle({
+      limit: 24,
+      channel: "instagram",
+      withLift: true,
+    }).catch(() => emptyBundle),
+    loadMarketingPostsBundle({
+      limit: 50,
+      channel: "instagram",
+      range: "1y",
+      withLift: false,
+    }).catch(() => emptyBundle),
+    needsSocialHistoryBackfill("instagram").catch(() => true),
+  ]);
 
   const posts = bundle.posts;
   const totalReach = posts.reduce((s, p) => s + p.reach, 0);
@@ -33,9 +48,10 @@ export default async function MetaPage() {
       : totalReach > 0
         ? (totalEngagement / totalReach) * 100
         : null;
+  const impressionsLabel = totalImpressions > 0 ? "views" : "reach";
 
   return (
-    <div>
+    <div className="animate-fade-up">
       <SectionHeader
         eyebrow="Meta · Instagram"
         title="Instagram metrics"
@@ -44,27 +60,12 @@ export default async function MetaPage() {
             ? "Views, likes en comments · posts verversen automatisch bij openen."
             : "Wacht op META_ACCESS_TOKEN. Pagina licht op zodra de token live is."
         }
-        action={
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/dashboard/assets"
-              className="border border-border px-3 py-2 text-sm hover:border-text"
-            >
-              Creatives
-            </Link>
-            <Link
-              href="/koppelingen"
-              className="bg-accent px-3 py-2 text-sm text-accent-contrast"
-            >
-              Bronnen
-            </Link>
-          </div>
-        }
       />
 
       <ChannelAutoSync
         channel="instagram"
         lastSyncedAt={bundle.lastSyncedAt}
+        backfillHistory={backfillHistory}
         enabled={hasToken}
       />
 
@@ -93,7 +94,7 @@ export default async function MetaPage() {
             <Stat value={formatNumber(posts.length)} label="posts" />
             <Stat
               value={formatNumber(totalImpressions || totalReach)}
-              label={totalImpressions > 0 ? "views" : "reach"}
+              label={impressionsLabel}
             />
             <Stat value={formatNumber(totalLikes)} label="likes" />
             <Stat value={formatNumber(totalComments)} label="comments" />
@@ -107,19 +108,26 @@ export default async function MetaPage() {
             />
           </section>
 
-          {posts.length === 0 ? (
-            <p className="border border-border px-4 py-3 text-sm text-text-muted">
-              {hasToken
+          <ChannelPerformanceCharts
+            channel="instagram"
+            initialPosts={chartBundle.posts}
+            impressionsLabel={impressionsLabel}
+          />
+
+          <hr className="my-8 border-border" />
+
+          <SocialPostsView
+            posts={posts}
+            channel="instagram"
+            initialCursor={bundle.nextCursor}
+            initialHasMore={bundle.hasMore}
+            gridClassName="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+            emptyMessage={
+              hasToken
                 ? "Nog geen Instagram-posts — sync loopt bij openen van deze pagina."
-                : "Nog geen Instagram-posts. Koppel Meta via Bronnen."}
-            </p>
-          ) : (
-            <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {posts.map((post) => (
-                <SocialPostCard key={post.id} post={post} />
-              ))}
-            </ul>
-          )}
+                : "Nog geen Instagram-posts. Koppel Meta via Bronnen."
+            }
+          />
         </>
       )}
     </div>

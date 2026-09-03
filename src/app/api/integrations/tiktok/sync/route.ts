@@ -3,10 +3,11 @@ import { auth } from "@/auth";
 import { syncTikTokReadOnly } from "@/lib/integrations/tiktok/sync";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 /** POST /api/integrations/tiktok/sync — read-only videos → marketing_posts.
- * Body `{ light: true }` skips Gemini vision for faster view refresh.
+ * Body `{ light: true }` skips Gemini + only refreshes newest 24.
+ * Full sync pulls ~6 months of history.
  */
 export async function POST(request: Request) {
   const session = await auth();
@@ -15,10 +16,11 @@ export async function POST(request: Request) {
   }
 
   const light = await readLightFlag(request);
-  const result = await syncTikTokReadOnly({
-    limit: light ? 24 : 40,
-    withAnalyze: !light,
-  });
+  const result = await syncTikTokReadOnly(
+    light
+      ? { limit: 24, since: null, withAnalyze: false }
+      : { withAnalyze: true },
+  );
   return NextResponse.json(
     { readOnly: true, light, ...result },
     { status: result.ok ? 200 : 502 },

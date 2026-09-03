@@ -1,3 +1,5 @@
+import { SOCIAL_SYNC_MAX_ITEMS } from "@/lib/integrations/social/sync-window";
+
 const THUISHAVEN_YOUTUBE_CHANNEL_ID = "UC2KhiKAhm8wIkjt2chtIUTA";
 const API = "https://www.googleapis.com/youtube/v3";
 
@@ -243,14 +245,22 @@ export async function getVideoDetails(
   return { ok: true, videos };
 }
 
-/** Recent channel uploads with public stats. */
+/** Recent channel uploads with public stats.
+ * Prefer `since` so we keep ~6 months of history even on busy channels.
+ */
 export async function listChannelVideos(options?: {
   limit?: number;
+  since?: Date;
 }): Promise<
   | { ok: true; channel: YouTubeChannelStats; videos: YouTubeVideo[] }
   | { ok: false; error: string }
 > {
-  const limit = Math.min(Math.max(options?.limit ?? 40, 1), 100);
+  const maxItems = Math.min(
+    Math.max(options?.limit ?? SOCIAL_SYNC_MAX_ITEMS, 1),
+    SOCIAL_SYNC_MAX_ITEMS,
+  );
+  const sinceMs = options?.since?.getTime() ?? null;
+
   const channelResult = await getChannelStats();
   if (!channelResult.ok) return channelResult;
 
@@ -262,16 +272,54 @@ export async function listChannelVideos(options?: {
     };
   }
 
-  const idsResult = await listUploadVideoIds(uploadsId, limit);
-  if (!idsResult.ok) return idsResult;
+  const videos: YouTubeVideo[] = [];
+  let pageToken: string | undefined;
+  let pastSince = false;
 
-  const videosResult = await getVideoDetails(idsResult.ids);
-  if (!videosResult.ok) return videosResult;
+  while (videos.length < maxItems && !pastSince) {
+    const pageSize = Math.min(50, maxItems - videos.length);
+    const params: Record<string, string> = {
+      part: "contentDetails",
+      playlistId: uploadsId,
+      maxResults: String(pageSize),
+    };
+    if (pageToken) params.pageToken = pageToken;
+
+    const idsResult = await ytGet<{
+      items?: Array<{ contentDetails?: { videoId?: string } }>;
+      nextPageToken?: string;
+    }>("playlistItems", params);
+    if (!idsResult.ok) return idsResult;
+
+    const ids = (idsResult.data.items ?? [])
+      .map((item) => item.contentDetails?.videoId)
+      .filter((id): id is string => Boolean(id));
+
+    if (ids.length === 0) break;
+
+    const details = await getVideoDetails(ids);
+    if (!details.ok) return details;
+
+    for (const video of details.videos) {
+      if (sinceMs != null && video.publishedAt) {
+        const t = new Date(video.publishedAt).getTime();
+        if (Number.isFinite(t) && t < sinceMs) {
+          pastSince = true;
+          break;
+        }
+      }
+      videos.push(video);
+      if (videos.length >= maxItems) break;
+    }
+
+    pageToken = idsResult.data.nextPageToken;
+    if (pastSince || !pageToken) break;
+  }
 
   return {
     ok: true,
     channel: channelResult.channel,
-    videos: videosResult.videos,
+    videos,
   };
 }
 

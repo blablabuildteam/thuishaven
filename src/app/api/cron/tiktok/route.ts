@@ -7,7 +7,7 @@ import {
 import { syncTikTokReadOnly } from "@/lib/integrations/tiktok/sync";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 /**
  * GET /api/cron/tiktok
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     });
   }
 
-  const result = await syncTikTokReadOnly({ limit: 40 });
+  const result = await syncTikTokReadOnly({ withAnalyze: true });
   return NextResponse.json(
     {
       trigger: "vercel-cron",

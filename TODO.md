@@ -3,7 +3,6 @@
 ## Access
 
 - [ ] Connect with Start Moving for Paid ads data
-- [ ] Get access to the Looker dashboard
 - [ ] Contact Appic for an API/developers token
 - [ ] Invite once the tool is done: Quinty (quinty@thuishaven.nl), Bas (bas@thuishaven.nl), Kasper (Kasper@thuishaven.nl), Tim (Tim@thuishaven.nl), Bas A (Basamro@thuishaven.nl), Roxy (roxy@thuishaven.nl)
 
@@ -24,7 +23,8 @@
 
 - [ ] Pull total ad spend per event
 - [ ] Sync Instagram after Meta token install
-- [ ] Narrow down which social posts count toward an event’s sales (e.g. exclude posts after the event)
+- [x] Narrow down which social posts count toward an event’s sales (exclude aftermovies / posts after the event; same-day = eventdag only)
+- [ ] Engagement-weighted impact score per promo post (Phase B)
 - [ ] Add a graph on Insights that shows marketing activities versus ticket sales
 
 ## Context

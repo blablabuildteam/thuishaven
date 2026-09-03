@@ -9,6 +9,7 @@ import {
   hasBlobToken,
   storeRemoteMediaAsBlob,
 } from "@/lib/integrations/social/blob";
+import { socialSyncSince } from "@/lib/integrations/social/sync-window";
 import { logIntegration } from "@/lib/integrations/log";
 
 export type YouTubeSyncResult = {
@@ -27,6 +28,7 @@ export type YouTubeSyncResult = {
  */
 export async function syncYouTubeReadOnly(options?: {
   limit?: number;
+  since?: Date | null;
   withBlob?: boolean;
   withAnalyze?: boolean;
 }): Promise<YouTubeSyncResult> {
@@ -52,7 +54,14 @@ export async function syncYouTubeReadOnly(options?: {
     };
   }
 
-  const listed = await listChannelVideos({ limit: options?.limit ?? 40 });
+  const since =
+    options?.since === null
+      ? undefined
+      : (options?.since ?? socialSyncSince());
+  const listed = await listChannelVideos({
+    limit: options?.limit,
+    since,
+  });
   if (!listed.ok) {
     await logIntegration({
       source: "youtube",

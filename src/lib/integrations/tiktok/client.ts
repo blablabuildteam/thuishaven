@@ -1,4 +1,5 @@
 import { assertExternalReadOnly } from "@/lib/integrations/read-only";
+import { SOCIAL_SYNC_MAX_ITEMS } from "@/lib/integrations/social/sync-window";
 import { ensureTikTokAccessToken } from "@/lib/integrations/tiktok/tokens";
 
 const API = "https://open.tiktokapis.com";
@@ -236,16 +237,28 @@ const VIDEO_FIELDS = [
   "share_count",
 ].join(",");
 
-/** Paginate Display API video list (max 20 per page). */
+/** Paginate Display API video list (max 20 per page).
+ * Prefer `since` (lookback) over a small fixed limit so history stays deep.
+ */
 export async function listTikTokVideos(options?: {
   limit?: number;
+  /** Keep fetching until videos older than this (inclusive cutoff). */
+  since?: Date;
 }): Promise<{ ok: true; videos: TikTokVideo[] } | { ok: false; error: string }> {
-  const limit = Math.min(Math.max(options?.limit ?? 40, 1), 100);
+  const maxItems = Math.min(
+    Math.max(options?.limit ?? SOCIAL_SYNC_MAX_ITEMS, 1),
+    SOCIAL_SYNC_MAX_ITEMS,
+  );
+  const sinceSec =
+    options?.since != null
+      ? Math.floor(options.since.getTime() / 1000)
+      : null;
   const videos: TikTokVideo[] = [];
   let cursor: number | undefined;
+  let pastSince = false;
 
-  while (videos.length < limit) {
-    const pageSize = Math.min(20, limit - videos.length);
+  while (videos.length < maxItems && !pastSince) {
+    const pageSize = Math.min(20, maxItems - videos.length);
     const body: Record<string, unknown> = { max_count: pageSize };
     if (cursor != null) body.cursor = cursor;
 
@@ -256,12 +269,21 @@ export async function listTikTokVideos(options?: {
     );
     if (!result.ok) return result;
 
-    for (const raw of result.data.videos ?? []) {
+    const page = result.data.videos ?? [];
+    if (page.length === 0) break;
+
+    for (const raw of page) {
       const mapped = mapVideo(raw);
-      if (mapped) videos.push(mapped);
+      if (!mapped) continue;
+      if (sinceSec != null && mapped.createTime > 0 && mapped.createTime < sinceSec) {
+        pastSince = true;
+        break;
+      }
+      videos.push(mapped);
+      if (videos.length >= maxItems) break;
     }
 
-    if (!result.data.has_more) break;
+    if (pastSince || !result.data.has_more) break;
     cursor = result.data.cursor;
     if (cursor == null) break;
   }

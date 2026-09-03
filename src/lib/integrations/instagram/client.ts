@@ -1,4 +1,5 @@
 import { ensureMetaAccessToken } from "@/lib/integrations/meta/tokens";
+import { SOCIAL_SYNC_MAX_ITEMS } from "@/lib/integrations/social/sync-window";
 
 const DEFAULT_VERSION = "v21.0";
 
@@ -66,14 +67,21 @@ async function graphGet<T>(
   }
 }
 
-/** Recent media for the configured IG business account. */
+/** Media for the configured IG business account.
+ * Paginates until `since` or max items so we keep ~6 months of history.
+ */
 export async function listInstagramMedia(options?: {
   limit?: number;
+  since?: Date;
 }): Promise<{ ok: true; media: IgMediaItem[] } | { ok: false; error: string }> {
   const igId = metaIgBusinessId();
   if (!igId) return { ok: false, error: "META_IG_BUSINESS_ID ontbreekt" };
 
-  const limit = Math.min(Math.max(options?.limit ?? 40, 1), 100);
+  const maxItems = Math.min(
+    Math.max(options?.limit ?? SOCIAL_SYNC_MAX_ITEMS, 1),
+    SOCIAL_SYNC_MAX_ITEMS,
+  );
+  const sinceMs = options?.since?.getTime() ?? null;
   const fields = [
     "id",
     "caption",
@@ -87,12 +95,44 @@ export async function listInstagramMedia(options?: {
     "children{media_type,media_url,thumbnail_url}",
   ].join(",");
 
-  const result = await graphGet<{ data?: IgMediaItem[]; paging?: unknown }>(
-    `${encodeURIComponent(igId)}/media`,
-    { fields, limit: String(limit) },
-  );
-  if (!result.ok) return result;
-  return { ok: true, media: result.data.data ?? [] };
+  const media: IgMediaItem[] = [];
+  let after: string | undefined;
+  let pastSince = false;
+
+  while (media.length < maxItems && !pastSince) {
+    const pageSize = Math.min(50, maxItems - media.length);
+    const params: Record<string, string> = {
+      fields,
+      limit: String(pageSize),
+    };
+    if (after) params.after = after;
+
+    const result = await graphGet<{
+      data?: IgMediaItem[];
+      paging?: { cursors?: { after?: string }; next?: string };
+    }>(`${encodeURIComponent(igId)}/media`, params);
+    if (!result.ok) return result;
+
+    const page = result.data.data ?? [];
+    if (page.length === 0) break;
+
+    for (const item of page) {
+      if (sinceMs != null && item.timestamp) {
+        const t = new Date(item.timestamp).getTime();
+        if (Number.isFinite(t) && t < sinceMs) {
+          pastSince = true;
+          break;
+        }
+      }
+      media.push(item);
+      if (media.length >= maxItems) break;
+    }
+
+    after = result.data.paging?.cursors?.after;
+    if (pastSince || !after || !result.data.paging?.next) break;
+  }
+
+  return { ok: true, media };
 }
 
 export type IgMediaInsights = {

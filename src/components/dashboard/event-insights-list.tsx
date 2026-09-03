@@ -18,7 +18,6 @@ import {
   Ticket,
   ScanLine,
   Share2,
-  Mail,
   CalendarDays,
   Megaphone,
   Euro,
@@ -27,11 +26,18 @@ import {
 } from "lucide-react";
 import { cn, formatNumber, formatPercent } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SocialChannelIcon } from "@/components/ui/social-channel-icon";
 import type {
   EventInsight,
   EventInsightHeadline,
+  EventInsightMail,
+  EventInsightSocial,
   CompetingEvent,
 } from "@/lib/insights/event-insights";
+import {
+  SALES_IMPACT_ROLE_HINT,
+  type SalesImpactRole,
+} from "@/lib/marketing/sales-impact";
 import {
   competeSizeLabel,
   competitionLevelLabel,
@@ -55,6 +61,15 @@ const CHANNEL_LABEL: Record<string, string> = {
   tiktok: "TikTok",
   youtube: "YouTube",
 };
+
+const ORGANIC_ROLE_ORDER = ["promo", "same_day", "after"] as const;
+
+const ORGANIC_GROUP_LABEL: Record<(typeof ORGANIC_ROLE_ORDER)[number], string> =
+  {
+    promo: "Voor event",
+    same_day: "Eventdag",
+    after: "Na event",
+  };
 
 function channelLabel(channel: string): string {
   return CHANNEL_LABEL[channel] ?? channel;
@@ -82,15 +97,13 @@ function HeadlineChip({ h }: { h: EventInsightHeadline }) {
         ? ScanLine
         : h.kind === "social"
           ? Share2
-          : h.kind === "mail"
-            ? Mail
-            : h.kind === "demo"
-              ? Users
-              : h.kind === "compete"
-                ? CalendarDays
-                : h.kind === "referrer"
-                  ? Megaphone
-                  : Ticket;
+          : h.kind === "demo"
+            ? Users
+            : h.kind === "compete"
+              ? CalendarDays
+              : h.kind === "referrer"
+                ? Megaphone
+                : Ticket;
 
   const colors: Record<EventInsightHeadline["tone"], string> = {
     positive: "border-success/35 bg-success/10 text-success",
@@ -109,6 +122,8 @@ function HeadlineChip({ h }: { h: EventInsightHeadline }) {
     >
       {h.kind === "compete" && h.competeLevel ? (
         <CompetitionLevelBars level={h.competeLevel} />
+      ) : h.kind === "mail" ? (
+        <SocialChannelIcon channel="mail" size={14} alt="" />
       ) : (
         <Icon className="size-3.5 shrink-0 opacity-80" strokeWidth={1.75} />
       )}
@@ -551,7 +566,12 @@ function EventDetail({ event }: { event: EventInsight }) {
                                   : "bg-text-dim",
                             )}
                           />
-                          <span className="flex-1 truncate">
+                          <span className="flex flex-1 items-center gap-1.5 truncate">
+                            <SocialChannelIcon
+                              channel={r.channel}
+                              size={12}
+                              alt=""
+                            />
                             {channelLabel(r.channel)}
                           </span>
                           <span className="font-mono text-text-muted">
@@ -681,51 +701,10 @@ function EventDetail({ event }: { event: EventInsight }) {
             />
 
             <SectionDivider label="Marketing · organic" />
-            <div className="space-y-1">
-              {socialPosts.slice(0, 3).map((p) => (
-                <div
-                  key={p.postId}
-                  className="flex items-center justify-between text-xs"
-                >
-                  <span className="truncate">
-                    <span className="capitalize text-text-muted">
-                      {p.channel}
-                    </span>
-                    {p.title && (
-                      <span className="ml-1 text-text-dim">
-                        · {p.title.slice(0, 30)}
-                      </span>
-                    )}
-                  </span>
-                  <span className="shrink-0 font-mono text-text-muted">
-                    {p.ticketLiftSold != null
-                      ? `+${formatNumber(p.ticketLiftSold)}`
-                      : "—"}
-                  </span>
-                </div>
-              ))}
-              {emailCampaigns.slice(0, 2).map((m) => (
-                <div
-                  key={m.campaignId}
-                  className="flex items-center justify-between text-xs"
-                >
-                  <span className="truncate">
-                    <span className="text-text-muted">Mail</span>
-                    <span className="ml-1 text-text-dim">
-                      · {m.name.slice(0, 30)}
-                    </span>
-                  </span>
-                  <span className="shrink-0 font-mono text-text-muted">
-                    {m.ordersAfter != null
-                      ? `~${formatNumber(m.ordersAfter)}`
-                      : `${formatNumber(m.sent)} sent`}
-                  </span>
-                </div>
-              ))}
-              {socialPosts.length === 0 && emailCampaigns.length === 0 && (
-                <p className="text-xs text-text-dim">Geen organic gekoppeld</p>
-              )}
-            </div>
+            <OrganicMarketingBlock
+              socialPosts={socialPosts}
+              emailCampaigns={emailCampaigns}
+            />
 
             <SectionDivider label="Marketing · paid" />
             <div className="border border-dashed border-border px-3 py-2.5 text-xs text-text-dim">
@@ -767,6 +746,124 @@ function EventDetail({ event }: { event: EventInsight }) {
           </Link>
         </div>
       </div>
+    </div>
+  );
+}
+
+function OrganicMarketingBlock({
+  socialPosts,
+  emailCampaigns,
+}: {
+  socialPosts: EventInsightSocial[];
+  emailCampaigns: EventInsightMail[];
+}) {
+  const mails = emailCampaigns.slice(0, 2);
+  const byRole: Record<SalesImpactRole, EventInsightSocial[]> = {
+    promo: socialPosts.filter((p) => p.salesImpactRole === "promo"),
+    same_day: socialPosts.filter((p) => p.salesImpactRole === "same_day"),
+    after: socialPosts.filter((p) => p.salesImpactRole === "after"),
+  };
+
+  const blocks = ORGANIC_ROLE_ORDER.flatMap((role) => {
+    const posts = byRole[role];
+    const groupMails = role === "promo" ? mails : [];
+    if (posts.length === 0 && groupMails.length === 0) return [];
+    return [
+      {
+        key: role,
+        label: ORGANIC_GROUP_LABEL[role],
+        posts,
+        mails: groupMails,
+      },
+    ];
+  });
+
+  return (
+    <div className="border border-dashed border-border px-3 py-2.5 text-xs">
+      {blocks.length === 0 ? (
+        <p className="text-text-dim">Geen organic gekoppeld</p>
+      ) : (
+        <div>
+          {blocks.map((block, i) => (
+            <div key={block.key}>
+              {i > 0 && <div className="my-2.5 h-px bg-border" />}
+              <p className="mb-1.5 text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
+                {block.label}
+              </p>
+              <div className="space-y-1">
+                {block.posts.map((p) => {
+                  const role = p.salesImpactRole;
+                  const liftLabel =
+                    role === "after"
+                      ? "n.v.t."
+                      : p.ticketLiftSold != null
+                        ? `+${formatNumber(p.ticketLiftSold)}`
+                        : "—";
+                  const body = (
+                    <div
+                      className="flex items-center justify-between gap-2"
+                      title={SALES_IMPACT_ROLE_HINT[role]}
+                    >
+                      <span className="flex min-w-0 items-center gap-1.5 truncate">
+                        <SocialChannelIcon
+                          channel={p.channel}
+                          size={14}
+                          alt=""
+                        />
+                        <span className="truncate text-text-muted">
+                          {p.title?.slice(0, 36) || p.channel}
+                        </span>
+                      </span>
+                      <span
+                        className="shrink-0 font-mono text-text-muted"
+                        title={
+                          role === "after"
+                            ? "Geen sales-impact"
+                            : `Tickets in window (${p.liftWindowLabel})`
+                        }
+                      >
+                        {liftLabel}
+                      </span>
+                    </div>
+                  );
+                  if (p.permalink) {
+                    return (
+                      <a
+                        key={p.postId}
+                        href={p.permalink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block hover:text-text"
+                      >
+                        {body}
+                      </a>
+                    );
+                  }
+                  return <div key={p.postId}>{body}</div>;
+                })}
+                {block.mails.map((m) => (
+                  <div
+                    key={m.campaignId}
+                    className="flex items-center justify-between gap-2"
+                  >
+                    <span className="flex min-w-0 items-center gap-1.5 truncate">
+                      <SocialChannelIcon channel="mail" size={14} alt="" />
+                      <span className="truncate text-text-muted">
+                        {m.name.slice(0, 30)}
+                      </span>
+                    </span>
+                    <span className="shrink-0 font-mono text-text-muted">
+                      {m.ordersAfter != null
+                        ? `~${formatNumber(m.ordersAfter)}`
+                        : `${formatNumber(m.sent)} sent`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

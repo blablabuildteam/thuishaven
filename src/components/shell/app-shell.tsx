@@ -7,11 +7,8 @@ import {
   BarChart3,
   Bell,
   Home,
-  Camera,
   CloudSun,
-  Film,
   LayoutDashboard,
-  Music2,
   Plug,
   ScrollText,
   Send,
@@ -21,15 +18,22 @@ import {
   Mail,
   LineChart,
   Workflow,
+  type LucideIcon,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { UserMenu } from "@/components/auth/user-menu";
+import {
+  SocialChannelIcon,
+  type SocialBrandChannel,
+} from "@/components/ui/social-channel-icon";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
   href: string;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon?: LucideIcon;
+  /** Brand mark from /public/social-icons */
+  brand?: SocialBrandChannel;
 };
 
 type NavSection = {
@@ -60,7 +64,7 @@ const dashboardSections: NavSection[] = [
     items: [
       { href: "/dashboard", label: "Events", icon: LayoutDashboard },
       { href: "/dashboard/weer", label: "Weer", icon: CloudSun },
-      { href: "/dashboard/marketing", label: "Mailings", icon: BarChart3 },
+      { href: "/dashboard/marketing", label: "Mailings", brand: "mail" },
       { href: "/dashboard/weeztix", label: "Tickets", icon: Ticket },
       { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
     ],
@@ -69,9 +73,9 @@ const dashboardSections: NavSection[] = [
     id: "social",
     label: "Social",
     items: [
-      { href: "/dashboard/meta", label: "Meta", icon: Camera },
-      { href: "/dashboard/tiktok", label: "TikTok", icon: Music2 },
-      { href: "/dashboard/youtube", label: "YouTube", icon: Film },
+      { href: "/dashboard/meta", label: "Meta", brand: "instagram" },
+      { href: "/dashboard/tiktok", label: "TikTok", brand: "tiktok" },
+      { href: "/dashboard/youtube", label: "YouTube", brand: "youtube" },
     ],
   },
 ];
@@ -110,6 +114,28 @@ function isNavActive(pathname: string, href: string) {
   );
 }
 
+function NavItemIcon({ item, active }: { item: NavItem; active: boolean }) {
+  if (item.brand) {
+    return (
+      <SocialChannelIcon
+        channel={item.brand}
+        size={16}
+        className={cn(
+          "opacity-90 transition-[filter]",
+          // Black glyphs: invert for dark idle + light active; cancel on dark active (yellow).
+          active ? "invert dark:invert-0" : "dark:invert",
+        )}
+        alt=""
+      />
+    );
+  }
+  if (item.icon) {
+    const Icon = item.icon;
+    return <Icon className="size-4 shrink-0 opacity-70" />;
+  }
+  return null;
+}
+
 function NavLink({
   item,
   active,
@@ -117,7 +143,6 @@ function NavLink({
   item: NavItem;
   active: boolean;
 }) {
-  const Icon = item.icon;
   return (
     <Link
       href={item.href}
@@ -128,7 +153,7 @@ function NavLink({
           : "text-text-muted hover:bg-surface hover:text-text",
       )}
     >
-      <Icon className="size-4 shrink-0 opacity-70" />
+      <NavItemIcon item={item} active={active} />
       <span>{item.label}</span>
     </Link>
   );

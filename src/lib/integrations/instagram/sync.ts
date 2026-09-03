@@ -10,6 +10,7 @@ import {
   hasBlobToken,
   storeRemoteMediaAsBlob,
 } from "@/lib/integrations/social/blob";
+import { socialSyncSince } from "@/lib/integrations/social/sync-window";
 import { logIntegration } from "@/lib/integrations/log";
 
 export type InstagramSyncResult = {
@@ -35,6 +36,7 @@ function titleFromCaption(caption: string | undefined): string | null {
  */
 export async function syncInstagramReadOnly(options?: {
   limit?: number;
+  since?: Date | null;
   withInsights?: boolean;
   withBlob?: boolean;
   withAnalyze?: boolean;
@@ -74,7 +76,14 @@ export async function syncInstagramReadOnly(options?: {
     };
   }
 
-  const listed = await listInstagramMedia({ limit: options?.limit ?? 40 });
+  const since =
+    options?.since === null
+      ? undefined
+      : (options?.since ?? socialSyncSince());
+  const listed = await listInstagramMedia({
+    limit: options?.limit,
+    since,
+  });
   if (!listed.ok) {
     await logIntegration({
       source: "instagram",
@@ -220,6 +229,20 @@ export async function syncInstagramReadOnly(options?: {
       notes.push(
         `Vision: ${e instanceof Error ? e.message : "analyse mislukt"}`,
       );
+    }
+  }
+
+  if (ok) {
+    try {
+      const { linkPostsToEditions } = await import(
+        "@/lib/marketing/edition-link"
+      );
+      const linked = await linkPostsToEditions({ limit: 40 });
+      if (linked.linked > 0) {
+        notes.push(`${linked.linked} posts → edities`);
+      }
+    } catch {
+      /* non-fatal */
     }
   }
 

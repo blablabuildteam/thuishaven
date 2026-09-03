@@ -7,7 +7,7 @@ import {
 import { syncYouTubeReadOnly } from "@/lib/integrations/youtube/sync";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 /**
  * GET /api/cron/youtube
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     });
   }
 
-  const result = await syncYouTubeReadOnly({ limit: 40 });
+  const result = await syncYouTubeReadOnly({ withAnalyze: true });
   return NextResponse.json(
     {
       trigger: "vercel-cron",

@@ -1,6 +1,6 @@
 import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
-import { editions, marketingPosts } from "@/lib/db/schema";
+import { editions, marketingPosts, raListings } from "@/lib/db/schema";
 import {
   normalizeArtistKey,
   parseEditionLineup,
@@ -320,15 +320,52 @@ export async function linkPostsToEditions(options?: {
     .from(editions)
     .where(isNotNull(editions.weeztixEventId));
 
+  const raRows = await db
+    .select({
+      editionId: raListings.editionId,
+      artists: raListings.artists,
+    })
+    .from(raListings)
+    .where(isNotNull(raListings.editionId));
+
+  const raArtistsByEdition = new Map<string, string[]>();
+  for (const row of raRows) {
+    if (!row.editionId) continue;
+    const existing = raArtistsByEdition.get(row.editionId) ?? [];
+    for (const a of row.artists ?? []) {
+      if (a?.trim() && !existing.includes(a)) existing.push(a);
+    }
+    raArtistsByEdition.set(row.editionId, existing);
+  }
+
   const editionIndex: EditionIndex[] = eds
     .filter((e) => !/TEMPLATE/i.test(e.name))
     .map((e) => {
-      const lineup = parseEditionLineup(e.name);
+      const parsed = parseEditionLineup(e.name);
+      const raArtists = raArtistsByEdition.get(e.id) ?? [];
+      // Prefer RA lineup when present; keep parsed Weeztix-name artists as extras.
+      const artists =
+        raArtists.length > 0
+          ? [
+              ...raArtists,
+              ...parsed.artists.filter(
+                (a) =>
+                  !raArtists.some(
+                    (r) => normalizeArtistKey(r) === normalizeArtistKey(a),
+                  ),
+              ),
+            ]
+          : parsed.artists;
+      const lineup = {
+        ...parsed,
+        artists,
+        headliner: raArtists[0] ?? parsed.headliner,
+      };
       return {
         ...e,
         lineup,
         artistKeys: new Set(
-          lineup.artists.map((a) => normalizeArtistKey(a)).filter(Boolean),
+          artists.map((a) => normalizeArtistKey(a)).filter(Boolean),
         ),
         nameNorm: normalizeArtistKey(e.name),
       };

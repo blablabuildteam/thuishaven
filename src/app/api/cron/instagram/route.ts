@@ -7,7 +7,7 @@ import {
 import { syncInstagramReadOnly } from "@/lib/integrations/instagram/sync";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 /**
  * GET /api/cron/instagram
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     });
   }
 
-  const result = await syncInstagramReadOnly({ limit: 40 });
+  const result = await syncInstagramReadOnly({ withAnalyze: true });
   return NextResponse.json(
     {
       trigger: "vercel-cron",

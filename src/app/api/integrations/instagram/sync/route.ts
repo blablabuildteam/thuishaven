@@ -3,10 +3,11 @@ import { auth } from "@/auth";
 import { syncInstagramReadOnly } from "@/lib/integrations/instagram/sync";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 /** POST /api/integrations/instagram/sync — read-only media → marketing_posts.
- * Body `{ light: true }` skips Gemini vision for faster view refresh.
+ * Body `{ light: true }` skips Gemini + only refreshes newest 24.
+ * Full sync pulls ~6 months of history.
  */
 export async function POST(request: Request) {
   const session = await auth();
@@ -15,10 +16,11 @@ export async function POST(request: Request) {
   }
 
   const light = await readLightFlag(request);
-  const result = await syncInstagramReadOnly({
-    limit: light ? 24 : 40,
-    withAnalyze: !light,
-  });
+  const result = await syncInstagramReadOnly(
+    light
+      ? { limit: 24, since: null, withAnalyze: false }
+      : { withAnalyze: true },
+  );
   return NextResponse.json(
     { readOnly: true, light, ...result },
     { status: result.ok ? 200 : 502 },
