@@ -24,6 +24,10 @@ import {
   type WeatherKind,
 } from "@/lib/weather/classify";
 import { weatherLocationMatch } from "@/lib/weather/store";
+import {
+  fetchOpenMeteoHourlyForDays,
+  type WeatherHourRow,
+} from "@/lib/weather/open-meteo";
 import { normalizeWeeztixInventory } from "@/lib/integrations/weeztix/inventory";
 import {
   competeSizeFromAttending,
@@ -324,6 +328,8 @@ export type EventInsight = {
     tempMinC: number | null;
     precipMm: number | null;
     tone: "positive" | "neutral" | "caution";
+    /** Hourly AMS strip for the event day (Open-Meteo). */
+    hourly: WeatherHourRow[];
   } | null;
 
   demographics: EventInsightDemographics | null;
@@ -742,6 +748,16 @@ export async function loadEventInsightsFresh(options?: {
       weatherRows.map((w) => [amsterdamDay(w.day), w]),
     );
 
+    const eventDays = [
+      ...new Set(filtered.map((e) => amsterdamDay(e.startsAt))),
+    ];
+    let hourlyByDay = new Map<string, WeatherHourRow[]>();
+    try {
+      hourlyByDay = await fetchOpenMeteoHourlyForDays(eventDays);
+    } catch (err) {
+      console.error("[loadEventInsights] hourly weather", err);
+    }
+
     const campsByEdition = new Map<string, typeof camps>();
     for (const c of camps) {
       if (!c.editionId) continue;
@@ -901,7 +917,35 @@ export async function loadEventInsightsFresh(options?: {
           tempMinC: classified.tempMinC,
           precipMm: classified.precipMm,
           tone: weatherTone(classified.kind),
+          hourly: hourlyByDay.get(day) ?? [],
         };
+      } else {
+        const hourly = hourlyByDay.get(day) ?? [];
+        if (hourly.length > 0) {
+          const temps = hourly
+            .map((h) => h.tempC)
+            .filter((t): t is number => t != null);
+          const precip = hourly.reduce((s, h) => s + (h.precipMm ?? 0), 0);
+          const classified = classifyEventWeather({
+            day,
+            tempMinC: temps.length ? Math.min(...temps) : null,
+            tempMaxC: temps.length ? Math.max(...temps) : null,
+            precipMm: precip,
+            windMaxMps: null,
+            weatherCode: hourly[12]?.weatherCode ?? hourly[0]?.weatherCode,
+          });
+          weather = {
+            label: classified.label,
+            kind: classified.kind,
+            summary: classified.summary,
+            sky: classified.sky,
+            tempMaxC: classified.tempMaxC,
+            tempMinC: classified.tempMinC,
+            precipMm: classified.precipMm,
+            tone: weatherTone(classified.kind),
+            hourly,
+          };
+        }
       }
 
       const demoRow = demoByEdition.get(e.id);
@@ -1212,7 +1256,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v15"],
+  ["event-insights-upcoming-v16"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1228,7 +1272,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v15"],
+  ["event-insights-past-v16"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],

@@ -10,6 +10,10 @@ import {
   Snowflake,
   Wind,
   ThermometerSun,
+  Cloud,
+  CloudFog,
+  CloudDrizzle,
+  CloudLightning,
   Users,
   MapPin,
   Cake,
@@ -18,7 +22,7 @@ import {
   Ticket,
   ScanLine,
   Share2,
-  CalendarDays,
+  Swords,
   Megaphone,
   Euro,
   TrendingUp,
@@ -56,6 +60,10 @@ import {
   type CompetitionLevel,
 } from "@/lib/integrations/ra/genres";
 import type { WeatherKind } from "@/lib/weather/classify";
+import type {
+  WeatherCodeIconKind,
+  WeatherHourRow,
+} from "@/lib/weather/open-meteo";
 import type { DemographicBucket } from "@/lib/db/schema";
 
 const COLLAPSE_MS = 380;
@@ -111,7 +119,7 @@ function HeadlineChip({ h }: { h: EventInsightHeadline }) {
           : h.kind === "demo"
             ? Users
             : h.kind === "compete"
-              ? CalendarDays
+              ? Swords
               : h.kind === "referrer"
                 ? Megaphone
                 : Ticket;
@@ -132,9 +140,7 @@ function HeadlineChip({ h }: { h: EventInsightHeadline }) {
         colors[h.tone],
       )}
     >
-      {h.kind === "compete" && h.competeLevel ? (
-        <CompetitionLevelBars level={h.competeLevel} />
-      ) : h.kind === "mail" ? (
+      {h.kind === "mail" ? (
         <SocialChannelIcon channel="mail" size={14} alt="" />
       ) : (
         <Icon className="size-3.5 shrink-0 opacity-80" strokeWidth={1.75} />
@@ -185,28 +191,132 @@ function WeatherChip({
   );
 }
 
-function FillBar({
-  pct,
+function ticketComposition(sold: number, capacity: number | null, scanned: number) {
+  const available =
+    capacity != null && capacity > 0 ? Math.max(0, capacity - sold) : null;
+  const scannedClamped = Math.min(scanned, Math.max(sold, 0));
+  const soldUnscanned = Math.max(0, sold - scannedClamped);
+  const base = capacity != null && capacity > 0 ? capacity : Math.max(sold, 1);
+  return {
+    available,
+    scannedClamped,
+    soldUnscanned,
+    scannedW: (scannedClamped / base) * 100,
+    soldRestW: (soldUnscanned / base) * 100,
+    availableW:
+      available != null
+        ? (available / base) * 100
+        : Math.max(0, 100 - (scannedClamped / base) * 100 - (soldUnscanned / base) * 100),
+  };
+}
+
+function TicketCompositionBar({
+  sold,
+  capacity,
+  scanned,
+  animate = false,
   className,
+}: {
+  sold: number;
+  capacity: number | null;
+  scanned: number;
+  animate?: boolean;
+  className?: string;
+}) {
+  const { available, scannedClamped, soldUnscanned, scannedW, soldRestW, availableW } =
+    ticketComposition(sold, capacity, scanned);
+
+  return (
+    <div
+      className={cn("flex h-1.5 w-full overflow-hidden bg-border", className)}
+      role="img"
+      aria-label={
+        capacity != null
+          ? `${formatNumber(sold)} van ${formatNumber(capacity)} verkocht, ${formatNumber(scanned)} gescand`
+          : `${formatNumber(sold)} verkocht, ${formatNumber(scanned)} gescand`
+      }
+    >
+      {scannedW > 0 && (
+        <div
+          className={cn("h-full bg-success", animate && "animate-bar-grow")}
+          style={{
+            width: `${scannedW}%`,
+            animationDelay: animate ? "0.05s" : undefined,
+          }}
+          title={`Gescand: ${formatNumber(scannedClamped)}`}
+        />
+      )}
+      {soldRestW > 0 && (
+        <div
+          className={cn("h-full bg-text", animate && "animate-bar-grow")}
+          style={{
+            width: `${soldRestW}%`,
+            animationDelay: animate ? "0.1s" : undefined,
+          }}
+          title={`Verkocht, niet gescand: ${formatNumber(soldUnscanned)}`}
+        />
+      )}
+      {availableW > 0 && capacity != null && (
+        <div
+          className="h-full bg-border"
+          style={{ width: `${availableW}%` }}
+          title={`Beschikbaar: ${formatNumber(available ?? 0)}`}
+        />
+      )}
+    </div>
+  );
+}
+
+function CompactTicketMetrics({
+  sold,
+  capacity,
+  scanned,
   animate = false,
 }: {
-  pct: number;
-  className?: string;
+  sold: number;
+  capacity: number | null;
+  scanned: number;
   animate?: boolean;
 }) {
-  const clamped = Math.min(100, Math.max(0, pct));
-  const tone =
-    clamped >= 85 ? "bg-success" : clamped >= 50 ? "bg-accent" : "bg-warn";
+  const { available } = ticketComposition(sold, capacity, scanned);
+  if (sold <= 0 && (capacity == null || capacity <= 0) && scanned <= 0) {
+    return null;
+  }
+
   return (
-    <div className={cn("w-24", className)}>
-      <div className="mb-0.5 flex justify-between text-[10px] text-text-dim">
-        <span>{formatPercent(clamped, 0)}</span>
-      </div>
-      <div className="h-1.5 w-full bg-border">
-        <div
-          className={cn("h-full", tone, animate && "animate-bar-grow")}
-          style={{ width: `${clamped}%` }}
-        />
+    <div className="w-[10rem] shrink-0">
+      <TicketCompositionBar
+        sold={sold}
+        capacity={capacity}
+        scanned={scanned}
+        animate={animate}
+        className="h-2"
+      />
+      <div className="mt-1 flex justify-between">
+        <div className="min-w-0 text-left" title="Beschikbaar">
+          <p className="font-mono text-[11px] font-medium leading-none tabular-nums">
+            {available != null ? formatNumber(available) : "—"}
+          </p>
+          <p className="mt-0.5 truncate text-[8px] tracking-wide text-text-dim uppercase">
+            Open
+          </p>
+        </div>
+        <div className="min-w-0 text-center" title="Verkocht">
+          <p className="font-mono text-[11px] font-medium leading-none tabular-nums">
+            {formatNumber(sold)}
+          </p>
+          <p className="mt-0.5 truncate text-[8px] tracking-wide text-text-dim uppercase">
+            Verkocht
+          </p>
+        </div>
+        <div className="min-w-0 text-right" title="Gescand">
+          <p className="font-mono text-[11px] font-medium leading-none tabular-nums">
+            {formatNumber(scanned)}
+          </p>
+          <p className="mt-0.5 truncate text-[8px] tracking-wide text-text-dim uppercase">
+            Scan
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -219,8 +329,9 @@ function WeatherIcon({
   kind: WeatherKind;
   size?: "sm" | "lg";
 }) {
+  const Icon = weatherIcon(kind);
   const box = size === "lg" ? "size-14" : "size-11";
-  const img = size === "lg" ? "size-12" : "size-9";
+  const icon = size === "lg" ? "size-7" : "size-5";
   const label: Record<WeatherKind, string> = {
     ideal: "Zonnig",
     ok: "Deels bewolkt",
@@ -230,26 +341,182 @@ function WeatherIcon({
     heat: "Hitte",
     windy: "Wind",
   };
+  const tone =
+    kind === "ideal"
+      ? "border-success/35 bg-success/10 text-success"
+      : kind === "wet" || kind === "cold_wet" || kind === "cold"
+        ? "border-info/40 bg-info/10 text-info"
+        : kind === "heat" || kind === "windy"
+          ? "border-warn/40 bg-warn/10 text-warn"
+          : "border-border bg-surface text-text-muted";
 
   return (
     <span
       className={cn(
-        // GIFs have an opaque white backdrop — match container so no gray frame shows
-        "flex shrink-0 items-center justify-center border border-white bg-white",
+        "flex shrink-0 items-center justify-center border",
         box,
+        tone,
       )}
       title={label[kind]}
       aria-label={label[kind]}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={`/weather_icons/${kind}.gif`}
-        alt=""
-        className={cn(img, "object-contain")}
-        width={size === "lg" ? 48 : 36}
-        height={size === "lg" ? 48 : 36}
-      />
+      <Icon className={icon} strokeWidth={1.5} />
     </span>
+  );
+}
+
+function hourlyWeatherIcon(kind: WeatherCodeIconKind) {
+  if (kind === "clear") return Sun;
+  if (kind === "fog") return CloudFog;
+  if (kind === "drizzle") return CloudDrizzle;
+  if (kind === "rain") return CloudRain;
+  if (kind === "snow") return Snowflake;
+  if (kind === "thunder") return CloudLightning;
+  return Cloud;
+}
+
+/** Weather block with collapsible hourly strip. */
+function WeatherBlock({
+  weather,
+}: {
+  weather: NonNullable<EventInsight["weather"]>;
+}) {
+  const [showHourly, setShowHourly] = useState(false);
+  const hasHourly = weather.hourly && weather.hourly.length > 0;
+
+  const afternoon = (weather.hourly ?? []).filter(
+    (h) => h.hour >= 12 && h.hour <= 23,
+  );
+  const late = (weather.hourly ?? []).filter((h) => h.hour <= 2);
+  const strip = afternoon.length > 0 ? [...afternoon, ...late] : weather.hourly ?? [];
+  const maxPrecip = Math.max(0.4, ...strip.map((h) => h.precipMm ?? 0));
+
+  return (
+    <div
+      className={cn(
+        "border",
+        isColdOrWet(weather.kind)
+          ? "border-info/40 bg-info/10"
+          : weather.tone === "positive"
+            ? "border-success/30 bg-success/5"
+            : weather.tone === "caution"
+              ? "border-warn/30 bg-warn/5"
+              : "border-border bg-surface",
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => hasHourly && setShowHourly((s) => !s)}
+        disabled={!hasHourly}
+        className={cn(
+          "flex w-full items-start gap-3 p-2.5 text-left",
+          hasHourly && "cursor-pointer hover:bg-surface-hover/50",
+        )}
+      >
+        <WeatherIcon kind={weather.kind} size="lg" />
+        <div className="min-w-0 flex-1 text-xs">
+          <p className="font-medium">{weather.label}</p>
+          <p className="mt-0.5 text-text-muted">
+            {weather.tempMinC != null && weather.tempMaxC != null
+              ? `${Math.round(weather.tempMinC)}–${Math.round(weather.tempMaxC)}°C`
+              : weather.tempMaxC != null
+                ? `${Math.round(weather.tempMaxC)}°C`
+                : ""}
+            {weather.precipMm != null &&
+              weather.precipMm > 0 &&
+              ` · ${weather.precipMm.toFixed(1)}mm`}
+            {" · "}
+            <span
+              className={cn(
+                weather.tone === "positive" && "text-success",
+                weather.tone === "caution" &&
+                  !isColdOrWet(weather.kind) &&
+                  "text-warn",
+                isColdOrWet(weather.kind) && "text-info",
+              )}
+            >
+              {weather.tone === "positive"
+                ? "Gunstig"
+                : weather.tone === "caution"
+                  ? "Ongunstig"
+                  : "Neutraal"}
+            </span>
+          </p>
+          {hasHourly && (
+            <p className="mt-1 text-[10px] text-text-dim">
+              {showHourly ? "Verberg uurlijks" : "Toon uurlijks"}
+              <ChevronDown
+                className={cn(
+                  "ml-1 inline size-3 transition-transform",
+                  showHourly && "rotate-180",
+                )}
+                strokeWidth={1.5}
+              />
+            </p>
+          )}
+        </div>
+      </button>
+
+      {showHourly && strip.length > 0 && (
+        <div className="border-t border-border/50 bg-surface/50 px-2 py-2">
+          <p className="mb-2 text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
+            Uurlijks · AMS
+          </p>
+          <div className="flex gap-1 overflow-x-auto pb-1">
+            {strip.map((h) => {
+              const Icon = hourlyWeatherIcon(h.iconKind);
+              const precip = h.precipMm ?? 0;
+              const barH =
+                precip > 0 ? Math.max(6, (precip / maxPrecip) * 24) : 0;
+              return (
+                <div
+                  key={`${h.day}-${h.hour}`}
+                  title={`${String(h.hour).padStart(2, "0")}:00 · ${h.label}${
+                    precip > 0 ? ` · ${precip.toFixed(1)} mm` : ""
+                  }`}
+                  className="flex w-10 shrink-0 flex-col items-center"
+                >
+                  <span className="font-mono text-[10px] text-text-dim">
+                    {String(h.hour).padStart(2, "0")}
+                  </span>
+                  <Icon
+                    className={cn(
+                      "my-0.5 size-4",
+                      h.iconKind === "clear"
+                        ? "text-warn"
+                        : h.iconKind === "rain" ||
+                            h.iconKind === "drizzle" ||
+                            h.iconKind === "thunder" ||
+                            h.iconKind === "snow"
+                          ? "text-info"
+                          : "text-text-muted",
+                    )}
+                    strokeWidth={1.5}
+                  />
+                  <span className="font-mono text-[11px] font-medium text-text">
+                    {h.tempC != null ? `${Math.round(h.tempC)}°` : "—"}
+                  </span>
+                  <div className="mt-1 flex h-6 w-full items-end justify-center">
+                    {barH > 0 ? (
+                      <div
+                        className="w-2.5 rounded-t-sm bg-info/70"
+                        style={{ height: `${barH}px` }}
+                        aria-hidden
+                      />
+                    ) : (
+                      <div className="h-px w-2.5 bg-border" aria-hidden />
+                    )}
+                  </div>
+                  <span className="mt-0.5 h-3 font-mono text-[9px] text-text-dim">
+                    {precip >= 0.1 ? precip.toFixed(1) : ""}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -264,31 +531,163 @@ function SectionDivider({ label }: { label: string }) {
   );
 }
 
-function StatPill({
+/** Capacity → sold → scanned as one composition. */
+function TicketMiniStat({
   label,
   value,
-  tone,
   hint,
 }: {
   label: string;
   value: string;
-  tone?: "positive" | "caution" | "neutral";
   hint?: string;
 }) {
   return (
-    <div
-      title={hint}
-      className={cn(
-        "flex items-center gap-1.5 border px-2 py-1 text-xs",
-        tone === "positive"
-          ? "border-success/30 bg-success/5"
-          : tone === "caution"
-            ? "border-warn/30 bg-warn/5"
-            : "border-border bg-surface",
-      )}
-    >
-      <span className="text-text-dim">{label}</span>
-      <span className="font-mono font-medium">{value}</span>
+    <div title={hint} className="min-w-0 text-right">
+      <p className="text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
+        {label}
+      </p>
+      <p className="mt-1 font-mono text-sm font-medium leading-none">{value}</p>
+    </div>
+  );
+}
+
+function TicketMetricsVisual({
+  sold,
+  capacity,
+  scanned,
+  fillPct,
+  scanRatePct,
+  avgPriceEur,
+  lastWeekSold,
+  sameDaySold,
+  soldOutDaysBefore,
+}: {
+  sold: number;
+  capacity: number | null;
+  scanned: number;
+  fillPct: number | null;
+  scanRatePct: number | null;
+  avgPriceEur: number | null;
+  lastWeekSold: number | null;
+  sameDaySold: number | null;
+  soldOutDaysBefore: number | null;
+}) {
+  const { available } = ticketComposition(sold, capacity, scanned);
+
+  const fillTone =
+    fillPct != null
+      ? fillPct >= 85
+        ? "text-success"
+        : fillPct < 50
+          ? "text-warn"
+          : "text-text"
+      : "text-text";
+
+  return (
+    <div className="mb-4 border border-border bg-surface px-3 py-3">
+      <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+        <div title="Nog beschikbare tickets (capaciteit − verkocht)">
+          <p className="text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
+            Beschikbaar
+          </p>
+          <p className="mt-1 font-display text-2xl leading-none tracking-tight">
+            {available != null ? formatNumber(available) : "—"}
+          </p>
+          <p className="mt-1 text-[10px] text-text-dim">
+            {capacity != null ? `van ${formatNumber(capacity)}` : "geen capaciteit"}
+          </p>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+            <div title="Verkochte Weeztix-tickets">
+              <p className="text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
+                Verkocht
+              </p>
+              <p
+                className={cn(
+                  "mt-1 font-display text-2xl leading-none tracking-tight",
+                  fillTone,
+                )}
+              >
+                {formatNumber(sold)}
+              </p>
+              <p className="mt-1 text-[10px] text-text-dim">
+                {fillPct != null ? `${formatPercent(fillPct, 0)} vol` : "totaal"}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-start justify-end gap-x-4 gap-y-2">
+              {avgPriceEur != null && (
+                <TicketMiniStat
+                  label="Gem. prijs"
+                  value={`€${avgPriceEur.toFixed(0)}`}
+                  hint="Gemiddelde betaalde ticketprijs"
+                />
+              )}
+              {lastWeekSold != null && lastWeekSold > 0 && (
+                <TicketMiniStat
+                  label="Laatste week"
+                  value={`+${formatNumber(lastWeekSold)}`}
+                  hint="Verkoop in de 7 dagen vóór/op eventdag"
+                />
+              )}
+              {sameDaySold != null && sameDaySold > 0 && (
+                <TicketMiniStat
+                  label="Eventdag"
+                  value={`+${formatNumber(sameDaySold)}`}
+                  hint="Tickets verkocht op de eventdag zelf (Weeztix)"
+                />
+              )}
+              {soldOutDaysBefore != null && (
+                <TicketMiniStat
+                  label="Uitverkocht"
+                  value={`${soldOutDaysBefore}d vóór`}
+                  hint="Dagen vóór start dat Weeztix uitverkocht raakte"
+                />
+              )}
+            </div>
+          </div>
+        </div>
+        <div title="Check-ins t.o.v. verkochte tickets">
+          <p className="text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
+            Gescand
+          </p>
+          <p className="mt-1 font-display text-2xl leading-none tracking-tight">
+            {formatNumber(scanned)}
+          </p>
+          <p className="mt-1 text-[10px] text-text-dim">
+            {scanRatePct != null
+              ? `${formatPercent(scanRatePct, 0)} check-in`
+              : sold > 0
+                ? "nog geen scans"
+                : "—"}
+          </p>
+        </div>
+      </div>
+
+      <TicketCompositionBar
+        sold={sold}
+        capacity={capacity}
+        scanned={scanned}
+        animate
+        className="mt-3 h-2.5"
+      />
+
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-text-dim">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-1.5 bg-success" aria-hidden />
+          Gescand
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-1.5 bg-text" aria-hidden />
+          Verkocht
+        </span>
+        {capacity != null && (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-1.5 border border-border bg-border" aria-hidden />
+            Beschikbaar
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -296,10 +695,17 @@ function StatPill({
 function EventDetailSkeleton() {
   return (
     <div className="space-y-4 px-4 py-4" aria-hidden>
-      <div className="flex flex-wrap gap-2">
-        {Array.from({ length: 4 }, (_, i) => (
-          <Skeleton key={i} className="h-7 w-24" />
-        ))}
+      <div className="border border-border px-3 py-3">
+        <div className="grid grid-cols-3 gap-3">
+          {Array.from({ length: 3 }, (_, i) => (
+            <div key={i} className="space-y-1.5">
+              <Skeleton className="h-2.5 w-16" />
+              <Skeleton className="h-7 w-14" />
+              <Skeleton className="h-2 w-12" />
+            </div>
+          ))}
+        </div>
+        <Skeleton className="mt-3 h-2.5 w-full" />
       </div>
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="space-y-3">
@@ -399,17 +805,13 @@ function EventRow({ event }: { event: EventInsight }) {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-3 pt-1">
-          {event.tickets.fillPct != null ? (
-            <FillBar
-              key={open ? `fill-${revealKey}` : "fill"}
-              pct={event.tickets.fillPct}
-              animate={open && phase === "ready"}
-            />
-          ) : event.tickets.sold > 0 ? (
-            <span className="font-mono text-sm">
-              {formatNumber(event.tickets.sold)}
-            </span>
-          ) : null}
+          <CompactTicketMetrics
+            key={open ? `fill-${revealKey}` : "fill"}
+            sold={event.tickets.sold}
+            capacity={event.tickets.capacity}
+            scanned={event.tickets.scanned}
+            animate={open && phase === "ready"}
+          />
           <ChevronDown
             className={cn(
               "size-4 text-text-dim transition-transform duration-300 ease-out",
@@ -469,62 +871,17 @@ function EventDetail({ event }: { event: EventInsight }) {
       <div className="insight-loading-pass absolute inset-0 z-[1]" />
 
       <div className="insight-reveal relative z-0 space-y-1">
-        <div className="mb-4 flex flex-wrap gap-2">
-          <StatPill
-            label="Verkocht"
-            value={
-              tickets.capacity
-                ? `${formatNumber(tickets.sold)} / ${formatNumber(tickets.capacity)}`
-                : formatNumber(tickets.sold)
-            }
-            tone={
-              tickets.fillPct != null
-                ? tickets.fillPct >= 85
-                  ? "positive"
-                  : tickets.fillPct < 50
-                    ? "caution"
-                    : "neutral"
-                : "neutral"
-            }
-            hint="Weeztix sold / capaciteit"
-          />
-          {tickets.scanned > 0 && (
-            <StatPill
-              label="Gescand"
-              value={`${formatNumber(tickets.scanned)}${tickets.scanRatePct != null ? ` (${formatPercent(tickets.scanRatePct, 0)})` : ""}`}
-              hint="Check-ins t.o.v. verkochte tickets"
-            />
-          )}
-          {tickets.avgPriceEur != null && (
-            <StatPill
-              label="Gem. prijs"
-              value={`€${tickets.avgPriceEur.toFixed(0)}`}
-              hint="Gemiddelde betaalde ticketprijs"
-            />
-          )}
-          {tickets.lastWeekSold != null && tickets.lastWeekSold > 0 && (
-            <StatPill
-              label="Laatste week"
-              value={`+${formatNumber(tickets.lastWeekSold)}`}
-              hint="Verkoop in de 7 dagen vóór/op eventdag"
-            />
-          )}
-          {tickets.sameDaySold != null && tickets.sameDaySold > 0 && (
-            <StatPill
-              label="Eventdag"
-              value={`+${formatNumber(tickets.sameDaySold)}`}
-              hint="Tickets verkocht op de eventdag zelf (Weeztix)"
-            />
-          )}
-          {tickets.soldOutDaysBefore != null && (
-            <StatPill
-              label="Uitverkocht"
-              value={`${tickets.soldOutDaysBefore}d vóór`}
-              tone="positive"
-              hint="Dagen vóór start dat Weeztix uitverkocht raakte"
-            />
-          )}
-        </div>
+        <TicketMetricsVisual
+          sold={tickets.sold}
+          capacity={tickets.capacity}
+          scanned={tickets.scanned}
+          fillPct={tickets.fillPct}
+          scanRatePct={tickets.scanRatePct}
+          avgPriceEur={tickets.avgPriceEur}
+          lastWeekSold={tickets.lastWeekSold}
+          sameDaySold={tickets.sameDaySold}
+          soldOutDaysBefore={tickets.soldOutDaysBefore}
+        />
 
         <div className="grid gap-x-6 gap-y-1 lg:grid-cols-2">
           <div>
@@ -665,49 +1022,7 @@ function EventDetail({ event }: { event: EventInsight }) {
             {weather && (
               <>
                 <SectionDivider label="Weer" />
-                <div
-                  className={cn(
-                    "flex items-start gap-3 border p-2.5",
-                    isColdOrWet(weather.kind)
-                      ? "border-info/40 bg-info/10"
-                      : weather.tone === "positive"
-                        ? "border-success/30 bg-success/5"
-                        : weather.tone === "caution"
-                          ? "border-warn/30 bg-warn/5"
-                          : "border-border bg-surface",
-                  )}
-                >
-                  <WeatherIcon kind={weather.kind} size="lg" />
-                  <div className="text-xs">
-                    <p className="font-medium">{weather.label}</p>
-                    <p className="mt-0.5 text-text-muted">
-                      {weather.tempMinC != null && weather.tempMaxC != null
-                        ? `${Math.round(weather.tempMinC)}–${Math.round(weather.tempMaxC)}°C`
-                        : weather.tempMaxC != null
-                          ? `${Math.round(weather.tempMaxC)}°C`
-                          : ""}
-                      {weather.precipMm != null &&
-                        weather.precipMm > 0 &&
-                        ` · ${weather.precipMm.toFixed(1)}mm`}
-                      {" · "}
-                      <span
-                        className={cn(
-                          weather.tone === "positive" && "text-success",
-                          weather.tone === "caution" &&
-                            !isColdOrWet(weather.kind) &&
-                            "text-warn",
-                          isColdOrWet(weather.kind) && "text-info",
-                        )}
-                      >
-                        {weather.tone === "positive"
-                          ? "Gunstig"
-                          : weather.tone === "caution"
-                            ? "Ongunstig"
-                            : "Neutraal"}
-                      </span>
-                    </p>
-                  </div>
-                </div>
+                <WeatherBlock weather={weather} />
               </>
             )}
 
