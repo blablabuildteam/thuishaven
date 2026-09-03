@@ -161,9 +161,22 @@ function sumChannel(
   return values.reduce((sum, n) => sum + (n?.used ?? 0), 0);
 }
 
-function TicketsTable({ rows }: { rows: TicketChannelRow[] }) {
+function visibleChannels(showDeurverkoop: boolean) {
+  return showDeurverkoop
+    ? CHANNELS
+    : CHANNELS.filter((col) => col.key !== "deurverkoop");
+}
+
+function TicketsTable({
+  rows,
+  showDeurverkoop = true,
+}: {
+  rows: TicketChannelRow[];
+  showDeurverkoop?: boolean;
+}) {
   const months = groupByMonth(rows);
-  const colCount = 2 + CHANNELS.length + 2;
+  const columns = visibleChannels(showDeurverkoop);
+  const colCount = 2 + columns.length + 2;
 
   return (
     <div className="overflow-x-auto border border-border">
@@ -172,7 +185,7 @@ function TicketsTable({ rows }: { rows: TicketChannelRow[] }) {
           <tr>
             <th className="px-4 py-3 font-medium">Editie</th>
             <th className="px-4 py-3 font-medium">Datum</th>
-            {CHANNELS.map((col) => (
+            {columns.map((col) => (
               <th
                 key={col.key}
                 className={cn(
@@ -196,7 +209,12 @@ function TicketsTable({ rows }: { rows: TicketChannelRow[] }) {
         </thead>
         <tbody>
           {months.map((month) => (
-            <MonthBlock key={month.key} month={month} colCount={colCount} />
+            <MonthBlock
+              key={month.key}
+              month={month}
+              colCount={colCount}
+              columns={columns}
+            />
           ))}
         </tbody>
         {rows.length > 1 && (
@@ -205,7 +223,7 @@ function TicketsTable({ rows }: { rows: TicketChannelRow[] }) {
               <td className="px-4 py-3 font-medium" colSpan={2}>
                 Totaal
               </td>
-              {CHANNELS.map((col) => (
+              {columns.map((col) => (
                 <td
                   key={col.key}
                   className={cn(
@@ -233,9 +251,11 @@ function TicketsTable({ rows }: { rows: TicketChannelRow[] }) {
 function MonthBlock({
   month,
   colCount,
+  columns,
 }: {
   month: { key: string; label: string; rows: TicketChannelRow[] };
   colCount: number;
+  columns: typeof CHANNELS[number][];
 }) {
   return (
     <>
@@ -282,7 +302,7 @@ function MonthBlock({
             <td className="px-4 py-3 whitespace-nowrap text-text-muted">
               {formatDate(row.startsAt)}
             </td>
-            {CHANNELS.map((col) => (
+            {columns.map((col) => (
               <td
                 key={col.key}
                 className={cn(
@@ -366,7 +386,7 @@ export function TicketsChannelsList({
             title="Komende events"
             count={upcoming.length}
           />
-          <TicketsTable rows={upcoming} />
+          <TicketsTable rows={upcoming} showDeurverkoop={false} />
         </section>
       )}
 
