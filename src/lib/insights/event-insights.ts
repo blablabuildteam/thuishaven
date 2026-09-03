@@ -200,6 +200,9 @@ export type EventInsightSocial = {
   title: string | null;
   engagement: number;
   impressions: number;
+  reach: number;
+  likeCount: number;
+  commentCount: number;
   ticketLiftSold: number | null;
   /** promo | same_day | after — aftermovies never get ticket lift. */
   salesImpactRole: "promo" | "same_day" | "after";
@@ -904,6 +907,9 @@ export async function loadEventInsightsFresh(options?: {
             title: p.title,
             engagement: p.engagement ?? 0,
             impressions: p.impressions ?? 0,
+            reach: p.reach ?? 0,
+            likeCount: p.likeCount ?? 0,
+            commentCount: p.commentCount ?? 0,
             ticketLiftSold: null,
             salesImpactRole: role,
             liftWindowLabel: window?.label ?? "n.v.t.",
@@ -1118,7 +1124,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v9"],
+  ["event-insights-upcoming-v10"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1134,7 +1140,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v9"],
+  ["event-insights-past-v10"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],

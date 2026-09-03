@@ -13,6 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { LoaderCircle } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import type {
   MarketingPostRow,
   MarketingPostsPage,
@@ -282,6 +283,27 @@ async function fetchPostsForRange(
   return collected;
 }
 
+function ChartPanelSkeleton({ label }: { label: string }) {
+  return (
+    <div>
+      <p className="mb-3 text-xs font-medium tracking-[0.12em] text-text-dim uppercase">
+        {label}
+      </p>
+      <div className="flex h-56 w-full flex-col justify-end gap-2 border border-border bg-surface p-3">
+        <div className="mb-2 flex items-center gap-2 text-xs text-text-dim">
+          <LoaderCircle className="size-3.5 animate-spin" aria-hidden />
+          <span className="animate-pulse-soft tracking-[0.08em] uppercase">
+            Laden…
+          </span>
+        </div>
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-16 w-4/5" />
+        <Skeleton className="h-10 w-3/5" />
+      </div>
+    </div>
+  );
+}
+
 function filterPostsByRange(
   posts: MarketingPostRow[],
   range: SocialRange,
@@ -303,8 +325,10 @@ export function ChannelPerformanceCharts({
   const [range, setRange] = useState<SocialRange>(DEFAULT_SOCIAL_RANGE);
   const [allPosts, setAllPosts] = useState(initialPosts);
   const [loading, setLoading] = useState(false);
+  const [rangeLoading, setRangeLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hydrated = useRef(false);
+  const rangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Seed once from SSR; ignore later refreshes so sync/router.refresh
   // does not wipe the selected period.
@@ -338,6 +362,23 @@ export function ChannelPerformanceCharts({
     };
   }, [channel]);
 
+  useEffect(() => {
+    return () => {
+      if (rangeTimer.current) clearTimeout(rangeTimer.current);
+    };
+  }, []);
+
+  const changeRange = (next: SocialRange) => {
+    if (next === range || rangeLoading) return;
+    setRangeLoading(true);
+    setRange(next);
+    if (rangeTimer.current) clearTimeout(rangeTimer.current);
+    rangeTimer.current = setTimeout(() => {
+      setRangeLoading(false);
+      rangeTimer.current = null;
+    }, 280);
+  };
+
   const posts = useMemo(
     () => filterPostsByRange(allPosts, range),
     [allPosts, range],
@@ -358,6 +399,9 @@ export function ChannelPerformanceCharts({
     color: colors.tooltipFg,
   } as const;
 
+  const showChartsLoading =
+    (loading && allPosts.length === 0) || rangeLoading;
+
   return (
     <section>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -376,13 +420,15 @@ export function ChannelPerformanceCharts({
             <button
               key={key}
               type="button"
-              onClick={() => setRange(key)}
+              onClick={() => changeRange(key)}
+              disabled={rangeLoading}
               className={cn(
                 "px-2.5 py-1.5 text-xs tracking-[0.06em] transition",
                 index > 0 && "border-l border-border",
                 range === key
                   ? "bg-text text-bg"
                   : "text-text-muted hover:text-text",
+                rangeLoading && "opacity-60",
               )}
               aria-pressed={range === key}
             >
@@ -392,20 +438,21 @@ export function ChannelPerformanceCharts({
         </div>
       </div>
 
-      {loading && allPosts.length === 0 ? (
-        <p
+      {showChartsLoading ? (
+        <div
           role="status"
-          className="flex items-center gap-2 border border-border px-4 py-3 text-sm text-text-muted"
+          aria-label="Grafieken laden"
+          className="grid gap-6 lg:grid-cols-2"
         >
-          <LoaderCircle className="size-3.5 animate-spin" aria-hidden />
-          Grafiek laden…
-        </p>
+          <ChartPanelSkeleton label={`${impressionsLabel} per dag`} />
+          <ChartPanelSkeleton label={`Top posts · ${impressionsLabel}`} />
+        </div>
       ) : error && allPosts.length === 0 ? (
         <p className="border border-danger/40 px-4 py-3 text-sm text-danger">
           {error}
         </p>
       ) : (
-        <div key={range} className="grid gap-6 lg:grid-cols-2">
+        <div key={range} className="animate-fade-up grid gap-6 lg:grid-cols-2">
           <div>
             <h3 className="mb-3 text-xs font-medium tracking-[0.12em] text-text-dim uppercase">
               {impressionsLabel} per dag
