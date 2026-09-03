@@ -938,6 +938,11 @@ function detectPricing(
       dimension: "pricing",
       significance: Math.max(significance, 0.4),
       detail: `De gemiddelde kaartprijs was ${fmtEur(price)}, lager dan de ${fmtEur(cohort.price.median)} bij vergelijkbare ${cohort.label}. Toch was dit event maar ${fmtPct(fill)} vol — de prijs was dus geen rem.`,
+      facts: facts(
+        ["Prijs dit event", fmtEur(price)],
+        ["Vergelijkbare " + cohort.label, fmtEur(cohort.price.median)],
+        ["Bezetting", fmtPct(fill)],
+      ),
     };
   }
 
@@ -948,6 +953,11 @@ function detectPricing(
       dimension: "pricing",
       significance: Math.max(significance, 0.48),
       detail: `Uitverkocht bij ${fmtEur(price)} per kaart. Vergelijkbare ${cohort.label} liggen rond ${fmtEur(cohort.price.median)} — de vraag hield de hogere prijs dus vol.`,
+      facts: facts(
+        ["Prijs dit event", fmtEur(price)],
+        ["Vergelijkbare " + cohort.label, fmtEur(cohort.price.median)],
+        ["Bezetting", fmtPct(fill)],
+      ),
     };
   }
 
@@ -958,6 +968,11 @@ function detectPricing(
       dimension: "pricing",
       significance: significance,
       detail: `De gemiddelde kaartprijs was ${fmtEur(price)}, hoger dan de ${fmtEur(cohort.price.median)} bij vergelijkbare ${cohort.label}. Dit event raakte ${fmtPct(fill)} vol.`,
+      facts: facts(
+        ["Prijs dit event", fmtEur(price)],
+        ["Vergelijkbare " + cohort.label, fmtEur(cohort.price.median)],
+        ["Bezetting", fmtPct(fill)],
+      ),
     };
   }
 
@@ -968,6 +983,11 @@ function detectPricing(
       dimension: "pricing",
       significance: significance * 0.85,
       detail: `Uitverkocht bij ${fmtEur(price)} per kaart. Vergelijkbare ${cohort.label} liggen rond ${fmtEur(cohort.price.median)}.`,
+      facts: facts(
+        ["Prijs dit event", fmtEur(price)],
+        ["Vergelijkbare " + cohort.label, fmtEur(cohort.price.median)],
+        ["Bezetting", fmtPct(fill)],
+      ),
     };
   }
 
