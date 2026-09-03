@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Bell,
+  CalendarDays,
   Home,
   Plug,
   ScrollText,
@@ -16,6 +17,7 @@ import {
   Mail,
   LineChart,
   Workflow,
+  Ban,
   type LucideIcon,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
@@ -77,9 +79,12 @@ const outreachSections: NavSection[] = [
     label: "Outreach",
     items: [
       { href: "/outreach", label: "Overzicht", icon: Send },
+      { href: "/outreach/planning", label: "Planning", icon: CalendarDays },
       { href: "/outreach/prospects", label: "Prospects", icon: Users },
+      { href: "/outreach/uitsluitingen", label: "Uitsluitingen", icon: Ban },
       { href: "/outreach/campaigns", label: "Campagnes", icon: Sparkles },
       { href: "/outreach/emails", label: "E-mails", icon: Mail },
+      { href: "/outreach/beschikbaarheid", label: "Agenda", icon: CalendarDays },
       { href: "/outreach/analytics", label: "Wat werkt", icon: LineChart },
       { href: "/outreach/pipeline", label: "Pipeline", icon: Workflow },
       { href: "/outreach/kosten", label: "Kosten", icon: BarChart3 },

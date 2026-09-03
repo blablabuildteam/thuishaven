@@ -1,9 +1,14 @@
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { prospects, statusLabels, type ProspectStatus } from "@/lib/mock/outreach";
+import {
+  listProspects,
+  statusLabels,
+  type ProspectStatus,
+} from "@/lib/outreach/data";
 import { formatNumber } from "@/lib/utils";
 
 export const metadata = { title: "Prospects" };
+export const dynamic = "force-dynamic";
 
 const toneFor = (status: ProspectStatus) => {
   if (status === "lead" || status === "replied") return "accent" as const;
@@ -12,13 +17,20 @@ const toneFor = (status: ProspectStatus) => {
   return "neutral" as const;
 };
 
-export default function ProspectsPage() {
+export default async function ProspectsPage() {
+  const { rows, source } = await listProspects();
+
   return (
     <div>
       <SectionHeader
         eyebrow="Pipeline"
         title="Prospects"
-        description="KvK + LinkedIn + website-extractie. Bedrijven (jubilea) en event bureaus in één lijst — filterbaar per type."
+        description="Eventbureaus uit Reijners lijst + later KvK/jubilea. Uitsluitingen zijn gemarkeerd."
+        action={
+          <StatusBadge tone={source === "db" ? "success" : "neutral"}>
+            {source === "db" ? `${rows.length} uit DB` : "Mockdata"}
+          </StatusBadge>
+        }
       />
 
       <div className="overflow-x-auto border border-border">
@@ -35,23 +47,23 @@ export default function ProspectsPage() {
             </tr>
           </thead>
           <tbody>
-            {prospects.map((p) => (
+            {rows.map((p) => (
               <tr
                 key={p.id}
                 className="border-b border-border last:border-0 hover:bg-surface/50"
               >
                 <td className="px-4 py-3">
                   <p className="text-text">{p.companyName}</p>
-                  <p className="text-xs text-text-dim">{p.city}</p>
+                  <p className="text-xs text-text-dim">
+                    {p.city ?? (p.contacts?.length ? `${p.contacts.length} contacten` : "—")}
+                  </p>
                 </td>
                 <td className="px-4 py-3 text-text-muted">
                   {p.type === "company" ? "Bedrijf" : "Bureau"}
                 </td>
-                <td className="px-4 py-3 text-text-muted">{p.sector}</td>
+                <td className="px-4 py-3 text-text-muted">{p.sector ?? "—"}</td>
                 <td className="px-4 py-3 font-mono text-text-muted">
-                  {p.employeeCount
-                    ? formatNumber(p.employeeCount)
-                    : "—"}
+                  {p.employeeCount ? formatNumber(p.employeeCount) : "—"}
                 </td>
                 <td className="px-4 py-3 font-mono text-accent">
                   {p.anniversaryYears ? `${p.anniversaryYears} jr` : "—"}

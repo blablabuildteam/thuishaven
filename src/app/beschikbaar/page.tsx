@@ -4,16 +4,18 @@ import {
   AvailabilityCalendar,
   AvailabilityLegend,
 } from "@/components/outreach/availability-calendar";
-import { openAvailabilityDays } from "@/lib/mock/availability";
+import { listAvailabilityDays } from "@/lib/outreach/availability";
 
 export const metadata = {
   title: "Beschikbaarheid · Thuishaven B2B",
   description:
     "Live overzicht van beschikbare doordeweekse data bij Thuishaven voor bedrijfsevents.",
 };
+export const dynamic = "force-dynamic";
 
-export default function PublicAvailabilityPage() {
-  const openCount = openAvailabilityDays().length;
+export default async function PublicAvailabilityPage() {
+  const { days } = await listAvailabilityDays();
+  const openCount = days.filter((d) => d.status === "available").length;
 
   return (
     <div className="relative z-0 min-h-screen bg-bg">
@@ -65,7 +67,7 @@ export default function PublicAvailabilityPage() {
           <AvailabilityLegend />
         </div>
 
-        <AvailabilityCalendar publicView />
+        <AvailabilityCalendar days={days} publicView />
 
         <footer className="mt-12 border-t border-border pt-6 text-xs text-text-dim">
           <p>

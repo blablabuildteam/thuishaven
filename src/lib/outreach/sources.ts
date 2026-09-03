@@ -146,18 +146,38 @@ export const PROSPECT_SOURCES: ProspectSource[] = [
   },
   {
     id: "linkedin_sales_nav",
-    name: "LinkedIn (Sales Nav / enrichment)",
+    name: "LinkedIn · Event / Office / Facilities Manager",
     description:
-      "Context en beslissers. Officiële API is beperkt; vaak via partner of handmatige export.",
-    whatYouGet: ["Bedrijfsomschrijving", "Headcount band", "Soms contactrollen"],
-    legalNote: "LinkedIn ToS streng — liever partner/API dan scrape.",
-    effort: "hoog",
-    cost: "hoog",
+      "Zoek decision-makers bij doelbedrijven: Event Manager, Office Manager, Facilities, People Ops, Internal Comms. Sales Nav of Apollo/Hunter voor company + rol → generic of verified mail.",
+    whatYouGet: [
+      "Rollen bij grote werkgevers (niet alleen CEO)",
+      "Headcount band",
+      "Soms direct e-mail / LinkedIn URL",
+    ],
+    legalNote:
+      "LinkedIn ToS streng — liever Sales Nav export of enrichment-partner dan scrape. Liever company-level + rol dan massale persoonsdata.",
+    effort: "middel",
+    cost: "middel",
     status: "onderzoek",
     envKeys: ["LINKEDIN_ACCESS_TOKEN", "ENRICHMENT_API_KEY"],
     meetingQuestions: [
-      "Hebben jullie Sales Navigator of een voorkeurspartner?",
-      "Willen we überhaupt persoonsnamen in de DB, of alleen company-level?",
+      "Hebben jullie Sales Navigator of Apollo?",
+      "Akkoord om Event/Office/Facilities Managers te targeten (B2B)?",
+      "Willen we persoonsnamen in de DB, of alleen company + generic events@?",
+    ],
+  },
+  {
+    id: "companies_house_style",
+    name: "Grote werkgeverslijsten AMS",
+    description:
+      "Seed zonder KvK: Amsterdam Economic Board, I amsterdam corporate lists, FD Gazellen, Deloitte Fast50, largest employers NL — filter 500–5k + regio, daarna website-scrape voor events@.",
+    whatYouGet: ["Naamlijsten HQ’s", "Sector", "Soms headcount"],
+    legalNote: "Check hergebruikrechten per bron; daarna publieke contactpagina’s.",
+    effort: "laag",
+    cost: "gratis",
+    status: "onderzoek",
+    meetingQuestions: [
+      "Hebben jullie al een ‘dream list’ van corporates die jullie willen?",
     ],
   },
   {

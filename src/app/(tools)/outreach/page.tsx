@@ -2,12 +2,8 @@ import Link from "next/link";
 import { SectionHeader } from "@/components/ui/section-header";
 import { MetricCard } from "@/components/ui/metric-card";
 import { StatusBadge } from "@/components/ui/status-badge";
-import {
-  availabilitySlots,
-  campaigns,
-  leads,
-  outreachKpis,
-} from "@/lib/mock/outreach";
+import { getOutreachOverview } from "@/lib/outreach/data";
+import { openAvailabilityDaysLive } from "@/lib/outreach/availability";
 import { getUsageSummary } from "@/lib/usage/store";
 import { formatNumber, formatPercent } from "@/lib/utils";
 
@@ -24,9 +20,11 @@ function eurFromCents(cents: number): string {
 }
 
 export default async function OutreachPage() {
+  const overview = await getOutreachOverview();
+  const openSlots = await openAvailabilityDaysLive();
   const openRate =
-    outreachKpis.sent > 0
-      ? (outreachKpis.opened / outreachKpis.sent) * 100
+    overview.kpis.sent > 0
+      ? (overview.kpis.opened / overview.kpis.sent) * 100
       : 0;
   let usage: Awaited<ReturnType<typeof getUsageSummary>> | null = null;
   try {
@@ -43,6 +41,18 @@ export default async function OutreachPage() {
         description="Mailvarianten per groep, A/B onderwerpregels, live beschikbaarheidsagenda en lead routing."
         action={
           <div className="flex flex-wrap gap-2">
+            <StatusBadge tone="danger">Send locked</StatusBadge>
+            <StatusBadge tone={overview.source === "db" ? "success" : "neutral"}>
+              {overview.source === "db"
+                ? `${overview.prospectCount} prospects · ${overview.exclusionCount} uitsluitingen`
+                : "Mockdata"}
+            </StatusBadge>
+            <Link
+              href="/outreach/planning"
+              className="bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast"
+            >
+              Planning
+            </Link>
             <Link
               href="/outreach/kosten"
               className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
@@ -50,14 +60,14 @@ export default async function OutreachPage() {
               Kostmeter →
             </Link>
             <Link
-              href="/outreach/analytics"
+              href="/outreach/emails"
               className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
             >
-              Wat werkt →
+              Drafts →
             </Link>
             <Link
               href="/outreach/beschikbaarheid"
-              className="bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast"
+              className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
             >
               Agenda
             </Link>
@@ -68,19 +78,19 @@ export default async function OutreachPage() {
       <div className="stagger mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <MetricCard
           label="Prospects"
-          value={formatNumber(outreachKpis.prospectsTotal)}
+          value={formatNumber(overview.kpis.prospectsTotal)}
         />
         <MetricCard
           label="Verzonden"
-          value={formatNumber(outreachKpis.sent)}
+          value={formatNumber(overview.kpis.sent)}
           accent
         />
         <MetricCard label="Geopend" value={formatPercent(openRate)} />
         <MetricCard
           label="Gereageerd"
-          value={formatNumber(outreachKpis.replied)}
+          value={formatNumber(overview.kpis.replied)}
         />
-        <MetricCard label="Leads" value={formatNumber(outreachKpis.leads)} />
+        <MetricCard label="Leads" value={formatNumber(overview.kpis.leads)} />
         <MetricCard
           label="Kosten · 30d"
           value={usage ? eurFromCents(usage.totalEurCents) : "—"}
@@ -104,11 +114,8 @@ export default async function OutreachPage() {
             </Link>
           </div>
           <ul className="space-y-3">
-            {campaigns.map((c) => (
-              <li
-                key={c.id}
-                className="border border-border bg-bg p-3"
-              >
+            {overview.campaigns.map((c) => (
+              <li key={c.id} className="border border-border bg-bg p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-medium text-text">{c.name}</p>
@@ -140,31 +147,35 @@ export default async function OutreachPage() {
               Inbox →
             </Link>
           </div>
-          <ul className="space-y-3">
-            {leads.map((lead) => (
-              <li
-                key={lead.id}
-                className="border-b border-border pb-3 last:border-0 last:pb-0"
-              >
-                <p className="text-sm text-text">{lead.companyName}</p>
-                <p className="mt-1 text-xs leading-relaxed text-text-muted">
-                  {lead.summary}
-                </p>
-              </li>
-            ))}
-          </ul>
+          {overview.leads.length === 0 ? (
+            <p className="text-sm text-text-muted">Nog geen warme leads.</p>
+          ) : (
+            <ul className="space-y-3">
+              {overview.leads.map((lead) => (
+                <li
+                  key={lead.id}
+                  className="border-b border-border pb-3 last:border-0 last:pb-0"
+                >
+                  <p className="text-sm text-text">{lead.companyName}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-text-muted">
+                    {lead.summary}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
 
           <h3 className="mb-2 mt-6 text-[11px] uppercase tracking-wider text-text-dim">
             Open slots (bureau-campagne)
           </h3>
           <ul className="space-y-1.5">
-            {availabilitySlots.map((slot) => (
+            {openSlots.slice(0, 5).map((slot) => (
               <li
                 key={slot.id}
                 className="flex items-center gap-2 text-xs text-text-muted"
               >
                 <span className="size-1.5 rounded-full bg-accent" />
-                {slot.label}
+                {slot.label ?? slot.date}
               </li>
             ))}
           </ul>

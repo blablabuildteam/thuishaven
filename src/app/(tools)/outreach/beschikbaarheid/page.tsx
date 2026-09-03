@@ -4,18 +4,24 @@ import {
   AvailabilityCalendar,
   AvailabilityLegend,
 } from "@/components/outreach/availability-calendar";
-import { openAvailabilityDays, formatEuro } from "@/lib/mock/availability";
+import { AvailabilityAdmin } from "@/components/outreach/availability-admin";
+import {
+  formatEuro,
+  listAvailabilityDays,
+} from "@/lib/outreach/availability";
 import { StatusBadge } from "@/components/ui/status-badge";
 
 export const metadata = { title: "Beschikbaarheid" };
+export const dynamic = "force-dynamic";
 
-export default function BeschikbaarheidPage() {
-  const open = openAvailabilityDays();
+export default async function BeschikbaarheidPage() {
+  const { days, source } = await listAvailabilityDays();
+  const open = days.filter((d) => d.status === "available");
   const priceRange = open
     .map((d) => d.priceFrom)
     .filter((p): p is number => p != null);
-  const min = Math.min(...priceRange);
-  const max = Math.max(...priceRange);
+  const min = priceRange.length ? Math.min(...priceRange) : 0;
+  const max = priceRange.length ? Math.max(...priceRange) : 0;
 
   return (
     <div>
@@ -50,7 +56,9 @@ export default function BeschikbaarheidPage() {
             Prijsrange
           </p>
           <p className="mt-1 font-display text-3xl">
-            {formatEuro(min)}–{formatEuro(max)}
+            {priceRange.length
+              ? `${formatEuro(min)}–${formatEuro(max)}`
+              : "—"}
           </p>
           <p className="mt-1 text-xs text-text-dim">excl. BTW · dynamic</p>
         </div>
@@ -62,16 +70,20 @@ export default function BeschikbaarheidPage() {
             /beschikbaar
           </p>
           <p className="mt-1 text-xs text-text-dim">
-            Clicks meetbaar per campagne
+            Bron: {source === "db" ? "database" : "mock"}
           </p>
         </div>
+      </div>
+
+      <div className="mb-8">
+        <AvailabilityAdmin initialDays={days} source={source} />
       </div>
 
       <div className="mb-6">
         <AvailabilityLegend />
       </div>
 
-      <AvailabilityCalendar />
+      <AvailabilityCalendar days={days} />
     </div>
   );
 }

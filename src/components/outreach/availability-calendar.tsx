@@ -23,16 +23,20 @@ type AvailabilityCalendarProps = {
   publicView?: boolean;
   onlyOpen?: boolean;
   className?: string;
+  /** When provided, use DB/live days instead of mock */
+  days?: AvailabilityDay[];
 };
 
 export function AvailabilityCalendar({
   publicView = false,
   onlyOpen = false,
   className,
+  days: daysProp,
 }: AvailabilityCalendarProps) {
+  const source = daysProp ?? availabilityCalendar;
   const days = onlyOpen
-    ? availabilityCalendar.filter((d) => d.status === "available")
-    : availabilityCalendar;
+    ? source.filter((d) => d.status === "available")
+    : source;
 
   const byMonth = days.reduce<Record<string, AvailabilityDay[]>>((acc, day) => {
     const key = format(parseISO(day.date), "yyyy-MM");
