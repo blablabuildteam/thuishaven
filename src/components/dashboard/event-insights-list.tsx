@@ -64,7 +64,7 @@ import type {
   WeatherCodeIconKind,
   WeatherHourRow,
 } from "@/lib/weather/open-meteo";
-import { displayEditionTitle } from "@/lib/editions/lineup";
+import { displayEditionName } from "@/lib/editions/lineup";
 import type { DemographicBucket } from "@/lib/db/schema";
 
 const COLLAPSE_MS = 380;
@@ -793,7 +793,6 @@ function EventRow({ event }: { event: EventInsight }) {
     year: "numeric",
   });
   const artists = event.artists.filter(Boolean);
-  const title = displayEditionTitle(event.name, artists);
 
   return (
     <li className="border border-border bg-surface">
@@ -821,7 +820,7 @@ function EventRow({ event }: { event: EventInsight }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <span className="text-[15px] font-medium leading-snug" title={event.name}>
-              {title}
+              {displayEditionName(event.name)}
             </span>
             {artists.length > 0 && (
               <span className="text-xs text-text-dim">

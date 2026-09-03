@@ -25,14 +25,12 @@ export function stripEditionDatePrefix(name: string): string {
   return loose || name.trim();
 }
 
-/** Title without date (and without W/ lineup when artists are shown separately). */
-export function displayEditionTitle(name: string, artists: string[] = []): string {
+/** Date prefix + a leading venue name, keeping the rest of the Weeztix title. */
+export function displayEditionName(name: string): string {
   let title = stripEditionDatePrefix(name);
-  if (artists.length > 0) {
-    const withoutLineup = title.replace(/\s*[|—–-]?\s*W\/\s*.+$/i, "").trim();
-    if (withoutLineup) title = withoutLineup;
-  }
-  return title || name;
+  title = title.replace(/^thuishaven(?:\s*[|—–:/-]\s*|\s+|$)/i, "").trim();
+  title = title.replace(/^w\/\s*/i, "").trim();
+  return title || stripEditionDatePrefix(name) || name;
 }
 
 const ROOM_TAGS = new Set([
