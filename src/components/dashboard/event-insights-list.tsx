@@ -1592,31 +1592,32 @@ function OrganicEngagementMetrics({
 
 function InsightModalSocialPost({ post }: { post: EventInsightSocial }) {
   const content = (
-    <div className="space-y-1">
-      <div className="flex min-w-0 items-center gap-2">
-        <SocialChannelIcon channel={post.channel} size={14} alt="" />
-        <span className="min-w-0 truncate font-mono text-[11px] text-text">
-          {post.postId}
-        </span>
-        {post.permalink && (
-          <ExternalLink className="size-3 shrink-0 text-text-dim" aria-hidden />
-        )}
+    <div className="flex items-start gap-2.5">
+      <SocialChannelIcon channel={post.channel} size={16} alt="" className="mt-0.5 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="min-w-0 truncate text-xs font-medium text-text">
+            {post.title?.slice(0, 50) || channelLabel(post.channel)}
+          </span>
+          {post.permalink && (
+            <ExternalLink className="size-3 shrink-0 text-text-dim" aria-hidden />
+          )}
+        </div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10px] text-text-dim">
+          <OrganicEngagementMetrics
+            impressions={post.impressions}
+            reach={post.reach}
+            likeCount={post.likeCount}
+            commentCount={post.commentCount}
+            shareCount={post.shareCount}
+            engagement={post.engagement}
+          />
+        </div>
       </div>
-      {post.title && (
-        <p className="truncate text-xs text-text-muted">{post.title}</p>
-      )}
-      <OrganicEngagementMetrics
-        impressions={post.impressions}
-        reach={post.reach}
-        likeCount={post.likeCount}
-        commentCount={post.commentCount}
-        shareCount={post.shareCount}
-        engagement={post.engagement}
-      />
-      {post.ticketLiftSold != null && post.salesImpactRole !== "after" && (
-        <p className="text-[10px] text-text-dim">
-          +{formatNumber(post.ticketLiftSold)} tickets in {post.liftWindowLabel}
-        </p>
+      {post.ticketLiftSold != null && (
+        <span className="shrink-0 text-xs font-medium text-success">
+          +{formatNumber(post.ticketLiftSold)}
+        </span>
       )}
     </div>
   );
@@ -1627,7 +1628,7 @@ function InsightModalSocialPost({ post }: { post: EventInsightSocial }) {
         href={post.permalink}
         target="_blank"
         rel="noreferrer"
-        className="block border border-border px-2.5 py-2 transition-colors hover:bg-surface-hover"
+        className="block rounded-sm border border-border px-2.5 py-2 transition-colors hover:bg-surface-hover"
         title="Open post"
       >
         {content}
@@ -1635,30 +1636,31 @@ function InsightModalSocialPost({ post }: { post: EventInsightSocial }) {
     );
   }
 
-  return <div className="border border-border px-2.5 py-2">{content}</div>;
+  return <div className="rounded-sm border border-border px-2.5 py-2">{content}</div>;
 }
 
 function InsightModalEmailCampaign({ campaign }: { campaign: EventInsightMail }) {
   return (
-    <div className="border border-border px-2.5 py-2">
-      <div className="flex min-w-0 items-center gap-2">
-        <SocialChannelIcon channel="mail" size={14} alt="" />
-        <span className="min-w-0 truncate font-mono text-[11px] text-text">
-          {campaign.campaignId}
+    <div className="flex items-start gap-2.5 rounded-sm border border-border px-2.5 py-2">
+      <SocialChannelIcon channel="mail" size={16} alt="" className="mt-0.5 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <span className="block truncate text-xs font-medium text-text">
+          {campaign.name}
         </span>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10px] text-text-dim">
+          {campaign.sent > 0 && (
+            <span>{formatNumber(campaign.sent)} verzonden</span>
+          )}
+          {campaign.openRate != null && (
+            <span>{formatPercent(campaign.openRate, 0)} open</span>
+          )}
+        </div>
       </div>
-      <p className="mt-1 truncate text-xs text-text-muted">{campaign.name}</p>
-      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-text-dim">
-        {campaign.sent > 0 && (
-          <span>{formatNumber(campaign.sent)} verzonden</span>
-        )}
-        {campaign.openRate != null && (
-          <span>{formatPercent(campaign.openRate, 0)} open</span>
-        )}
-        {campaign.ordersAfter != null && (
-          <span>~{formatNumber(campaign.ordersAfter)} orders</span>
-        )}
-      </div>
+      {campaign.ordersAfter != null && (
+        <span className="shrink-0 text-xs font-medium text-success">
+          ~{formatNumber(campaign.ordersAfter)}
+        </span>
+      )}
     </div>
   );
 }
