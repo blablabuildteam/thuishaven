@@ -49,7 +49,7 @@ const dashboardSections: NavSection[] = [
     id: "ops",
     label: "Overzicht",
     items: [
-      { href: "/dashboard/dashboards", label: "Inzichten", icon: LineChart },
+      { href: "/dashboard/inzichten", label: "Inzichten", icon: LineChart },
       { href: "/dashboard/tickets", label: "Tickets", icon: Ticket },
       { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
     ],
@@ -58,7 +58,7 @@ const dashboardSections: NavSection[] = [
     id: "marketing",
     label: "Marketing (organic)",
     items: [
-      { href: "/dashboard/marketing", label: "Mailings", brand: "mail" },
+      { href: "/dashboard/mails", label: "Mailings", brand: "mail" },
       { href: "/dashboard/meta", label: "Meta", brand: "instagram" },
       { href: "/dashboard/tiktok", label: "TikTok", brand: "tiktok" },
       { href: "/dashboard/youtube", label: "YouTube", brand: "youtube" },
@@ -176,7 +176,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="border-b border-border px-3 py-3">
           <div className="grid grid-cols-2 gap-1 bg-bg-elevated p-1">
             <ToolSwitch
-              href="/dashboard/dashboards"
+              href="/dashboard/inzichten"
               active={!isOutreach}
               label="Dashboard"
             />
@@ -254,7 +254,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-1">
             <ThemeToggle compact />
             <div className="flex gap-1 bg-surface p-1">
-              <ToolSwitch href="/dashboard/dashboards" active={!isOutreach} label="Dash" />
+              <ToolSwitch href="/dashboard/inzichten" active={!isOutreach} label="Dash" />
               <ToolSwitch href="/outreach" active={isOutreach} label="Out" />
             </div>
           </div>

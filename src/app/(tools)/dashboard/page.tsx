@@ -87,7 +87,7 @@ export default async function DashboardPage() {
               Weer
             </Link>
             <Link
-              href="/dashboard/marketing"
+              href="/dashboard/mails"
               className="bg-accent px-3 py-2 text-sm text-accent-contrast"
             >
               Mailings

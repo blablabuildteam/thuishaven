@@ -628,7 +628,7 @@ export function IntegrationsHub() {
 
       <p className="mt-8 text-sm text-text-muted">
         Dashboard-bronnen voeden Dashboards.{" "}
-        <Link href="/dashboard/dashboards" className="underline hover:text-text">
+        <Link href="/dashboard/inzichten" className="underline hover:text-text">
           Naar Dashboards →
         </Link>
         {" · "}

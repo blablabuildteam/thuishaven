@@ -20,6 +20,21 @@ const nextConfig: NextConfig = {
         destination: "/dashboard/tickets/:editionId",
         permanent: true,
       },
+      {
+        source: "/dashboard/dashboards",
+        destination: "/dashboard/inzichten",
+        permanent: true,
+      },
+      {
+        source: "/dashboard/insights",
+        destination: "/dashboard/inzichten",
+        permanent: true,
+      },
+      {
+        source: "/dashboard/marketing",
+        destination: "/dashboard/mails",
+        permanent: true,
+      },
     ];
   },
 };

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import {
   Sun,
@@ -26,6 +27,8 @@ import {
   Euro,
   TrendingUp,
   Clock,
+  WandSparkles,
+  X,
   BadgeEuro,
   Heart,
   MessageCircle,
@@ -240,14 +243,14 @@ function InsightChip({ insight }: { insight: AnomalyInsight }) {
         {insight.detail && (
           <button
             type="button"
-            aria-label="Toelichting"
+            aria-label="AI-toelichting"
             onClick={(e) => {
               e.stopPropagation();
               setOpen(true);
             }}
             className="inline-flex size-5 shrink-0 items-center justify-center text-current opacity-55 transition-opacity hover:opacity-100"
           >
-            <Info className="size-3.5" strokeWidth={1.75} />
+            <WandSparkles className="size-3.5" strokeWidth={1.75} />
           </button>
         )}
       </span>

@@ -16,7 +16,7 @@ function coverageLabel(signal: "measured" | "no_curve", daysCovered: number) {
   return `${daysCovered} van 7 dagen gemeten`;
 }
 
-export default async function MarketingPage() {
+export default async function MailsPage() {
   const [campaigns, mailLift] = await Promise.all([
     listRecentCampaigns(24),
     loadMailLift().catch(() => null),

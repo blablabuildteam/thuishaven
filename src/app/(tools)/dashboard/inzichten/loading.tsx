@@ -1,5 +1,5 @@
 import { DashboardsPageSkeleton } from "@/components/dashboard/dashboards-skeletons";
 
-export default function DashboardsLoading() {
+export default function InzichtenLoading() {
   return <DashboardsPageSkeleton />;
 }

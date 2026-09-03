@@ -12,7 +12,7 @@ import {
 
 export const metadata = { title: "Inzichten" };
 
-export default async function DashboardsPage() {
+export default async function InzichtenPage() {
   return (
     <div>
       <SectionHeader

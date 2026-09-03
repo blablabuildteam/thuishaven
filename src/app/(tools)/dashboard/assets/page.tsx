@@ -45,7 +45,7 @@ export default async function AssetsPage() {
         action={
           <div className="flex flex-wrap gap-2">
             <Link
-              href="/dashboard/dashboards"
+              href="/dashboard/inzichten"
               className="border border-border px-3 py-2 text-sm hover:border-text"
             >
               Dashboards

@@ -39,12 +39,19 @@ export type AnomalyDimension =
   | "soldout"
   | "same_day";
 
+export type AnomalyFact = {
+  label: string;
+  value: string;
+};
+
 export type AnomalyInsight = {
   text: string;
   tone: "positive" | "neutral" | "caution" | "danger";
   dimension: AnomalyDimension;
   significance: number;
   detail?: string;
+  /** Comparison metrics for the detail modal — not shown on the chip. */
+  facts?: AnomalyFact[];
   /** Present on weather insights so the chip can match heat / rain / wind. */
   weatherKind?: WeatherKind;
 };
@@ -323,6 +330,20 @@ function fmtCount(n: number): string {
   return n.toLocaleString("nl-NL");
 }
 
+function facts(
+  ...rows: Array<[string, string | number | null | undefined]>
+): AnomalyFact[] {
+  const out: AnomalyFact[] = [];
+  for (const [label, value] of rows) {
+    if (value == null || value === "") continue;
+    out.push({
+      label,
+      value: typeof value === "number" ? String(value) : value,
+    });
+  }
+  return out;
+}
+
 /** Pick the tightest cohort that has enough past events for a metric. */
 function resolveCohort(
   event: AnomalyEventInput,
@@ -503,6 +524,12 @@ function detectFill(
       : above
         ? `Dit event was ${fmtPct(fill)} vol. Vergelijkbare ${label} zitten meestal rond ${fmtPct(cohort.fill.median)} vol.`
         : `Dit event was ${fmtPct(fill)} vol. Vergelijkbare ${label} zitten meestal rond ${fmtPct(cohort.fill.median)} vol.`,
+    facts: facts(
+      ["Dit event", fmtPct(fill)],
+      ["Vergelijkbare " + label, fmtPct(cohort.fill.median)],
+      ["Verkocht", fmtCount(e.tickets.sold)],
+      ["Capaciteit", e.tickets.capacity != null ? fmtCount(e.tickets.capacity) : null],
+    ),
   };
 }
 
@@ -540,6 +567,11 @@ function detectWeather(
         detail: soldOut
           ? `Uitverkocht (${fmtPct(fill)}) terwijl het ${e.weather.label.toLowerCase()} was. Outdoor events met slecht weer zitten meestal maar rond ${fmtPct(peer)} vol.`
           : `Dit event was ${fmtPct(fill)} vol ondanks ${e.weather.label.toLowerCase()}. Outdoor events met slecht weer zitten meestal rond ${fmtPct(peer)} vol.`,
+        facts: facts(
+          ["Dit event", fmtPct(fill)],
+          ["Outdoor bij slecht weer", fmtPct(peer)],
+          ["Weer", e.weather.label],
+        ),
       };
     }
 
@@ -550,6 +582,11 @@ function detectWeather(
       weatherKind: e.weather.kind,
       significance: sigFromPp(peer - fill, 20),
       detail: `Het was ${e.weather.label.toLowerCase()} en dit event raakte ${fmtPct(fill)} vol. Bij vergelijkbaar slecht weer zitten outdoor events meestal rond ${fmtPct(peer)} vol.`,
+      facts: facts(
+        ["Dit event", fmtPct(fill)],
+        ["Outdoor bij slecht weer", fmtPct(peer)],
+        ["Weer", e.weather.label],
+      ),
     };
   }
 
@@ -562,6 +599,11 @@ function detectWeather(
       weatherKind: e.weather.kind,
       significance: sigFromPp(delta, 22),
       detail: `Het weer was ideaal, dus dat was geen rem. Dit event was ${fmtPct(fill)} vol; andere mooie outdoor-dagen zitten meestal rond ${fmtPct(idealFill)} vol.`,
+      facts: facts(
+        ["Dit event", fmtPct(fill)],
+        ["Mooie outdoor-dagen", fmtPct(idealFill)],
+        ["Weer", e.weather.label],
+      ),
     };
   }
 
@@ -614,6 +656,12 @@ function detectCompetition(
         detail: soldOut
           ? `Uitverkocht (${fmtPct(fill)}) terwijl er ${festBit} naast speelde. Op zulke drukke avonden raken events meestal rond ${fmtPct(expected)} vol.`
           : `Dit event was ${fmtPct(fill)} vol terwijl er ${festBit} naast speelde. Op zulke drukke avonden zitten events meestal rond ${fmtPct(expected)} vol.`,
+        facts: facts(
+          ["Dit event", fmtPct(fill)],
+          ["Drukke avonden", fmtPct(expected)],
+          ["Festivals dezelfde dag", nFest > 0 ? String(nFest) : "0"],
+          ["Parties / feestdagen", String(e.competingFestivals.length - nFest)],
+        ),
       };
     }
 
@@ -623,6 +671,11 @@ function detectCompetition(
       dimension: "competition",
       significance: sigFromPp(expected - fill, 20),
       detail: `Er speelde ${festBit} op dezelfde dag. Dit event was ${fmtPct(fill)} vol; andere drukke avonden zitten meestal rond ${fmtPct(expected)} vol.`,
+      facts: facts(
+        ["Dit event", fmtPct(fill)],
+        ["Drukke avonden", fmtPct(expected)],
+        ["Festivals dezelfde dag", nFest > 0 ? String(nFest) : "0"],
+      ),
     };
   }
 
@@ -633,6 +686,11 @@ function detectCompetition(
       dimension: "competition",
       significance: sigFromPp(lowPeer - fill, 22),
       detail: `Er speelde weinig mee in de stad, dus concurrentie was geen rem. Dit event was ${fmtPct(fill)} vol; rustige avonden zitten meestal rond ${fmtPct(lowPeer)} vol.`,
+      facts: facts(
+        ["Dit event", fmtPct(fill)],
+        ["Rustige avonden", fmtPct(lowPeer)],
+        ["Andere events die dag", String(e.competingFestivals.length)],
+      ),
     };
   }
 
@@ -673,6 +731,11 @@ function detectScan(
             weatherHint ? ` Het weer (${e.weather?.label.toLowerCase()}) kan no-shows verklaren.` : ""
           }`
         : `${fmtPct(scan)} van de verkochte kaarten is gescand (${fmtCount(e.tickets.scanned)} van ${fmtCount(e.tickets.sold)}). Bij vergelijkbare ${cohort.label} is dat meestal ${fmtPct(cohort.scan.median)}.`,
+    facts: facts(
+      ["Gescand", `${fmtPct(scan)} (${fmtCount(e.tickets.scanned)} van ${fmtCount(e.tickets.sold)})`],
+      ["Vergelijkbare " + cohort.label, fmtPct(cohort.scan.median)],
+      ["Niet binnengekomen", fmtCount(Math.max(0, e.tickets.sold - e.tickets.scanned))],
+    ),
   };
 }
 
@@ -708,6 +771,12 @@ function detectSocial(
         dimension: "social",
         significance: Math.min(1, 0.5 + Math.min(0.4, lift / 400)),
         detail: `${posts.length} posts vóór of op de eventdag bereikten ${fmtCount(reach)} mensen. In de dagen rond die posts gingen er ${fmtCount(lift)} extra tickets weg — dat is een samenhang, geen harde toewijzing.`,
+        facts: facts(
+          ["Promo / eventdag-posts", String(posts.length)],
+          ["Bereik", fmtCount(reach)],
+          ["Tickets rond die posts", "+" + fmtCount(lift)],
+          ["Bezetting", fill != null ? fmtPct(fill) : null],
+        ),
       };
     }
     if (fill != null && highFill != null && fill <= highFill - 12 && e.status === "past") {
@@ -717,6 +786,12 @@ function detectSocial(
         dimension: "social",
         significance: sigFromPp(highFill - fill, 22),
         detail: `Er was een duidelijke social push, maar dit event was ${fmtPct(fill)} vol. Events met een vergelijkbare push zitten meestal rond ${fmtPct(highFill)} vol.`,
+        facts: facts(
+          ["Dit event", fmtPct(fill)],
+          ["Events met sterke social", fmtPct(highFill)],
+          ["Promo-posts", String(posts.length)],
+          ["Bereik", fmtCount(reach)],
+        ),
       };
     }
     if (posts.length >= 2) {
@@ -726,6 +801,11 @@ function detectSocial(
         dimension: "social",
         significance: 0.4,
         detail: `${posts.length} posts vóór het event bereikten ${fmtCount(reach)} mensen. In de dagen rond die posts is geen duidelijke extra verkoop te zien.`,
+        facts: facts(
+          ["Promo-posts", String(posts.length)],
+          ["Bereik", fmtCount(reach)],
+          ["Bezetting", fill != null ? fmtPct(fill) : null],
+        ),
       };
     }
   }
@@ -751,6 +831,11 @@ function detectSocial(
       dimension: "social",
       significance: sigFromPp(delta, 24),
       detail: `Er zijn geen promo-posts vóór het event gekoppeld (aftermovies tellen niet mee). Dit event was ${fmtPct(fill)} vol; events mét posts zitten meestal rond ${fmtPct(withOrganic)} vol.`,
+      facts: facts(
+        ["Dit event", fmtPct(fill)],
+        ["Events mét posts", fmtPct(withOrganic)],
+        ["Promo-posts", "0"],
+      ),
     };
   }
 
@@ -778,6 +863,11 @@ function detectEmail(
       dimension: "email",
       significance: sigFromPp(deltaMail, 20),
       detail: `Er is geen mailcampagne gekoppeld. Dit event was ${fmtPct(fill)} vol; events mét mail zitten meestal rond ${fmtPct(withMail)} vol.`,
+      facts: facts(
+        ["Dit event", fmtPct(fill)],
+        ["Events mét mail", fmtPct(withMail)],
+        ["Events zonder mail", withoutMail != null ? fmtPct(withoutMail) : null],
+      ),
     };
   }
 
@@ -788,6 +878,11 @@ function detectEmail(
       dimension: "email",
       significance: Math.min(1, 0.42 + Math.min(0.35, orders / 200)),
       detail: `${e.emailCampaigns.length === 1 ? "Na de mail" : "Na de mails"} gingen er ongeveer ${fmtCount(orders)} tickets weg in de week erna${fill != null ? ` (event ${fmtPct(fill)} vol)` : ""}. Dat is een samenhang, geen harde toewijzing.`,
+      facts: facts(
+        ["Campagnes", String(e.emailCampaigns.length)],
+        ["Tickets in de week erna", "~" + fmtCount(orders)],
+        ["Bezetting", fill != null ? fmtPct(fill) : null],
+      ),
     };
   }
 
@@ -804,6 +899,12 @@ function detectEmail(
       dimension: "email",
       significance: sigFromPp(withMail - fill, 24),
       detail: `Er ${e.emailCampaigns.length === 1 ? "is een mailcampagne" : `zijn ${e.emailCampaigns.length} mailcampagnes`} gekoppeld, maar in de week erna gingen er maar ongeveer ${fmtCount(orders)} tickets weg. Dit event was ${fmtPct(fill)} vol; events mét mail zitten meestal rond ${fmtPct(withMail)} vol.`,
+      facts: facts(
+        ["Campagnes", String(e.emailCampaigns.length)],
+        ["Tickets in de week erna", "~" + fmtCount(orders)],
+        ["Dit event", fmtPct(fill)],
+        ["Events mét mail", fmtPct(withMail)],
+      ),
     };
   }
 

@@ -1,4 +1,8 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
+import { DeurverkoopCell } from "@/components/dashboard/deurverkoop-cell";
 import { displayEditionName } from "@/lib/editions/lineup";
 import { cn, formatDate, formatNumber } from "@/lib/utils";
 
@@ -44,10 +48,10 @@ export function totalTicketsSold(row: TicketChannelRow): number | null {
     channelIssued(row.ra),
     channelIssued(row.appic),
     channelIssued(row.wingame),
-    row.vrienden,
+    channelIssued(row.vrienden),
   ];
   if (parts.every((n) => n == null)) return null;
-  return parts.reduce((sum, n) => sum + (n ?? 0), 0);
+  return parts.reduce<number>((sum, n) => sum + (n ?? 0), 0);
 }
 
 const CHANNELS = [
@@ -138,12 +142,12 @@ function sumChannel(
   if (key === "total") {
     const values = rows.map(totalTicketsSold);
     if (values.every((n) => n == null)) return null;
-    return values.reduce((sum, n) => sum + (n ?? 0), 0);
+    return values.reduce<number>((sum, n) => sum + (n ?? 0), 0);
   }
   if (key === "scanned") {
     const values = rows.map((row) => row.scanned);
     if (values.every((n) => n == null)) return null;
-    return values.reduce((sum, n) => sum + (n ?? 0), 0);
+    return values.reduce<number>((sum, n) => sum + (n ?? 0), 0);
   }
 
   const col = CHANNELS.find((c) => c.key === key);
@@ -170,9 +174,11 @@ function visibleChannels(showDeurverkoop: boolean) {
 function TicketsTable({
   rows,
   showDeurverkoop = true,
+  onDeurverkoopChange,
 }: {
   rows: TicketChannelRow[];
   showDeurverkoop?: boolean;
+  onDeurverkoopChange?: (editionId: string, value: number | null) => void;
 }) {
   const months = groupByMonth(rows);
   const columns = visibleChannels(showDeurverkoop);
@@ -194,6 +200,11 @@ function TicketsTable({
                 )}
               >
                 {col.label}
+                {col.key === "deurverkoop" && (
+                  <span className="mt-0.5 block font-normal tracking-normal text-text-dim normal-case">
+                    handmatig
+                  </span>
+                )}
                 {col.pending && col.key !== "wingame" && (
                   <span className="mt-0.5 block font-normal tracking-normal text-text-dim normal-case">
                     binnenkort
@@ -214,6 +225,7 @@ function TicketsTable({
               month={month}
               colCount={colCount}
               columns={columns}
+              onDeurverkoopChange={onDeurverkoopChange}
             />
           ))}
         </tbody>
@@ -252,10 +264,12 @@ function MonthBlock({
   month,
   colCount,
   columns,
+  onDeurverkoopChange,
 }: {
   month: { key: string; label: string; rows: TicketChannelRow[] };
   colCount: number;
-  columns: typeof CHANNELS[number][];
+  columns: readonly (typeof CHANNELS)[number][];
+  onDeurverkoopChange?: (editionId: string, value: number | null) => void;
 }) {
   return (
     <>
@@ -310,7 +324,18 @@ function MonthBlock({
                   col.pool && "whitespace-nowrap",
                 )}
               >
-                <ChannelCell value={row[col.key]} pending={col.pending} />
+                {col.key === "deurverkoop" &&
+                !row.isExternal &&
+                onDeurverkoopChange ? (
+                  <DeurverkoopCell
+                    editionId={row.id}
+                    editionName={displayEditionName(row.name)}
+                    value={row.deurverkoop}
+                    onSaved={(next) => onDeurverkoopChange(row.id, next)}
+                  />
+                ) : (
+                  <ChannelCell value={row[col.key]} pending={col.pending} />
+                )}
               </td>
             ))}
             <td className="border-l border-border px-4 py-3 text-right font-mono font-medium">
@@ -366,6 +391,24 @@ export function TicketsChannelsList({
   upcoming: TicketChannelRow[];
   past: TicketChannelRow[];
 }) {
+  const [overrides, setOverrides] = useState<Record<string, number | null>>(
+    {},
+  );
+
+  const applyOverrides = (rows: TicketChannelRow[]): TicketChannelRow[] =>
+    rows.map((row) =>
+      row.isExternal || !(row.id in overrides)
+        ? row
+        : { ...row, deurverkoop: overrides[row.id] ?? null },
+    );
+
+  const onDeurverkoopChange = (editionId: string, value: number | null) => {
+    setOverrides((prev) => ({ ...prev, [editionId]: value }));
+  };
+
+  const upcomingRows = applyOverrides(upcoming);
+  const pastRows = applyOverrides(past);
+
   if (upcoming.length === 0 && past.length === 0) {
     return (
       <div className="border border-border bg-surface p-5">
@@ -386,7 +429,10 @@ export function TicketsChannelsList({
             title="Komende events"
             count={upcoming.length}
           />
-          <TicketsTable rows={upcoming} showDeurverkoop={false} />
+          <TicketsTable
+            rows={upcomingRows}
+            onDeurverkoopChange={onDeurverkoopChange}
+          />
         </section>
       )}
 
@@ -401,7 +447,10 @@ export function TicketsChannelsList({
             title="Afgelopen events"
             count={past.length}
           />
-          <TicketsTable rows={past} />
+          <TicketsTable
+            rows={pastRows}
+            onDeurverkoopChange={onDeurverkoopChange}
+          />
         </section>
       )}
     </div>
