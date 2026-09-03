@@ -3,6 +3,8 @@
  * Default: Thuishaven-omgeving (Contactweg / Westpoort, Amsterdam).
  * Geen dakniveau-precisie nodig — dagelijkse regio-waarden volstaan.
  */
+import { shiftIsoDay } from "@/lib/time/amsterdam";
+
 export const AMS = {
   locationKey: "thuishaven",
   locationLabel: "Thuishaven · Contactweg (AMS)",
@@ -355,7 +357,7 @@ export async function fetchOpenMeteoHourlyForDays(
   const out = new Map<string, WeatherHourRow[]>();
   // Open-Meteo forecast API only covers ~16 days ahead — skip dates beyond that
   const today = new Date().toISOString().slice(0, 10);
-  const forecastMaxEnd = shiftDay(today, 16);
+  const forecastMaxEnd = shiftIsoDay(today, 16);
   const wanted = [...new Set(days.filter(Boolean))]
     .filter((d) => d <= forecastMaxEnd)
     .sort();
