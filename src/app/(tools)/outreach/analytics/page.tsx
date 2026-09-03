@@ -23,36 +23,38 @@ export default async function OutreachAnalyticsPage() {
       <SectionHeader
         eyebrow="Performance"
         title="Resultaten"
-        description="Per mail: verzonden, geopend, geklikt, gereageerd. Opens komen binnen via Brevo-webhook zodra versturen aanstaat."
+        description="Opens, clicks en A/B per onderwerpregel. Tracking via Brevo-webhook. Live prospect-send blijft uit; testsends naar team@ mogen."
         action={
           <div className="flex flex-wrap gap-2">
             {snap.sendLocked ? (
-              <StatusBadge tone="danger">Send locked</StatusBadge>
+              <StatusBadge tone="danger">Live send locked</StatusBadge>
             ) : (
-              <StatusBadge tone="success">Send unlocked</StatusBadge>
+              <StatusBadge tone="success">Live unlocked</StatusBadge>
+            )}
+            {snap.testSendAllowed ? (
+              <StatusBadge tone="success">Testsend aan</StatusBadge>
+            ) : (
+              <StatusBadge tone="neutral">Testsend uit</StatusBadge>
             )}
             <Link
-              href="/outreach/planning"
+              href="/outreach/emails"
               className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
             >
-              Planning →
+              Drafts / test →
             </Link>
           </div>
         }
       />
 
-      {snap.sendLocked && (
-        <div className="mb-6 border border-border bg-surface px-4 py-3 text-sm text-text-muted">
-          <p className="font-medium text-text">Nog geen live verzending</p>
-          <p className="mt-1">
-            Dit dashboard vult zich zodra mails via{" "}
-            <code className="text-accent">zakelijk@thuishaven.nl</code> gaan
-            (reply-to <code className="text-accent">evenement@thuishaven.nl</code>
-            ) en de webhook open/click events terugstuurt. Zelfde Brevo-API mag;
-            visitor-mailings blijven op postduif@.
-          </p>
-        </div>
-      )}
+      <div className="mb-6 border border-border bg-surface px-4 py-3 text-sm text-text-muted">
+        <p className="font-medium text-text">Zo werkt open-tracking</p>
+        <p className="mt-1">
+          1) Genereer draft met A/B-onderwerp · 2) Stuur test naar{" "}
+          <code className="text-accent">team@blablabuild.com</code> · 3) Open de
+          mail · 4) Open verschijnt hier (Brevo webhook). From:{" "}
+          <code>zakelijk@</code> · reply-to: <code>evenement@</code>.
+        </p>
+      </div>
 
       <div className="stagger mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
         <MetricCard label="Drafts" value={String(snap.kpis.drafts)} />
@@ -63,10 +65,7 @@ export default async function OutreachAnalyticsPage() {
           value={formatPercent(snap.kpis.openRate)}
         />
         <MetricCard label="Geklikt" value={String(snap.kpis.clicked)} />
-        <MetricCard
-          label="CTR"
-          value={formatPercent(snap.kpis.clickRate)}
-        />
+        <MetricCard label="CTR" value={formatPercent(snap.kpis.clickRate)} />
         <MetricCard label="Replies" value={String(snap.kpis.replied)} />
         <MetricCard
           label="Reply rate"
@@ -75,23 +74,91 @@ export default async function OutreachAnalyticsPage() {
       </div>
 
       <section className="mb-8 border border-border bg-surface p-4">
+        <h2 className="mb-2 font-display text-2xl tracking-[0.06em]">
+          A/B · onderwerpregels
+        </h2>
+        <p className="mb-4 text-sm text-text-muted">
+          Per variant arm A vs B. Winner = hoogste open rate binnen dezelfde
+          variant.
+        </p>
+        {snap.ab.length === 0 ? (
+          <p className="text-sm text-text-muted">
+            Nog geen verzonden mails. Stuur een test vanaf E-mails om A/B te
+            vullen.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[820px] text-left text-sm">
+              <thead className="border-b border-border text-[11px] uppercase tracking-wider text-text-muted">
+                <tr>
+                  <th className="pb-3 font-medium">Variant</th>
+                  <th className="pb-3 font-medium">Arm</th>
+                  <th className="pb-3 font-medium">Onderwerp</th>
+                  <th className="pb-3 font-medium">Sent</th>
+                  <th className="pb-3 font-medium">Open</th>
+                  <th className="pb-3 font-medium">CTR</th>
+                  <th className="pb-3 font-medium">Reply</th>
+                  <th className="pb-3 font-medium" />
+                </tr>
+              </thead>
+              <tbody>
+                {snap.ab.map((row) => (
+                  <tr
+                    key={`${row.variantKey}-${row.subjectKey}`}
+                    className="border-b border-border last:border-0"
+                  >
+                    <td className="py-3 pr-3 text-text">{row.variantName}</td>
+                    <td className="py-3 font-mono text-xs uppercase text-accent">
+                      {row.subjectKey}
+                    </td>
+                    <td className="max-w-xs py-3 pr-3 text-text-muted">
+                      {row.subject}
+                    </td>
+                    <td className="py-3 font-mono">{row.sent}</td>
+                    <td className="py-3 font-mono">
+                      {formatPercent(row.openRate)}
+                      <span className="ml-1 text-xs text-text-dim">
+                        ({row.opened})
+                      </span>
+                    </td>
+                    <td className="py-3 font-mono">
+                      {formatPercent(row.clickRate)}
+                    </td>
+                    <td className="py-3 font-mono">
+                      {formatPercent(row.replyRate)}
+                    </td>
+                    <td className="py-3">
+                      {row.winner && (
+                        <StatusBadge tone="accent">Winner</StatusBadge>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="mb-8 border border-border bg-surface p-4">
         <h2 className="mb-4 font-display text-2xl tracking-[0.06em]">
           Mails · open-status
         </h2>
         {snap.rows.length === 0 ? (
           <p className="text-sm text-text-muted">
-            Nog geen mails in de database. Genereer drafts op{" "}
+            Nog geen mails. Genereer op{" "}
             <Link href="/outreach/emails" className="text-accent underline">
               E-mails
-            </Link>{" "}
-            — opens verschijnen hier na verzending.
+            </Link>
+            .
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left text-sm">
+            <table className="w-full min-w-[960px] text-left text-sm">
               <thead className="border-b border-border text-[11px] uppercase tracking-wider text-text-muted">
                 <tr>
                   <th className="pb-3 font-medium">Bedrijf</th>
+                  <th className="pb-3 font-medium">A/B</th>
                   <th className="pb-3 font-medium">Onderwerp</th>
                   <th className="pb-3 font-medium">Status</th>
                   <th className="pb-3 font-medium">Verzonden</th>
@@ -111,6 +178,10 @@ export default async function OutreachAnalyticsPage() {
                       <p className="font-mono text-xs text-text-dim">
                         {row.toEmail ?? "—"}
                       </p>
+                    </td>
+                    <td className="py-3 font-mono text-xs text-text-muted">
+                      {(row.variantKey ?? "—").replace("_", " ")}
+                      {row.subjectKey ? ` · ${row.subjectKey}` : ""}
                     </td>
                     <td className="max-w-xs py-3 pr-3 text-text-muted">
                       {row.subject}
@@ -171,10 +242,7 @@ export default async function OutreachAnalyticsPage() {
           </Link>
         </div>
         {snap.recentReplies.length === 0 ? (
-          <p className="text-sm text-text-muted">
-            Nog geen replies. Replies op outbound komen hier binnen (en later
-            als warme lead naar Reijner/Yoram).
-          </p>
+          <p className="text-sm text-text-muted">Nog geen replies.</p>
         ) : (
           <ul className="space-y-3">
             {snap.recentReplies.map((reply) => (

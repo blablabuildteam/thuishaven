@@ -26,12 +26,16 @@ export type OutreachVariantId =
   | "jubileum"
   | "short_checkin";
 
+export type OutreachSubjectArm = "a" | "b";
+
 export type OutreachVariant = {
   id: OutreachVariantId;
   name: string;
   audience: "company" | "agency" | "both";
   description: string;
   guidance: string;
+  /** A/B onderwerpregels — stats worden hierop gegroepeerd */
+  subjects: Record<OutreachSubjectArm, string>;
 };
 
 export const OUTREACH_VARIANTS: OutreachVariant[] = [
@@ -42,6 +46,10 @@ export const OUTREACH_VARIANTS: OutreachVariant[] = [
     description: "Dicht bij Reijners stijl: warm, locatie als beleving, soft CTA tour.",
     guidance:
       "Open warm. Schets 2–3 areas met karakter (niet de hele lijst). Noem huur + cateringpakket kort. Soft CTA: bezichtiging plannen. Geen hard sales-push.",
+    subjects: {
+      a: "Bezichtiging Thuishaven — even kennismaken op locatie?",
+      b: "Thuishaven voor jullie volgende bedrijfsevent",
+    },
   },
   {
     id: "open_dates",
@@ -50,6 +58,10 @@ export const OUTREACH_VARIANTS: OutreachVariant[] = [
     description: "Update voor eventbureaus met link naar live beschikbaarheid.",
     guidance:
       "Kort en praktisch voor bureaus. Focus op open doordeweekse slots + live agenda-link. Bied floorplans/capacity aan. Geen jubileum-taal.",
+    subjects: {
+      a: "Open data Thuishaven — handig voor je pitches",
+      b: "Actuele doordeweekse slots bij Thuishaven",
+    },
   },
   {
     id: "jubileum",
@@ -58,6 +70,10 @@ export const OUTREACH_VARIANTS: OutreachVariant[] = [
     description: "Proactief voor 5/10/25-jarig jubileum, nog steeds warm (niet pushy).",
     guidance:
       "Gefeliciteerd kort en oprecht. Koppel jubileum aan een avond die bij hun cultuur past. Soft CTA tour + beschikbaarheid. Geen 'meer dan een taart op kantoor'-clichés.",
+    subjects: {
+      a: "Gefeliciteerd — een avond die bij jullie past",
+      b: "Jubileum vieren op Thuishaven?",
+    },
   },
   {
     id: "short_checkin",
@@ -66,6 +82,10 @@ export const OUTREACH_VARIANTS: OutreachVariant[] = [
     description: "3–5 zinnen, minimale locatiepitch, sterke soft CTA.",
     guidance:
       "Maximaal 5 zinnen. Geen area-opsomming. Vraag of er een bedrijfsevent speelt en bied bezichtiging + agenda-link.",
+    subjects: {
+      a: "Korte vraag over jullie volgende event",
+      b: "Even checken — speelt er iets bij jullie?",
+    },
   },
 ];
 
@@ -73,6 +93,13 @@ export function getOutreachVariant(id: OutreachVariantId): OutreachVariant {
   return (
     OUTREACH_VARIANTS.find((v) => v.id === id) ?? OUTREACH_VARIANTS[0]!
   );
+}
+
+export function pickSubjectArm(seed?: string): OutreachSubjectArm {
+  if (!seed) return Math.random() < 0.5 ? "a" : "b";
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h + seed.charCodeAt(i) * (i + 1)) % 2;
+  return h === 0 ? "a" : "b";
 }
 
 export function buildOutreachSystemPrompt(): string {

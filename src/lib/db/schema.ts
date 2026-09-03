@@ -184,6 +184,10 @@ export const outreachEmails = pgTable("outreach_emails", {
     .references(() => prospects.id),
   variantId: uuid("variant_id").references(() => mailVariants.id),
   subjectId: uuid("subject_id").references(() => mailSubjects.id),
+  /** App-level A/B keys (warm_tour / open_dates / …) */
+  variantKey: text("variant_key"),
+  /** A/B subject arm: a | b */
+  subjectKey: text("subject_key"),
   subject: text("subject").notNull(),
   body: text("body").notNull(),
   status: outreachEmailStatusEnum("status").notNull().default("draft"),

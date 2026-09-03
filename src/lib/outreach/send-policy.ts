@@ -1,13 +1,6 @@
 /**
- * Outreach send policy — default: niets versturen.
- *
- * Isolatie t.o.v. visitor-mailings:
- * - From: zakelijk@ (niet postduif@)
- * - Reply-To: evenement@
- * - tags: outreach
- * - OUTREACH_SEND_ENABLED hard off tot jullie groen licht geven
- *
- * Zelfde Brevo-account/API mag; aparte key is optioneel (revoke), geen must.
+ * Outreach send policy — default: geen live sends naar prospects.
+ * Testsend naar team@ mag aan (voor open-tracking / A/B validatie).
  */
 
 import { getBrevoKey } from "@/lib/integrations/brevo/client";
@@ -16,15 +9,15 @@ export function isOutreachSendEnabled(): boolean {
   return process.env.OUTREACH_SEND_ENABLED?.trim() === "true";
 }
 
-/**
- * Prefer dedicated outreach key; otherwise reuse existing Brevo API
- * (BREVO_API_KEY / BREVO_MCP_TOKEN).
- */
+/** Testsend naar OUTREACH_TEST_RECIPIENT — default aan. */
+export function isOutreachTestSendEnabled(): boolean {
+  const raw = process.env.OUTREACH_TEST_SEND_ENABLED?.trim();
+  if (raw === "false") return false;
+  return true;
+}
+
 export function getOutreachBrevoKey(): string | null {
-  return (
-    process.env.BREVO_OUTREACH_API_KEY?.trim() ||
-    getBrevoKey()
-  );
+  return process.env.BREVO_OUTREACH_API_KEY?.trim() || getBrevoKey();
 }
 
 export function getOutreachSender(): { email: string; name: string } {
@@ -38,7 +31,6 @@ export function getOutreachSender(): { email: string; name: string } {
   };
 }
 
-/** Replies from prospects go to the existing B2B inbox. */
 export function getOutreachReplyTo(): { email: string; name: string } {
   return {
     email:
@@ -50,12 +42,38 @@ export function getOutreachReplyTo(): { email: string; name: string } {
   };
 }
 
-export function outreachSendBlockReason(): string | null {
+export function getOutreachTestRecipient(): string {
+  return (
+    process.env.OUTREACH_TEST_RECIPIENT?.trim() || "team@blablabuild.com"
+  );
+}
+
+/** Block live prospect sends. */
+export function outreachLiveSendBlockReason(): string | null {
   if (!isOutreachSendEnabled()) {
-    return "Versturen staat uit (OUTREACH_SEND_ENABLED ≠ true). Alleen drafts + planning.";
+    return "Live versturen staat uit (OUTREACH_SEND_ENABLED ≠ true).";
+  }
+  if (process.env.OUTREACH_LIVE_SEND?.trim() !== "true") {
+    return "OUTREACH_LIVE_SEND ≠ true — alleen testsends naar het testadres.";
   }
   if (!getOutreachBrevoKey()) {
-    return "Geen Brevo API-key (BREVO_OUTREACH_API_KEY of BREVO_API_KEY / MCP).";
+    return "Geen Brevo API-key.";
   }
   return null;
+}
+
+/** Block test sends (team@). */
+export function outreachTestSendBlockReason(): string | null {
+  if (!isOutreachTestSendEnabled()) {
+    return "Testsend staat uit (OUTREACH_TEST_SEND_ENABLED=false).";
+  }
+  if (!getOutreachBrevoKey()) {
+    return "Geen Brevo API-key.";
+  }
+  return null;
+}
+
+/** @deprecated use test/live specific helpers */
+export function outreachSendBlockReason(): string | null {
+  return outreachLiveSendBlockReason();
 }

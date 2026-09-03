@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { z } from "zod";
-import { generateAndStoreDraft } from "@/lib/integrations/outreach";
+import {
+  generateAndStoreDraft,
+  sendStoredDraft,
+} from "@/lib/integrations/outreach";
 import { OUTREACH_VARIANTS } from "@/lib/outreach/tone";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +14,7 @@ const generateSchema = z.object({
   variantId: z
     .enum(["warm_tour", "open_dates", "jubileum", "short_checkin"])
     .optional(),
+  subjectArm: z.enum(["a", "b"]).optional(),
 });
 
 export async function GET() {
@@ -30,14 +34,24 @@ export async function POST(request: Request) {
   const body = await request.json();
   const action = body?.action as string | undefined;
 
-  if (action === "send") {
-    return NextResponse.json(
-      {
-        error:
-          "Versturen staat uit. Review eerst /outreach/planning. Zet later OUTREACH_SEND_ENABLED=true + BREVO_OUTREACH_API_KEY.",
-      },
-      { status: 403 },
-    );
+  if (action === "send" || action === "send-test") {
+    const sendSchema = z.object({
+      action: z.enum(["send", "send-test"]),
+      emailId: z.string().uuid(),
+    });
+    const parsed = sendSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
+    }
+    // Only test sends for now (team@). Live requires separate unlock.
+    const result = await sendStoredDraft({
+      emailId: parsed.data.emailId,
+      forceTest: true,
+    });
+    if ("error" in result) {
+      return NextResponse.json(result, { status: 400 });
+    }
+    return NextResponse.json(result);
   }
 
   const parsed = generateSchema.safeParse(body);

@@ -1,5 +1,5 @@
 /**
- * Outreach results — open/click/reply metrics from DB.
+ * Outreach results — open/click/reply + A/B by variant/subject.
  */
 
 import { desc, eq, sql } from "drizzle-orm";
@@ -9,13 +9,19 @@ import {
   outreachEmails,
   prospects,
 } from "@/lib/db/schema";
-import { outreachSendBlockReason } from "./send-policy";
+import {
+  outreachLiveSendBlockReason,
+  outreachTestSendBlockReason,
+} from "./send-policy";
+import { getOutreachVariant, type OutreachVariantId } from "./tone";
 
 export type OutreachMailResultRow = {
   id: string;
   companyName: string;
   toEmail: string | null;
   subject: string;
+  variantKey: string | null;
+  subjectKey: string | null;
   status: string;
   sentAt: string | null;
   openedAt: string | null;
@@ -26,9 +32,25 @@ export type OutreachMailResultRow = {
   replied: boolean;
 };
 
+export type AbRow = {
+  variantKey: string;
+  variantName: string;
+  subjectKey: string;
+  subject: string;
+  sent: number;
+  opened: number;
+  clicked: number;
+  replied: number;
+  openRate: number;
+  clickRate: number;
+  replyRate: number;
+  winner?: boolean;
+};
+
 export type OutreachResultsSnapshot = {
   source: "db" | "empty";
   sendLocked: boolean;
+  testSendAllowed: boolean;
   sendBlockReason: string | null;
   kpis: {
     drafts: number;
@@ -42,6 +64,7 @@ export type OutreachResultsSnapshot = {
     clickRate: number;
     replyRate: number;
   };
+  ab: AbRow[];
   rows: OutreachMailResultRow[];
   recentReplies: Array<{
     id: string;
@@ -60,13 +83,15 @@ function rate(part: number, whole: number): number {
 }
 
 export async function getOutreachResultsSnapshot(): Promise<OutreachResultsSnapshot> {
-  const block = outreachSendBlockReason();
+  const liveBlock = outreachLiveSendBlockReason();
+  const testBlock = outreachTestSendBlockReason();
 
   if (!hasDatabase()) {
     return {
       source: "empty",
-      sendLocked: true,
-      sendBlockReason: block,
+      sendLocked: Boolean(liveBlock),
+      testSendAllowed: !testBlock,
+      sendBlockReason: liveBlock,
       kpis: {
         drafts: 0,
         sent: 0,
@@ -79,6 +104,7 @@ export async function getOutreachResultsSnapshot(): Promise<OutreachResultsSnaps
         clickRate: 0,
         replyRate: 0,
       },
+      ab: [],
       rows: [],
       recentReplies: [],
     };
@@ -138,6 +164,8 @@ export async function getOutreachResultsSnapshot(): Promise<OutreachResultsSnaps
       openedAt: outreachEmails.openedAt,
       clickedAt: outreachEmails.clickedAt,
       repliedAt: outreachEmails.repliedAt,
+      variantKey: outreachEmails.variantKey,
+      subjectKey: outreachEmails.subjectKey,
       companyName: prospects.companyName,
       toEmail: prospects.email,
     })
@@ -145,6 +173,68 @@ export async function getOutreachResultsSnapshot(): Promise<OutreachResultsSnaps
     .innerJoin(prospects, eq(outreachEmails.prospectId, prospects.id))
     .orderBy(desc(outreachEmails.createdAt))
     .limit(100);
+
+  const abMap = new Map<string, AbRow>();
+  for (const r of mailRows) {
+    const isSent = ["sent", "opened", "clicked", "replied", "bounced", "opted_out"].includes(
+      r.status,
+    ) || Boolean(r.sentAt);
+    if (!isSent) continue;
+    const vk = r.variantKey ?? "unknown";
+    const sk = r.subjectKey ?? "?";
+    const key = `${vk}::${sk}`;
+    const variantName = (() => {
+      try {
+        return getOutreachVariant(vk as OutreachVariantId).name;
+      } catch {
+        return vk;
+      }
+    })();
+    const row =
+      abMap.get(key) ??
+      ({
+        variantKey: vk,
+        variantName,
+        subjectKey: sk,
+        subject: r.subject,
+        sent: 0,
+        opened: 0,
+        clicked: 0,
+        replied: 0,
+        openRate: 0,
+        clickRate: 0,
+        replyRate: 0,
+      } satisfies AbRow);
+    row.sent += 1;
+    if (r.openedAt || ["opened", "clicked", "replied"].includes(r.status)) {
+      row.opened += 1;
+    }
+    if (r.clickedAt || ["clicked", "replied"].includes(r.status)) {
+      row.clicked += 1;
+    }
+    if (r.repliedAt || r.status === "replied") row.replied += 1;
+    abMap.set(key, row);
+  }
+
+  const ab = [...abMap.values()].map((r) => ({
+    ...r,
+    openRate: rate(r.opened, r.sent),
+    clickRate: rate(r.clicked, r.sent),
+    replyRate: rate(r.replied, r.sent),
+  }));
+
+  // Mark winner per variant (highest open rate with ≥1 sent)
+  const byVariant = new Map<string, AbRow[]>();
+  for (const row of ab) {
+    const list = byVariant.get(row.variantKey);
+    if (list) list.push(row);
+    else byVariant.set(row.variantKey, [row]);
+  }
+  for (const group of byVariant.values()) {
+    if (group.length < 2) continue;
+    const best = [...group].sort((a, b) => b.openRate - a.openRate)[0];
+    if (best && best.sent > 0) best.winner = true;
+  }
 
   const replies = await db
     .select({
@@ -163,8 +253,9 @@ export async function getOutreachResultsSnapshot(): Promise<OutreachResultsSnaps
 
   return {
     source: "db",
-    sendLocked: Boolean(block),
-    sendBlockReason: block,
+    sendLocked: Boolean(liveBlock),
+    testSendAllowed: !testBlock,
+    sendBlockReason: liveBlock,
     kpis: {
       drafts: drafts?.c ?? 0,
       sent: sentCount,
@@ -177,18 +268,24 @@ export async function getOutreachResultsSnapshot(): Promise<OutreachResultsSnaps
       clickRate: rate(clickedCount, sentCount),
       replyRate: rate(repliedCount, sentCount),
     },
+    ab: ab.sort((a, b) => a.variantKey.localeCompare(b.variantKey)),
     rows: mailRows.map((r) => ({
       id: r.id,
       companyName: r.companyName,
       toEmail: r.toEmail,
       subject: r.subject,
+      variantKey: r.variantKey,
+      subjectKey: r.subjectKey,
       status: r.status,
       sentAt: r.sentAt?.toISOString() ?? null,
       openedAt: r.openedAt?.toISOString() ?? null,
       clickedAt: r.clickedAt?.toISOString() ?? null,
       repliedAt: r.repliedAt?.toISOString() ?? null,
-      opened: Boolean(r.openedAt) || ["opened", "clicked", "replied"].includes(r.status),
-      clicked: Boolean(r.clickedAt) || ["clicked", "replied"].includes(r.status),
+      opened:
+        Boolean(r.openedAt) ||
+        ["opened", "clicked", "replied"].includes(r.status),
+      clicked:
+        Boolean(r.clickedAt) || ["clicked", "replied"].includes(r.status),
       replied: Boolean(r.repliedAt) || r.status === "replied",
     })),
     recentReplies: replies.map((r) => ({

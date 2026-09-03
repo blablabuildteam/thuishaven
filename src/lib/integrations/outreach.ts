@@ -12,11 +12,15 @@ import {
   getOutreachBrevoKey,
   getOutreachReplyTo,
   getOutreachSender,
-  outreachSendBlockReason,
+  getOutreachTestRecipient,
+  outreachLiveSendBlockReason,
+  outreachTestSendBlockReason,
 } from "@/lib/outreach/send-policy";
 import {
   buildOutreachSystemPrompt,
   getOutreachVariant,
+  pickSubjectArm,
+  type OutreachSubjectArm,
   type OutreachVariantId,
 } from "@/lib/outreach/tone";
 import { recordUsage } from "@/lib/usage/store";
@@ -153,9 +157,15 @@ export async function generateOutreachEmail(input: {
   anniversaryYears?: number;
   availabilitySummary?: string;
   variantId?: OutreachVariantId;
+  subjectArm?: OutreachSubjectArm;
   availabilityUrl?: string;
 }): Promise<
-  | { subject: string; body: string; variantId: OutreachVariantId }
+  | {
+      subject: string;
+      body: string;
+      variantId: OutreachVariantId;
+      subjectKey: OutreachSubjectArm;
+    }
   | { error: string }
 > {
   const variant = getOutreachVariant(
@@ -167,12 +177,37 @@ export async function generateOutreachEmail(input: {
           : "warm_tour"),
   );
 
+  const subjectKey =
+    input.subjectArm ??
+    pickSubjectArm(`${input.companyName}:${variant.id}:${Date.now()}`);
+  const subject = variant.subjects[subjectKey];
+
   const availability =
     input.availabilitySummary ?? (await availabilitySummaryForEmail());
   const availabilityUrl = input.availabilityUrl ?? PUBLIC_AVAILABILITY_URL;
 
-  const prompt = `Schrijf één outbound mail.
+  const hasAi =
+    Boolean(process.env.OPENAI_API_KEY?.trim()) ||
+    Boolean(process.env.GEMINI_API_KEY?.trim());
 
+  if (!hasAi) {
+    const body = templateOutreachBody({
+      variantId: variant.id,
+      companyName: input.companyName,
+      availabilityUrl,
+      availability,
+    });
+    return {
+      subject,
+      body,
+      variantId: variant.id,
+      subjectKey,
+    };
+  }
+
+  const prompt = `Schrijf ALLEEN de body van één outbound mail (geen subject verzinnen).
+
+Subject (vast, A/B-arm ${subjectKey.toUpperCase()}): ${subject}
 Variant: ${variant.name}
 Guidance: ${variant.guidance}
 Audience: ${input.type === "agency" ? "eventbureau" : "bedrijf"}
@@ -184,7 +219,8 @@ Availability summary:
 ${availability}
 Availability URL: ${availabilityUrl}
 
-JSON output verplicht.`;
+JSON output verplicht: {"subject":"${subject.replace(/"/g, '\\"')}","body":"..."}
+Gebruik exact dit subject.`;
 
   const llm = await callLlmJson(prompt);
   if (!llm.ok) return { error: llm.error };
@@ -201,24 +237,76 @@ JSON output verplicht.`;
       operation: "generate_outreach_email",
       units: 1,
       unitLabel: "mail",
-      meta: { variant: variant.id, company: input.companyName },
+      meta: {
+        variant: variant.id,
+        subjectKey,
+        company: input.companyName,
+      },
     });
   } catch {
     /* usage logging optional */
   }
 
-  return { ...parsed, variantId: variant.id };
+  return {
+    subject,
+    body: parsed.body,
+    variantId: variant.id,
+    subjectKey,
+  };
 }
 
-/** Test mode only applies after OUTREACH_SEND_ENABLED unlock. */
+function templateOutreachBody(input: {
+  variantId: OutreachVariantId;
+  companyName: string;
+  availabilityUrl: string;
+  availability: string;
+}): string {
+  if (input.variantId === "open_dates") {
+    return `Hoi ${input.companyName},
+
+Even een update van onze open doordeweekse slots — altijd actueel:
+
+${input.availabilityUrl}
+
+Handig voor client pitches die deze week lopen. Floorplans of capacity? Stuur ik meteen mee.
+
+Groet,
+Thuishaven Events`;
+  }
+  if (input.variantId === "short_checkin") {
+    return `Hoi,
+
+Speelt er bij jullie een bedrijfsevent of borrel? Thuishaven is doordeweeks beschikbaar — even een bezichtiging plannen is vaak het snelst om te zien of het past.
+
+Live agenda: ${input.availabilityUrl}
+
+Groet,
+Thuishaven Events`;
+  }
+  return `Hoi,
+
+Leuk om ${input.companyName} te bereiken over een mogelijke locatie voor jullie evenement.
+
+Thuishaven is een festivalterrein in Amsterdam met in- en outdoor area's met elk een eigen karakter (Mainstage, Circustent, Romneyloods, en meer). Verhuur is simpel: huur voor de area's die jullie inzetten + een cateringpakket.
+
+Bekijk actuele data:
+${input.availabilityUrl}
+
+Graag plan ik een bezichtiging in om de mogelijkheden op locatie te bespreken.
+
+Groet,
+Thuishaven Events`;
+}
+
 export function resolveOutreachRecipients(intended: string[]): {
   to: string[];
   testMode: boolean;
   intended: string[];
 } {
-  const live = process.env.OUTREACH_LIVE_SEND?.trim() === "true";
-  const testTo =
-    process.env.OUTREACH_TEST_RECIPIENT?.trim() || "team@blablabuild.com";
+  const live =
+    process.env.OUTREACH_LIVE_SEND?.trim() === "true" &&
+    process.env.OUTREACH_SEND_ENABLED?.trim() === "true";
+  const testTo = getOutreachTestRecipient();
   if (live) {
     return { to: intended, testMode: false, intended };
   }
@@ -236,32 +324,48 @@ export function salesNotifyRecipients(): string[] {
 }
 
 /**
- * Outreach send — HARD OFF by default.
- * Never uses marketing Brevo (BREVO_MCP_TOKEN / BREVO_API_KEY).
+ * Outreach send via Brevo.
+ * Default = testmode (team@). Live prospects only with OUTREACH_SEND_ENABLED + LIVE.
  */
 export async function sendViaBrevo(input: {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  tags?: string[];
+  /** Force test recipient even if live flags are on */
+  forceTest?: boolean;
 }): Promise<{
   messageId?: string;
   error?: string;
   testMode?: boolean;
   deliveredTo?: string[];
 }> {
-  const blocked = outreachSendBlockReason();
-  if (blocked) return { error: blocked };
+  const forceTest = input.forceTest !== false; // default: test only
+  if (forceTest) {
+    const blocked = outreachTestSendBlockReason();
+    if (blocked) return { error: blocked };
+  } else {
+    const blocked = outreachLiveSendBlockReason();
+    if (blocked) return { error: blocked };
+  }
 
   const key = getOutreachBrevoKey();
-  if (!key) return { error: "BREVO_OUTREACH_API_KEY ontbreekt" };
+  if (!key) return { error: "Geen Brevo API-key" };
 
-  const resolved = resolveOutreachRecipients([input.to]);
+  const resolved = forceTest
+    ? {
+        to: [getOutreachTestRecipient()],
+        testMode: true as const,
+        intended: [input.to],
+      }
+    : { to: [input.to], testMode: false as const, intended: [input.to] };
+
   const subject = resolved.testMode
     ? `[TEST → ${input.to}] ${input.subject}`
     : input.subject;
   const html = resolved.testMode
-    ? `<p><strong>TESTMODE</strong> — bedoeld voor <code>${input.to}</code>.</p>${input.html}`
+    ? `<p style="font-family:system-ui,sans-serif"><strong>TESTMODE</strong> — bedoeld voor <code>${input.to}</code>, afgeleverd aan testadres. Open deze mail om open-tracking te valideren.</p>${input.html}`
     : input.html;
 
   const sender = getOutreachSender();
@@ -284,7 +388,7 @@ export async function sendViaBrevo(input: {
         subject,
         htmlContent: html,
         textContent: input.text,
-        tags: ["outreach", "thuishaven-b2b"],
+        tags: input.tags ?? ["outreach", "thuishaven-b2b"],
       }),
       cache: "no-store",
     });
@@ -326,7 +430,7 @@ export async function notifySalesTeam(input: {
   prospectId?: string;
   outreachEmailId?: string;
 }): Promise<{ ok: boolean; error?: string; testMode?: boolean }> {
-  const blocked = outreachSendBlockReason();
+  const blocked = outreachTestSendBlockReason();
   if (blocked) return { ok: false, error: blocked };
 
   // Persist lead even when notify mail is blocked? No — full notify path locked.
@@ -399,12 +503,14 @@ export async function notifySalesTeam(input: {
 export async function generateAndStoreDraft(input: {
   prospectId: string;
   variantId?: OutreachVariantId;
+  subjectArm?: OutreachSubjectArm;
 }): Promise<
   | {
       emailId: string;
       subject: string;
       body: string;
       variantId: OutreachVariantId;
+      subjectKey: OutreachSubjectArm;
     }
   | { error: string }
 > {
@@ -429,6 +535,7 @@ export async function generateAndStoreDraft(input: {
     sector: prospect.sector ?? undefined,
     anniversaryYears: prospect.anniversaryYears ?? undefined,
     variantId: input.variantId,
+    subjectArm: input.subjectArm,
   });
   if ("error" in generated) return generated;
 
@@ -440,6 +547,8 @@ export async function generateAndStoreDraft(input: {
       subject: generated.subject,
       body: generated.body,
       status: "draft",
+      variantKey: generated.variantId,
+      subjectKey: generated.subjectKey,
     })
     .returning();
 
@@ -448,11 +557,14 @@ export async function generateAndStoreDraft(input: {
     subject: generated.subject,
     body: generated.body,
     variantId: generated.variantId,
+    subjectKey: generated.subjectKey,
   };
 }
 
 export async function sendStoredDraft(input: {
   emailId: string;
+  /** Always true for now unless live unlock */
+  forceTest?: boolean;
 }): Promise<
   | {
       messageId?: string;
@@ -462,7 +574,10 @@ export async function sendStoredDraft(input: {
     }
   | { error: string }
 > {
-  const blocked = outreachSendBlockReason();
+  const forceTest = input.forceTest !== false;
+  const blocked = forceTest
+    ? outreachTestSendBlockReason()
+    : outreachLiveSendBlockReason();
   if (blocked) return { error: blocked };
 
   if (!hasDatabase()) return { error: "DATABASE_URL ontbreekt" };
@@ -478,6 +593,8 @@ export async function sendStoredDraft(input: {
       prospectId: prospects.id,
       metadata: prospects.metadata,
       prospectStatus: prospects.status,
+      variantKey: outreachEmails.variantKey,
+      subjectKey: outreachEmails.subjectKey,
     })
     .from(outreachEmails)
     .innerJoin(prospects, eq(outreachEmails.prospectId, prospects.id))
@@ -495,12 +612,21 @@ export async function sendStoredDraft(input: {
     (Array.isArray(meta.contacts) ? meta.contacts[0] : undefined);
   if (!intended) return { error: "Geen e-mailadres op prospect" };
 
-  const html = `<pre style="font-family:system-ui,sans-serif;white-space:pre-wrap;line-height:1.5">${escapeHtml(row.body)}</pre>`;
+  const html = `<div style="font-family:system-ui,sans-serif;white-space:pre-wrap;line-height:1.5">${escapeHtml(row.body)}</div>`;
+  const tags = [
+    "outreach",
+    "thuishaven-b2b",
+    row.variantKey ? `variant:${row.variantKey}` : null,
+    row.subjectKey ? `subject:${row.subjectKey}` : null,
+  ].filter((t): t is string => Boolean(t));
+
   const sent = await sendViaBrevo({
     to: intended,
     subject: row.subject,
     html,
     text: row.body,
+    tags,
+    forceTest,
   });
   if (sent.error) return { error: sent.error };
 
@@ -513,10 +639,12 @@ export async function sendStoredDraft(input: {
     })
     .where(eq(outreachEmails.id, row.id));
 
-  await db
-    .update(prospects)
-    .set({ status: "contacted", updatedAt: new Date() })
-    .where(eq(prospects.id, row.prospectId));
+  if (!forceTest) {
+    await db
+      .update(prospects)
+      .set({ status: "contacted", updatedAt: new Date() })
+      .where(eq(prospects.id, row.prospectId));
+  }
 
   return {
     messageId: sent.messageId,
