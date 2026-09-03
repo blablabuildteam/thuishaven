@@ -233,18 +233,39 @@ function InsightDeepDive({
     );
   }
 
-  // Only show promo posts (before event) with meaningful ticket lift (≥10)
-  // Exclude same_day posts — those sales are too noisy to attribute
+  // Split posts by timing: promo (before event) vs same_day (event day)
   const MIN_LIFT_THRESHOLD = 10;
   const allPromoPosts =
     insight.dimension === "social"
       ? event.socialPosts.filter((p) => p.salesImpactRole === "promo")
       : [];
+  const sameDayPosts =
+    insight.dimension === "social"
+      ? event.socialPosts.filter((p) => p.salesImpactRole === "same_day")
+      : [];
   const concurrentPostCount = allPromoPosts.length;
-  const marketingPosts = allPromoPosts
-    .filter((p) => p.ticketLiftSold != null && p.ticketLiftSold >= MIN_LIFT_THRESHOLD)
-    .sort((a, b) => (b.ticketLiftSold ?? 0) - (a.ticketLiftSold ?? 0))
-    .slice(0, 3);
+
+  // Prefer posts with detected spikes, then fall back to window-based lift
+  const postsWithSpikes = allPromoPosts.filter(
+    (p) => p.spikeDetected && p.spikeEstimatedLift != null && p.spikeEstimatedLift >= MIN_LIFT_THRESHOLD,
+  );
+  const postsWithWindowLift = allPromoPosts.filter(
+    (p) =>
+      !p.spikeDetected &&
+      p.ticketLiftSold != null &&
+      p.ticketLiftSold >= MIN_LIFT_THRESHOLD,
+  );
+  const hasAnySpikes = postsWithSpikes.length > 0;
+
+  // Show spike posts first, then window-based, capped at 3
+  const marketingPosts = [
+    ...postsWithSpikes.sort(
+      (a, b) => (b.spikeEstimatedLift ?? 0) - (a.spikeEstimatedLift ?? 0),
+    ),
+    ...postsWithWindowLift.sort(
+      (a, b) => (b.ticketLiftSold ?? 0) - (a.ticketLiftSold ?? 0),
+    ),
+  ].slice(0, 3);
   // Only show mail campaigns with orders, capped at 3
   const marketingMails =
     insight.dimension === "email"
@@ -268,57 +289,81 @@ function InsightDeepDive({
           ))}
         </dl>
       )}
-      {marketingPosts.length > 0 ? (
+      {insight.dimension === "social" && (allPromoPosts.length > 0 || sameDayPosts.length > 0) && (
         <div
           className={cn(
             "border-t border-border pt-3",
             insight.facts && insight.facts.length > 0 ? "mt-4" : "mt-3",
           )}
         >
-          <p className="mb-1 text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
-            Promo-posts met voorverkoop
-          </p>
-          <p className="mb-2 text-[10px] text-text-dim">
-            Tickets verkocht ±48u rond publicatie — range bij {concurrentPostCount} actieve posts.
-          </p>
-          <ul className="space-y-2">
-            {marketingPosts.map((post) => (
-              <li key={post.postId}>
-                <InsightModalSocialPost
-                  post={post}
-                  concurrentPosts={concurrentPostCount}
-                />
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2 text-[10px] text-text-dim">
+          {/* Pre-event posts */}
+          {allPromoPosts.length > 0 && (
+            <div className="mb-4">
+              <p className="mb-1 text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
+                Vóór event · {allPromoPosts.length} posts
+              </p>
+              {marketingPosts.length > 0 ? (
+                <>
+                  <p className="mb-2 text-[10px] text-text-dim">
+                    {hasAnySpikes
+                      ? "Verkoopspike gedetecteerd binnen 4u na publicatie — hoger dan baseline."
+                      : `Posts met voorverkoop (±48u) — range bij ${concurrentPostCount} actieve posts.`}
+                  </p>
+                  <ul className="space-y-2">
+                    {marketingPosts.map((post) => (
+                      <li key={post.postId}>
+                        <InsightModalSocialPost
+                          post={post}
+                          concurrentPosts={concurrentPostCount}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                  {allPromoPosts.length > marketingPosts.length && (
+                    <p className="mt-2 text-[10px] text-text-dim">
+                      + {allPromoPosts.length - marketingPosts.length} posts zonder significante voorverkoop
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-text-muted">
+                  Geen van de {concurrentPostCount} promo-posts had significante voorverkoop (&lt;10 tickets in ±48u).
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Event-day posts */}
+          {sameDayPosts.length > 0 && (
+            <div>
+              <p className="mb-1 text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
+                Eventdag · {sameDayPosts.length} posts
+              </p>
+              {event.tickets.sameDaySold != null && event.tickets.sameDaySold > 0 && (
+                <p className="mb-2 text-xs font-medium text-success">
+                  {formatNumber(event.tickets.sameDaySold)} tickets verkocht op de dag zelf
+                </p>
+              )}
+              <ul className="space-y-2">
+                {sameDayPosts.slice(0, 3).map((post) => (
+                  <li key={post.postId}>
+                    <InsightModalSocialPostCompact post={post} />
+                  </li>
+                ))}
+              </ul>
+              {sameDayPosts.length > 3 && (
+                <p className="mt-2 text-[10px] text-text-dim">
+                  + {sameDayPosts.length - 3} meer posts
+                </p>
+              )}
+            </div>
+          )}
+
+          <p className="mt-3 text-[10px] text-text-dim">
             Paid ads volgen later (Start Moving).
           </p>
         </div>
-      ) : insight.dimension === "social" && allPromoPosts.length > 0 ? (
-        <div
-          className={cn(
-            "border-t border-border pt-3",
-            insight.facts && insight.facts.length > 0 ? "mt-4" : "mt-3",
-          )}
-        >
-          <p className="mb-1 text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
-            Last-minute verkoop
-          </p>
-          <p className="text-xs text-text-muted">
-            Geen van de {concurrentPostCount} promo-posts had significante voorverkoop in de ±48u
-            erna. De meeste tickets gingen waarschijnlijk pas op of vlak voor de eventdag weg.
-          </p>
-          {event.tickets.sameDaySold != null && event.tickets.sameDaySold > 0 && (
-            <p className="mt-2 text-xs font-medium text-text">
-              Eventdag-verkoop: {formatNumber(event.tickets.sameDaySold)} tickets
-            </p>
-          )}
-          <p className="mt-2 text-[10px] text-text-dim">
-            Paid ads volgen later (Start Moving).
-          </p>
-        </div>
-      ) : null}
+      )}
       {marketingMails.length > 0 && (
         <div
           className={cn(
@@ -1623,12 +1668,16 @@ function InsightModalSocialPost({
   concurrentPosts,
 }: {
   post: EventInsightSocial;
-  /** Number of promo/same_day posts with overlapping windows */
+  /** Number of promo posts for context */
   concurrentPosts: number;
 }) {
-  const lift = post.ticketLiftSold;
+  // Prefer spike-based attribution if detected, fall back to window-based
+  const hasSpike = post.spikeDetected && post.spikeEstimatedLift != null;
+  const lift = hasSpike ? post.spikeEstimatedLift : post.ticketLiftSold;
+
+  // For window-based, show range; for spike-based, show exact estimate
   const lowerBound =
-    lift != null && concurrentPosts > 1
+    !hasSpike && lift != null && concurrentPosts > 1
       ? Math.round(lift / concurrentPosts)
       : null;
   const showRange = lowerBound != null && lowerBound !== lift;
@@ -1658,18 +1707,88 @@ function InsightModalSocialPost({
           />
         </div>
       </div>
-      {lift != null && (
+      {lift != null && lift > 0 && (
         <div className="shrink-0 text-right">
-          <span className="block text-xs font-medium tabular-nums text-text">
-            {showRange
-              ? `~${formatNumber(lowerBound!)}–${formatNumber(lift)}`
-              : formatNumber(lift)}
-          </span>
-          <span className="text-[9px] text-text-dim">
-            {post.liftWindowLabel}
-            {concurrentPosts > 1 && ` · ${concurrentPosts} posts`}
-          </span>
+          {hasSpike ? (
+            <>
+              <span className="block text-xs font-medium tabular-nums text-success">
+                +{formatNumber(lift)}
+              </span>
+              <span className="text-[9px] text-success/70">
+                spike {post.spikeHoursAfter != null ? `${post.spikeHoursAfter}u` : ""} na post
+                {post.spikeMultiplier != null && ` · ${post.spikeMultiplier}×`}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="block text-xs font-medium tabular-nums text-text">
+                {showRange
+                  ? `~${formatNumber(lowerBound!)}–${formatNumber(lift)}`
+                  : formatNumber(lift)}
+              </span>
+              <span className="text-[9px] text-text-dim">
+                {post.liftWindowLabel}
+                {concurrentPosts > 1 && ` · ${concurrentPosts} posts`}
+              </span>
+            </>
+          )}
         </div>
+      )}
+    </div>
+  );
+
+  if (post.permalink) {
+    return (
+      <a
+        href={post.permalink}
+        target="_blank"
+        rel="noreferrer"
+        className={cn(
+          "block rounded-sm border px-2.5 py-2 transition-colors hover:bg-surface-hover",
+          hasSpike ? "border-success/40 bg-success/5" : "border-border",
+        )}
+        title="Open post"
+      >
+        {content}
+      </a>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "rounded-sm border px-2.5 py-2",
+        hasSpike ? "border-success/40 bg-success/5" : "border-border",
+      )}
+    >
+      {content}
+    </div>
+  );
+}
+
+/** Compact post row for event-day posts — no ticket lift, just engagement */
+function InsightModalSocialPostCompact({ post }: { post: EventInsightSocial }) {
+  const content = (
+    <div className="flex items-center gap-2.5">
+      <div className="flex size-5 shrink-0 items-center justify-center">
+        <SocialChannelIcon channel={post.channel} size={16} alt={channelLabel(post.channel)} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <span className="block truncate text-xs text-text">
+          {post.title?.slice(0, 45) || channelLabel(post.channel)}
+        </span>
+        <OrganicEngagementMetrics
+          impressions={post.impressions}
+          reach={post.reach}
+          likeCount={post.likeCount}
+          commentCount={post.commentCount}
+          shareCount={post.shareCount}
+          engagement={post.engagement}
+          className="mt-0.5"
+        />
+      </div>
+      {post.permalink && (
+        <ExternalLink className="size-3 shrink-0 text-text-dim" aria-hidden />
       )}
     </div>
   );

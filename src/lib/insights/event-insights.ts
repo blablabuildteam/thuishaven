@@ -66,6 +66,10 @@ import {
   annotateAnomalies,
   type AnomalyInsight,
 } from "@/lib/insights/anomaly-engine";
+import {
+  detectPostSpikes,
+  summarizeByPost,
+} from "@/lib/marketing/spike-detection";
 
 /** How often we re-check Weeztix for *new* events (background, non-blocking). */
 const EVENT_LIST_STALE_MS = 6 * 60 * 60 * 1000;
@@ -236,6 +240,14 @@ export type EventInsightSocial = {
    * single upload; otherwise the individual posts behind the group totals.
    */
   variants: EventInsightSocialVariant[];
+  /** Spike detection: did a sales spike occur within 4h of this post? */
+  spikeDetected: boolean;
+  /** Estimated tickets from detected spikes (spike amount - baseline) */
+  spikeEstimatedLift: number | null;
+  /** Hours after post when spike occurred */
+  spikeHoursAfter: number | null;
+  /** How much higher than baseline (e.g., 2.5x) */
+  spikeMultiplier: number | null;
 };
 
 export type EventInsightMail = {
@@ -914,6 +926,11 @@ export async function loadEventInsightsFresh(options?: {
             format: p.visualFeatures?.format ?? null,
             offer: p.visualFeatures?.offer ?? null,
             variants: [],
+            // Spike detection fields — populated later
+            spikeDetected: false,
+            spikeEstimatedLift: null,
+            spikeHoursAfter: null,
+            spikeMultiplier: null,
           };
         })
         .sort((a, b) => {
@@ -1128,6 +1145,45 @@ export async function loadEventInsightsFresh(options?: {
       event.organicImpactScore = organic.score;
     }
 
+    // Spike detection for past events with promo posts
+    const pastWithPosts = insights.filter(
+      (e) =>
+        e.status === "past" &&
+        e.socialPosts.some((p) => p.salesImpactRole === "promo"),
+    );
+    await Promise.all(
+      pastWithPosts.map(async (event) => {
+        try {
+          const { matches } = await detectPostSpikes(
+            event.editionId,
+            event.day,
+            event.socialPosts.map((p) => ({
+              postId: p.postId,
+              publishedAt: p.publishedAt,
+              salesImpactRole: p.salesImpactRole,
+            })),
+          );
+          const byPost = summarizeByPost(matches);
+          for (const post of event.socialPosts) {
+            const attr = byPost.get(post.postId);
+            if (attr && attr.hasSpike) {
+              post.spikeDetected = true;
+              post.spikeEstimatedLift = attr.totalEstimatedLift;
+              // Use first (strongest) spike for display
+              const first = attr.spikes[0];
+              if (first) {
+                post.spikeHoursAfter = first.hoursAfterPost;
+                post.spikeMultiplier = first.spikeMultiplier;
+              }
+            }
+          }
+        } catch (err) {
+          // Spike detection is optional — don't break insights if it fails
+          console.warn(`Spike detection failed for ${event.editionId}:`, err);
+        }
+      }),
+    );
+
   // Upcoming/past are cached separately — annotate after merge so cohorts
   // include the full set. Mode "all" (recovery path) annotates here.
   if (mode === "all") {
@@ -1164,7 +1220,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v18"],
+  ["event-insights-upcoming-v19"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1180,7 +1236,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v18"],
+  ["event-insights-past-v19"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],

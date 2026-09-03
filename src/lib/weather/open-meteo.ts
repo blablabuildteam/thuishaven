@@ -352,8 +352,13 @@ function parseHourly(data: OpenMeteoHourly): WeatherHourRow[] {
 export async function fetchOpenMeteoHourlyForDays(
   days: string[],
 ): Promise<Map<string, WeatherHourRow[]>> {
-  const wanted = [...new Set(days.filter(Boolean))].sort();
   const out = new Map<string, WeatherHourRow[]>();
+  // Open-Meteo forecast API only covers ~16 days ahead — skip dates beyond that
+  const today = new Date().toISOString().slice(0, 10);
+  const forecastMaxEnd = shiftDay(today, 16);
+  const wanted = [...new Set(days.filter(Boolean))]
+    .filter((d) => d <= forecastMaxEnd)
+    .sort();
   if (!wanted.length) return out;
 
   // Group into runs where gaps are ≤ 3 days to keep archive requests small.
