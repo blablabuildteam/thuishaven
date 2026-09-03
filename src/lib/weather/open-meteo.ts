@@ -238,7 +238,14 @@ export async function fetchOpenMeteoHourlyRange(options: {
   ): Promise<WeatherHourRow[]> {
     const today = new Date().toISOString().slice(0, 10);
     const archiveSafeEnd = shiftDay(today, -5);
+    // Open-Meteo forecast API covers ~16 days ahead
+    const forecastMaxEnd = shiftDay(today, 16);
     const useForecast = endDate > archiveSafeEnd;
+
+    // If entire range is beyond forecast window, return empty (no data available yet)
+    if (startDate > forecastMaxEnd) {
+      return [];
+    }
 
     const hourlyVars = "temperature_2m,precipitation,weather_code";
 
@@ -263,11 +270,14 @@ export async function fetchOpenMeteoHourlyRange(options: {
       if (rows) return rows;
     }
 
+    // Cap endDate to forecast window to avoid API errors
+    const cappedEnd = endDate > forecastMaxEnd ? forecastMaxEnd : endDate;
+
     const forecast = new URLSearchParams({
       latitude: String(lat),
       longitude: String(lon),
       start_date: startDate,
-      end_date: endDate,
+      end_date: cappedEnd,
       hourly: hourlyVars,
       timezone: "Europe/Amsterdam",
     });
@@ -292,7 +302,9 @@ export async function fetchOpenMeteoHourlyRange(options: {
       if (rows) return rows;
     }
 
-    throw new Error(`Open-Meteo hourly HTTP fail ${startDate}–${endDate}`);
+    // Return empty instead of throwing — dates may be too far in future
+    console.warn(`[weather] No data available for ${startDate}–${endDate}`);
+    return [];
   }
 
   const start = new Date(`${options.startDate}T12:00:00Z`);

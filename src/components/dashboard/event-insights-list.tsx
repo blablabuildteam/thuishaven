@@ -233,19 +233,18 @@ function InsightDeepDive({
     );
   }
 
-  // Only show posts with measurable ticket lift, sorted by impact, capped at 3
-  const marketingPosts =
+  // Only show promo posts (before event) with meaningful ticket lift (≥10)
+  // Exclude same_day posts — those sales are too noisy to attribute
+  const MIN_LIFT_THRESHOLD = 10;
+  const allPromoPosts =
     insight.dimension === "social"
-      ? event.socialPosts
-          .filter(
-            (p) =>
-              (p.salesImpactRole === "promo" || p.salesImpactRole === "same_day") &&
-              p.ticketLiftSold != null &&
-              p.ticketLiftSold > 0,
-          )
-          .sort((a, b) => (b.ticketLiftSold ?? 0) - (a.ticketLiftSold ?? 0))
-          .slice(0, 3)
+      ? event.socialPosts.filter((p) => p.salesImpactRole === "promo")
       : [];
+  const concurrentPostCount = allPromoPosts.length;
+  const marketingPosts = allPromoPosts
+    .filter((p) => p.ticketLiftSold != null && p.ticketLiftSold >= MIN_LIFT_THRESHOLD)
+    .sort((a, b) => (b.ticketLiftSold ?? 0) - (a.ticketLiftSold ?? 0))
+    .slice(0, 3);
   // Only show mail campaigns with orders, capped at 3
   const marketingMails =
     insight.dimension === "email"
@@ -269,20 +268,26 @@ function InsightDeepDive({
           ))}
         </dl>
       )}
-      {marketingPosts.length > 0 && (
+      {marketingPosts.length > 0 ? (
         <div
           className={cn(
             "border-t border-border pt-3",
             insight.facts && insight.facts.length > 0 ? "mt-4" : "mt-3",
           )}
         >
-          <p className="mb-2 text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
-            Top posts met ticketlift
+          <p className="mb-1 text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
+            Promo-posts met voorverkoop
+          </p>
+          <p className="mb-2 text-[10px] text-text-dim">
+            Tickets verkocht ±48u rond publicatie — range bij {concurrentPostCount} actieve posts.
           </p>
           <ul className="space-y-2">
             {marketingPosts.map((post) => (
               <li key={post.postId}>
-                <InsightModalSocialPost post={post} />
+                <InsightModalSocialPost
+                  post={post}
+                  concurrentPosts={concurrentPostCount}
+                />
               </li>
             ))}
           </ul>
@@ -290,7 +295,30 @@ function InsightDeepDive({
             Paid ads volgen later (Start Moving).
           </p>
         </div>
-      )}
+      ) : insight.dimension === "social" && allPromoPosts.length > 0 ? (
+        <div
+          className={cn(
+            "border-t border-border pt-3",
+            insight.facts && insight.facts.length > 0 ? "mt-4" : "mt-3",
+          )}
+        >
+          <p className="mb-1 text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
+            Last-minute verkoop
+          </p>
+          <p className="text-xs text-text-muted">
+            Geen van de {concurrentPostCount} promo-posts had significante voorverkoop in de ±48u
+            erna. De meeste tickets gingen waarschijnlijk pas op of vlak voor de eventdag weg.
+          </p>
+          {event.tickets.sameDaySold != null && event.tickets.sameDaySold > 0 && (
+            <p className="mt-2 text-xs font-medium text-text">
+              Eventdag-verkoop: {formatNumber(event.tickets.sameDaySold)} tickets
+            </p>
+          )}
+          <p className="mt-2 text-[10px] text-text-dim">
+            Paid ads volgen later (Start Moving).
+          </p>
+        </div>
+      ) : null}
       {marketingMails.length > 0 && (
         <div
           className={cn(
@@ -1590,10 +1618,26 @@ function OrganicEngagementMetrics({
   );
 }
 
-function InsightModalSocialPost({ post }: { post: EventInsightSocial }) {
+function InsightModalSocialPost({
+  post,
+  concurrentPosts,
+}: {
+  post: EventInsightSocial;
+  /** Number of promo/same_day posts with overlapping windows */
+  concurrentPosts: number;
+}) {
+  const lift = post.ticketLiftSold;
+  const lowerBound =
+    lift != null && concurrentPosts > 1
+      ? Math.round(lift / concurrentPosts)
+      : null;
+  const showRange = lowerBound != null && lowerBound !== lift;
+
   const content = (
     <div className="flex items-start gap-2.5">
-      <SocialChannelIcon channel={post.channel} size={16} alt="" className="mt-0.5 shrink-0" />
+      <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center">
+        <SocialChannelIcon channel={post.channel} size={18} alt={channelLabel(post.channel)} />
+      </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className="min-w-0 truncate text-xs font-medium text-text">
@@ -1614,10 +1658,18 @@ function InsightModalSocialPost({ post }: { post: EventInsightSocial }) {
           />
         </div>
       </div>
-      {post.ticketLiftSold != null && (
-        <span className="shrink-0 text-xs font-medium text-success">
-          +{formatNumber(post.ticketLiftSold)}
-        </span>
+      {lift != null && (
+        <div className="shrink-0 text-right">
+          <span className="block text-xs font-medium tabular-nums text-text">
+            {showRange
+              ? `~${formatNumber(lowerBound!)}–${formatNumber(lift)}`
+              : formatNumber(lift)}
+          </span>
+          <span className="text-[9px] text-text-dim">
+            {post.liftWindowLabel}
+            {concurrentPosts > 1 && ` · ${concurrentPosts} posts`}
+          </span>
+        </div>
       )}
     </div>
   );
