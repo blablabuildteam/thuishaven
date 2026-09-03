@@ -251,6 +251,7 @@ export type SalesSourceId =
   | "weeztix"
   | "appic"
   | "wingame"
+  | "vrienden"
   | "resident_advisor";
 
 export type SalesSourceRow = {
@@ -437,7 +438,7 @@ export async function loadEventInsightsFresh(options?: {
   const minDay = filtered[filtered.length - 1]!.startsAt;
   const maxDay = filtered[0]!.startsAt;
 
-  const [weatherRows, camps, festivals, dailyRows, posts, refs, appicRows, raInvRows, raRows, demoRows] =
+  const [weatherRows, camps, festivals, dailyRows, posts, refs, appicRows, raInvRows, vriendenRows, raRows, demoRows] =
     await Promise.all([
       safeQuery(
         "weather",
@@ -556,6 +557,26 @@ export async function loadEventInsightsFresh(options?: {
         [],
       ),
       safeQuery(
+        "vrienden",
+        () =>
+          db
+            .select({
+              editionId: ticketInventory.editionId,
+              sold: ticketInventory.sold,
+              scanned: ticketInventory.scanned,
+              capacity: ticketInventory.capacity,
+              available: ticketInventory.available,
+            })
+            .from(ticketInventory)
+            .where(
+              and(
+                eq(ticketInventory.platform, "vrienden"),
+                inArray(ticketInventory.editionId, editionIds),
+              ),
+            ),
+        [],
+      ),
+      safeQuery(
         "raListings",
         () =>
           db
@@ -648,6 +669,9 @@ export async function loadEventInsightsFresh(options?: {
     const raInvByEdition = new Map(
       raInvRows.map((r) => [r.editionId, r]),
     );
+    const vriendenByEdition = new Map(
+      vriendenRows.map((r) => [r.editionId, r]),
+    );
     const raByEdition = new Map(
       raRows
         .filter((r): r is typeof r & { editionId: string } => r.editionId != null)
@@ -690,9 +714,12 @@ export async function loadEventInsightsFresh(options?: {
 
       const appic = appicByEdition.get(e.id);
       const raInv = raInvByEdition.get(e.id);
+      const vrienden = vriendenByEdition.get(e.id);
       const raListing = raByEdition.get(e.id);
       const splitIssued =
-        (appic?.sold ?? 0) + (raInv?.sold ?? 0);
+        (appic?.sold ?? 0) +
+        (raInv?.sold ?? 0) +
+        (vrienden?.sold ?? 0);
       const shopSold = Math.max(0, sold - splitIssued);
       const sources: SalesSourceRow[] = [
         {
@@ -723,6 +750,21 @@ export async function loadEventInsightsFresh(options?: {
           available: null,
           status: "shell",
           note: "Nog geen integratie",
+        },
+        {
+          id: "vrienden",
+          label: "Vriendentickets",
+          sold: vrienden != null ? (vrienden.scanned ?? 0) : null,
+          reserved:
+            vrienden != null
+              ? (vrienden.capacity ?? vrienden.sold ?? 0) || null
+              : null,
+          available: vrienden != null ? (vrienden.available ?? 0) : null,
+          status: vrienden != null ? "live" : "empty",
+          note:
+            vrienden != null
+              ? "Vrienden daytickets · gebruikt / gereserveerd"
+              : undefined,
         },
         {
           id: "resident_advisor",

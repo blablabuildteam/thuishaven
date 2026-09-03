@@ -1,88 +1,216 @@
-import { SectionHeader } from "@/components/ui/section-header";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { TicketSalesChart } from "@/components/dashboard/ticket-sales-chart";
 import {
-  editions,
-  platformLabels,
-  ticketInventory,
-} from "@/lib/mock/dashboard";
-import { formatNumber } from "@/lib/utils";
+  TicketsChannelsSearch,
+  type TicketChannelRowInput,
+} from "@/components/dashboard/tickets-channels-search";
+import {
+  type TicketChannelRow,
+  type TicketPoolCell,
+} from "@/components/dashboard/tickets-channels-table";
+import { SectionHeader } from "@/components/ui/section-header";
+import { getDb, hasDatabase } from "@/lib/db/client";
+import { editions, externalTicketEvents, ticketInventory } from "@/lib/db/schema";
+import { normalizeWeeztixInventory } from "@/lib/integrations/weeztix/inventory";
+import { amsterdamDay } from "@/lib/time/amsterdam";
+import { desc, isNotNull, and, eq, inArray } from "drizzle-orm";
 
-export const metadata = { title: "Kaartverkoop" };
+export const metadata = { title: "Tickets" };
+export const dynamic = "force-dynamic";
 
-export default function TicketsPage() {
-  const edition = editions.find((e) => e.status === "live") ?? editions[0];
-  const inventory = ticketInventory.filter((t) => t.editionId === edition.id);
-  const primarySoldOut = inventory.some(
-    (i) => i.platform === "resident_advisor" && i.isSoldOut,
-  );
-  const secondaryActive = inventory.some(
-    (i) => i.platform === "ticketswap" && i.available > 0,
-  );
+type PoolInventory = {
+  sold: number;
+  scanned: number;
+  capacity: number | null;
+};
+
+function poolCell(row: PoolInventory | undefined): TicketPoolCell {
+  if (!row) return null;
+  const reserved = row.capacity ?? row.sold;
+  if (reserved <= 0 && row.scanned <= 0) return null;
+  return {
+    used: row.scanned,
+    reserved,
+    issued: row.sold,
+  };
+}
+
+/**
+ * Ticketsheet: verkoop per kanaal, totaal + scans, komend vs afgelopen.
+ */
+export default async function TicketsPage() {
+  if (!hasDatabase()) {
+    return (
+      <div>
+        <SectionHeader
+          eyebrow="Tickets"
+          title="Tickets"
+          description="Geen DATABASE_URL."
+        />
+      </div>
+    );
+  }
+
+  const db = getDb();
+  const [editionRows, extraInv, externalRows] = await Promise.all([
+    db
+      .select({
+        id: editions.id,
+        name: editions.name,
+        startsAt: editions.startsAt,
+        sold: ticketInventory.sold,
+        scanned: ticketInventory.scanned,
+        capacity: ticketInventory.capacity,
+        available: ticketInventory.available,
+      })
+      .from(editions)
+      .leftJoin(
+        ticketInventory,
+        and(
+          eq(ticketInventory.editionId, editions.id),
+          eq(ticketInventory.platform, "weeztix"),
+        ),
+      )
+      .where(isNotNull(editions.weeztixEventId))
+      .orderBy(desc(editions.startsAt)),
+    db
+      .select({
+        editionId: ticketInventory.editionId,
+        platform: ticketInventory.platform,
+        sold: ticketInventory.sold,
+        scanned: ticketInventory.scanned,
+        capacity: ticketInventory.capacity,
+      })
+      .from(ticketInventory)
+      .where(
+        inArray(ticketInventory.platform, [
+          "resident_advisor",
+          "appic",
+          "vrienden",
+          "internal",
+        ]),
+      ),
+    db
+      .select({
+        id: externalTicketEvents.id,
+        name: externalTicketEvents.name,
+        startsAt: externalTicketEvents.startsAt,
+        expectedAttendees: externalTicketEvents.expectedAttendees,
+        scanned: externalTicketEvents.scanned,
+      })
+      .from(externalTicketEvents)
+      .orderBy(desc(externalTicketEvents.startsAt)),
+  ]);
+
+  const extraByEdition = new Map<
+    string,
+    {
+      ra?: PoolInventory;
+      appic?: PoolInventory;
+      vrienden?: PoolInventory;
+      internal?: number;
+    }
+  >();
+  for (const row of extraInv) {
+    const current = extraByEdition.get(row.editionId) ?? {};
+    const pool: PoolInventory = {
+      sold: row.sold ?? 0,
+      scanned: row.scanned ?? 0,
+      capacity: row.capacity,
+    };
+    if (row.platform === "resident_advisor") current.ra = pool;
+    if (row.platform === "appic") current.appic = pool;
+    if (row.platform === "vrienden") current.vrienden = pool;
+    if (row.platform === "internal") current.internal = row.sold ?? 0;
+    extraByEdition.set(row.editionId, current);
+  }
+
+  function splitChannelIssued(extra?: {
+    ra?: PoolInventory;
+    appic?: PoolInventory;
+    vrienden?: PoolInventory;
+  }): number {
+    if (!extra) return 0;
+    return (
+      (extra.ra?.sold ?? 0) +
+      (extra.appic?.sold ?? 0) +
+      (extra.vrienden?.sold ?? 0)
+    );
+  }
+
+  const today = amsterdamDay(new Date());
+
+  const externalMapped: TicketChannelRow[] = externalRows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    startsAt: row.startsAt,
+    day: amsterdamDay(row.startsAt),
+    weeztix: null,
+    deurverkoop: null,
+    ra: null,
+    appic: null,
+    wingame: null,
+    vrienden: null,
+    scanned: row.scanned,
+    isExternal: true,
+    externalAttendees: row.expectedAttendees,
+  }));
+
+  const mapped: TicketChannelRow[] = [
+    ...editionRows
+      .filter((row) => !/TEMPLATE/i.test(row.name))
+      .map((row) => {
+        const extra = extraByEdition.get(row.id);
+        const hasWeeztix = row.sold != null;
+        const inv = normalizeWeeztixInventory({
+          sold: row.sold,
+          capacity: row.capacity,
+          available: row.available,
+        });
+        const splitIssued = splitChannelIssued(extra);
+        const shopSold = hasWeeztix ? Math.max(0, inv.sold - splitIssued) : null;
+        return {
+          id: row.id,
+          name: row.name,
+          startsAt: row.startsAt,
+          day: amsterdamDay(row.startsAt),
+          weeztix: shopSold,
+          deurverkoop: extra?.internal ?? null,
+          ra: poolCell(extra?.ra),
+          appic: poolCell(extra?.appic),
+          wingame: null,
+          vrienden: poolCell(extra?.vrienden),
+          scanned: hasWeeztix ? (row.scanned ?? 0) : null,
+        };
+      }),
+    ...externalMapped,
+  ];
+
+  const upcoming = mapped
+    .filter((row) => row.day >= today)
+    .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  const past = mapped.filter((row) => row.day < today);
+
+  const serialize = (rows: TicketChannelRow[]): TicketChannelRowInput[] =>
+    rows.map((row) => ({ ...row, startsAt: row.startsAt.toISOString() }));
 
   return (
     <div>
       <SectionHeader
-        eyebrow="Kaartverkoop"
-        title="Live per platform"
-        description="Near-real-time sync waar de API het toelaat — Weeztix, RA, Appic, TicketSwap en intern."
+        eyebrow="Tickets"
+        title="Tickets"
+        description="Verkoop per kanaal, zoals het ticketsheet. Totaal is de som van de kanalen; gescand is Weeztix check-in."
       />
 
-      {primarySoldOut && secondaryActive && (
-        <div className="mb-6 border border-warn/40 bg-warn/10 px-4 py-3 text-sm text-warn">
-          Officieel kanaal (RA) is sold-out terwijl TicketSwap nog tickets toont.
-          Zie Alerts voor notificatie-status.
-        </div>
-      )}
+      <TicketsChannelsSearch
+        upcoming={serialize(upcoming)}
+        past={serialize(past)}
+      />
 
-      <div className="mb-6 overflow-x-auto border border-border">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
-            <tr>
-              <th className="px-4 py-3 font-medium">Platform</th>
-              <th className="px-4 py-3 font-medium">Verkocht</th>
-              <th className="px-4 py-3 font-medium">Beschikbaar</th>
-              <th className="px-4 py-3 font-medium">Capaciteit</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {inventory.map((row) => (
-              <tr
-                key={row.platform}
-                className="border-b border-border last:border-0 hover:bg-surface/60"
-              >
-                <td className="px-4 py-3 text-text">
-                  {platformLabels[row.platform]}
-                </td>
-                <td className="px-4 py-3 font-mono">{formatNumber(row.sold)}</td>
-                <td className="px-4 py-3 font-mono text-accent">
-                  {formatNumber(row.available)}
-                </td>
-                <td className="px-4 py-3 font-mono text-text-muted">
-                  {row.capacity != null ? formatNumber(row.capacity) : "—"}
-                </td>
-                <td className="px-4 py-3">
-                  {row.isSoldOut ? (
-                    <StatusBadge tone="danger">Sold out</StatusBadge>
-                  ) : row.platform === "ticketswap" ? (
-                    <StatusBadge tone="warn">Secundair</StatusBadge>
-                  ) : (
-                    <StatusBadge tone="success">Open</StatusBadge>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <section className="border border-border bg-surface p-4">
-        <h2 className="mb-4 font-display text-2xl tracking-[0.06em]">
-          Trend · afgelopen week
-        </h2>
-        <TicketSalesChart />
-      </section>
+      <p className="mt-3 text-xs text-text-dim">
+        Weeztix = shop (exclusief barcode-pools). Appic, RA en vriendentickets tonen
+        gebruikt / gereserveerd uit Weeztix (check-ins vs poolgrootte). Deurverkoop
+        volgt zodra die cijfers in de voorraad staan. Game Appic volgt nog. Externe events zijn handmatig (verwachte bezoekers in Totaal).
+        Totaal = som van de kanalen. Gescand = Weeztix check-in.
+      </p>
     </div>
   );
 }

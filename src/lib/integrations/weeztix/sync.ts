@@ -11,6 +11,7 @@ import { amsterdamDay } from "@/lib/time/amsterdam";
 import { estimateSoldOutFromTicketTypes } from "@/lib/editions/sold-out-timing";
 import {
   channelHasTicketTypes,
+  DERIVED_PLATFORM_CHANNEL,
   summarizeWeeztixChannels,
   WEEZTIX_DERIVED_PLATFORMS,
   type ChannelInventorySummary,
@@ -453,8 +454,7 @@ async function upsertTicketInventoryForEvents(
     }
 
     for (const platform of WEEZTIX_DERIVED_PLATFORMS) {
-      const channel =
-        platform === "appic" ? "appic" : ("resident_advisor" as const);
+      const channel = DERIVED_PLATFORM_CHANNEL[platform];
       await upsertDerivedChannelInventory(
         db,
         item.editionId,

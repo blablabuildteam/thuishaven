@@ -315,11 +315,6 @@ function fmtPct(n: number): string {
   return `${Math.round(n)}%`;
 }
 
-/** Short vs-line for tooltips: "dit event 92%, vergelijkbaar 75%". */
-function vsPct(actual: number, peer: number): string {
-  return `dit event ${fmtPct(actual)}, vergelijkbaar ${fmtPct(peer)}`;
-}
-
 function fmtEur(n: number): string {
   return `€${Math.round(n)}`;
 }
@@ -501,7 +496,13 @@ function detectFill(
     tone,
     dimension: "fill",
     significance: soldOut ? Math.min(1, significance + 0.1) : significance,
-    detail: `${vsPct(fill, cohort.fill.median)} (${label}).`,
+    detail: soldOut
+      ? above && Math.abs(delta) >= 6
+        ? `Uitverkocht op ${fmtPct(fill)}. Vergelijkbare ${label} raken meestal rond ${fmtPct(cohort.fill.median)} vol — dit event deed het dus duidelijk beter.`
+        : `Uitverkocht op ${fmtPct(fill)}. Dat ligt in lijn met vergelijkbare ${label} (meestal ${fmtPct(cohort.fill.median)} vol).`
+      : above
+        ? `Dit event was ${fmtPct(fill)} vol. Vergelijkbare ${label} zitten meestal rond ${fmtPct(cohort.fill.median)} vol.`
+        : `Dit event was ${fmtPct(fill)} vol. Vergelijkbare ${label} zitten meestal rond ${fmtPct(cohort.fill.median)} vol.`,
   };
 }
 
@@ -536,7 +537,9 @@ function detectWeather(
         dimension: "weather",
         weatherKind: e.weather.kind,
         significance: Math.min(1, 0.55 + sigFromPp(delta, 30) * 0.4),
-        detail: `Bij slecht weer zitten outdoor events meestal rond ${fmtPct(peer)} vol.`,
+        detail: soldOut
+          ? `Uitverkocht (${fmtPct(fill)}) terwijl het ${e.weather.label.toLowerCase()} was. Outdoor events met slecht weer zitten meestal maar rond ${fmtPct(peer)} vol.`
+          : `Dit event was ${fmtPct(fill)} vol ondanks ${e.weather.label.toLowerCase()}. Outdoor events met slecht weer zitten meestal rond ${fmtPct(peer)} vol.`,
       };
     }
 
@@ -546,7 +549,7 @@ function detectWeather(
       dimension: "weather",
       weatherKind: e.weather.kind,
       significance: sigFromPp(peer - fill, 20),
-      detail: `${vsPct(fill, peer)} bij vergelijkbaar weer.`,
+      detail: `Het was ${e.weather.label.toLowerCase()} en dit event raakte ${fmtPct(fill)} vol. Bij vergelijkbaar slecht weer zitten outdoor events meestal rond ${fmtPct(peer)} vol.`,
     };
   }
 
@@ -558,7 +561,7 @@ function detectWeather(
       dimension: "weather",
       weatherKind: e.weather.kind,
       significance: sigFromPp(delta, 22),
-      detail: `Het weer was geen rem. ${vsPct(fill, idealFill)}.`,
+      detail: `Het weer was ideaal, dus dat was geen rem. Dit event was ${fmtPct(fill)} vol; andere mooie outdoor-dagen zitten meestal rond ${fmtPct(idealFill)} vol.`,
     };
   }
 
@@ -608,7 +611,9 @@ function detectCompetition(
         tone: "positive",
         dimension: "competition",
         significance: Math.min(1, 0.62 + (soldOut ? 0.15 : 0)),
-        detail: `Op drukke avonden zitten events meestal rond ${fmtPct(expected)} vol.`,
+        detail: soldOut
+          ? `Uitverkocht (${fmtPct(fill)}) terwijl er ${festBit} naast speelde. Op zulke drukke avonden raken events meestal rond ${fmtPct(expected)} vol.`
+          : `Dit event was ${fmtPct(fill)} vol terwijl er ${festBit} naast speelde. Op zulke drukke avonden zitten events meestal rond ${fmtPct(expected)} vol.`,
       };
     }
 
@@ -617,7 +622,7 @@ function detectCompetition(
       tone: "caution",
       dimension: "competition",
       significance: sigFromPp(expected - fill, 20),
-      detail: `${festBit} dezelfde dag. ${vsPct(fill, expected)}.`,
+      detail: `Er speelde ${festBit} op dezelfde dag. Dit event was ${fmtPct(fill)} vol; andere drukke avonden zitten meestal rond ${fmtPct(expected)} vol.`,
     };
   }
 
@@ -627,7 +632,7 @@ function detectCompetition(
       tone: "caution",
       dimension: "competition",
       significance: sigFromPp(lowPeer - fill, 22),
-      detail: `Er speelde weinig mee in de stad — de mindere verkoop heeft een andere oorzaak. ${vsPct(fill, lowPeer)}.`,
+      detail: `Er speelde weinig mee in de stad, dus concurrentie was geen rem. Dit event was ${fmtPct(fill)} vol; rustige avonden zitten meestal rond ${fmtPct(lowPeer)} vol.`,
     };
   }
 
@@ -662,7 +667,12 @@ function detectScan(
     tone: delta < 0 ? (scan < 55 ? "caution" : "neutral") : "positive",
     dimension: "scan",
     significance,
-    detail: `${fmtPct(scan)} gescand (${fmtCount(e.tickets.scanned)} van ${fmtCount(e.tickets.sold)}). Vergelijkbare ${cohort.label} meestal ${fmtPct(cohort.scan.median)}.`,
+    detail:
+      delta < 0
+        ? `${fmtPct(scan)} van de verkochte kaarten is gescand (${fmtCount(e.tickets.scanned)} van ${fmtCount(e.tickets.sold)}). Bij vergelijkbare ${cohort.label} is dat meestal ${fmtPct(cohort.scan.median)}.${
+            weatherHint ? ` Het weer (${e.weather?.label.toLowerCase()}) kan no-shows verklaren.` : ""
+          }`
+        : `${fmtPct(scan)} van de verkochte kaarten is gescand (${fmtCount(e.tickets.scanned)} van ${fmtCount(e.tickets.sold)}). Bij vergelijkbare ${cohort.label} is dat meestal ${fmtPct(cohort.scan.median)}.`,
   };
 }
 
@@ -697,7 +707,7 @@ function detectSocial(
         tone: "positive",
         dimension: "social",
         significance: Math.min(1, 0.5 + Math.min(0.4, lift / 400)),
-        detail: `${posts.length} posts vóór/op de eventdag, ${fmtCount(reach)} mensen bereikt. Extra tickets in de dagen rond die posts (samenhang, geen harde toewijzing).`,
+        detail: `${posts.length} posts vóór of op de eventdag bereikten ${fmtCount(reach)} mensen. In de dagen rond die posts gingen er ${fmtCount(lift)} extra tickets weg — dat is een samenhang, geen harde toewijzing.`,
       };
     }
     if (fill != null && highFill != null && fill <= highFill - 12 && e.status === "past") {
@@ -706,7 +716,7 @@ function detectSocial(
         tone: "caution",
         dimension: "social",
         significance: sigFromPp(highFill - fill, 22),
-        detail: `Events met een sterke social push zitten meestal rond ${fmtPct(highFill)} vol. ${vsPct(fill, highFill)}.`,
+        detail: `Er was een duidelijke social push, maar dit event was ${fmtPct(fill)} vol. Events met een vergelijkbare push zitten meestal rond ${fmtPct(highFill)} vol.`,
       };
     }
     if (posts.length >= 2) {
@@ -715,7 +725,7 @@ function detectSocial(
         tone: "positive",
         dimension: "social",
         significance: 0.4,
-        detail: `${fmtCount(reach)} mensen bereikt. Geen duidelijke extra verkoop in de dagen rond die posts.`,
+        detail: `${posts.length} posts vóór het event bereikten ${fmtCount(reach)} mensen. In de dagen rond die posts is geen duidelijke extra verkoop te zien.`,
       };
     }
   }
@@ -740,7 +750,7 @@ function detectSocial(
       tone: "caution",
       dimension: "social",
       significance: sigFromPp(delta, 24),
-      detail: `Geen promo-posts vóór het event gekoppeld (aftermovies tellen niet mee). Events mét posts zitten meestal rond ${fmtPct(withOrganic)} vol.`,
+      detail: `Er zijn geen promo-posts vóór het event gekoppeld (aftermovies tellen niet mee). Dit event was ${fmtPct(fill)} vol; events mét posts zitten meestal rond ${fmtPct(withOrganic)} vol.`,
     };
   }
 
@@ -767,7 +777,7 @@ function detectEmail(
       tone: "caution",
       dimension: "email",
       significance: sigFromPp(deltaMail, 20),
-      detail: `${vsPct(fill, withMail)}. Events met een mailcampagne zitten meestal voller.`,
+      detail: `Er is geen mailcampagne gekoppeld. Dit event was ${fmtPct(fill)} vol; events mét mail zitten meestal rond ${fmtPct(withMail)} vol.`,
     };
   }
 
@@ -777,7 +787,7 @@ function detectEmail(
       tone: "positive",
       dimension: "email",
       significance: Math.min(1, 0.42 + Math.min(0.35, orders / 200)),
-      detail: "Tickets in de week ná de mail. Dat is een samenhang, geen harde toewijzing.",
+      detail: `${e.emailCampaigns.length === 1 ? "Na de mail" : "Na de mails"} gingen er ongeveer ${fmtCount(orders)} tickets weg in de week erna${fill != null ? ` (event ${fmtPct(fill)} vol)` : ""}. Dat is een samenhang, geen harde toewijzing.`,
     };
   }
 
@@ -793,7 +803,7 @@ function detectEmail(
       tone: "neutral",
       dimension: "email",
       significance: sigFromPp(withMail - fill, 24),
-      detail: `${e.emailCampaigns.length} campagne(s), ~${fmtCount(orders)} tickets in de week erna.`,
+      detail: `Er ${e.emailCampaigns.length === 1 ? "is een mailcampagne" : `zijn ${e.emailCampaigns.length} mailcampagnes`} gekoppeld, maar in de week erna gingen er maar ongeveer ${fmtCount(orders)} tickets weg. Dit event was ${fmtPct(fill)} vol; events mét mail zitten meestal rond ${fmtPct(withMail)} vol.`,
     };
   }
 
@@ -826,7 +836,7 @@ function detectPricing(
       tone: "caution",
       dimension: "pricing",
       significance: Math.max(significance, 0.4),
-      detail: `Prijs was geen rem. Vergelijkbare ${cohort.label} liggen rond ${fmtEur(cohort.price.median)}.`,
+      detail: `De gemiddelde kaartprijs was ${fmtEur(price)}, lager dan de ${fmtEur(cohort.price.median)} bij vergelijkbare ${cohort.label}. Toch was dit event maar ${fmtPct(fill)} vol — de prijs was dus geen rem.`,
     };
   }
 
@@ -836,7 +846,7 @@ function detectPricing(
       tone: "positive",
       dimension: "pricing",
       significance: Math.max(significance, 0.48),
-      detail: `Kaarten gingen weg ondanks een hogere prijs (vergelijkbaar ${fmtEur(cohort.price.median)}).`,
+      detail: `Uitverkocht bij ${fmtEur(price)} per kaart. Vergelijkbare ${cohort.label} liggen rond ${fmtEur(cohort.price.median)} — de vraag hield de hogere prijs dus vol.`,
     };
   }
 
@@ -846,7 +856,7 @@ function detectPricing(
       tone: "caution",
       dimension: "pricing",
       significance: significance,
-      detail: `Vergelijkbare ${cohort.label} liggen rond ${fmtEur(cohort.price.median)}. Dit event ${fmtPct(fill)} vol.`,
+      detail: `De gemiddelde kaartprijs was ${fmtEur(price)}, hoger dan de ${fmtEur(cohort.price.median)} bij vergelijkbare ${cohort.label}. Dit event raakte ${fmtPct(fill)} vol.`,
     };
   }
 
@@ -856,7 +866,7 @@ function detectPricing(
       tone: "neutral",
       dimension: "pricing",
       significance: significance * 0.85,
-      detail: `Gemiddeld ${fmtEur(price)} hier, ${fmtEur(cohort.price.median)} bij vergelijkbare events.`,
+      detail: `Uitverkocht bij ${fmtEur(price)} per kaart. Vergelijkbare ${cohort.label} liggen rond ${fmtEur(cohort.price.median)}.`,
     };
   }
 
@@ -879,7 +889,7 @@ function detectSoldout(
       tone: "caution",
       dimension: "soldout",
       significance: 0.42,
-      detail: `Vergelijkbare ${cohort.label} die wél uitverkochten, gemiddeld ${Math.round(cohort.soldOutDays.median)} dagen vóór start.`,
+      detail: `Dit event was ${fmtPct(e.tickets.fillPct)} vol en niet uitverkocht. Vergelijkbare ${cohort.label} die wél uitverkochten, waren gemiddeld ${Math.round(cohort.soldOutDays.median)} dagen vóór start al vol.`,
     };
   }
 
@@ -900,8 +910,8 @@ function detectSoldout(
       significance: 0.92,
       detail:
         second != null
-          ? `Tweede was ${second}d vóór start.`
-          : "Enige uitverkochte editie met timing dit jaar.",
+          ? `Dit event was het snelst uitverkocht in ${year}: ${days} dagen vóór start vol. De nummer twee was ${second} dagen van tevoren vol.`
+          : `Dit event was het snelst uitverkocht in ${year}: ${days} dagen vóór start vol.`,
     };
   }
 
@@ -913,7 +923,7 @@ function detectSoldout(
         tone: "neutral",
         dimension: "soldout",
         significance: 0.38,
-        detail: "Vol geraakt op de dag zelf — laat in de curve.",
+        detail: "Uitverkocht op de eventdag zelf — de laatste kaarten gingen dus pas laat weg.",
       };
     }
     return null;
@@ -930,7 +940,10 @@ function detectSoldout(
     tone: delta > 0 ? "positive" : "neutral",
     dimension: "soldout",
     significance: Math.min(1, 0.35 + Math.abs(delta) / 20),
-    detail: `Uitverkochte ${cohort.label} zijn meestal ${Math.round(cohort.soldOutDays.median)} dagen van tevoren vol.`,
+    detail:
+      delta > 0
+        ? `Uitverkocht ${days} dagen vóór start. Uitverkochte ${cohort.label} zijn meestal ${Math.round(cohort.soldOutDays.median)} dagen van tevoren vol.`
+        : `Uitverkocht ${days} dagen vóór start — later dan gebruikelijk. Uitverkochte ${cohort.label} zijn meestal ${Math.round(cohort.soldOutDays.median)} dagen van tevoren vol.`,
   };
 }
 
@@ -957,7 +970,10 @@ function detectSameDay(
     tone: delta > 0 ? "neutral" : "positive",
     dimension: "same_day",
     significance,
-    detail: `${fmtPct(share)} van de kaarten ging op de eventdag zelf weg. Bij vergelijkbare ${cohort.label} is dat meestal ${fmtPct(cohort.sameDayShare.median)}.`,
+    detail:
+      delta > 0
+        ? `${fmtPct(share)} van de kaarten ging op de eventdag zelf weg. Bij vergelijkbare ${cohort.label} is dat meestal ${fmtPct(cohort.sameDayShare.median)} — dus meer last-minute dan gebruikelijk.`
+        : `${fmtPct(share)} van de kaarten ging op de eventdag zelf weg. Bij vergelijkbare ${cohort.label} is dat meestal ${fmtPct(cohort.sameDayShare.median)} — het meeste was dus al vooraf verkocht.`,
   };
 }
 

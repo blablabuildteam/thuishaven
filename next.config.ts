@@ -8,6 +8,20 @@ const nextConfig: NextConfig = {
   turbopack: {
     root,
   },
+  async redirects() {
+    return [
+      {
+        source: "/dashboard/weeztix",
+        destination: "/dashboard/tickets",
+        permanent: true,
+      },
+      {
+        source: "/dashboard/weeztix/:editionId",
+        destination: "/dashboard/tickets/:editionId",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

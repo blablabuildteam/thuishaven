@@ -18,6 +18,7 @@
   --accent-contrast: #ffffff;
   --highlight: #fff201;
   --warn: #f1c40f;
+  --warn-fg: #6e5600;
   --danger: #d22624;
   --info: #79cae5;
   /* Duidelijke “werkt”-status — past bij cream/zwart, geen neon */
@@ -51,6 +52,7 @@
   --accent-contrast: #000000;
   --highlight: #fff201;
   --warn: #f1c40f;
+  --warn-fg: #f1c40f;
   --danger: #d22624;
   --info: #79cae5;
   --success: #3d9b5f;
@@ -80,6 +82,7 @@
   --color-accent-contrast: var(--accent-contrast);
   --color-highlight: var(--highlight);
   --color-warn: var(--warn);
+  --color-warn-fg: var(--warn-fg);
   --color-danger: var(--danger);
   --color-info: var(--info);
   --color-success: var(--success);
@@ -289,6 +292,34 @@ html.dark body::before {
   }
 }
 
+@keyframes insight-modal-backdrop {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes insight-modal-panel {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.insight-modal-backdrop {
+  animation: insight-modal-backdrop 180ms ease-out both;
+}
+
+.insight-modal-panel {
+  animation: insight-modal-panel 220ms ease-out both;
+}
+
 @keyframes bar-grow {
   from {
     transform: scaleX(0);
@@ -370,6 +401,30 @@ html.dark body::before {
   animation: insight-shimmer-pass 0.7s ease-out both;
 }
 
+.dashboard-date-input {
+  color-scheme: light;
+  appearance: none;
+}
+
+.dark .dashboard-date-input {
+  color-scheme: dark;
+}
+
+.dashboard-date-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.55;
+  filter: none;
+}
+
+.dark .dashboard-date-input::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.65;
+}
+
+.dashboard-date-input:focus::-webkit-calendar-picker-indicator {
+  opacity: 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .collapse-panel {
     transition: none;
@@ -377,7 +432,9 @@ html.dark body::before {
 
   .insight-reveal > *,
   .animate-bar-grow,
-  .insight-loading-pass {
+  .insight-loading-pass,
+  .insight-modal-backdrop,
+  .insight-modal-panel {
     animation: none;
   }
 

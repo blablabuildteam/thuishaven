@@ -21,8 +21,11 @@ export type TicketChannelRow = {
   ra: TicketPoolCell;
   appic: TicketPoolCell;
   wingame: TicketPoolCell;
-  vrienden: number | null;
+  vrienden: TicketPoolCell;
   scanned: number | null;
+  /** Handmatig extern event — alleen Totaal gevuld. */
+  isExternal?: boolean;
+  externalAttendees?: number | null;
 };
 
 function channelIssued(value: number | TicketPoolCell | null): number | null {
@@ -32,6 +35,9 @@ function channelIssued(value: number | TicketPoolCell | null): number | null {
 }
 
 export function totalTicketsSold(row: TicketChannelRow): number | null {
+  if (row.isExternal) {
+    return row.externalAttendees ?? null;
+  }
   const parts = [
     row.weeztix,
     row.deurverkoop,
@@ -47,10 +53,10 @@ export function totalTicketsSold(row: TicketChannelRow): number | null {
 const CHANNELS = [
   { key: "weeztix", label: "Weeztix", pending: false, pool: false },
   { key: "deurverkoop", label: "Deurverkoop", pending: false, pool: false },
-  { key: "ra", label: "Resident Advisor", pending: false, pool: true },
+  { key: "ra", label: "RA", pending: false, pool: true },
   { key: "appic", label: "Appic", pending: false, pool: true },
-  { key: "wingame", label: "Wingame Appic", pending: true, pool: true },
-  { key: "vrienden", label: "Vriendentickets", pending: true, pool: false },
+  { key: "wingame", label: "Game Appic", pending: true, pool: true },
+  { key: "vrienden", label: "Vriendentickets", pending: false, pool: true },
 ] as const;
 
 function monthKey(day: string): string {
@@ -99,9 +105,12 @@ function ChannelCell({
   }
   if (typeof value === "object") {
     return (
-      <span title="Gebruikt / gereserveerd">
+      <span
+        className="inline-block whitespace-nowrap tabular-nums"
+        title="Gebruikt / gereserveerd"
+      >
         {formatNumber(value.used)}
-        <span className="text-text-dim"> / {formatNumber(value.reserved)}</span>
+        <span className="text-text-dim">/{formatNumber(value.reserved)}</span>
       </span>
     );
   }
@@ -164,14 +173,15 @@ function TicketsTable({ rows }: { rows: TicketChannelRow[] }) {
             <th className="px-4 py-3 font-medium">Editie</th>
             <th className="px-4 py-3 font-medium">Datum</th>
             {CHANNELS.map((col) => (
-              <th key={col.key} className="px-4 py-3 text-right font-medium">
-                {col.label}
-                {col.pool && (
-                  <span className="mt-0.5 block font-normal tracking-normal text-text-dim normal-case">
-                    gebruikt / geres.
-                  </span>
+              <th
+                key={col.key}
+                className={cn(
+                  "px-3 py-3 text-right font-medium",
+                  col.pool && "whitespace-nowrap",
                 )}
-                {col.pending && (
+              >
+                {col.label}
+                {col.pending && col.key !== "wingame" && (
                   <span className="mt-0.5 block font-normal tracking-normal text-text-dim normal-case">
                     binnenkort
                   </span>
@@ -196,7 +206,13 @@ function TicketsTable({ rows }: { rows: TicketChannelRow[] }) {
                 Totaal
               </td>
               {CHANNELS.map((col) => (
-                <td key={col.key} className="px-4 py-3 text-right font-mono">
+                <td
+                  key={col.key}
+                  className={cn(
+                    "px-3 py-3 text-right font-mono",
+                    col.pool && "whitespace-nowrap",
+                  )}
+                >
                   <ChannelCell value={sumChannel(rows, col.key)} pending={col.pending} />
                 </td>
               ))}
@@ -234,21 +250,46 @@ function MonthBlock({
       {month.rows.map((row) => {
         const total = totalTicketsSold(row);
         return (
-          <tr key={row.id} className="border-b border-border/70 last:border-0">
+          <tr
+            key={row.id}
+            className={cn(
+              "border-b border-border/70 last:border-0",
+              row.isExternal && "bg-surface/30",
+            )}
+          >
             <td className="max-w-[280px] truncate px-4 py-3">
-              <Link
-                href={`/dashboard/weeztix/${row.id}`}
-                className="hover:underline"
-                title={row.name}
-              >
-                {displayEditionName(row.name)}
-              </Link>
+              {row.isExternal ? (
+                <Link
+                  href={`/dashboard/tickets/external/${row.id}`}
+                  className="flex items-center gap-2 hover:underline"
+                  title={row.name}
+                >
+                  <span className="truncate">{row.name}</span>
+                  <span className="shrink-0 text-[10px] tracking-wide text-text-dim uppercase">
+                    Extern
+                  </span>
+                </Link>
+              ) : (
+                <Link
+                  href={`/dashboard/tickets/${row.id}`}
+                  className="hover:underline"
+                  title={row.name}
+                >
+                  {displayEditionName(row.name)}
+                </Link>
+              )}
             </td>
             <td className="px-4 py-3 whitespace-nowrap text-text-muted">
               {formatDate(row.startsAt)}
             </td>
             {CHANNELS.map((col) => (
-              <td key={col.key} className="px-4 py-3 text-right font-mono">
+              <td
+                key={col.key}
+                className={cn(
+                  "px-3 py-3 text-right font-mono",
+                  col.pool && "whitespace-nowrap",
+                )}
+              >
                 <ChannelCell value={row[col.key]} pending={col.pending} />
               </td>
             ))}

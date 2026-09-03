@@ -129,31 +129,134 @@ function insightChipIcon(insight: AnomalyInsight) {
   return Ticket;
 }
 
+const INSIGHT_DIMENSION_LABEL: Record<AnomalyInsight["dimension"], string> = {
+  fill: "Verkoop",
+  weather: "Weer",
+  competition: "Concurrentie",
+  scan: "Scan",
+  social: "Social",
+  email: "Mail",
+  pricing: "Prijs",
+  soldout: "Uitverkocht",
+  same_day: "Last-minute",
+};
+
+function InsightDetailModal({
+  insight,
+  onClose,
+}: {
+  insight: AnomalyInsight;
+  onClose: () => void;
+}) {
+  const titleId = useId();
+  const Icon = insightChipIcon(insight);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button
+        type="button"
+        aria-label="Sluiten"
+        onClick={onClose}
+        className="insight-modal-backdrop absolute inset-0 bg-black/40"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="insight-modal-panel relative z-10 w-full max-w-md border border-border bg-surface p-5"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-[11px] tracking-[0.14em] text-text-dim uppercase">
+            {INSIGHT_DIMENSION_LABEL[insight.dimension]}
+          </p>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Sluiten"
+            className="text-text-dim transition-colors hover:text-text"
+          >
+            <X className="size-4" strokeWidth={1.5} />
+          </button>
+        </div>
+        <p
+          id={titleId}
+          className="mt-2 flex items-start gap-2 text-[15px] font-medium leading-snug"
+        >
+          {insight.dimension === "email" ? (
+            <SocialChannelIcon channel="mail" size={16} alt="" />
+          ) : (
+            <Icon className="mt-0.5 size-4 shrink-0 opacity-80" strokeWidth={1.75} />
+          )}
+          <span>{insight.text}</span>
+        </p>
+        {insight.detail && (
+          <p className="mt-3 text-sm leading-relaxed text-text-muted">
+            {insight.detail}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function InsightChip({ insight }: { insight: AnomalyInsight }) {
+  const [open, setOpen] = useState(false);
   const Icon = insightChipIcon(insight);
 
   const colors: Record<AnomalyInsight["tone"], string> = {
     positive: "border-success/35 bg-success/10 text-success",
     neutral: "border-border bg-surface-hover text-text",
-    caution: "border-warn/40 bg-warn/10 text-warn",
+    caution: "border-warn/40 bg-warn/10 text-warn-fg",
     danger: "border-danger/40 bg-danger/10 text-danger",
   };
 
   return (
-    <span
-      title={insight.detail}
-      className={cn(
-        "inline-flex max-w-full items-center gap-1.5 border px-2.5 py-1 text-xs font-medium tracking-wide",
-        colors[insight.tone],
-      )}
-    >
-      {insight.dimension === "email" ? (
-        <SocialChannelIcon channel="mail" size={14} alt="" />
-      ) : (
-        <Icon className="size-3.5 shrink-0 opacity-80" strokeWidth={1.75} />
-      )}
-      <span className="min-w-0">{insight.text}</span>
-    </span>
+    <>
+      <span
+        className={cn(
+          "inline-flex max-w-full items-center gap-1.5 border py-1 pr-1 pl-2.5 text-xs font-medium tracking-wide",
+          colors[insight.tone],
+        )}
+      >
+        {insight.dimension === "email" ? (
+          <SocialChannelIcon channel="mail" size={14} alt="" />
+        ) : (
+          <Icon className="size-3.5 shrink-0 opacity-80" strokeWidth={1.75} />
+        )}
+        <span className="min-w-0">{insight.text}</span>
+        {insight.detail && (
+          <button
+            type="button"
+            aria-label="Toelichting"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(true);
+            }}
+            className="inline-flex size-5 shrink-0 items-center justify-center text-current opacity-55 transition-opacity hover:opacity-100"
+          >
+            <Info className="size-3.5" strokeWidth={1.75} />
+          </button>
+        )}
+      </span>
+      {open &&
+        createPortal(
+          <InsightDetailModal insight={insight} onClose={() => setOpen(false)} />,
+          document.body,
+        )}
+    </>
   );
 }
 
@@ -313,7 +416,7 @@ function WeatherIcon({
       : kind === "wet" || kind === "cold_wet" || kind === "cold"
         ? "border-info/40 bg-info/10 text-info"
         : kind === "heat" || kind === "windy"
-          ? "border-warn/40 bg-warn/10 text-warn"
+          ? "border-warn/40 bg-warn/10 text-warn-fg"
           : "border-border bg-surface text-text-muted";
 
   return (
@@ -397,7 +500,7 @@ function WeatherBlock({
                 weather.tone === "positive" && "text-success",
                 weather.tone === "caution" &&
                   !isColdOrWet(weather.kind) &&
-                  "text-warn",
+                  "text-warn-fg",
                 isColdOrWet(weather.kind) && "text-info",
               )}
             >
@@ -449,7 +552,7 @@ function WeatherBlock({
                     className={cn(
                       "my-0.5 size-4",
                       h.iconKind === "clear"
-                        ? "text-warn"
+                        ? "text-warn-fg"
                         : h.iconKind === "rain" ||
                             h.iconKind === "drizzle" ||
                             h.iconKind === "thunder" ||
@@ -545,7 +648,7 @@ function TicketMetricsVisual({
       ? fillPct >= 85
         ? "text-success"
         : fillPct < 50
-          ? "text-warn"
+          ? "text-warn-fg"
           : "text-text"
       : "text-text";
 
@@ -759,49 +862,53 @@ function EventRow({ event }: { event: EventInsight }) {
   });
   const artists = event.artists.filter(Boolean);
 
+  const toggleOpen = () => setOpen((o) => !o);
+
   return (
     <li className="border border-border bg-surface">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-4 px-4 py-4 text-left transition-colors hover:bg-surface-hover"
-      >
-        <span
-          className="flex w-12 shrink-0 flex-col items-center text-text-muted"
-          title={dateLabel}
-          aria-label={dateLabel}
+      <div className="transition-colors hover:bg-surface-hover">
+      <div className="flex w-full items-start gap-4 px-4 py-4">
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={toggleOpen}
+          className="flex min-w-0 flex-1 items-start gap-4 text-left"
         >
-          <span className="text-[9px] font-medium leading-none tracking-[0.08em] text-text-dim capitalize">
-            {weekdayLabel}
-          </span>
-          <span className="mt-0.5 font-mono text-[2.25rem] font-bold leading-none tabular-nums">
-            {dayNum}
-          </span>
-          <span className="mt-0.5 text-[9px] font-medium leading-none tracking-[0.14em] text-text-dim uppercase">
-            {monthLabel}
-          </span>
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <span className="text-[15px] font-medium leading-snug" title={event.name}>
-              {displayEditionName(event.name)}
+          <span
+            className="flex w-12 shrink-0 flex-col items-center text-text-muted"
+            title={dateLabel}
+            aria-label={dateLabel}
+          >
+            <span className="text-[9px] font-medium leading-none tracking-[0.08em] text-text-dim capitalize">
+              {weekdayLabel}
             </span>
-            {artists.length > 0 && (
-              <span className="text-xs text-text-dim">
-                {artists.join(" · ")}
+            <span className="mt-0.5 font-mono text-[2.25rem] font-bold leading-none tabular-nums">
+              {dayNum}
+            </span>
+            <span className="mt-0.5 text-[9px] font-medium leading-none tracking-[0.14em] text-text-dim uppercase">
+              {monthLabel}
+            </span>
+          </span>
+          <span className="min-w-0 flex-1 pt-1">
+            <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span className="text-[15px] font-medium leading-snug" title={event.name}>
+                {displayEditionName(event.name)}
               </span>
-            )}
-          </div>
-          {event.insights.length > 0 && (
-            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-              {event.insights.map((insight, i) => (
-                <InsightChip key={`${insight.dimension}-${i}`} insight={insight} />
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-3">
+              {artists.length > 0 && (
+                <span className="text-xs text-text-dim">
+                  {artists.join(" · ")}
+                </span>
+              )}
+            </span>
+          </span>
+        </button>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-label={open ? "Details sluiten" : "Details openen"}
+          onClick={toggleOpen}
+          className="flex shrink-0 items-center gap-3 pt-1"
+        >
           <CompactTicketMetrics
             key={open ? `fill-${revealKey}` : "fill"}
             sold={event.tickets.sold}
@@ -816,8 +923,16 @@ function EventRow({ event }: { event: EventInsight }) {
             )}
             strokeWidth={1.5}
           />
+        </button>
+      </div>
+      {event.insights.length > 0 && (
+        <div className="-mt-1 flex flex-wrap items-center gap-1.5 pr-4 pb-4 pl-20">
+          {event.insights.map((insight, i) => (
+            <InsightChip key={`${insight.dimension}-${i}`} insight={insight} />
+          ))}
         </div>
-      </button>
+      )}
+      </div>
 
       <div className="collapse-panel" data-open={open ? "true" : "false"}>
         <div className="collapse-inner">
@@ -1094,7 +1209,7 @@ function EventDetail({ event }: { event: EventInsight }) {
 
         <div className="mt-4 border-t border-border pt-3">
           <Link
-            href={`/dashboard/weeztix/${event.editionId}`}
+            href={`/dashboard/tickets/${event.editionId}`}
             className="text-xs underline underline-offset-2 hover:text-text"
           >
             Volledig ticket detail →

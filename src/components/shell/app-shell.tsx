@@ -50,7 +50,7 @@ const dashboardSections: NavSection[] = [
     label: "Overzicht",
     items: [
       { href: "/dashboard/dashboards", label: "Inzichten", icon: LineChart },
-      { href: "/dashboard/weeztix", label: "Tickets", icon: Ticket },
+      { href: "/dashboard/tickets", label: "Tickets", icon: Ticket },
       { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
     ],
   },

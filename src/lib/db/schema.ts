@@ -264,6 +264,7 @@ export const ticketPlatformEnum = pgEnum("ticket_platform", [
   "weeztix",
   "resident_advisor",
   "appic",
+  "vrienden",
   "ticketswap",
   "internal",
 ]);
@@ -661,5 +662,16 @@ export const externalEvents = pgTable("external_events", {
   region: text("region").notNull().default("Amsterdam"),
   impactNote: text("impact_note"),
   source: text("source").notNull().default("manual"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/** Handmatige externe events op het ticketssheet (alleen verwachte bezoekers). */
+export const externalTicketEvents = pgTable("external_ticket_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  expectedAttendees: integer("expected_attendees").notNull(),
+  /** Werkelijke check-ins na afloop — handmatig ingevuld. */
+  scanned: integer("scanned"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });

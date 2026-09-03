@@ -92,7 +92,7 @@ function DemoList({
   );
 }
 
-export default async function WeeztixEditionPage({
+export default async function TicketEditionPage({
   params,
 }: {
   params: Promise<{ editionId: string }>;
@@ -161,7 +161,7 @@ export default async function WeeztixEditionPage({
   return (
     <div>
       <p className="mb-4 text-sm text-text-muted">
-        <Link href="/dashboard/weeztix" className="hover:underline">
+        <Link href="/dashboard/tickets" className="hover:underline">
           ← Tickets
         </Link>
       </p>

@@ -21,14 +21,25 @@ export type ChannelInventorySummary = {
 export const WEEZTIX_DERIVED_PLATFORMS = [
   "appic",
   "resident_advisor",
+  "vrienden",
 ] as const;
 
 export type WeeztixDerivedPlatform = (typeof WEEZTIX_DERIVED_PLATFORMS)[number];
+
+export const DERIVED_PLATFORM_CHANNEL: Record<
+  WeeztixDerivedPlatform,
+  WeeztixSalesChannel
+> = {
+  appic: "appic",
+  resident_advisor: "resident_advisor",
+  vrienden: "vrienden",
+};
 
 const BARCODE_POOL_CHANNELS = new Set<WeeztixSalesChannel>([
   "appic",
   "resident_advisor",
   "wingame",
+  "vrienden",
 ]);
 
 function ticketSold(t: WeeztixTicketType): number {
