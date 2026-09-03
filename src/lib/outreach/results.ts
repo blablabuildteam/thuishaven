@@ -13,6 +13,7 @@ import {
   outreachLiveSendBlockReason,
   outreachTestSendBlockReason,
 } from "./send-policy";
+import { FOLLOW_UP_READY_AFTER_DAYS } from "./sequence";
 import { getOutreachVariant, type OutreachVariantId } from "./tone";
 
 export type OutreachMailResultRow = {
@@ -75,6 +76,17 @@ export type OutreachResultsSnapshot = {
     receivedAt: string;
     companyName: string | null;
   }>;
+  /** Sent, opened, no reply — candidates for a soft reminder (not auto-sent). */
+  followUpCandidates: Array<{
+    id: string;
+    companyName: string;
+    toEmail: string | null;
+    subject: string;
+    sentAt: string;
+    openedAt: string | null;
+    daysSinceSent: number;
+    ready: boolean;
+  }>;
 };
 
 function rate(part: number, whole: number): number {
@@ -107,6 +119,7 @@ export async function getOutreachResultsSnapshot(): Promise<OutreachResultsSnaps
       ab: [],
       rows: [],
       recentReplies: [],
+      followUpCandidates: [],
     };
   }
 
@@ -297,5 +310,31 @@ export async function getOutreachResultsSnapshot(): Promise<OutreachResultsSnaps
       receivedAt: r.receivedAt.toISOString(),
       companyName: r.companyName,
     })),
+    followUpCandidates: mailRows
+      .filter((r) => {
+        const opened =
+          Boolean(r.openedAt) ||
+          ["opened", "clicked"].includes(r.status);
+        const replied =
+          Boolean(r.repliedAt) || r.status === "replied";
+        return Boolean(r.sentAt) && opened && !replied;
+      })
+      .map((r) => {
+        const sentAt = r.sentAt!;
+        const daysSinceSent = Math.floor(
+          (Date.now() - sentAt.getTime()) / (1000 * 60 * 60 * 24),
+        );
+        return {
+          id: r.id,
+          companyName: r.companyName,
+          toEmail: r.toEmail,
+          subject: r.subject,
+          sentAt: sentAt.toISOString(),
+          openedAt: r.openedAt?.toISOString() ?? null,
+          daysSinceSent,
+          ready: daysSinceSent >= FOLLOW_UP_READY_AFTER_DAYS,
+        };
+      })
+      .sort((a, b) => b.daysSinceSent - a.daysSinceSent),
   };
 }

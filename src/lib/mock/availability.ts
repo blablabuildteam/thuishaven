@@ -33,7 +33,23 @@ export const dayStatusLabels: Record<DayStatus, string> = {
 };
 
 export const PUBLIC_AVAILABILITY_PATH = "/beschikbaar";
-export const PUBLIC_AVAILABILITY_URL = "https://tools.thuishaven.nl/beschikbaar";
+
+/**
+ * Deelbare agenda-URL in mails.
+ * tools.thuishaven.nl wijst nog niet naar Vercel (Plesk/CF 404) —
+ * tot DNS omstaat gebruiken we de werkende Vercel-app URL.
+ */
+export function getPublicAvailabilityUrl(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "").trim();
+  const base =
+    fromEnv && !fromEnv.includes("tools.thuishaven.nl")
+      ? fromEnv
+      : "https://thuishaven.vercel.app";
+  return `${base}${PUBLIC_AVAILABILITY_PATH}`;
+}
+
+/** @deprecated prefer getPublicAvailabilityUrl() — kept for static imports */
+export const PUBLIC_AVAILABILITY_URL = "https://thuishaven.vercel.app/beschikbaar";
 
 /** Aug–Sep 2026 weekday-focused mock calendar */
 export const availabilityCalendar: AvailabilityDay[] = [

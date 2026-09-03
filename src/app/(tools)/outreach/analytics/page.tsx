@@ -75,6 +75,47 @@ export default async function OutreachAnalyticsPage() {
 
       <section className="mb-8 border border-border bg-surface p-4">
         <h2 className="mb-2 font-display text-2xl tracking-[0.06em]">
+          Uitstaande leads · follow-up
+        </h2>
+        <p className="mb-4 text-sm text-text-muted">
+          Geopend, nog geen reply. Na 3 dagen “klaar” voor een zachte reminder —
+          alleen als queue, geen auto-send. Copy noemt nooit dat we een open zagen.
+        </p>
+        {snap.followUpCandidates.length === 0 ? (
+          <p className="text-sm text-text-muted">
+            Nog geen uitstaande leads. Zodra iemand opent zonder te antwoorden,
+            verschijnt die hier.
+          </p>
+        ) : (
+          <ul className="space-y-3">
+            {snap.followUpCandidates.map((c) => (
+              <li
+                key={c.id}
+                className="flex flex-wrap items-start justify-between gap-3 border border-border bg-bg p-4"
+              >
+                <div>
+                  <p className="text-sm font-medium text-text">{c.companyName}</p>
+                  <p className="font-mono text-xs text-text-dim">
+                    {c.toEmail ?? "—"}
+                  </p>
+                  <p className="mt-1 text-xs text-text-muted">{c.subject}</p>
+                </div>
+                <div className="text-right">
+                  <StatusBadge tone={c.ready ? "accent" : "info"}>
+                    {c.ready ? "follow-up klaar" : "wacht nog"}
+                  </StatusBadge>
+                  <p className="mt-2 text-xs text-text-dim">
+                    {c.daysSinceSent} dag{c.daysSinceSent === 1 ? "" : "en"} geleden
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="mb-8 border border-border bg-surface p-4">
+        <h2 className="mb-2 font-display text-2xl tracking-[0.06em]">
           A/B · onderwerpregels
         </h2>
         <p className="mb-4 text-sm text-text-muted">

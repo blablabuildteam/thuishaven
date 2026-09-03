@@ -7,6 +7,7 @@ import {
 import { AvailabilityAdmin } from "@/components/outreach/availability-admin";
 import {
   formatEuro,
+  getPublicAvailabilityUrl,
   listAvailabilityDays,
 } from "@/lib/outreach/availability";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -22,6 +23,7 @@ export default async function BeschikbaarheidPage() {
     .filter((p): p is number => p != null);
   const min = priceRange.length ? Math.min(...priceRange) : 0;
   const max = priceRange.length ? Math.max(...priceRange) : 0;
+  const liveUrl = getPublicAvailabilityUrl();
 
   return (
     <div>
@@ -64,13 +66,21 @@ export default async function BeschikbaarheidPage() {
         </div>
         <div className="border border-border bg-surface p-4">
           <p className="font-display text-sm tracking-[0.14em] text-text-muted">
-            Live URL in mails
+            Deelbare live-link
           </p>
-          <p className="mt-2 break-all font-mono text-xs text-accent">
-            /beschikbaar
-          </p>
+          <a
+            href={liveUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 block break-all font-mono text-xs text-accent underline-offset-2 hover:underline"
+          >
+            {liveUrl}
+          </a>
           <p className="mt-1 text-xs text-text-dim">
-            Bron: {source === "db" ? "database" : "mock"}
+            Zelfde data als hier · bron: {source === "db" ? "database" : "mock"}
+            {liveUrl.includes("vercel.app")
+              ? " · tools.thuishaven.nl DNS nog niet gekoppeld"
+              : ""}
           </p>
         </div>
       </div>

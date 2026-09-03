@@ -3,6 +3,7 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { MetricCard } from "@/components/ui/metric-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { getOutreachPlanningSnapshot } from "@/lib/outreach/planning";
+import { sequenceForOpenedNoReply } from "@/lib/outreach/sequence";
 import { formatNumber } from "@/lib/utils";
 
 export const metadata = { title: "Planning" };
@@ -106,6 +107,49 @@ export default async function OutreachPlanningPage() {
           </ul>
         </section>
       </div>
+
+      <section className="mb-8 border border-border bg-surface p-4">
+        <h2 className="font-display text-2xl tracking-[0.06em]">
+          Sequence · uitstaande leads
+        </h2>
+        <p className="mt-2 max-w-2xl text-sm text-text-muted">
+          Concept voor leads zonder reply. Geen auto-send — wel zichtbaar op
+          Resultaten wie “follow-up klaar” is. Open-tracking blijft intern (wie
+          prioriteit krijgt); in de mail zelf nooit benoemen.
+        </p>
+        <p className="mt-3 max-w-2xl border border-border bg-bg px-3 py-2 text-xs text-text-muted">
+          <span className="font-medium text-text">Partnerbureaus</span> (MCI,
+          Live-Impact, …) zijn bestaande relaties — geen cold outreach. Suggestie:
+          alleen korte open-data seintjes als jullie dat handig vinden. Cold
+          targets komen later via KvK / LinkedIn / directories.
+        </p>
+        <ol className="mt-5 space-y-4">
+          {sequenceForOpenedNoReply().map((step) => (
+            <li key={step.id} className="border border-border bg-bg p-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-sm font-medium text-text">{step.name}</p>
+                <p className="text-xs text-text-dim">
+                  dag {step.afterDays}
+                  {step.trigger === "opened_no_reply"
+                    ? " · queue: open + geen reply"
+                    : ""}
+                </p>
+              </div>
+              <p className="mt-1 text-xs text-text-muted">{step.toneNote}</p>
+              {step.subjectHint !== "A/B onderwerp uit variant" ? (
+                <p className="mt-2 font-mono text-xs text-accent">
+                  Onderwerp: {step.subjectHint}
+                </p>
+              ) : null}
+              {step.exampleBody !== "(zie gegenereerde draft)" ? (
+                <pre className="mt-3 whitespace-pre-wrap font-sans text-sm leading-relaxed text-text-muted">
+                  {step.exampleBody}
+                </pre>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      </section>
 
       <section className="mb-8">
         <h2 className="mb-3 font-display text-2xl tracking-[0.06em]">

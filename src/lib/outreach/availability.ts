@@ -9,6 +9,7 @@ import {
   availabilityCalendar as mockCalendar,
   dayStatusLabels,
   formatEuro,
+  getPublicAvailabilityUrl,
   openAvailabilityDays as mockOpenDays,
   type AvailabilityDay,
   type DayPart,
@@ -20,6 +21,7 @@ import {
 export {
   dayStatusLabels,
   formatEuro,
+  getPublicAvailabilityUrl,
   PUBLIC_AVAILABILITY_PATH,
   PUBLIC_AVAILABILITY_URL,
 };
@@ -160,7 +162,7 @@ export async function availabilitySummaryForEmail(limit = 4): Promise<string> {
       d.priceFrom != null ? ` · vanaf ${formatEuro(d.priceFrom)}` : "";
     return `• ${d.date}${price}`;
   });
-  return `Open slots (selectie):\n${lines.join("\n")}\nLive: ${PUBLIC_AVAILABILITY_URL}`;
+  return `Open slots (selectie):\n${lines.join("\n")}\nLive: ${getPublicAvailabilityUrl()}`;
 }
 
 export { mockOpenDays };

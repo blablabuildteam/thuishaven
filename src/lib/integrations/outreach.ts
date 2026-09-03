@@ -8,6 +8,7 @@ import { leads, outreachEmails, prospects } from "@/lib/db/schema";
 import { assertExternalReadOnly } from "@/lib/integrations/read-only";
 import { availabilitySummaryForEmail } from "@/lib/outreach/availability";
 import { getAgencyCampaignId } from "@/lib/outreach/data";
+import { renderOutreachHtmlEmail } from "@/lib/outreach/email-html";
 import {
   getOutreachBrevoKey,
   getOutreachReplyTo,
@@ -25,7 +26,7 @@ import {
   type OutreachVariantId,
 } from "@/lib/outreach/tone";
 import { recordUsage } from "@/lib/usage/store";
-import { PUBLIC_AVAILABILITY_URL } from "@/lib/mock/availability";
+import { getPublicAvailabilityUrl } from "@/lib/mock/availability";
 
 export type EnrichmentResult = {
   companyName: string;
@@ -185,7 +186,7 @@ export async function generateOutreachEmail(input: {
 
   const availability =
     input.availabilitySummary ?? (await availabilitySummaryForEmail());
-  const availabilityUrl = input.availabilityUrl ?? PUBLIC_AVAILABILITY_URL;
+  const availabilityUrl = input.availabilityUrl ?? getPublicAvailabilityUrl();
 
   const hasAi =
     Boolean(process.env.OPENAI_API_KEY?.trim()) ||
@@ -378,9 +379,8 @@ export async function sendViaBrevo(input: {
   const subject = resolved.testMode
     ? `[TEST → ${input.to}] ${input.subject}`
     : input.subject;
-  const html = resolved.testMode
-    ? `<p style="font-family:system-ui,sans-serif"><strong>TESTMODE</strong> — bedoeld voor <code>${input.to}</code>, afgeleverd aan testadres. Open deze mail om open-tracking te valideren.</p>${input.html}`
-    : input.html;
+  // HTML is pre-rendered with optional test banner by the caller.
+  const html = input.html;
 
   const sender = getOutreachSender();
   const replyTo = getOutreachReplyTo();
@@ -626,7 +626,12 @@ export async function sendStoredDraft(input: {
     (Array.isArray(meta.contacts) ? meta.contacts[0] : undefined);
   if (!intended) return { error: "Geen e-mailadres op prospect" };
 
-  const html = `<div style="font-family:Georgia,serif;font-size:15px;line-height:1.55;color:#1a1a1a;white-space:pre-wrap">${escapeHtml(row.body)}</div>`;
+  const html = renderOutreachHtmlEmail({
+    body: row.body,
+    testBanner: forceTest
+      ? `TESTMODE — bedoeld voor ${intended}, afgeleverd aan testadres. Open deze mail om open-tracking te valideren.`
+      : null,
+  });
   const tags = [
     "outreach",
     "thuishaven-b2b",
@@ -644,11 +649,15 @@ export async function sendStoredDraft(input: {
   });
   if (sent.error) return { error: sent.error };
 
+  const storedMessageId = sent.messageId
+    ? sent.messageId.replace(/^<|>$/g, "").trim()
+    : null;
+
   await db
     .update(outreachEmails)
     .set({
       status: "sent",
-      brevoMessageId: sent.messageId ?? null,
+      brevoMessageId: storedMessageId,
       sentAt: new Date(),
     })
     .where(eq(outreachEmails.id, row.id));

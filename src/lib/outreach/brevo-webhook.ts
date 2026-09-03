@@ -2,7 +2,7 @@
  * Apply Brevo transactional webhook events to outreach_emails.
  */
 
-import { eq, sql } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { inboundReplies, outreachEmails, prospects } from "@/lib/db/schema";
 
@@ -18,9 +18,15 @@ export type BrevoWebhookEvent = {
   link?: string;
 };
 
-function normalizeMessageId(id: string | undefined | null): string | null {
+/** Strip wrapping <> — Brevo + our store may differ. */
+export function normalizeMessageId(id: string | undefined | null): string | null {
   if (!id) return null;
   return id.replace(/^<|>$/g, "").trim() || null;
+}
+
+function messageIdVariants(id: string): string[] {
+  const bare = normalizeMessageId(id)!;
+  return [...new Set([bare, `<${bare}>`, id.trim()])];
 }
 
 function eventTime(raw?: string): Date {
@@ -33,7 +39,9 @@ function hasOutreachTag(event: BrevoWebhookEvent): boolean {
   const tags = [
     ...(Array.isArray(event.tags) ? event.tags : []),
     ...(Array.isArray(event.tag) ? event.tag : event.tag ? [event.tag] : []),
-  ].map((t) => t.toLowerCase());
+  ]
+    .flatMap((t) => String(t).split(","))
+    .map((t) => t.trim().toLowerCase());
   return tags.some((t) => t.includes("outreach"));
 }
 
@@ -45,12 +53,10 @@ export async function applyBrevoOutreachEvent(
   const eventName = (event.event ?? "").toLowerCase();
   if (!eventName) return { ok: false, reason: "no_event" };
 
-  const messageId = normalizeMessageId(
-    event["message-id"] ?? event.messageId,
-  );
+  const rawMessageId = event["message-id"] ?? event.messageId;
+  const messageId = normalizeMessageId(rawMessageId);
   const email = event.email?.trim().toLowerCase();
 
-  // Prefer matching outreach-tagged events; still allow match by message-id
   const db = getDb();
 
   let row:
@@ -65,6 +71,7 @@ export async function applyBrevoOutreachEvent(
     | undefined;
 
   if (messageId) {
+    const variants = messageIdVariants(rawMessageId!);
     const [byMsg] = await db
       .select({
         id: outreachEmails.id,
@@ -75,14 +82,18 @@ export async function applyBrevoOutreachEvent(
         repliedAt: outreachEmails.repliedAt,
       })
       .from(outreachEmails)
-      .where(eq(outreachEmails.brevoMessageId, messageId))
+      .where(
+        or(
+          ...variants.map((v) => eq(outreachEmails.brevoMessageId, v)),
+          sql`replace(replace(${outreachEmails.brevoMessageId}, '<', ''), '>', '') = ${messageId}`,
+        ),
+      )
       .limit(1);
     row = byMsg;
   }
 
   if (!row && email) {
-    // Fallback: latest sent mail to this address
-    const [byEmail] = await db
+    const [byProspectEmail] = await db
       .select({
         id: outreachEmails.id,
         prospectId: outreachEmails.prospectId,
@@ -94,11 +105,11 @@ export async function applyBrevoOutreachEvent(
       .from(outreachEmails)
       .innerJoin(prospects, eq(outreachEmails.prospectId, prospects.id))
       .where(
-        sql`lower(${prospects.email}) = ${email} and ${outreachEmails.status} <> 'draft'`,
+        sql`${outreachEmails.status} <> 'draft' and lower(${prospects.email}) = ${email}`,
       )
       .orderBy(sql`${outreachEmails.sentAt} desc nulls last`)
       .limit(1);
-    row = byEmail;
+    row = byProspectEmail;
   }
 
   if (!row) {
@@ -123,20 +134,29 @@ export async function applyBrevoOutreachEvent(
     }
   }
 
-  if (eventName === "opened" || eventName === "unique_opened" || eventName === "uniqueOpened") {
+  if (
+    eventName === "opened" ||
+    eventName === "unique_opened" ||
+    eventName === "uniqueopened"
+  ) {
     patch.status = "opened";
     if (!row.openedAt) patch.openedAt = at;
   }
 
-  if (eventName === "click" || eventName === "clicks" || eventName === "unique_clicks") {
+  if (
+    eventName === "click" ||
+    eventName === "clicks" ||
+    eventName === "unique_clicks" ||
+    eventName === "uniqueclicks"
+  ) {
     patch.status = "clicked";
     if (!row.openedAt) patch.openedAt = at;
     if (!row.clickedAt) patch.clickedAt = at;
   }
 
   if (
-    eventName === "hardBounce" ||
-    eventName === "softBounce" ||
+    eventName === "hardbounce" ||
+    eventName === "softbounce" ||
     eventName === "bounce" ||
     eventName === "blocked" ||
     eventName === "invalid"
