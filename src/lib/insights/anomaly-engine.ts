@@ -25,7 +25,7 @@ import type { WeekdayKey } from "@/lib/time/nl-calendar";
 import type { WeatherKind } from "@/lib/weather/classify";
 
 const MIN_COHORT = 3;
-const MAX_INSIGHTS = 3;
+const MAX_INSIGHTS = 5;
 const SIGNIFICANCE_FLOOR = 0.28;
 
 export type AnomalyDimension =
@@ -1011,6 +1011,10 @@ function detectSoldout(
       dimension: "soldout",
       significance: 0.42,
       detail: `Dit event was ${fmtPct(e.tickets.fillPct)} vol en niet uitverkocht. Vergelijkbare ${cohort.label} die wél uitverkochten, waren gemiddeld ${Math.round(cohort.soldOutDays.median)} dagen vóór start al vol.`,
+      facts: facts(
+        ["Bezetting", fmtPct(e.tickets.fillPct)],
+        ["Vergelijkbaar uitverkocht", `${Math.round(cohort.soldOutDays.median)}d vóór`],
+      ),
     };
   }
 
@@ -1033,6 +1037,10 @@ function detectSoldout(
         second != null
           ? `Dit event was het snelst uitverkocht in ${year}: ${days} dagen vóór start vol. De nummer twee was ${second} dagen van tevoren vol.`
           : `Dit event was het snelst uitverkocht in ${year}: ${days} dagen vóór start vol.`,
+      facts: facts(
+        ["Uitverkocht", `${days}d vóór`],
+        ["Nummer twee", second != null ? `${second}d vóór` : null],
+      ),
     };
   }
 
@@ -1045,6 +1053,7 @@ function detectSoldout(
         dimension: "soldout",
         significance: 0.38,
         detail: "Uitverkocht op de eventdag zelf — de laatste kaarten gingen dus pas laat weg.",
+        facts: facts(["Uitverkocht", "op de eventdag"]),
       };
     }
     return null;
@@ -1065,6 +1074,10 @@ function detectSoldout(
       delta > 0
         ? `Uitverkocht ${days} dagen vóór start. Uitverkochte ${cohort.label} zijn meestal ${Math.round(cohort.soldOutDays.median)} dagen van tevoren vol.`
         : `Uitverkocht ${days} dagen vóór start — later dan gebruikelijk. Uitverkochte ${cohort.label} zijn meestal ${Math.round(cohort.soldOutDays.median)} dagen van tevoren vol.`,
+    facts: facts(
+      ["Dit event", `${days}d vóór`],
+      ["Vergelijkbare " + cohort.label, `${Math.round(cohort.soldOutDays.median)}d vóór`],
+    ),
   };
 }
 
@@ -1095,6 +1108,11 @@ function detectSameDay(
       delta > 0
         ? `${fmtPct(share)} van de kaarten ging op de eventdag zelf weg. Bij vergelijkbare ${cohort.label} is dat meestal ${fmtPct(cohort.sameDayShare.median)} — dus meer last-minute dan gebruikelijk.`
         : `${fmtPct(share)} van de kaarten ging op de eventdag zelf weg. Bij vergelijkbare ${cohort.label} is dat meestal ${fmtPct(cohort.sameDayShare.median)} — het meeste was dus al vooraf verkocht.`,
+    facts: facts(
+      ["Last-minute dit event", fmtPct(share)],
+      ["Vergelijkbare " + cohort.label, fmtPct(cohort.sameDayShare.median)],
+      ["Tickets op de dag", e.tickets.sameDaySold != null ? fmtCount(e.tickets.sameDaySold) : null],
+    ),
   };
 }
 
@@ -1113,7 +1131,7 @@ const DETECTORS: Array<
 ];
 
 /**
- * Ranked anomaly insights for one event. Caps at 3, drops weak signals.
+ * Ranked anomaly insights for one event. Caps at 5, drops weak signals.
  * At most one insight per dimension.
  */
 export function detectAnomalies(

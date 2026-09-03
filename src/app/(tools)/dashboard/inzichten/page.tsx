@@ -1,10 +1,10 @@
 import { Suspense } from "react";
 import { SectionHeader } from "@/components/ui/section-header";
 import {
-  AiSection,
   ConflictsBanner,
   EventInsightsSection,
 } from "@/components/dashboard/dashboards-sections";
+import { InsightsChatWidget } from "@/components/dashboard/insights-chat-widget";
 import {
   ConflictsSkeleton,
   EventInsightsSkeleton,
@@ -14,7 +14,7 @@ export const metadata = { title: "Inzichten" };
 
 export default async function InzichtenPage() {
   return (
-    <div>
+    <div className="pb-24">
       <SectionHeader
         eyebrow="Inzichten"
         title="Event-inzichten"
@@ -29,7 +29,9 @@ export default async function InzichtenPage() {
         <EventInsightsSection />
       </Suspense>
 
-      <AiSection />
+      <InsightsChatWidget
+        comingSoon={process.env.VERCEL_ENV === "production"}
+      />
     </div>
   );
 }

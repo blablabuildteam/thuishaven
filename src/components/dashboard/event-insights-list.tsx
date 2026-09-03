@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
+/* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
 import {
   Sun,
@@ -27,7 +28,6 @@ import {
   Euro,
   TrendingUp,
   Clock,
-  WandSparkles,
   X,
   BadgeEuro,
   Heart,
@@ -144,15 +144,198 @@ const INSIGHT_DIMENSION_LABEL: Record<AnomalyInsight["dimension"], string> = {
   same_day: "Last-minute",
 };
 
+const GEMINI_SRC = "/social-icons/Google_Gemini_icon_2025.svg.webp";
+
+function GeminiMark({
+  size = 14,
+  className,
+}: {
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <img
+      src={GEMINI_SRC}
+      alt=""
+      width={size}
+      height={size}
+      className={cn("shrink-0 object-contain", className)}
+    />
+  );
+}
+
+function useTypedText(text: string) {
+  const [shown, setShown] = useState("");
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    if (!text) {
+      setShown("");
+      setDone(true);
+      return;
+    }
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) {
+      setShown(text);
+      setDone(true);
+      return;
+    }
+    setShown("");
+    setDone(false);
+    let i = 0;
+    const id = window.setInterval(() => {
+      i = Math.min(text.length, i + 3);
+      setShown(text.slice(0, i));
+      if (i >= text.length) {
+        window.clearInterval(id);
+        setDone(true);
+      }
+    }, 12);
+    return () => window.clearInterval(id);
+  }, [text]);
+
+  return { shown, done };
+}
+
+function InsightDeepDive({
+  insight,
+  event,
+}: {
+  insight: AnomalyInsight;
+  event: EventInsight;
+}) {
+  const extras: string[] = [];
+  if (insight.dimension === "weather" && event.weather) {
+    const bits = [
+      event.weather.sky,
+      event.weather.tempMinC != null && event.weather.tempMaxC != null
+        ? `${Math.round(event.weather.tempMinC)}–${Math.round(event.weather.tempMaxC)}°`
+        : null,
+      event.weather.precipMm != null && event.weather.precipMm > 0
+        ? `${Math.round(event.weather.precipMm)} mm regen`
+        : null,
+    ].filter(Boolean);
+    if (bits.length) extras.push(bits.join(" · "));
+  }
+  if (insight.dimension === "competition") {
+    const names = event.competingFestivals.slice(0, 5).map((c) => c.name);
+    if (names.length) extras.push(`Zelfde dag: ${names.join(", ")}`);
+  }
+  if (insight.dimension === "fill" && event.tickets.lastWeekSold != null) {
+    extras.push(
+      `${formatNumber(event.tickets.lastWeekSold)} tickets in de laatste 7 dagen${
+        event.tickets.sameDaySold != null
+          ? `, ${formatNumber(event.tickets.sameDaySold)} op de eventdag`
+          : ""
+      }.`,
+    );
+  }
+
+  // Only show posts with measurable ticket lift, sorted by impact, capped at 3
+  const marketingPosts =
+    insight.dimension === "social"
+      ? event.socialPosts
+          .filter(
+            (p) =>
+              (p.salesImpactRole === "promo" || p.salesImpactRole === "same_day") &&
+              p.ticketLiftSold != null &&
+              p.ticketLiftSold > 0,
+          )
+          .sort((a, b) => (b.ticketLiftSold ?? 0) - (a.ticketLiftSold ?? 0))
+          .slice(0, 3)
+      : [];
+  // Only show mail campaigns with orders, capped at 3
+  const marketingMails =
+    insight.dimension === "email"
+      ? event.emailCampaigns
+          .filter((m) => m.ordersAfter != null && m.ordersAfter > 0)
+          .sort((a, b) => (b.ordersAfter ?? 0) - (a.ordersAfter ?? 0))
+          .slice(0, 3)
+      : [];
+
+  return (
+    <>
+      {insight.facts && insight.facts.length > 0 && (
+        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2.5 border-t border-border pt-3">
+          {insight.facts.map((fact) => (
+            <div key={fact.label}>
+              <dt className="text-[10px] tracking-wide text-text-dim uppercase">
+                {fact.label}
+              </dt>
+              <dd className="mt-0.5 text-sm font-medium tabular-nums">{fact.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {marketingPosts.length > 0 && (
+        <div
+          className={cn(
+            "border-t border-border pt-3",
+            insight.facts && insight.facts.length > 0 ? "mt-4" : "mt-3",
+          )}
+        >
+          <p className="mb-2 text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
+            Top posts met ticketlift
+          </p>
+          <ul className="space-y-2">
+            {marketingPosts.map((post) => (
+              <li key={post.postId}>
+                <InsightModalSocialPost post={post} />
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-[10px] text-text-dim">
+            Paid ads volgen later (Start Moving).
+          </p>
+        </div>
+      )}
+      {marketingMails.length > 0 && (
+        <div
+          className={cn(
+            "border-t border-border pt-3",
+            insight.facts && insight.facts.length > 0 ? "mt-4" : "mt-3",
+          )}
+        >
+          <p className="mb-2 text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
+            Top campagnes met orders
+          </p>
+          <ul className="space-y-2">
+            {marketingMails.map((campaign) => (
+              <li key={campaign.campaignId}>
+                <InsightModalEmailCampaign campaign={campaign} />
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-[10px] text-text-dim">
+            Paid ads volgen later (Start Moving).
+          </p>
+        </div>
+      )}
+      {extras.length > 0 && (
+        <ul className="mt-3 space-y-1.5 text-xs leading-relaxed text-text-dim">
+          {extras.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
 function InsightDetailModal({
   insight,
+  event,
   onClose,
 }: {
   insight: AnomalyInsight;
+  event: EventInsight;
   onClose: () => void;
 }) {
   const titleId = useId();
-  const Icon = insightChipIcon(insight);
+  const body = insight.detail ?? "";
+  const { shown, done } = useTypedText(body);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -182,8 +365,9 @@ function InsightDetailModal({
         className="insight-modal-panel relative z-10 w-full max-w-md border border-border bg-surface p-5"
       >
         <div className="flex items-start justify-between gap-3">
-          <p className="text-[11px] tracking-[0.14em] text-text-dim uppercase">
-            {INSIGHT_DIMENSION_LABEL[insight.dimension]}
+          <p className="flex items-center gap-1.5 text-[11px] tracking-[0.14em] text-text-dim uppercase">
+            <GeminiMark size={14} />
+            AI-inzicht · {INSIGHT_DIMENSION_LABEL[insight.dimension]}
           </p>
           <button
             type="button"
@@ -194,69 +378,85 @@ function InsightDetailModal({
             <X className="size-4" strokeWidth={1.5} />
           </button>
         </div>
-        <p
-          id={titleId}
-          className="mt-2 flex items-start gap-2 text-[15px] font-medium leading-snug"
-        >
-          {insight.dimension === "email" ? (
-            <SocialChannelIcon channel="mail" size={16} alt="" />
-          ) : (
-            <Icon className="mt-0.5 size-4 shrink-0 opacity-80" strokeWidth={1.75} />
-          )}
-          <span>{insight.text}</span>
+        <p id={titleId} className="mt-3 text-[15px] font-medium leading-snug">
+          {insight.text}
         </p>
-        {insight.detail && (
-          <p className="mt-3 text-sm leading-relaxed text-text-muted">
-            {insight.detail}
+        {body && (
+          <p className="mt-3 min-h-[3.5rem] text-sm leading-relaxed text-text-muted">
+            {shown}
+            {!done && (
+              <span
+                aria-hidden
+                className="ml-px inline-block h-[1em] w-px translate-y-0.5 bg-text-muted align-text-bottom"
+              />
+            )}
           </p>
         )}
+        <div
+          className={cn(
+            "transition-opacity duration-200",
+            done ? "opacity-100" : "opacity-0",
+          )}
+        >
+          <InsightDeepDive insight={insight} event={event} />
+        </div>
       </div>
     </div>
   );
 }
 
-function InsightChip({ insight }: { insight: AnomalyInsight }) {
+function InsightChip({
+  insight,
+  event,
+}: {
+  insight: AnomalyInsight;
+  event: EventInsight;
+}) {
   const [open, setOpen] = useState(false);
   const Icon = insightChipIcon(insight);
 
   const colors: Record<AnomalyInsight["tone"], string> = {
-    positive: "border-success/35 bg-success/10 text-success",
-    neutral: "border-border bg-surface-hover text-text",
-    caution: "border-warn/40 bg-warn/10 text-warn-fg",
-    danger: "border-danger/40 bg-danger/10 text-danger",
+    positive: "border-success/40 bg-success/10 text-success",
+    neutral: "border-border bg-surface-hover/80 text-text",
+    caution: "border-warn/50 bg-warn/10 text-warn-fg",
+    danger: "border-danger/50 bg-danger/10 text-danger",
   };
 
   return (
     <>
-      <span
+      <button
+        type="button"
+        aria-label="AI-toelichting"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen(true);
+        }}
         className={cn(
-          "inline-flex max-w-full items-center gap-1.5 border py-1 pr-1 pl-2.5 text-xs font-medium tracking-wide",
+          "group/chip inline-flex max-w-full items-center gap-2 rounded-sm border px-3 py-1.5 text-left text-[13px] font-medium leading-snug tracking-wide transition-shadow hover:shadow-sm",
           colors[insight.tone],
         )}
       >
         {insight.dimension === "email" ? (
-          <SocialChannelIcon channel="mail" size={14} alt="" />
+          <SocialChannelIcon channel="mail" size={15} alt="" />
         ) : (
-          <Icon className="size-3.5 shrink-0 opacity-80" strokeWidth={1.75} />
+          <Icon className="size-4 shrink-0 opacity-85" strokeWidth={1.75} />
         )}
-        <span className="min-w-0">{insight.text}</span>
-        {insight.detail && (
-          <button
-            type="button"
-            aria-label="AI-toelichting"
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpen(true);
-            }}
-            className="inline-flex size-5 shrink-0 items-center justify-center text-current opacity-55 transition-opacity hover:opacity-100"
-          >
-            <WandSparkles className="size-3.5" strokeWidth={1.75} />
-          </button>
-        )}
-      </span>
+        <span className="inline-flex min-w-0 items-center">
+          <span className="min-w-0">{insight.text}</span>
+          <span className="grid grid-cols-[0fr] transition-[grid-template-columns] duration-200 ease-out group-hover/chip:grid-cols-[1fr] group-focus-visible/chip:grid-cols-[1fr] max-md:grid-cols-[1fr]">
+            <span className="min-w-0 overflow-hidden">
+              <GeminiMark size={16} className="ml-2 size-4" />
+            </span>
+          </span>
+        </span>
+      </button>
       {open &&
         createPortal(
-          <InsightDetailModal insight={insight} onClose={() => setOpen(false)} />,
+          <InsightDetailModal
+            insight={insight}
+            event={event}
+            onClose={() => setOpen(false)}
+          />,
           document.body,
         )}
     </>
@@ -356,36 +556,36 @@ function CompactTicketMetrics({
   }
 
   return (
-    <div className="w-[10rem] shrink-0">
+    <div className="w-[26rem] shrink-0">
       <TicketCompositionBar
         sold={sold}
         capacity={capacity}
         scanned={scanned}
         animate={animate}
-        className="h-2"
+        className="h-2.5"
       />
-      <div className="mt-1 flex justify-between">
+      <div className="mt-1.5 flex justify-between">
         <div className="min-w-0 text-left" title="Beschikbaar">
-          <p className="font-mono text-[11px] font-medium leading-none tabular-nums">
+          <p className="font-mono text-[13px] font-medium leading-none tabular-nums">
             {available != null ? formatNumber(available) : "—"}
           </p>
-          <p className="mt-0.5 truncate text-[8px] tracking-wide text-text-dim uppercase">
+          <p className="mt-1 truncate text-[10px] tracking-wide text-text-dim uppercase">
             Open
           </p>
         </div>
         <div className="min-w-0 text-center" title="Verkocht">
-          <p className="font-mono text-[11px] font-medium leading-none tabular-nums">
+          <p className="font-mono text-[13px] font-medium leading-none tabular-nums">
             {formatNumber(sold)}
           </p>
-          <p className="mt-0.5 truncate text-[8px] tracking-wide text-text-dim uppercase">
+          <p className="mt-1 truncate text-[10px] tracking-wide text-text-dim uppercase">
             Verkocht
           </p>
         </div>
         <div className="min-w-0 text-right" title="Gescand">
-          <p className="font-mono text-[11px] font-medium leading-none tabular-nums">
+          <p className="font-mono text-[13px] font-medium leading-none tabular-nums">
             {formatNumber(scanned)}
           </p>
-          <p className="mt-0.5 truncate text-[8px] tracking-wide text-text-dim uppercase">
+          <p className="mt-1 truncate text-[10px] tracking-wide text-text-dim uppercase">
             Scan
           </p>
         </div>
@@ -869,72 +1069,81 @@ function EventRow({ event }: { event: EventInsight }) {
 
   return (
     <li className="border border-border bg-surface">
-      <div className="transition-colors hover:bg-surface-hover">
-      <div className="flex w-full items-start gap-4 px-4 py-4">
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={toggleOpen}
-          className="flex min-w-0 flex-1 items-start gap-4 text-left"
-        >
-          <span
-            className="flex w-12 shrink-0 flex-col items-center text-text-muted"
-            title={dateLabel}
-            aria-label={dateLabel}
+      <div className="group/row transition-colors hover:bg-surface-hover/50">
+        {/* Main row: date + title + metrics */}
+        <div className="flex w-full items-start gap-4 px-4 py-4">
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={toggleOpen}
+            className="flex min-w-0 flex-1 items-start gap-4 text-left"
           >
-            <span className="text-[9px] font-medium leading-none tracking-[0.08em] text-text-dim capitalize">
-              {weekdayLabel}
-            </span>
-            <span className="mt-0.5 font-mono text-[2.25rem] font-bold leading-none tabular-nums">
-              {dayNum}
-            </span>
-            <span className="mt-0.5 text-[9px] font-medium leading-none tracking-[0.14em] text-text-dim uppercase">
-              {monthLabel}
-            </span>
-          </span>
-          <span className="min-w-0 flex-1 pt-1">
-            <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-              <span className="text-[15px] font-medium leading-snug" title={event.name}>
-                {displayEditionName(event.name)}
+            <span
+              className="flex w-12 shrink-0 flex-col items-center text-text-muted"
+              title={dateLabel}
+              aria-label={dateLabel}
+            >
+              <span className="text-[9px] font-medium leading-none tracking-[0.08em] text-text-dim capitalize">
+                {weekdayLabel}
               </span>
-              {artists.length > 0 && (
-                <span className="text-xs text-text-dim">
-                  {artists.join(" · ")}
-                </span>
-              )}
+              <span className="mt-0.5 font-mono text-[2.25rem] font-bold leading-none tabular-nums">
+                {dayNum}
+              </span>
+              <span className="mt-0.5 text-[9px] font-medium leading-none tracking-[0.14em] text-text-dim uppercase">
+                {monthLabel}
+              </span>
             </span>
-          </span>
-        </button>
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-label={open ? "Details sluiten" : "Details openen"}
-          onClick={toggleOpen}
-          className="flex shrink-0 items-center gap-3 pt-1"
-        >
-          <CompactTicketMetrics
-            key={open ? `fill-${revealKey}` : "fill"}
-            sold={event.tickets.sold}
-            capacity={event.tickets.capacity}
-            scanned={event.tickets.scanned}
-            animate={open && phase === "ready"}
-          />
-          <ChevronDown
-            className={cn(
-              "size-4 text-text-dim transition-transform duration-300 ease-out",
-              open && "rotate-180",
-            )}
-            strokeWidth={1.5}
-          />
-        </button>
-      </div>
-      {event.insights.length > 0 && (
-        <div className="-mt-1 flex flex-wrap items-center gap-1.5 pr-4 pb-4 pl-20">
-          {event.insights.map((insight, i) => (
-            <InsightChip key={`${insight.dimension}-${i}`} insight={insight} />
-          ))}
+            <span className="min-w-0 flex-1 pt-1">
+              <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <span className="text-[15px] font-medium leading-snug" title={event.name}>
+                  {displayEditionName(event.name)}
+                </span>
+                {artists.length > 0 && (
+                  <span className="text-xs text-text-dim">
+                    {artists.join(" · ")}
+                  </span>
+                )}
+              </span>
+            </span>
+          </button>
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-label={open ? "Details sluiten" : "Details openen"}
+            onClick={toggleOpen}
+            className="flex shrink-0 items-center gap-3 pt-1"
+          >
+            <CompactTicketMetrics
+              key={open ? `fill-${revealKey}` : "fill"}
+              sold={event.tickets.sold}
+              capacity={event.tickets.capacity}
+              scanned={event.tickets.scanned}
+              animate={open && phase === "ready"}
+            />
+            <ChevronDown
+              className={cn(
+                "size-4 text-text-dim transition-transform duration-300 ease-out",
+                open && "rotate-180",
+              )}
+              strokeWidth={1.5}
+            />
+          </button>
         </div>
-      )}
+
+        {/* AI Insights row — visually distinct section */}
+        {event.insights.length > 0 && (
+          <div className="border-t border-dashed border-border/60 bg-bg/30 px-4 py-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              {event.insights.map((insight, i) => (
+                <InsightChip
+                  key={`${insight.dimension}-${i}`}
+                  insight={insight}
+                  event={event}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="collapse-panel" data-open={open ? "true" : "false"}>
@@ -1377,6 +1586,79 @@ function OrganicEngagementMetrics({
             geen metrics
           </span>
         )}
+    </div>
+  );
+}
+
+function InsightModalSocialPost({ post }: { post: EventInsightSocial }) {
+  const content = (
+    <div className="space-y-1">
+      <div className="flex min-w-0 items-center gap-2">
+        <SocialChannelIcon channel={post.channel} size={14} alt="" />
+        <span className="min-w-0 truncate font-mono text-[11px] text-text">
+          {post.postId}
+        </span>
+        {post.permalink && (
+          <ExternalLink className="size-3 shrink-0 text-text-dim" aria-hidden />
+        )}
+      </div>
+      {post.title && (
+        <p className="truncate text-xs text-text-muted">{post.title}</p>
+      )}
+      <OrganicEngagementMetrics
+        impressions={post.impressions}
+        reach={post.reach}
+        likeCount={post.likeCount}
+        commentCount={post.commentCount}
+        shareCount={post.shareCount}
+        engagement={post.engagement}
+      />
+      {post.ticketLiftSold != null && post.salesImpactRole !== "after" && (
+        <p className="text-[10px] text-text-dim">
+          +{formatNumber(post.ticketLiftSold)} tickets in {post.liftWindowLabel}
+        </p>
+      )}
+    </div>
+  );
+
+  if (post.permalink) {
+    return (
+      <a
+        href={post.permalink}
+        target="_blank"
+        rel="noreferrer"
+        className="block border border-border px-2.5 py-2 transition-colors hover:bg-surface-hover"
+        title="Open post"
+      >
+        {content}
+      </a>
+    );
+  }
+
+  return <div className="border border-border px-2.5 py-2">{content}</div>;
+}
+
+function InsightModalEmailCampaign({ campaign }: { campaign: EventInsightMail }) {
+  return (
+    <div className="border border-border px-2.5 py-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <SocialChannelIcon channel="mail" size={14} alt="" />
+        <span className="min-w-0 truncate font-mono text-[11px] text-text">
+          {campaign.campaignId}
+        </span>
+      </div>
+      <p className="mt-1 truncate text-xs text-text-muted">{campaign.name}</p>
+      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-text-dim">
+        {campaign.sent > 0 && (
+          <span>{formatNumber(campaign.sent)} verzonden</span>
+        )}
+        {campaign.openRate != null && (
+          <span>{formatPercent(campaign.openRate, 0)} open</span>
+        )}
+        {campaign.ordersAfter != null && (
+          <span>~{formatNumber(campaign.ordersAfter)} orders</span>
+        )}
+      </div>
     </div>
   );
 }

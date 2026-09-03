@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { InsightsChatPanel } from "@/components/dashboard/insights-chat-panel";
 import { EventInsightsList } from "@/components/dashboard/event-insights-list";
 import { LoadedSection } from "@/components/dashboard/dashboards-skeletons";
 import {
@@ -93,16 +92,3 @@ export async function EventInsightsSection() {
   );
 }
 
-export function AiSection() {
-  return (
-    <LoadedSection className="border border-border bg-surface p-5">
-      <p className="mb-1 text-[11px] tracking-[0.14em] text-text-dim uppercase">
-        AI
-      </p>
-      <h2 className="mb-3 font-display text-xl tracking-[0.02em]">
-        Vraag de data
-      </h2>
-      <InsightsChatPanel />
-    </LoadedSection>
-  );
-}

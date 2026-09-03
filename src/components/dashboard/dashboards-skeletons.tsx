@@ -58,7 +58,7 @@ export function EventInsightsSkeleton({ rows = 5 }: { rows?: number }) {
           </div>
           <Skeleton className="h-8 w-10" />
         </div>
-        <ul className="space-y-2">
+        <ul className="space-y-5">
           {Array.from({ length: Math.min(rows, 3) }, (_, i) => (
             <EventRowSkeleton key={`up-${i}`} />
           ))}
@@ -72,7 +72,7 @@ export function EventInsightsSkeleton({ rows = 5 }: { rows?: number }) {
           </div>
           <Skeleton className="h-8 w-10" />
         </div>
-        <ul className="space-y-2">
+        <ul className="space-y-5">
           {Array.from({ length: Math.max(2, rows - 3) }, (_, i) => (
             <EventRowSkeleton key={`past-${i}`} />
           ))}

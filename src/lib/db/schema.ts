@@ -675,3 +675,31 @@ export const externalTicketEvents = pgTable("external_ticket_events", {
   scanned: integer("scanned"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export type InsightsChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+/** Insights Gemini-gesprekken — 14 dagen bewaard. */
+export const insightsChats = pgTable(
+  "insights_chats",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => appUsers.id, { onDelete: "cascade" }),
+    title: text("title").notNull().default("Nieuw gesprek"),
+    messages: jsonb("messages")
+      .$type<InsightsChatMessage[]>()
+      .notNull()
+      .default([]),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [index("insights_chats_user_updated").on(t.userId, t.updatedAt)],
+);

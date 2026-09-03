@@ -88,7 +88,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     optionalEnvKeys: ["GEMINI_MODEL", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"],
     askFromClient: [
       "Gemini API-key via Google AI Studio",
-      "Optioneel: voorkeursmodel (standaard gemini-2.0-flash)",
+      "Optioneel: voorkeursmodel (standaard gemini-3.6-flash)",
     ],
     verifyHint: "GET generativelanguage.googleapis.com/models",
     docsUrl: "https://aistudio.google.com/apikey",

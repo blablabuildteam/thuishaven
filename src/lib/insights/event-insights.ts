@@ -193,6 +193,7 @@ export type CompetingEvent = {
 export type {
   AnomalyInsight,
   AnomalyDimension,
+  AnomalyFact,
 } from "@/lib/insights/anomaly-engine";
 
 export type EventInsightSocialVariant = {
@@ -1163,7 +1164,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v17"],
+  ["event-insights-upcoming-v18"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1179,7 +1180,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v17"],
+  ["event-insights-past-v18"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],

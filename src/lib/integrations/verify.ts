@@ -90,7 +90,7 @@ async function verifyOpenAI(): Promise<VerifyResult> {
       if (!res.ok) {
         return base("ai", name, "error", `Gemini HTTP ${res.status}`);
       }
-      const model = process.env.GEMINI_MODEL?.trim() || "gemini-2.0-flash";
+      const model = process.env.GEMINI_MODEL?.trim() || "gemini-3.6-flash";
       return base("ai", name, "verified", `Gemini · ${model}`);
     } catch (e) {
       return base(
