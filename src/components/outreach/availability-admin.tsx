@@ -2,8 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import type { AvailabilityDay, DayStatus } from "@/lib/outreach/availability";
-import { dayStatusLabels } from "@/lib/outreach/availability";
+import {
+  dayStatusLabels,
+  type AvailabilityDay,
+  type DayStatus,
+} from "@/lib/mock/availability";
 
 const STATUSES: DayStatus[] = [
   "available",

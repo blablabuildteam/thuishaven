@@ -3,14 +3,21 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { StatusBadge } from "@/components/ui/status-badge";
-import type { OutreachProspect } from "@/lib/outreach/data";
 import {
   OUTREACH_VARIANTS,
   type OutreachVariantId,
 } from "@/lib/outreach/tone";
 
+type WorkbenchProspect = {
+  id: string;
+  type: "company" | "agency";
+  companyName: string;
+  email: string | null;
+  status: string;
+};
+
 type Props = {
-  prospects: OutreachProspect[];
+  prospects: WorkbenchProspect[];
 };
 
 /** Draft-only: generate + review. No send button. */
