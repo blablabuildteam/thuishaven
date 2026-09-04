@@ -257,7 +257,14 @@ export async function getOutreachOverview() {
     return {
       source: "mock" as const,
       kpis: mockKpis,
-      campaigns: mockCampaigns,
+      campaigns: mockCampaigns.map((c) => ({
+        ...c,
+        sentCount: 0,
+        openCount: 0,
+        replyCount: 0,
+        leadCount: 0,
+        status: "draft" as const,
+      })),
       leads: mockLeads,
       prospectCount: mockProspects.length,
       exclusionCount: 1,
@@ -295,7 +302,7 @@ export async function getOutreachOverview() {
     .from(prospects)
     .where(eq(prospects.status, "unreachable"));
 
-  const campRows = await db.select().from(campaigns).orderBy(campaigns.name);
+  const campaignsLive = await listCampaignsWithLiveStats();
   const leadRows = await listLeads();
 
   return {
@@ -308,24 +315,94 @@ export async function getOutreachOverview() {
       leads: leadCountRow?.count ?? 0,
       unreachable: unreachableRow?.count ?? 0,
     },
-    campaigns:
-      campRows.length > 0
-        ? campRows.map((c) => ({
+    campaigns: campaignsLive.rows,
+    leads: leadRows.rows,
+    prospectCount: prospectCountRow?.count ?? 0,
+    exclusionCount: exclusionCountRow?.count ?? 0,
+  };
+}
+
+/** Campaign cards with live mail stats (not stale mock counters). */
+export async function listCampaignsWithLiveStats(): Promise<{
+  source: "db" | "mock";
+  rows: Array<{
+    id: string;
+    name: string;
+    audience: ProspectType;
+    status: string;
+    description: string;
+    sentCount: number;
+    openCount: number;
+    replyCount: number;
+    leadCount: number;
+  }>;
+}> {
+  if (!hasDatabase()) {
+    return {
+      source: "mock",
+      rows: mockCampaigns.map((c) => ({
+        ...c,
+        sentCount: 0,
+        openCount: 0,
+        replyCount: 0,
+        leadCount: 0,
+        status: "draft",
+      })),
+    };
+  }
+
+  const db = getDb();
+  const campRows = await db.select().from(campaigns).orderBy(campaigns.name);
+
+  const stats = await db
+    .select({
+      audience: prospects.type,
+      sent: sql<number>`count(*) filter (where ${outreachEmails.status} in ('sent','opened','clicked','replied') or ${outreachEmails.sentAt} is not null)::int`,
+      opened: sql<number>`count(*) filter (where ${outreachEmails.openedAt} is not null or ${outreachEmails.status} in ('opened','clicked','replied'))::int`,
+      replied: sql<number>`count(*) filter (where ${outreachEmails.repliedAt} is not null or ${outreachEmails.status} = 'replied')::int`,
+    })
+    .from(outreachEmails)
+    .innerJoin(prospects, eq(outreachEmails.prospectId, prospects.id))
+    .groupBy(prospects.type);
+
+  const leadsByAudience = await db
+    .select({
+      audience: prospects.type,
+      c: sql<number>`count(*)::int`,
+    })
+    .from(leads)
+    .innerJoin(prospects, eq(leads.prospectId, prospects.id))
+    .groupBy(prospects.type);
+
+  const statMap = new Map(stats.map((s) => [s.audience, s]));
+  const leadMap = new Map(leadsByAudience.map((s) => [s.audience, s.c]));
+
+  const rows =
+    campRows.length > 0
+      ? campRows.map((c) => {
+          const s = statMap.get(c.audience);
+          return {
             id: c.id,
             name: c.name,
             audience: c.audience,
             status: c.status,
             description: c.description ?? "",
-            sentCount: c.sentCount,
-            openCount: c.openCount,
-            replyCount: c.replyCount,
-            leadCount: c.leadCount,
-          }))
-        : mockCampaigns,
-    leads: leadRows.rows,
-    prospectCount: prospectCountRow?.count ?? 0,
-    exclusionCount: exclusionCountRow?.count ?? 0,
-  };
+            sentCount: s?.sent ?? 0,
+            openCount: s?.opened ?? 0,
+            replyCount: s?.replied ?? 0,
+            leadCount: leadMap.get(c.audience) ?? 0,
+          };
+        })
+      : mockCampaigns.map((c) => ({
+          ...c,
+          sentCount: 0,
+          openCount: 0,
+          replyCount: 0,
+          leadCount: 0,
+          status: "draft",
+        }));
+
+  return { source: "db", rows };
 }
 
 export async function getProspectById(id: string) {

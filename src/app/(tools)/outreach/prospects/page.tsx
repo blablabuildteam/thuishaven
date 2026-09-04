@@ -17,15 +17,33 @@ const toneFor = (status: ProspectStatus) => {
   return "neutral" as const;
 };
 
+function sourceLabel(source?: string) {
+  switch (source) {
+    case "bureau_import":
+      return "Partnerlijst Reijner";
+    case "kvk":
+      return "KvK";
+    case "linkedin":
+    case "linkedin_sales_nav":
+      return "LinkedIn";
+    case "website_scrape":
+      return "Website";
+    case "manual":
+      return "Handmatig";
+    default:
+      return source ?? "Onbekend";
+  }
+}
+
 export default async function ProspectsPage() {
   const { rows, source } = await listProspects();
 
   return (
     <div>
       <SectionHeader
-        eyebrow="Pipeline"
+        eyebrow="Lijsten"
         title="Prospects"
-        description="Eventbureaus uit Reijners lijst + later KvK/jubilea. Uitsluitingen zijn gemarkeerd."
+        description="Nu vooral partnerbureaus uit Reijners import. Later komen hier KvK-bedrijven bij — bron zie je per rij."
         action={
           <StatusBadge tone={source === "db" ? "success" : "neutral"}>
             {source === "db" ? `${rows.length} uit DB` : "Mockdata"}
@@ -34,11 +52,12 @@ export default async function ProspectsPage() {
       />
 
       <div className="overflow-x-auto border border-border">
-        <table className="w-full min-w-[720px] text-left text-sm">
+        <table className="w-full min-w-[820px] text-left text-sm">
           <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
             <tr>
               <th className="px-4 py-3 font-medium">Bedrijf</th>
               <th className="px-4 py-3 font-medium">Type</th>
+              <th className="px-4 py-3 font-medium">Bron</th>
               <th className="px-4 py-3 font-medium">Sector</th>
               <th className="px-4 py-3 font-medium">Medewerkers</th>
               <th className="px-4 py-3 font-medium">Jubileum</th>
@@ -60,6 +79,11 @@ export default async function ProspectsPage() {
                 </td>
                 <td className="px-4 py-3 text-text-muted">
                   {p.type === "company" ? "Bedrijf" : "Bureau"}
+                </td>
+                <td className="px-4 py-3">
+                  <span className="font-mono text-xs text-text-muted">
+                    {sourceLabel(p.source)}
+                  </span>
                 </td>
                 <td className="px-4 py-3 text-text-muted">{p.sector ?? "—"}</td>
                 <td className="px-4 py-3 font-mono text-text-muted">

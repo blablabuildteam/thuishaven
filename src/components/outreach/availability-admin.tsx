@@ -1,19 +1,21 @@
 "use client";
 
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
 import {
   dayStatusLabels,
+  formatEuro,
   type AvailabilityDay,
   type DayStatus,
 } from "@/lib/mock/availability";
+import { StatusBadge } from "@/components/ui/status-badge";
 
-const STATUSES: DayStatus[] = [
-  "available",
-  "hold",
-  "booked_external",
-  "own_event",
-  "closed",
+const QUICK_STATUSES: { value: DayStatus; label: string }[] = [
+  { value: "available", label: "Open" },
+  { value: "hold", label: "In optie" },
+  { value: "booked_external", label: "Bezet" },
+  { value: "own_event", label: "Eigen event" },
+  { value: "closed", label: "Dicht" },
 ];
 
 type Props = {
@@ -25,68 +27,86 @@ export function AvailabilityAdmin({ initialDays, source }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    date: "",
-    status: "available" as DayStatus,
-    dayPart: "full",
-    label: "",
-    priceFrom: "",
-    priceNote: "",
-    notes: "",
-  });
+  const [message, setMessage] = useState<string | null>(null);
+  const [date, setDate] = useState("");
+  const [status, setStatus] = useState<DayStatus>("available");
+  const [label, setLabel] = useState("");
+  const [showAll, setShowAll] = useState(false);
 
-  async function save() {
+  const sorted = useMemo(
+    () => [...initialDays].sort((a, b) => a.date.localeCompare(b.date)),
+    [initialDays],
+  );
+  const openDays = sorted.filter((d) => d.status === "available");
+  const otherDays = sorted.filter((d) => d.status !== "available");
+  const visible = showAll ? sorted : openDays;
+
+  async function saveDay(payload: {
+    id?: string;
+    date: string;
+    status: DayStatus;
+    dayPart?: string;
+    label?: string | null;
+    priceFrom?: number | null;
+    notes?: string | null;
+    areas?: string[];
+  }) {
     setError(null);
+    setMessage(null);
     const res = await fetch("/api/outreach/availability", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        date: form.date,
-        status: form.status,
-        dayPart: form.dayPart,
-        label: form.label || null,
-        priceFrom: form.priceFrom ? Number(form.priceFrom) : null,
-        priceNote: form.priceNote || null,
-        notes: form.notes || null,
-        areas: ["Tempel", "Loods", "Circus"],
+        dayPart: "full",
+        areas: [],
+        ...payload,
       }),
     });
     const data = await res.json();
     if (!res.ok) {
       setError(data.error ?? "Opslaan mislukt");
-      return;
+      return false;
     }
-    setForm((f) => ({ ...f, date: "", label: "", priceFrom: "", notes: "" }));
     startTransition(() => router.refresh());
+    return true;
   }
 
-  async function updateStatus(day: AvailabilityDay, status: DayStatus) {
-    setError(null);
-    const res = await fetch("/api/outreach/availability", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: day.id,
-        date: day.date,
-        status,
-        dayPart: day.dayPart,
-        label: day.label ?? null,
-        priceFrom: day.priceFrom ?? null,
-        priceNote: day.priceNote ?? null,
-        areas: day.areas ?? [],
-        notes: day.notes ?? null,
-      }),
+  async function addOpenDay() {
+    if (!date) return;
+    const ok = await saveDay({
+      date,
+      status,
+      label: label.trim() || (status === "available" ? "Beschikbaar" : null),
     });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error ?? "Update mislukt");
-      return;
+    if (ok) {
+      setMessage(
+        status === "available"
+          ? "Open dag opgeslagen — zichtbaar op de live agenda."
+          : "Dag opgeslagen.",
+      );
+      setDate("");
+      setLabel("");
+      setStatus("available");
     }
-    startTransition(() => router.refresh());
+  }
+
+  async function setDayStatus(day: AvailabilityDay, next: DayStatus) {
+    await saveDay({
+      id: day.id.startsWith("fill-") ? undefined : day.id,
+      date: day.date,
+      status: next,
+      dayPart: day.dayPart,
+      label: day.label ?? null,
+      priceFrom: day.priceFrom ?? null,
+      notes: day.notes ?? null,
+      areas: day.areas ?? [],
+    });
   }
 
   async function remove(id: string) {
-    if (!confirm("Deze dag verwijderen?")) return;
+    if (id.startsWith("fill-")) return;
+    if (!confirm("Deze dag verwijderen uit de agenda?")) return;
+    setError(null);
     const res = await fetch(`/api/outreach/availability?id=${id}`, {
       method: "DELETE",
     });
@@ -101,142 +121,158 @@ export function AvailabilityAdmin({ initialDays, source }: Props) {
   return (
     <div className="space-y-6">
       <div className="border border-border bg-surface p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
           <h3 className="font-display text-lg tracking-[0.06em]">
-            Dag toevoegen / bijwerken
+            Snel een dag zetten
           </h3>
           <p className="text-xs text-text-dim">
-            Bron: {source === "db" ? "database" : "mock (seed eerst)"}
+            {source === "db" ? "Live database" : "Mock — seed eerst"}
           </p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <p className="mb-4 text-sm text-text-muted">
+          Kies een datum en status. Open dagen (wo/do/vr) komen op de deelbare
+          agenda.
+        </p>
+
+        <div className="flex flex-wrap gap-2">
+          {QUICK_STATUSES.map((s) => (
+            <button
+              key={s.value}
+              type="button"
+              onClick={() => setStatus(s.value)}
+              className={
+                status === s.value
+                  ? "bg-accent px-3 py-1.5 font-display text-xs tracking-[0.1em] text-accent-contrast"
+                  : "border border-border bg-bg px-3 py-1.5 font-display text-xs tracking-[0.1em] text-text-muted hover:border-accent"
+              }
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
           <label className="text-xs text-text-muted">
             Datum
             <input
               type="date"
-              className="mt-1 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
-              value={form.date}
-              onChange={(e) => setForm({ ...form, date: e.target.value })}
+              className="mt-1 w-full border border-border bg-bg px-3 py-2.5 text-sm text-text"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
             />
           </label>
           <label className="text-xs text-text-muted">
-            Status
-            <select
-              className="mt-1 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
-              value={form.status}
-              onChange={(e) =>
-                setForm({ ...form, status: e.target.value as DayStatus })
-              }
+            Label (optioneel)
+            <input
+              className="mt-1 w-full border border-border bg-bg px-3 py-2.5 text-sm text-text"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="bijv. Hele dag · Circustent"
+            />
+          </label>
+          <div className="flex items-end">
+            <button
+              type="button"
+              disabled={!date || pending}
+              onClick={() => void addOpenDay()}
+              className="w-full bg-accent px-4 py-2.5 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50 sm:w-auto"
             >
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {dayStatusLabels[s]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs text-text-muted">
-            Dagdeel
-            <select
-              className="mt-1 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
-              value={form.dayPart}
-              onChange={(e) => setForm({ ...form, dayPart: e.target.value })}
-            >
-              <option value="full">Hele dag</option>
-              <option value="day">Overdag</option>
-              <option value="evening">Avond</option>
-            </select>
-          </label>
-          <label className="text-xs text-text-muted">
-            Label
-            <input
-              className="mt-1 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
-              value={form.label}
-              onChange={(e) => setForm({ ...form, label: e.target.value })}
-              placeholder="Optioneel"
-            />
-          </label>
-          <label className="text-xs text-text-muted">
-            Prijs vanaf (€)
-            <input
-              type="number"
-              className="mt-1 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
-              value={form.priceFrom}
-              onChange={(e) => setForm({ ...form, priceFrom: e.target.value })}
-              placeholder="8500"
-            />
-          </label>
-          <label className="text-xs text-text-muted">
-            Notities
-            <input
-              className="mt-1 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            />
-          </label>
+              Opslaan
+            </button>
+          </div>
         </div>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            disabled={!form.date || pending}
-            onClick={() => void save()}
-            className="bg-accent px-4 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
+
+        {(error || message) && (
+          <p
+            className={`mt-3 text-sm ${error ? "text-danger" : "text-text-muted"}`}
           >
-            Opslaan
-          </button>
-          {error && <p className="text-sm text-danger">{error}</p>}
-        </div>
+            {error ?? message}
+          </p>
+        )}
       </div>
 
-      <div className="overflow-x-auto border border-border">
-        <table className="w-full min-w-[720px] text-left text-sm">
-          <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
-            <tr>
-              <th className="px-4 py-3 font-medium">Datum</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Prijs</th>
-              <th className="px-4 py-3 font-medium">Label</th>
-              <th className="px-4 py-3 font-medium">Actie</th>
-            </tr>
-          </thead>
-          <tbody>
-            {initialDays.map((day) => (
-              <tr key={day.id} className="border-b border-border last:border-0">
-                <td className="px-4 py-3 font-mono text-xs">{day.date}</td>
-                <td className="px-4 py-3">
+      <div className="border border-border bg-surface">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+          <div>
+            <h3 className="font-display text-lg tracking-[0.06em]">
+              Open dagen
+            </h3>
+            <p className="text-xs text-text-dim">
+              {openDays.length} open
+              {otherDays.length ? ` · ${otherDays.length} overig in DB` : ""}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="text-xs text-accent underline-offset-2 hover:underline"
+            onClick={() => setShowAll((v) => !v)}
+          >
+            {showAll ? "Alleen open tonen" : "Alles tonen"}
+          </button>
+        </div>
+
+        {visible.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-text-muted">
+            Nog geen open dagen. Voeg hierboven een datum toe.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {visible.map((day) => (
+              <li
+                key={day.id}
+                className="flex flex-wrap items-center gap-3 px-4 py-3"
+              >
+                <div className="min-w-[7rem]">
+                  <p className="font-mono text-sm text-text">{day.date}</p>
+                  <p className="text-xs text-text-muted">
+                    {day.label ?? dayStatusLabels[day.status]}
+                  </p>
+                </div>
+                <StatusBadge
+                  tone={
+                    day.status === "available"
+                      ? "success"
+                      : day.status === "hold"
+                        ? "info"
+                        : "danger"
+                  }
+                >
+                  {dayStatusLabels[day.status]}
+                </StatusBadge>
+                {day.priceFrom != null ? (
+                  <span className="font-mono text-xs text-text-dim">
+                    {formatEuro(day.priceFrom)}
+                  </span>
+                ) : null}
+                <div className="ml-auto flex flex-wrap items-center gap-2">
                   <select
-                    className="border border-border bg-bg px-2 py-1 text-xs"
+                    className="border border-border bg-bg px-2 py-1.5 text-xs text-text"
                     value={day.status}
+                    disabled={pending}
                     onChange={(e) =>
-                      void updateStatus(day, e.target.value as DayStatus)
+                      void setDayStatus(day, e.target.value as DayStatus)
                     }
                   >
-                    {STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {dayStatusLabels[s]}
+                    {QUICK_STATUSES.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
                       </option>
                     ))}
                   </select>
-                </td>
-                <td className="px-4 py-3 font-mono text-xs text-text-muted">
-                  {day.priceFrom ?? "—"}
-                </td>
-                <td className="px-4 py-3 text-text-muted">
-                  {day.label ?? "—"}
-                </td>
-                <td className="px-4 py-3">
-                  <button
-                    type="button"
-                    className="text-xs text-danger underline-offset-2 hover:underline"
-                    onClick={() => void remove(day.id)}
-                  >
-                    Verwijder
-                  </button>
-                </td>
-              </tr>
+                  {!day.id.startsWith("fill-") ? (
+                    <button
+                      type="button"
+                      className="text-xs text-danger underline-offset-2 hover:underline"
+                      onClick={() => void remove(day.id)}
+                    >
+                      Weg
+                    </button>
+                  ) : null}
+                </div>
+              </li>
             ))}
-          </tbody>
-        </table>
+          </ul>
+        )}
       </div>
     </div>
   );

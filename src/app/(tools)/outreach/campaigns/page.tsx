@@ -1,21 +1,42 @@
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { campaigns } from "@/lib/mock/outreach";
+import { listCampaignsWithLiveStats } from "@/lib/outreach/data";
+import { outreachLiveSendBlockReason } from "@/lib/outreach/send-policy";
 import { formatPercent } from "@/lib/utils";
 
 export const metadata = { title: "Campagnes" };
+export const dynamic = "force-dynamic";
 
-export default function CampaignsPage() {
+export default async function CampaignsPage() {
+  const { rows, source } = await listCampaignsWithLiveStats();
+  const sendBlock = outreachLiveSendBlockReason();
+
   return (
     <div>
       <SectionHeader
-        eyebrow="Campagnes"
+        eyebrow="Lijsten"
         title="Twee outreach-stromen"
-        description="Zelfde technische basis, eigen targeting en triggers. Tone of voice en targetingcriteria finetunen we samen vóór live-gang."
+        description="Bedrijven (jubilea via KvK, later) en partnerbureaus (open-data seintjes). Cijfers komen uit echte mails — geen demo-getallen."
+        action={
+          <StatusBadge tone={source === "db" ? "success" : "neutral"}>
+            {source === "db" ? "Live data" : "Mock"}
+          </StatusBadge>
+        }
       />
 
+      {sendBlock ? (
+        <div className="mb-6 border border-border bg-surface px-4 py-3 text-sm text-text-muted">
+          <p className="font-medium text-text">Nog geen live campagne-volume</p>
+          <p className="mt-1">{sendBlock}</p>
+          <p className="mt-1 text-xs text-text-dim">
+            Testsends tellen mee bij de bureau-stroom als die naar een
+            bureau-prospect horen.
+          </p>
+        </div>
+      ) : null}
+
       <div className="grid gap-4">
-        {campaigns.map((c) => {
+        {rows.map((c) => {
           const openRate =
             c.sentCount > 0 ? (c.openCount / c.sentCount) * 100 : 0;
           return (
@@ -25,13 +46,17 @@ export default function CampaignsPage() {
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge
                       tone={c.audience === "company" ? "info" : "accent"}
                     >
                       {c.audience === "company" ? "Bedrijven" : "Bureaus"}
                     </StatusBadge>
-                    <StatusBadge tone="success">{c.status}</StatusBadge>
+                    <StatusBadge
+                      tone={c.status === "active" ? "success" : "neutral"}
+                    >
+                      {c.status}
+                    </StatusBadge>
                   </div>
                   <h2 className="mt-3 font-display text-2xl tracking-tight">
                     {c.name}
