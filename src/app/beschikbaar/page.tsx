@@ -1,7 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
-import { AvailabilityCalendar } from "@/components/outreach/availability-calendar";
+import { PublicMonthCalendar } from "@/components/outreach/public-month-calendar";
 import { listAvailabilityDays } from "@/lib/outreach/availability";
+import { expandAvailabilityToFullMonths } from "@/lib/outreach/expand-availability-months";
 
 export const metadata = {
   title: "Beschikbaarheid · Thuishaven B2B",
@@ -11,7 +12,8 @@ export const metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function PublicAvailabilityPage() {
-  const { days } = await listAvailabilityDays();
+  const { days: raw } = await listAvailabilityDays();
+  const days = expandAvailabilityToFullMonths(raw);
   const openCount = days.filter((d) => d.status === "available").length;
 
   return (
@@ -50,17 +52,17 @@ export default async function PublicAvailabilityPage() {
 
           <div className="max-w-2xl border-b-2 border-[#fff201] pb-4">
             <p className="text-sm leading-relaxed text-black/60 sm:text-base">
-              Actuele doordeweekse beschikbaarheid voor bedrijfsevents. Data met
-              een kruis zijn dicht. Prijzen dynamisch, excl. BTW.
+              Hele maand in één oogopslag. Dagen met “open” zijn boekbaar; dagen
+              met een kruis zijn dicht.
             </p>
           </div>
 
           <p className="mt-4 font-display text-sm tracking-[0.14em] text-black/40">
-            {openCount} slots beschikbaar · bijgewerkt live
+            {openCount} slots open · bijgewerkt live
           </p>
         </header>
 
-        <AvailabilityCalendar days={days} publicView className="th-public-cal" />
+        <PublicMonthCalendar days={days} />
       </div>
     </div>
   );
