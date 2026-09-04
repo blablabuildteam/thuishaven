@@ -28,6 +28,8 @@ import {
 import { recordUsage } from "@/lib/usage/store";
 import { getPublicAvailabilityUrl } from "@/lib/mock/availability";
 
+import { discoverCompanyProspects } from "@/lib/integrations/kvk";
+
 export type EnrichmentResult = {
   companyName: string;
   email?: string;
@@ -37,15 +39,35 @@ export type EnrichmentResult = {
   error?: string;
 };
 
-export async function searchKvkCompanies(_params: {
+export async function searchKvkCompanies(params: {
   city?: string;
   minEmployees?: number;
   maxEmployees?: number;
-}): Promise<{ ok: boolean; error?: string; count?: number }> {
-  if (!process.env.KVK_API_KEY) {
-    return { ok: false, error: "KVK_API_KEY ontbreekt" };
-  }
-  return { ok: false, error: "Nog niet geïmplementeerd" };
+  naam?: string;
+  jubileeOnly?: boolean;
+  maxEnrich?: number;
+}): Promise<{
+  ok: boolean;
+  error?: string;
+  count?: number;
+  candidates?: Awaited<ReturnType<typeof discoverCompanyProspects>>["candidates"];
+  skipped?: Awaited<ReturnType<typeof discoverCompanyProspects>>["skipped"];
+}> {
+  const result = await discoverCompanyProspects({
+    places: params.city ? [params.city] : undefined,
+    naam: params.naam,
+    minEmployees: params.minEmployees,
+    maxEmployees: params.maxEmployees,
+    jubileeOnly: params.jubileeOnly,
+    maxEnrich: params.maxEnrich ?? 30,
+  });
+  if (!result.ok) return { ok: false, error: result.error };
+  return {
+    ok: true,
+    count: result.candidates.length,
+    candidates: result.candidates,
+    skipped: result.skipped,
+  };
 }
 
 function parseJsonMail(raw: string): { subject: string; body: string } | null {
