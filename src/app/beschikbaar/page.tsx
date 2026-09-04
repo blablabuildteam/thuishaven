@@ -1,9 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import {
-  AvailabilityCalendar,
-  AvailabilityLegend,
-} from "@/components/outreach/availability-calendar";
+import { AvailabilityCalendar } from "@/components/outreach/availability-calendar";
 import { listAvailabilityDays } from "@/lib/outreach/availability";
 
 export const metadata = {
@@ -54,8 +51,7 @@ export default async function PublicAvailabilityPage() {
           <div className="max-w-2xl border-b-2 border-[#fff201] pb-4">
             <p className="text-sm leading-relaxed text-black/60 sm:text-base">
               Actuele doordeweekse beschikbaarheid voor bedrijfsevents. Data met
-              een kruis zijn dicht (eigen programmering, externe boeking of
-              opbouw). Prijzen zijn dynamisch en excl. BTW.
+              een kruis zijn dicht. Prijzen dynamisch, excl. BTW.
             </p>
           </div>
 
@@ -64,26 +60,7 @@ export default async function PublicAvailabilityPage() {
           </p>
         </header>
 
-        <div className="mb-6">
-          <AvailabilityLegend />
-        </div>
-
         <AvailabilityCalendar days={days} publicView className="th-public-cal" />
-
-        <footer className="mt-12 border-t border-black/15 pt-6 text-xs text-black/45">
-          <p>
-            Thuishaven · Amsterdam West ·{" "}
-            <a
-              href="https://thuishaven.nl/"
-              className="underline-offset-2 hover:underline"
-            >
-              thuishaven.nl
-            </a>
-          </p>
-          <p className="mt-1">
-            Prijzen indicatief · offerte via evenement@thuishaven.nl
-          </p>
-        </footer>
       </div>
     </div>
   );
