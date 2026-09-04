@@ -68,7 +68,7 @@ function ruleToForm(rule: AlertRuleView): FormState {
 function channelLabel(type: string): string {
   if (type === "weeztix_soldout_ra_open") return "Resident Advisor";
   if (type === "ticketswap_after_soldout") return "TicketSwap";
-  if (type === "custom") return "Appic";
+  if (type === "custom") return "Appic Game";
   return type;
 }
 
@@ -321,7 +321,7 @@ export function AlertsWorkbench({
                     setForm((f) => ({ ...f, checkAppic: e.target.checked }))
                   }
                 />
-                Appic
+                Appic Game
               </label>
             </div>
           </fieldset>
@@ -383,7 +383,7 @@ export function AlertsWorkbench({
                       {[
                         rule.checkRa && "RA",
                         rule.checkTicketswap && "TicketSwap",
-                        rule.checkAppic && "Appic",
+                        rule.checkAppic && "Appic Game",
                       ]
                         .filter(Boolean)
                         .join(" · ")}

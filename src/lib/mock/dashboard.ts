@@ -211,7 +211,7 @@ export const chatSuggestions = [
 export const platformLabels: Record<TicketPlatform, string> = {
   weeztix: "Weeztix",
   resident_advisor: "Resident Advisor",
-  appic: "Appic",
+  appic: "Appic Game",
   ticketswap: "TicketSwap",
   internal: "Intern",
 };

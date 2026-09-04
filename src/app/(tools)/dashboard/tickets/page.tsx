@@ -206,7 +206,7 @@ export default async function TicketsPage() {
       />
 
       <p className="mt-3 text-xs text-text-dim">
-        Weeztix = shop (exclusief barcode-pools). Appic, RA en vriendentickets tonen
+        Weeztix = shop (exclusief barcode-pools). Appic Game, RA en vriendentickets tonen
         gebruikt / gereserveerd uit Weeztix (check-ins vs poolgrootte). Deurverkoop
         is handmatig — typ het aantal van de deurlijst in de kolom. Game Appic
         volgt nog. Externe events zijn handmatig (verwachte bezoekers in Totaal).

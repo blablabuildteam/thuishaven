@@ -31,7 +31,7 @@ function toEmailItem(alert: {
   }
   if (alert.type === "custom") {
     return {
-      channel: "Appic",
+      channel: "Appic Game",
       kind: "revenue_leak",
       title: alert.title,
       message: alert.message,

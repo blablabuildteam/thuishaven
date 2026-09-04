@@ -178,10 +178,10 @@ export function matchesForRule(
         editionName: snap.editionName,
         startsAt: snap.startsAt,
         channel: "appic",
-        channelLabel: "Appic",
+        channelLabel: "Appic Game",
         kind: "revenue_leak",
-        title: `${snap.editionName}: Appic actief na Weeztix-drempel`,
-        message: `${why}, maar Appic toont nog ${n === 1 ? "1 ticket" : `${n} tickets`}. Mogelijke omzetlek.`,
+        title: `${snap.editionName}: Appic Game actief na Weeztix-drempel`,
+        message: `${why}, maar Appic Game toont nog ${n === 1 ? "1 ticket" : `${n} tickets`}. Mogelijke omzetlek.`,
         availableCount: n,
         url: null,
       });

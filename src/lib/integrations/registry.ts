@@ -148,13 +148,13 @@ export const INTEGRATIONS: IntegrationDef[] = [
   },
   {
     id: "appic",
-    name: "Appic",
+    name: "Appic Game",
     tool: "dashboard",
     description:
-      "Secundaire ticketverkoop — geparkeerd. Later dezelfde alertregel als TicketSwap: Weeztix sold-out terwijl Appic nog open staat.",
+      "Secundaire ticketverkoop — geparkeerd. Later dezelfde alertregel als TicketSwap: Weeztix sold-out terwijl Appic Game nog open staat.",
     envKeys: ["APPIC_API_KEY"],
     askFromClient: ["API-key", "Event/product mapping"],
-    verifyHint: "On hold — geen live check tot we Appic weer oppakken",
+    verifyHint: "On hold — geen live check tot we Appic Game weer oppakken",
     priority: "later",
     onHold: true,
   },
@@ -178,20 +178,6 @@ export const INTEGRATIONS: IntegrationDef[] = [
     verifyHint:
       "Read-only listings voor venue Thuishaven (publieke GraphQL is geblokkeerd; HTML/Firecrawl-fallback)",
     docsUrl: "https://www.ticketswap.com/location/thuishaven/3517",
-    priority: "high",
-  },
-  {
-    id: "internal_ticketing",
-    name: "Intern ticketbeheer",
-    tool: "dashboard",
-    description: "Interne ticketadministratie via API.",
-    envKeys: ["INTERNAL_TICKETING_API_URL", "INTERNAL_TICKETING_API_KEY"],
-    askFromClient: [
-      "API-URL + documentatie",
-      "Auth-methode",
-      "Voorbeeld responses",
-    ],
-    verifyHint: "Health/ping endpoint",
     priority: "high",
   },
   {
@@ -276,7 +262,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     name: "Dashboard alerts",
     tool: "dashboard",
     description:
-      "Zelf alerts instellen: ontvangers, Weeztix-drempel, en welke kanalen (RA / TicketSwap / Appic) we checken.",
+      "Zelf alerts instellen: ontvangers, Weeztix-drempel, en welke kanalen (RA / TicketSwap / Appic Game) we checken.",
     envKeys: ["ALERT_NOTIFY_EMAIL", "ALERT_EMAIL_ENABLED"],
     optionalEnvKeys: [
       "ALERT_EMAIL_ALLOWLIST",

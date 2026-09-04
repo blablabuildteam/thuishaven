@@ -101,7 +101,7 @@ export function TicketSalesChart() {
             stroke="#ff6a00"
             fill="transparent"
             strokeWidth={1.5}
-            name="Appic"
+            name="Appic Game"
           />
           <Area
             type="monotone"
