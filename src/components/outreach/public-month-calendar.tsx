@@ -79,7 +79,7 @@ export function PublicMonthCalendar({ days, className }: Props) {
               <h2 className="shrink-0 font-display text-xl tracking-[0.06em] text-black sm:text-2xl md:text-[2rem]">
                 {format(parseISO(`${monthKey}-01`), "MMMM yyyy", { locale: nl })}
               </h2>
-              <div className="mb-1 h-px flex-1 bg-[#fff201]" />
+              <div className="mb-1.5 h-px flex-1 bg-black/15" />
             </div>
 
             {/* Swipeable on narrow screens so 5 cols stay readable */}

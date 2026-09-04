@@ -50,10 +50,10 @@ export default async function PublicAvailabilityPage() {
             </Link>
           </div>
 
-          <div className="max-w-3xl border-b-2 border-[#fff201] pb-4">
+          <div className="max-w-3xl border-b border-black/15 pb-4">
             <p className="text-sm leading-relaxed text-black/60 sm:text-base">
-              Hele maand in één oogopslag. Dagen met “open” zijn boekbaar; dagen
-              met een streep zijn dicht.
+              Hele maand in één oogopslag. Zwarte vakjes met “Open” zijn
+              boekbaar; vakjes met een lichte streep zijn dicht.
             </p>
           </div>
 
