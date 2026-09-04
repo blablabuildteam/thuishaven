@@ -10,6 +10,7 @@ import {
   EventInsightsSkeleton,
 } from "@/components/dashboard/dashboards-skeletons";
 
+export const dynamic = "force-dynamic";
 export const metadata = { title: "Inzichten" };
 
 export default async function InzichtenPage() {
