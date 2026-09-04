@@ -745,7 +745,7 @@ export async function loadEventInsightsFresh(options?: {
         },
         {
           id: "appic",
-          label: "Appic",
+          label: "Appic Game",
           sold: appic != null ? (appic.scanned ?? 0) : null,
           reserved:
             appic != null

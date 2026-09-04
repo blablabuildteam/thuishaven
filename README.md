@@ -51,8 +51,7 @@ Zie de checklist in de chat / projectplannen. Kort:
 - AI-key (OpenAI of Anthropic)
 
 **Dashboard**
-- API-toegang: Instagram, TikTok, YouTube, Weeztix, TicketSwap, Resident Advisor, Appic
-- Intern ticketbeheersysteem (URL + docs + key)
+- API-toegang: Instagram, TikTok, YouTube, Weeztix, TicketSwap, Resident Advisor, Appic Game
 - Editie-namen mapping over systemen
 - Alert-e-mailadressen
 - Voorbeeld-creatives per editie

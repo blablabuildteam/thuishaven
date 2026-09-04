@@ -49,6 +49,9 @@ import type {
 } from "@/lib/insights/event-insights";
 import {
   SALES_IMPACT_ROLE_HINT,
+  organicAttributionWeight,
+  organicSalesContribution,
+  type OrganicSalesContribution,
   type SalesImpactRole,
 } from "@/lib/marketing/sales-impact";
 import {
@@ -102,6 +105,14 @@ const ORGANIC_GROUP_LABEL: Record<(typeof ORGANIC_ROLE_ORDER)[number], string> =
 
 function channelLabel(channel: string): string {
   return CHANNEL_LABEL[channel] ?? channel;
+}
+
+function formatContributionLift(c: OrganicSalesContribution): string {
+  if (c.mode === "none" || c.lift == null) return "—";
+  if (c.mode === "range" && c.lowerBound != null) {
+    return `~${formatNumber(c.lowerBound)}–${formatNumber(c.lift)}`;
+  }
+  return `+${formatNumber(c.lift)}`;
 }
 
 function isColdOrWet(kind: WeatherKind): boolean {
@@ -1287,7 +1298,7 @@ function EventDetail({ event }: { event: EventInsight }) {
 
         <div className="grid gap-x-6 gap-y-1 lg:grid-cols-2">
           <div>
-            <SectionDivider label="Verkoop per bron" />
+            <SectionDivider label="Tickets per bron" />
             <div className="space-y-2.5">
               {tickets.sources.map((s, i) => {
                 const barValue =
@@ -1458,6 +1469,7 @@ function EventDetail({ event }: { event: EventInsight }) {
               emailCampaigns={emailCampaigns}
               impactLevel={event.organicImpactLevel}
               impactScore={event.organicImpactScore}
+              ticketsSold={tickets.sold}
               sameDaySold={tickets.sameDaySold}
             />
 
@@ -1510,12 +1522,14 @@ function OrganicMarketingBlock({
   emailCampaigns,
   impactLevel,
   impactScore,
+  ticketsSold,
   sameDaySold,
 }: {
   socialPosts: EventInsightSocial[];
   emailCampaigns: EventInsightMail[];
   impactLevel: EventInsight["organicImpactLevel"];
   impactScore: number;
+  ticketsSold: number;
   sameDaySold: number | null;
 }) {
   const mails = emailCampaigns.slice(0, 2);
@@ -1524,6 +1538,14 @@ function OrganicMarketingBlock({
     same_day: socialPosts.filter((p) => p.salesImpactRole === "same_day"),
     after: socialPosts.filter((p) => p.salesImpactRole === "after"),
   };
+  const promoWeights = byRole.promo.map(organicAttributionWeight);
+  const promoTotalWeight = promoWeights.reduce((s, w) => s + w, 0);
+  const preEventSold = Math.max(0, ticketsSold - (sameDaySold ?? 0));
+  const promoHasWindowLift = byRole.promo.some(
+    (p) =>
+      (p.ticketLiftSold != null && p.ticketLiftSold > 0) ||
+      (p.spikeDetected && p.spikeEstimatedLift != null),
+  );
 
   const blocks = ORGANIC_ROLE_ORDER.flatMap((role) => {
     const posts = byRole[role];
@@ -1564,9 +1586,35 @@ function OrganicMarketingBlock({
                 <p className="mb-1.5 text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
                   {block.label}
                 </p>
+                {block.key === "promo" && byRole.promo.length > 0 && (
+                  <p className="mb-1.5 text-[10px] text-text-dim">
+                    {promoHasWindowLift
+                      ? `Tickets in ±48u — range bij ${byRole.promo.length} actieve posts.`
+                      : preEventSold > 0
+                        ? `Voorverkoop ${formatNumber(preEventSold)} tickets — range = gelijke split vs. naar bereik.`
+                        : "Geen meetbare ticketlift rond deze posts."}
+                  </p>
+                )}
                 <div className="space-y-1">
                   {block.posts.map((p) => (
-                    <OrganicPostRow key={p.postId} post={p} />
+                    <OrganicPostRow
+                      key={p.postId}
+                      post={p}
+                      concurrentPosts={
+                        block.key === "promo" ? byRole.promo.length : 1
+                      }
+                      preEventSold={
+                        block.key === "promo" ? preEventSold : null
+                      }
+                      postWeight={
+                        block.key === "promo"
+                          ? organicAttributionWeight(p)
+                          : 0
+                      }
+                      totalWeight={
+                        block.key === "promo" ? promoTotalWeight : 0
+                      }
+                    />
                   ))}
                   {block.mails.map((m) => (
                     <div
@@ -1671,16 +1719,16 @@ function InsightModalSocialPost({
   /** Number of promo posts for context */
   concurrentPosts: number;
 }) {
-  // Prefer spike-based attribution if detected, fall back to window-based
-  const hasSpike = post.spikeDetected && post.spikeEstimatedLift != null;
-  const lift = hasSpike ? post.spikeEstimatedLift : post.ticketLiftSold;
-
-  // For window-based, show range; for spike-based, show exact estimate
-  const lowerBound =
-    !hasSpike && lift != null && concurrentPosts > 1
-      ? Math.round(lift / concurrentPosts)
-      : null;
-  const showRange = lowerBound != null && lowerBound !== lift;
+  const contribution = organicSalesContribution({
+    ticketLiftSold: post.ticketLiftSold,
+    spikeDetected: post.spikeDetected,
+    spikeEstimatedLift: post.spikeEstimatedLift,
+    concurrentPosts,
+  });
+  const hasSpike = contribution.mode === "spike";
+  const lift = contribution.lift;
+  const showRange = contribution.mode === "range";
+  const lowerBound = contribution.lowerBound;
 
   const content = (
     <div className="flex items-start gap-2.5">
@@ -1836,16 +1884,38 @@ function InsightModalEmailCampaign({ campaign }: { campaign: EventInsightMail })
   );
 }
 
-function OrganicPostRow({ post }: { post: EventInsightSocial }) {
+function OrganicPostRow({
+  post,
+  concurrentPosts = 1,
+  preEventSold = null,
+  postWeight = 0,
+  totalWeight = 0,
+}: {
+  post: EventInsightSocial;
+  /** Promo posts that share overlapping ±48u windows. */
+  concurrentPosts?: number;
+  preEventSold?: number | null;
+  postWeight?: number;
+  totalWeight?: number;
+}) {
   const [open, setOpen] = useState(false);
   const role = post.salesImpactRole;
   const hasVariants = post.variants.length > 1;
+  const contribution = organicSalesContribution({
+    ticketLiftSold: post.ticketLiftSold,
+    spikeDetected: post.spikeDetected,
+    spikeEstimatedLift: post.spikeEstimatedLift,
+    concurrentPosts,
+    preEventSold,
+    postWeight,
+    totalWeight,
+  });
   const liftLabel =
-    role === "after"
-      ? "n.v.t."
-      : post.ticketLiftSold != null
-        ? `+${formatNumber(post.ticketLiftSold)}`
-        : "—";
+    role === "after" ? "n.v.t." : formatContributionLift(contribution);
+  const showContributionUnder =
+    role === "promo" &&
+    contribution.mode !== "none" &&
+    (contribution.lift ?? 0) > 0;
 
   return (
     <div className="py-0.5">
@@ -1888,6 +1958,45 @@ function OrganicPostRow({ post }: { post: EventInsightSocial }) {
               engagement={post.engagement}
               className="pl-[18px]"
             />
+            {showContributionUnder && (
+              <p
+                className="pl-[18px] text-[10px] text-text-dim"
+                title={
+                  contribution.source === "spike"
+                    ? "Verkoopspike binnen 4u na publicatie, boven baseline."
+                    : contribution.source === "allocated"
+                      ? "Voorverkoop (totaal minus eventdag) — ondergrens gelijke split, bovengrens naar bereik."
+                      : contribution.mode === "range"
+                        ? `Tickets in ${post.liftWindowLabel} — range omdat ${concurrentPosts} posts dezelfde window delen.`
+                        : `Tickets in window (${post.liftWindowLabel})`
+                }
+              >
+                {contribution.source === "spike" ? (
+                  <>
+                    spike
+                    {post.spikeHoursAfter != null
+                      ? ` ${post.spikeHoursAfter}u na post`
+                      : " na post"}
+                    {post.spikeMultiplier != null
+                      ? ` · ${post.spikeMultiplier}×`
+                      : ""}
+                  </>
+                ) : contribution.source === "allocated" ? (
+                  <>
+                    {formatContributionLift(contribution)} tickets ·
+                    voorverkoop
+                  </>
+                ) : (
+                  <>
+                    {formatContributionLift(contribution)} tickets
+                    {post.liftWindowLabel ? ` · ${post.liftWindowLabel}` : ""}
+                    {contribution.mode === "range" && concurrentPosts > 1
+                      ? ` · ${concurrentPosts} posts`
+                      : ""}
+                  </>
+                )}
+              </p>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-2 pt-0.5">
             {hasVariants && (
@@ -1915,7 +2024,13 @@ function OrganicPostRow({ post }: { post: EventInsightSocial }) {
               title={
                 role === "after"
                   ? "Geen sales-impact"
-                  : `Tickets in window (${post.liftWindowLabel})`
+                  : contribution.source === "spike"
+                    ? "Verkoopspike binnen 4u na publicatie, boven baseline."
+                    : contribution.source === "allocated"
+                      ? "Voorverkoop (totaal minus eventdag) — ondergrens gelijke split, bovengrens naar bereik."
+                      : contribution.mode === "range"
+                        ? `Tickets in ${post.liftWindowLabel} — range omdat ${concurrentPosts} posts dezelfde window delen.`
+                        : `Tickets in window (${post.liftWindowLabel})`
               }
             >
               {liftLabel}

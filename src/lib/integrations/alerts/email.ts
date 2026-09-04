@@ -128,7 +128,7 @@ export function renderAlertEmail(input: {
           <tr>
             <td style="border-top:1px solid ${BORDER};padding:16px 0 0 0;">
               <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:${DIM};">
-                ${escapeHtml(input.footer ?? "Thuishaven Tools · sold-out alerts. Primair: Weeztix. Secundair: RA, TicketSwap, Appic.")}
+                ${escapeHtml(input.footer ?? "Thuishaven Tools · sold-out alerts. Primair: Weeztix. Secundair: RA, TicketSwap, Appic Game.")}
               </p>
             </td>
           </tr>
@@ -163,7 +163,7 @@ export function renderTestAlertEmail() {
     eyebrow: "Dashboard alerts · test",
     title: "Testmail sold-out alerts",
     intro:
-      "Dit is geen echte mismatch. We checken of alertmails aankomen bij team@blablabuild.com. Bij een echte conflict — Weeztix uitverkocht terwijl RA, TicketSwap of Appic nog open staat — krijg je hier een bericht met link naar het dashboard.",
+      "Dit is geen echte mismatch. We checken of alertmails aankomen bij team@blablabuild.com. Bij een echte conflict — Weeztix uitverkocht terwijl RA, TicketSwap of Appic Game nog open staat — krijg je hier een bericht met link naar het dashboard.",
     items: [
       {
         channel: "Voorbeeld · Resident Advisor",
@@ -195,7 +195,7 @@ export function renderMismatchAlertEmail(items: AlertEmailItem[]) {
         ? "1 secundair kanaal nog actief"
         : `${n} secundaire kanalen nog actief`,
     intro:
-      "Weeztix is uitverkocht, maar een secundair kanaal verkoopt nog. RA = overboekingsrisico. TicketSwap / Appic = omzetlek.",
+      "Weeztix is uitverkocht, maar een secundair kanaal verkoopt nog. RA = overboekingsrisico. TicketSwap / Appic Game = omzetlek.",
     items,
     ctaLabel: "Bekijk in dashboard",
   });

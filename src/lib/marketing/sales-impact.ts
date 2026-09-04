@@ -101,3 +101,84 @@ export function salesLiftWindow(input: {
 export function countsTowardSalesImpact(role: SalesImpactRole): boolean {
   return role === "promo" || role === "same_day";
 }
+
+export type OrganicSalesContribution = {
+  /** spike = hourly match; range = uncertain split; exact = sole credit. */
+  mode: "spike" | "range" | "exact" | "none";
+  /** window = ±48u tickets; allocated = voorverkoop split by reach. */
+  source: "spike" | "window" | "allocated" | "none";
+  lift: number | null;
+  /** Lower bound when credit is shared or weighted. */
+  lowerBound: number | null;
+};
+
+/** Reach-first weight so viral posts take a larger slice of voorverkoop. */
+export function organicAttributionWeight(p: {
+  impressions: number;
+  reach: number;
+  engagement: number;
+}): number {
+  if (p.impressions > 0) return p.impressions;
+  if (p.reach > 0) return p.reach;
+  return Math.max(0, p.engagement);
+}
+
+/**
+ * How much of ticket sales we can credit to one promo post.
+ * 1. Sales spike within 4u → single estimate.
+ * 2. ±48u window with tickets → range lift/N … lift (shared window).
+ * 3. Otherwise split voorverkoop: equal share vs reach-weighted share.
+ */
+export function organicSalesContribution(input: {
+  ticketLiftSold: number | null;
+  spikeDetected: boolean;
+  spikeEstimatedLift: number | null;
+  concurrentPosts: number;
+  preEventSold?: number | null;
+  postWeight?: number;
+  totalWeight?: number;
+}): OrganicSalesContribution {
+  const none = {
+    mode: "none" as const,
+    source: "none" as const,
+    lift: null,
+    lowerBound: null,
+  };
+
+  if (input.spikeDetected && input.spikeEstimatedLift != null) {
+    return {
+      mode: "spike",
+      source: "spike",
+      lift: input.spikeEstimatedLift,
+      lowerBound: null,
+    };
+  }
+
+  if (input.ticketLiftSold != null && input.ticketLiftSold > 0) {
+    const lift = input.ticketLiftSold;
+    if (input.concurrentPosts > 1) {
+      const lowerBound = Math.round(lift / input.concurrentPosts);
+      if (lowerBound !== lift) {
+        return { mode: "range", source: "window", lift, lowerBound };
+      }
+    }
+    return { mode: "exact", source: "window", lift, lowerBound: null };
+  }
+
+  const pool = input.preEventSold ?? 0;
+  if (pool <= 0) return none;
+
+  const n = Math.max(1, input.concurrentPosts);
+  const equal = Math.round(pool / n);
+  const totalWeight = input.totalWeight ?? 0;
+  const postWeight = input.postWeight ?? 0;
+  const weighted =
+    totalWeight > 0 ? Math.round((pool * postWeight) / totalWeight) : equal;
+  const lowerBound = Math.min(equal, weighted);
+  const lift = Math.max(equal, weighted);
+  if (lift <= 0) return none;
+  if (lowerBound !== lift) {
+    return { mode: "range", source: "allocated", lift, lowerBound };
+  }
+  return { mode: "exact", source: "allocated", lift, lowerBound: null };
+}

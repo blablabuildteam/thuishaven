@@ -36,7 +36,7 @@ export async function ConflictsBanner() {
               : `${conflicts.length} events zijn uitverkocht op Weeztix, maar nog te koop elders`}
           </span>
           <span className="mt-0.5 block text-xs text-text-muted sm:mt-0 sm:ml-0 sm:inline sm:before:content-['_·_']">
-            RA / TicketSwap / Appic verkopen nog — risico op overboeking of
+            RA / TicketSwap / Appic Game verkopen nog — risico op overboeking of
             omzetlek
           </span>
         </span>
