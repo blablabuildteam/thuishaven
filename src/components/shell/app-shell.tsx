@@ -18,6 +18,7 @@ import {
   LineChart,
   Workflow,
   Ban,
+  MessageSquare,
   type LucideIcon,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
@@ -75,26 +76,40 @@ const dashboardSystemNav: NavItem[] = [
 
 const outreachSections: NavSection[] = [
   {
-    id: "outreach",
-    label: "Outreach",
+    id: "werken",
+    label: "Werken",
     items: [
       { href: "/outreach", label: "Overzicht", icon: Send },
-      { href: "/outreach/planning", label: "Planning", icon: CalendarDays },
-      { href: "/outreach/prospects", label: "Prospects", icon: Users },
-      { href: "/outreach/uitsluitingen", label: "Uitsluitingen", icon: Ban },
-      { href: "/outreach/campaigns", label: "Campagnes", icon: Sparkles },
-      { href: "/outreach/emails", label: "E-mails", icon: Mail },
       { href: "/outreach/beschikbaarheid", label: "Agenda", icon: CalendarDays },
+      { href: "/outreach/emails", label: "E-mails", icon: Mail },
+      { href: "/outreach/planning", label: "Planning", icon: CalendarDays },
+    ],
+  },
+  {
+    id: "lijsten",
+    label: "Lijsten",
+    items: [
+      { href: "/outreach/prospects", label: "Prospects", icon: Users },
+      { href: "/outreach/uitsluitingen", label: "Niet mailen", icon: Ban },
+      { href: "/outreach/campaigns", label: "Campagnes", icon: Sparkles },
+    ],
+  },
+  {
+    id: "inzicht",
+    label: "Inzicht",
+    items: [
       { href: "/outreach/analytics", label: "Resultaten", icon: LineChart },
-      { href: "/outreach/pipeline", label: "Pipeline", icon: Workflow },
+      { href: "/outreach/leads", label: "Leads", icon: MessageSquare },
       { href: "/outreach/kosten", label: "Kosten", icon: BarChart3 },
     ],
   },
 ];
 
 const outreachSystemNav: NavItem[] = [
+  { href: "/outreach/pipeline", label: "Pipeline", icon: Workflow },
   { href: "/koppelingen", label: "Bronnen", icon: Plug },
 ];
+
 
 function isNavActive(pathname: string, href: string) {
   return (
