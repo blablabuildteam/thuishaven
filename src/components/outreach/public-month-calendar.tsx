@@ -3,7 +3,6 @@ import {
   format,
   parseISO,
   startOfMonth,
-  startOfWeek,
 } from "date-fns";
 import { nl } from "date-fns/locale";
 import {
@@ -12,9 +11,11 @@ import {
   type AvailabilityDay,
   type DayStatus,
 } from "@/lib/mock/availability";
+import { isShownWeekday } from "@/lib/outreach/expand-availability-months";
 import { cn } from "@/lib/utils";
 
-const WEEKDAYS = ["ma", "di", "wo", "do", "vr", "za", "zo"] as const;
+/** Wed–Sun only (no Mon/Tue). */
+const WEEKDAYS = ["wo", "do", "vr", "za", "zo"] as const;
 
 function publicStatusLabel(status: DayStatus): string {
   if (status === "available") return "Open";
@@ -32,25 +33,30 @@ function isBlocked(status: DayStatus) {
   );
 }
 
+/** Build Wed–Sun rows for a month (Mon/Tue skipped). */
 function weeksForMonth(
   monthKey: string,
   byDate: Map<string, AvailabilityDay>,
 ): (AvailabilityDay | null)[][] {
   const monthStart = startOfMonth(parseISO(`${monthKey}-01`));
-  let cursor = startOfWeek(monthStart, { weekStartsOn: 1 });
   const weeks: (AvailabilityDay | null)[][] = [];
+  const dow = monthStart.getDay(); // 0 Sun
+  const toMonday = dow === 0 ? -6 : 1 - dow;
+  let weekMonday = addDays(monthStart, toMonday);
 
   for (let w = 0; w < 6; w++) {
     const week: (AvailabilityDay | null)[] = [];
     let anyInMonth = false;
-    for (let d = 0; d < 7; d++) {
-      const iso = format(cursor, "yyyy-MM-dd");
+    // Wed=+2 … Sun=+6 from Monday
+    for (const offset of [2, 3, 4, 5, 6]) {
+      const day = addDays(weekMonday, offset);
+      const iso = format(day, "yyyy-MM-dd");
       const inMonth = iso.startsWith(monthKey);
       if (inMonth) anyInMonth = true;
       week.push(inMonth ? byDate.get(iso) ?? null : null);
-      cursor = addDays(cursor, 1);
     }
     if (anyInMonth) weeks.push(week);
+    weekMonday = addDays(weekMonday, 7);
   }
   return weeks;
 }
@@ -60,7 +66,7 @@ type Props = {
   className?: string;
 };
 
-/** Full-month week grid for public /beschikbaar. */
+/** Full-month Wed–Sun grid for public /beschikbaar. */
 export function PublicMonthCalendar({ days, className }: Props) {
   const byDate = new Map(days.map((d) => [d.date, d]));
   const monthKeys = [...new Set(days.map((d) => d.date.slice(0, 7)))].sort();
@@ -78,7 +84,7 @@ export function PublicMonthCalendar({ days, className }: Props) {
               <div className="mb-1 h-px flex-1 bg-[#fff201]" />
             </div>
 
-            <div className="mb-2 grid grid-cols-7 gap-1.5 sm:gap-2">
+            <div className="mb-2 grid grid-cols-5 gap-1.5 sm:gap-2">
               {WEEKDAYS.map((d) => (
                 <p
                   key={d}
@@ -93,7 +99,7 @@ export function PublicMonthCalendar({ days, className }: Props) {
               {weeks.map((week, wi) => (
                 <div
                   key={wi}
-                  className="grid grid-cols-7 gap-1.5 sm:gap-2"
+                  className="grid grid-cols-5 gap-1.5 sm:gap-2"
                 >
                   {week.map((day, di) =>
                     day ? (

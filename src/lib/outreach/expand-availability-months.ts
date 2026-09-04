@@ -1,6 +1,7 @@
 /**
- * Expand sparse venue days into full calendar months (Mon–Sun weeks).
- * Missing weekdays → closed; weekends → own_event (niet B2B-doordeweeks).
+ * Expand sparse venue days into full months (Wed–Sun only).
+ * Mon/Tue are never shown — B2B midweek + weekend programmering.
+ * Missing Wed–Fri → closed; Sat/Sun → own_event.
  */
 
 import {
@@ -11,6 +12,11 @@ import {
   startOfMonth,
 } from "date-fns";
 import type { AvailabilityDay, DayStatus } from "@/lib/mock/availability";
+
+/** JS getDay(): 0=Sun … 6=Sat. Skip Mon(1) and Tue(2). */
+export function isShownWeekday(jsDay: number): boolean {
+  return jsDay !== 1 && jsDay !== 2;
+}
 
 function monthKeysFromDays(days: AvailabilityDay[]): string[] {
   const keys = new Set(days.map((d) => d.date.slice(0, 7)));
@@ -27,7 +33,7 @@ function fillerDay(iso: string, status: DayStatus, label: string): AvailabilityD
   };
 }
 
-/** Fill every day in months that appear in `days`. */
+/** Fill Wed–Sun in months that appear in `days`. */
 export function expandAvailabilityToFullMonths(
   days: AvailabilityDay[],
 ): AvailabilityDay[] {
@@ -40,14 +46,16 @@ export function expandAvailabilityToFullMonths(
     const start = startOfMonth(parseISO(`${monthKey}-01`));
     const end = endOfMonth(start);
     for (const day of eachDayOfInterval({ start, end })) {
+      const jsDay = day.getDay();
+      if (!isShownWeekday(jsDay)) continue;
+
       const iso = format(day, "yyyy-MM-dd");
       const existing = byDate.get(iso);
       if (existing) {
         out.push(existing);
         continue;
       }
-      const weekday = day.getDay(); // 0 Sun … 6 Sat
-      const weekend = weekday === 0 || weekday === 6;
+      const weekend = jsDay === 0 || jsDay === 6;
       out.push(
         fillerDay(
           iso,
