@@ -6,7 +6,7 @@ import { getOutreachPlanningSnapshot } from "@/lib/outreach/planning";
 import { sequenceForOpenedNoReply } from "@/lib/outreach/sequence";
 import { formatNumber } from "@/lib/utils";
 
-export const metadata = { title: "Planning" };
+export const metadata = { title: "Wachtrij" };
 export const dynamic = "force-dynamic";
 
 export default async function OutreachPlanningPage() {
@@ -15,17 +15,17 @@ export default async function OutreachPlanningPage() {
   return (
     <div>
       <SectionHeader
-        eyebrow="Review eerst"
-        title="Planning & wachtrij"
-        description="Alles wat klaarstaat om later te mailen — zonder dat er iets de deur uit gaat. Versturen staat hard uit tot jij dat expliciet aanzet."
+        eyebrow="Nog niet versturen"
+        title="Wachtrij"
+        description="Wie klaarstaat om later te mailen — geen kalender. Dit is de send-queue en cadence, los van Agenda."
         action={
           <div className="flex flex-wrap gap-2">
-            <StatusBadge tone="danger">Send locked</StatusBadge>
+            <StatusBadge tone="danger">Live send uit</StatusBadge>
             <Link
               href="/outreach/emails"
               className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
             >
-              Drafts →
+              E-mails →
             </Link>
           </div>
         }

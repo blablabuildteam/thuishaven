@@ -7,6 +7,7 @@ import {
   BarChart3,
   Bell,
   CalendarDays,
+  ClipboardList,
   Home,
   Plug,
   ScrollText,
@@ -82,7 +83,7 @@ const outreachSections: NavSection[] = [
       { href: "/outreach", label: "Overzicht", icon: Send },
       { href: "/outreach/beschikbaarheid", label: "Agenda", icon: CalendarDays },
       { href: "/outreach/emails", label: "E-mails", icon: Mail },
-      { href: "/outreach/planning", label: "Planning", icon: CalendarDays },
+      { href: "/outreach/planning", label: "Wachtrij", icon: ClipboardList },
     ],
   },
   {
@@ -99,7 +100,7 @@ const outreachSections: NavSection[] = [
     label: "Inzicht",
     items: [
       { href: "/outreach/analytics", label: "Resultaten", icon: LineChart },
-      { href: "/outreach/leads", label: "Leads", icon: MessageSquare },
+      { href: "/outreach/leads", label: "Warme leads", icon: MessageSquare },
       { href: "/outreach/kosten", label: "Kosten", icon: BarChart3 },
     ],
   },

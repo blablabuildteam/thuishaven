@@ -1,10 +1,12 @@
 /**
  * Apply Brevo transactional webhook events to outreach_emails.
+ * Opens/clicks/bounces come from Brevo. Replies do not — use recordInboundReply.
  */
 
 import { eq, or, sql } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
-import { inboundReplies, outreachEmails, prospects } from "@/lib/db/schema";
+import { outreachEmails, prospects } from "@/lib/db/schema";
+import { recordInboundReply } from "@/lib/outreach/inbound-reply";
 
 export type BrevoWebhookEvent = {
   event?: string;
@@ -169,19 +171,23 @@ export async function applyBrevoOutreachEvent(
   }
 
   if (eventName === "reply" || eventName === "inbound" || eventName === "replied") {
-    patch.status = "replied";
-    if (!row.repliedAt) patch.repliedAt = at;
-    if (!row.openedAt) patch.openedAt = at;
-
-    await db.insert(inboundReplies).values({
-      outreachEmailId: row.id,
-      prospectId: row.prospectId,
-      fromEmail: email ?? "unknown",
+    // Rare — Brevo transactional webhooks usually do not emit replies.
+    if (!email) return { ok: true, matched: true, reason: "reply_missing_email" };
+    const reply = await recordInboundReply({
+      fromEmail: email,
       subject: event.subject ?? null,
-      bodyPreview: null,
-      sentiment: null,
+      outreachEmailId: row.id,
       receivedAt: at,
     });
+    return {
+      ok: reply.ok,
+      matched: reply.ok && "matched" in reply ? reply.matched : false,
+      reason: !reply.ok
+        ? reply.reason
+        : !reply.matched
+          ? reply.reason
+          : undefined,
+    };
   }
 
   if (Object.keys(patch).length) {

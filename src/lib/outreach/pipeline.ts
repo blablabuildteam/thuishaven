@@ -81,20 +81,21 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     id: "track",
     name: "6. Meten",
     description:
-      "Opens/clicks/replies via Brevo-webhooks → onderwerp A/B + CTR op agenda-link.",
-    dependsOn: ["Brevo-webhooks"],
-    dataSource: "Webhook → outreach_emails / mail_subjects",
+      "Opens/clicks via Brevo-webhook. Replies loggen op Resultaten (evenement@) → inbound_replies.",
+    dependsOn: ["Brevo-webhooks", "Resultaten reply-form"],
+    dataSource: "Webhook + /api/outreach/inbound",
     status: "partial",
-    missing: ["Webhook-URL + Brevo-config"],
+    missing: ["Mailbox-automatisering (optioneel)"],
   },
   {
     id: "route",
     name: "7. Lead routen",
-    description: "Positieve reply → notificatie sales + leadrecord.",
-    dependsOn: ["SALES_NOTIFY_EMAIL", "Brevo"],
-    dataSource: "inbound_replies + notify",
-    status: "needs_credentials",
-    missing: ["SALES_NOTIFY_EMAIL"],
+    description:
+      "Positieve gelogde reply → leadrecord. Sales-mail blijft geblokkeerd tot unlock.",
+    dependsOn: ["inbound reply log"],
+    dataSource: "inbound_replies → leads",
+    status: "partial",
+    missing: ["OUTREACH_SEND_ENABLED voor sales-notify"],
   },
 ];
 

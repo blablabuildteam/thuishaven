@@ -18,8 +18,8 @@ export default async function EmailsPage() {
     <div>
       <SectionHeader
         eyebrow="Outbound"
-        title="Gegenereerde mails"
-        description="Varianten op Reijners tone of voice. Alleen drafts — versturen staat hard uit tot jij dat in planning/env vrijgeeft."
+        title="E-mails"
+        description="Drafts in Reijners tone of voice. Testsends naar team@ mogen; live prospects blijven geblokkeerd tot expliciete unlock."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={source === "db" ? "success" : "neutral"}>
@@ -29,7 +29,7 @@ export default async function EmailsPage() {
               href="/outreach/analytics"
               className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
             >
-              Analytics →
+              Resultaten →
             </Link>
             <Link
               href="/beschikbaar"

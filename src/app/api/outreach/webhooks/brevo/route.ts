@@ -7,7 +7,8 @@ import {
 export const dynamic = "force-dynamic";
 
 /**
- * Brevo transactional webhook → outreach open/click/bounce/reply.
+ * Brevo transactional webhook → outreach open/click/bounce.
+ * Replies: not emitted by Brevo — log via POST /api/outreach/inbound (Resultaten).
  * Configure in Brevo → Transactional → Webhooks:
  *   URL: https://<app>/api/outreach/webhooks/brevo?secret=<OUTREACH_BREVO_WEBHOOK_SECRET>
  *   Events: delivered, opened, click, hardBounce, softBounce, unsubscribed

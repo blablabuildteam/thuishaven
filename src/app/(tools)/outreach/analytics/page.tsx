@@ -2,6 +2,7 @@ import Link from "next/link";
 import { SectionHeader } from "@/components/ui/section-header";
 import { MetricCard } from "@/components/ui/metric-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { LogReplyForm } from "@/components/outreach/log-reply-form";
 import { getOutreachResultsSnapshot } from "@/lib/outreach/results";
 import { formatPercent } from "@/lib/utils";
 import { format } from "date-fns";
@@ -10,26 +11,49 @@ import { nl } from "date-fns/locale";
 export const metadata = { title: "Resultaten" };
 export const dynamic = "force-dynamic";
 
+const STATUS_NL: Record<string, string> = {
+  draft: "Concept",
+  queued: "Wachtrij",
+  sent: "Verzonden",
+  opened: "Geopend",
+  clicked: "Geklikt",
+  replied: "Beantwoord",
+  bounced: "Bounce",
+  opted_out: "Uitgeschreven",
+};
+
 function fmt(iso: string | null) {
   if (!iso) return "—";
   return format(new Date(iso), "d MMM · HH:mm", { locale: nl });
 }
 
+function statusLabel(status: string) {
+  return STATUS_NL[status] ?? status;
+}
+
 export default async function OutreachAnalyticsPage() {
   const snap = await getOutreachResultsSnapshot();
+  const loggableMails = snap.rows
+    .filter((r) => r.status !== "draft" && Boolean(r.sentAt) && !r.replied)
+    .map((r) => ({
+      id: r.id,
+      companyName: r.companyName,
+      toEmail: r.toEmail,
+      subject: r.subject,
+    }));
 
   return (
     <div>
       <SectionHeader
         eyebrow="Performance"
         title="Resultaten"
-        description="Opens, clicks en A/B per onderwerpregel. Tracking via Brevo-webhook. Live prospect-send blijft uit; testsends naar team@ mogen."
+        description="Opens en clicks via Brevo. Replies log je hier handmatig (ze landen in evenement@). Live prospect-send blijft uit; testsends naar team@ mogen."
         action={
           <div className="flex flex-wrap gap-2">
             {snap.sendLocked ? (
-              <StatusBadge tone="danger">Live send locked</StatusBadge>
+              <StatusBadge tone="danger">Live send uit</StatusBadge>
             ) : (
-              <StatusBadge tone="success">Live unlocked</StatusBadge>
+              <StatusBadge tone="success">Live send aan</StatusBadge>
             )}
             {snap.testSendAllowed ? (
               <StatusBadge tone="success">Testsend aan</StatusBadge>
@@ -40,24 +64,33 @@ export default async function OutreachAnalyticsPage() {
               href="/outreach/emails"
               className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
             >
-              Drafts / test →
+              E-mails →
             </Link>
           </div>
         }
       />
 
-      <div className="mb-6 border border-border bg-surface px-4 py-3 text-sm text-text-muted">
-        <p className="font-medium text-text">Zo werkt open-tracking</p>
-        <p className="mt-1">
-          1) Genereer draft met A/B-onderwerp · 2) Stuur test naar{" "}
-          <code className="text-accent">team@blablabuild.com</code> · 3) Open de
-          mail · 4) Open verschijnt hier (Brevo webhook). From:{" "}
-          <code>zakelijk@</code> · reply-to: <code>evenement@</code>.
-        </p>
+      <div className="mb-6 grid gap-3 lg:grid-cols-2">
+        <div className="border border-border bg-surface px-4 py-3 text-sm text-text-muted">
+          <p className="font-medium text-text">Opens & clicks</p>
+          <p className="mt-1">
+            Automatisch via Brevo-webhook na een testsend. From{" "}
+            <code className="text-accent">zakelijk@</code> · reply-to{" "}
+            <code className="text-accent">evenement@</code>.
+          </p>
+        </div>
+        <div className="border border-border bg-surface px-4 py-3 text-sm text-text-muted">
+          <p className="font-medium text-text">Replies</p>
+          <p className="mt-1">
+            Komen binnen op evenement@. Log ze hieronder — dan tellen ze mee in
+            KPIs, verdwijnen ze uit de follow-up queue, en worden positieve
+            antwoorden warme leads.
+          </p>
+        </div>
       </div>
 
-      <div className="stagger mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-        <MetricCard label="Drafts" value={String(snap.kpis.drafts)} />
+      <div className="stagger mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-9">
+        <MetricCard label="Concepten" value={String(snap.kpis.drafts)} />
         <MetricCard label="Verzonden" value={String(snap.kpis.sent)} />
         <MetricCard label="Geopend" value={String(snap.kpis.opened)} accent />
         <MetricCard
@@ -71,20 +104,28 @@ export default async function OutreachAnalyticsPage() {
           label="Reply rate"
           value={formatPercent(snap.kpis.replyRate)}
         />
+        <MetricCard label="Bounces" value={String(snap.kpis.bounced)} />
       </div>
 
       <section className="mb-8 border border-border bg-surface p-4">
         <h2 className="mb-2 font-display text-2xl tracking-[0.06em]">
-          Uitstaande leads · follow-up
+          Reply loggen
+        </h2>
+        <LogReplyForm mails={loggableMails} />
+      </section>
+
+      <section className="mb-8 border border-border bg-surface p-4">
+        <h2 className="mb-2 font-display text-2xl tracking-[0.06em]">
+          Follow-up queue
         </h2>
         <p className="mb-4 text-sm text-text-muted">
-          Geopend, nog geen reply. Na 3 dagen “klaar” voor een zachte reminder —
-          alleen als queue, geen auto-send. Copy noemt nooit dat we een open zagen.
+          Geopend, nog geen antwoord. Na 3 dagen klaar voor een zachte reminder —
+          alleen als queue, geen auto-send. Zeg in de mail nooit dat we een open
+          zagen.
         </p>
         {snap.followUpCandidates.length === 0 ? (
           <p className="text-sm text-text-muted">
-            Nog geen uitstaande leads. Zodra iemand opent zonder te antwoorden,
-            verschijnt die hier.
+            Leeg — niemand heeft geopend zonder te antwoorden.
           </p>
         ) : (
           <ul className="space-y-3">
@@ -102,10 +143,11 @@ export default async function OutreachAnalyticsPage() {
                 </div>
                 <div className="text-right">
                   <StatusBadge tone={c.ready ? "accent" : "info"}>
-                    {c.ready ? "follow-up klaar" : "wacht nog"}
+                    {c.ready ? "reminder klaar" : "nog wachten"}
                   </StatusBadge>
                   <p className="mt-2 text-xs text-text-dim">
-                    {c.daysSinceSent} dag{c.daysSinceSent === 1 ? "" : "en"} geleden
+                    {c.daysSinceSent} dag{c.daysSinceSent === 1 ? "" : "en"}{" "}
+                    geleden
                   </p>
                 </div>
               </li>
@@ -135,7 +177,7 @@ export default async function OutreachAnalyticsPage() {
                   <th className="pb-3 font-medium">Variant</th>
                   <th className="pb-3 font-medium">Arm</th>
                   <th className="pb-3 font-medium">Onderwerp</th>
-                  <th className="pb-3 font-medium">Sent</th>
+                  <th className="pb-3 font-medium">Verzonden</th>
                   <th className="pb-3 font-medium">Open</th>
                   <th className="pb-3 font-medium">CTR</th>
                   <th className="pb-3 font-medium">Reply</th>
@@ -183,7 +225,7 @@ export default async function OutreachAnalyticsPage() {
 
       <section className="mb-8 border border-border bg-surface p-4">
         <h2 className="mb-4 font-display text-2xl tracking-[0.06em]">
-          Mails · open-status
+          Alle mails
         </h2>
         {snap.rows.length === 0 ? (
           <p className="text-sm text-text-muted">
@@ -241,7 +283,7 @@ export default async function OutreachAnalyticsPage() {
                                   : "neutral"
                         }
                       >
-                        {row.status}
+                        {statusLabel(row.status)}
                       </StatusBadge>
                     </td>
                     <td className="py-3 font-mono text-xs text-text-muted">
@@ -279,18 +321,33 @@ export default async function OutreachAnalyticsPage() {
             href="/outreach/leads"
             className="text-xs text-accent hover:underline"
           >
-            Leads →
+            Warme leads →
           </Link>
         </div>
         {snap.recentReplies.length === 0 ? (
-          <p className="text-sm text-text-muted">Nog geen replies.</p>
+          <p className="text-sm text-text-muted">
+            Nog geen gelogde replies. Zolang er niets in evenement@ binnenkomt
+            (of je het hier niet logt), blijft dit leeg.
+          </p>
         ) : (
           <ul className="space-y-3">
             {snap.recentReplies.map((reply) => (
               <li key={reply.id} className="border border-border bg-bg p-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <StatusBadge tone="accent">
-                    {reply.sentiment ?? "reply"}
+                  <StatusBadge
+                    tone={
+                      reply.sentiment === "positive"
+                        ? "accent"
+                        : reply.sentiment === "negative"
+                          ? "danger"
+                          : "info"
+                    }
+                  >
+                    {reply.sentiment === "positive"
+                      ? "positief"
+                      : reply.sentiment === "negative"
+                        ? "negatief"
+                        : "neutraal"}
                   </StatusBadge>
                   <span className="text-xs text-text-dim">
                     {fmt(reply.receivedAt)}

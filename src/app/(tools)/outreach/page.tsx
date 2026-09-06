@@ -25,7 +25,7 @@ const STEPS = [
   {
     n: "1",
     title: "Agenda bijwerken",
-    body: "Zet open wo/do/vr-dagen klaar. Dezelfde agenda deel je met prospects.",
+    body: "Zet open wo–zo-dagen klaar. Dezelfde agenda deel je met prospects.",
     href: "/outreach/beschikbaarheid",
     cta: "Open agenda",
   },
@@ -38,8 +38,8 @@ const STEPS = [
   },
   {
     n: "3",
-    title: "Resultaten bekijken",
-    body: "Zie opens, A/B-onderwerpen en uitstaande leads.",
+    title: "Resultaten & replies",
+    body: "Opens komen automatisch binnen. Replies uit evenement@ log je op Resultaten.",
     href: "/outreach/analytics",
     cta: "Naar resultaten",
   },
@@ -66,10 +66,12 @@ export default async function OutreachPage() {
       <SectionHeader
         eyebrow="Bedrijfsevent Outreach"
         title="Overzicht"
-        description="Hier regel je uitgaande mails voor bedrijfsevents: agenda, drafts, en wat er terugkomt. Live versturen staat uit tot jullie groen licht geven."
+        description="Uitgaande mails voor bedrijfsevents: agenda, drafts, opens en replies. Live versturen blijft uit tot jullie groen licht geven."
         action={
           <div className="flex flex-wrap gap-2">
-            <StatusBadge tone="danger">Live send uit</StatusBadge>
+            <StatusBadge tone={sendBlock ? "danger" : "success"}>
+              {sendBlock ? "Live send uit" : "Live send aan"}
+            </StatusBadge>
             <StatusBadge tone={overview.source === "db" ? "success" : "neutral"}>
               {overview.source === "db"
                 ? `${overview.prospectCount} prospects`
@@ -84,7 +86,8 @@ export default async function OutreachPage() {
           <p className="font-medium text-text">Nu veilig in testmodus</p>
           <p className="mt-1">{sendBlock}</p>
           <p className="mt-1 text-xs text-text-dim">
-            Testsends gaan naar team@ · From zakelijk@ · reply-to evenement@
+            Testsends → team@ · From zakelijk@ · reply-to evenement@ · replies
+            loggen op Resultaten
           </p>
         </div>
       ) : null}
@@ -200,8 +203,11 @@ export default async function OutreachPage() {
           </div>
           {overview.leads.length === 0 ? (
             <p className="text-sm text-text-muted">
-              Nog geen warme leads. Replies landen eerst in evenement@; daarna
-              zetten we ze hier zichtbaar.
+              Nog geen warme leads. Log een positieve reply op{" "}
+              <Link href="/outreach/analytics" className="text-accent underline">
+                Resultaten
+              </Link>{" "}
+              — die verschijnt hier automatisch.
             </p>
           ) : (
             <ul className="space-y-3">
