@@ -5,17 +5,17 @@ import { discoverCompanyProspects } from "@/lib/integrations/kvk";
 
 export const dynamic = "force-dynamic";
 
-const schema = z.object({
-  city: z.string().min(2).optional(),
-  naam: z.string().min(2).optional(),
-  minEmployees: z.number().int().min(1).optional(),
-  maxEmployees: z.number().int().min(1).optional(),
-  jubileeOnly: z.boolean().optional(),
-  maxEnrich: z.number().int().min(1).max(80).optional(),
-});
+const schema = z
+  .object({
+    naam: z.string().min(2).optional(),
+    kvkNummer: z.string().min(8).max(20).optional(),
+  })
+  .refine((v) => Boolean(v.naam || v.kvkNummer), {
+    message: "naam of kvkNummer verplicht",
+  });
 
 /**
- * Dry-run KvK discovery — returns candidates, does not insert prospects.
+ * Dry-run KvK lookup — name or KvK number only. Does not insert prospects.
  * POST /api/outreach/kvk/discover
  */
 export async function POST(request: Request) {
@@ -27,16 +27,15 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Zoek alleen op bedrijfsnaam of KvK-nummer." },
+      { status: 400 },
+    );
   }
 
   const result = await discoverCompanyProspects({
-    places: parsed.data.city ? [parsed.data.city] : undefined,
     naam: parsed.data.naam,
-    minEmployees: parsed.data.minEmployees,
-    maxEmployees: parsed.data.maxEmployees,
-    jubileeOnly: parsed.data.jubileeOnly,
-    maxEnrich: parsed.data.maxEnrich ?? 20,
+    kvkNummer: parsed.data.kvkNummer,
   });
 
   if (!result.ok) {

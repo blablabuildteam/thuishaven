@@ -7,6 +7,7 @@ import { prospects } from "@/lib/mock/outreach";
 import { openAvailabilityDays } from "@/lib/mock/availability";
 import { mailVariants } from "@/lib/mock/mail-performance";
 import { mockMultiSourceDiscover } from "@/lib/outreach/sources";
+import { hasKvkConfig } from "@/lib/integrations/kvk";
 
 export type PipelineStageId =
   | "discover"
@@ -32,21 +33,21 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     id: "discover",
     name: "1. Ontdekken",
     description:
-      "Multi-source: KvK (jubilea/size/regio) + bureau-import + optioneel Places/directories/CRM. Dedupe op naam/domein/KvK.",
-    dependsOn: ["KVK_API_KEY of alternatieve bronnen", "bureau-lijst"],
-    dataSource: "KvK · CSV · CRM · Places · directories",
+      "Prospects komen uit partnerlijst / LinkedIn / CRM — niet uit KvK-targeting. Dedupe op naam/domein/KvK.",
+    dependsOn: ["bureau-lijst of andere bron"],
+    dataSource: "CSV · CRM · LinkedIn",
     status: "partial",
-    missing: ["KVK_API_KEY of enrichment", "Eventbureau CSV"],
+    missing: ["Meer bronnen naast partnerlijst"],
   },
   {
     id: "enrich",
     name: "2. Verrijken",
     description:
-      "Website-scrape voor info@/events@, sector, optioneel enrichment-API. Markeer onbereikbaar zonder mail.",
-    dependsOn: ["discover"],
-    dataSource: "Website-fetch + optionele enrichment-partner",
-    status: "partial",
-    missing: ["Keuze enrichment-partner"],
+      "KvK op bedrijfsnaam of KvK-nummer: vestiging, medewerkers, jubileum, non-mailing. Geen SBI/plaats-sweep.",
+    dependsOn: ["KVK_API_KEY"],
+    dataSource: "KvK Zoeken + Basis + Vestiging",
+    status: "needs_credentials",
+    missing: ["KVK_API_KEY"],
   },
   {
     id: "filter",
@@ -98,6 +99,21 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     missing: ["OUTREACH_SEND_ENABLED voor sales-notify"],
   },
 ];
+
+export function getLivePipelineStages(): PipelineStage[] {
+  return PIPELINE_STAGES.map((stage) => {
+    if (stage.id === "enrich" && hasKvkConfig()) {
+      return {
+        ...stage,
+        status: "partial",
+        missing: [],
+        description:
+          "KvK-key staat aan. Verrijk bestaande prospects op naam of nummer via /outreach/prospects.",
+      };
+    }
+    return stage;
+  });
+}
 
 export type DryRunStepResult = {
   stage: PipelineStageId;

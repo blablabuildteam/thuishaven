@@ -1,10 +1,12 @@
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { KvkEnrichForm } from "@/components/outreach/kvk-enrich-form";
 import {
   listProspects,
   statusLabels,
   type ProspectStatus,
 } from "@/lib/outreach/data";
+import { hasKvkConfig } from "@/lib/integrations/kvk";
 import { formatNumber } from "@/lib/utils";
 
 export const metadata = { title: "Prospects" };
@@ -43,12 +45,25 @@ export default async function ProspectsPage() {
       <SectionHeader
         eyebrow="Lijsten"
         title="Prospects"
-        description="Nu vooral partnerbureaus uit Reijners import. Later komen hier KvK-bedrijven bij — bron zie je per rij."
+        description="Partnerbureaus uit Reijners import. KvK vult bestaande rijen aan (vestiging, medewerkers, jubileum) — geen nieuwe doelgroep."
         action={
-          <StatusBadge tone={source === "db" ? "success" : "neutral"}>
-            {source === "db" ? `${rows.length} uit DB` : "Mockdata"}
-          </StatusBadge>
+          <div className="flex flex-wrap gap-2">
+            <StatusBadge tone={hasKvkConfig() ? "success" : "danger"}>
+              {hasKvkConfig() ? "KvK gekoppeld" : "KvK-key ontbreekt"}
+            </StatusBadge>
+            <StatusBadge tone={source === "db" ? "success" : "neutral"}>
+              {source === "db" ? `${rows.length} uit DB` : "Mockdata"}
+            </StatusBadge>
+          </div>
         }
+      />
+
+      <KvkEnrichForm
+        prospects={rows.map((p) => ({
+          id: p.id,
+          companyName: p.companyName,
+          kvkNumber: p.kvkNumber,
+        }))}
       />
 
       <div className="overflow-x-auto border border-border">
@@ -56,6 +71,7 @@ export default async function ProspectsPage() {
           <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
             <tr>
               <th className="px-4 py-3 font-medium">Bedrijf</th>
+              <th className="px-4 py-3 font-medium">KvK</th>
               <th className="px-4 py-3 font-medium">Type</th>
               <th className="px-4 py-3 font-medium">Bron</th>
               <th className="px-4 py-3 font-medium">Sector</th>
@@ -76,6 +92,9 @@ export default async function ProspectsPage() {
                   <p className="text-xs text-text-dim">
                     {p.city ?? (p.contacts?.length ? `${p.contacts.length} contacten` : "—")}
                   </p>
+                </td>
+                <td className="px-4 py-3 font-mono text-xs text-text-muted">
+                  {p.kvkNumber ?? "—"}
                 </td>
                 <td className="px-4 py-3 text-text-muted">
                   {p.type === "company" ? "Bedrijf" : "Bureau"}

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  PIPELINE_STAGES,
+  getLivePipelineStages,
   runOutreachDryRun,
 } from "@/lib/outreach/pipeline";
 
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   return NextResponse.json({
-    stages: PIPELINE_STAGES,
+    stages: getLivePipelineStages(),
   });
 }
 

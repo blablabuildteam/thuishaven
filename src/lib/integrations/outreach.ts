@@ -40,12 +40,8 @@ export type EnrichmentResult = {
 };
 
 export async function searchKvkCompanies(params: {
-  city?: string;
-  minEmployees?: number;
-  maxEmployees?: number;
   naam?: string;
-  jubileeOnly?: boolean;
-  maxEnrich?: number;
+  kvkNummer?: string;
 }): Promise<{
   ok: boolean;
   error?: string;
@@ -54,12 +50,8 @@ export async function searchKvkCompanies(params: {
   skipped?: Awaited<ReturnType<typeof discoverCompanyProspects>>["skipped"];
 }> {
   const result = await discoverCompanyProspects({
-    places: params.city ? [params.city] : undefined,
     naam: params.naam,
-    minEmployees: params.minEmployees,
-    maxEmployees: params.maxEmployees,
-    jubileeOnly: params.jubileeOnly,
-    maxEnrich: params.maxEnrich ?? 30,
+    kvkNummer: params.kvkNummer,
   });
   if (!result.ok) return { ok: false, error: result.error };
   return {

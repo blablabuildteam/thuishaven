@@ -33,22 +33,21 @@ export const PROSPECT_SOURCES: ProspectSource[] = [
     id: "kvk",
     name: "KvK Handelsregister API",
     description:
-      "Officiële bron voor NL-bedrijven: oprichtingsdatum (jubilea), vestigingsplaats, SBI, soms medewerkersklasse.",
+      "Verrijking van bedrijven die we al kennen: naam of KvK-nummer → vestiging, medewerkers, jubileum, non-mailing. Geen doelgroepenselectie.",
     whatYouGet: [
-      "Bedrijfsnaam + KvK-nummer",
-      "Vestigingsadres / plaats",
-      "Oprichtingsdatum → jubileum-trigger",
-      "Rechtsvorm / SBI-sector",
+      "KvK-nummer + vestiging",
+      "Medewerkers / plaats",
+      "Oprichtingsdatum → jubileum",
+      "Non-mailing-vlag",
     ],
-    legalNote: "B2B; geen onnodige persoonsgegevens opslaan. Opt-out in elke mail.",
-    effort: "middel",
-    cost: "middel",
-    status: "gepland",
+    legalNote:
+      "Alleen zoeken op bedrijfsnaam of KvK-nummer. Geen SBI- of plaats-targeting.",
+    effort: "laag",
+    cost: "laag",
+    status: "ingebouwd",
     envKeys: ["KVK_API_KEY"],
     meetingQuestions: [
-      "Wij richten de KvK API in — kunnen we dat onder jullie KvK/Developer-account doen zodat credits bij jullie landen?",
-      "Wie nodigt ons uit / deelt toegang tot dat account?",
-      "Akkoord targeting 500–5.000 medewerkers, Amsterdam + 50 km?",
+      "Welke bestaande namen/nummers willen we eerst verrijken?",
     ],
   },
   {

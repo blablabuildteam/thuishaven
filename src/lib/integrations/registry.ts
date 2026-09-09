@@ -235,13 +235,11 @@ export const INTEGRATIONS: IntegrationDef[] = [
     name: "KvK API",
     tool: "outreach",
     description:
-      "Prospectidentificatie, medewerkers, oprichtingsdatum/jubilea. Wij zetten op; abonnement + credits op Thuishaven-account.",
+      "Verrijking van bekende bedrijven (naam of KvK-nummer): vestiging, medewerkers, jubilea, non-mailing. Geen SBI-targeting.",
     envKeys: ["KVK_API_KEY"],
     optionalEnvKeys: ["KVK_API_URL"],
     askFromClient: [
-      "Thuishaven-account bij KvK (wij richten API in; credits/facturatie op jullie)",
-      "Wie mag het KvK Developer Portal-account beheren / ons uitnodigen",
-      "Bevestiging targeting: 500–5.000 medewerkers, Amsterdam + 50 km",
+      "API-key in het KvK Developer Portal (contract + credits bij de aanvrager)",
     ],
     verifyHint: "Zoeknaam of basisprofiel call",
     docsUrl: "https://developers.kvk.nl/",

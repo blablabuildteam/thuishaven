@@ -29,6 +29,7 @@ export type OutreachProspect = {
   id: string;
   type: ProspectType;
   companyName: string;
+  kvkNumber?: string | null;
   sector: string | null;
   employeeCount: number | null;
   city: string | null;
@@ -95,6 +96,7 @@ export async function listProspects(options?: {
         id: p.id,
         type: p.type,
         companyName: p.companyName,
+        kvkNumber: p.kvkNumber,
         sector: p.sector,
         employeeCount: p.employeeCount,
         city: p.city,
