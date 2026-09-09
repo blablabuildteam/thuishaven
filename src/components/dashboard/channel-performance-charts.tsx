@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ExternalLink, LoaderCircle } from "lucide-react";
+import { ExternalLink, Heart, LoaderCircle, MessageCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type {
   MarketingPostRow,
@@ -240,6 +240,8 @@ type TopPostBar = {
   id: string;
   title: string;
   views: number;
+  likes: number;
+  comments: number;
   permalink: string | null;
   image: string | null;
   publishedAt: string | null;
@@ -255,6 +257,8 @@ function buildTopPosts(posts: MarketingPostRow[], limit = 8): TopPostBar[] {
       id: post.id,
       title: post.title?.trim() || "Zonder titel",
       views: postViews(post),
+      likes: post.likeCount,
+      comments: post.commentCount,
       permalink: post.permalink,
       image: postImage(post),
       publishedAt: post.publishedAt,
@@ -316,9 +320,12 @@ function TopPostsPanel({
                   />
                 </span>
               </span>
-              <span className="text-[11px] tabular-nums text-text-muted">
-                {formatNumber(post.views)}
-              </span>
+              <TopPostMetrics
+                views={post.views}
+                likes={post.likes}
+                comments={post.comments}
+                className="shrink-0"
+              />
             </>
           );
 
@@ -378,6 +385,45 @@ function TopPostsPanel({
   );
 }
 
+function TopPostMetrics({
+  views,
+  likes,
+  comments,
+  viewsLabel,
+  className,
+}: {
+  views: number;
+  likes: number;
+  comments: number;
+  viewsLabel?: string;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 text-[11px] tabular-nums text-text-muted",
+        className,
+      )}
+    >
+      <span>
+        {formatNumber(views)}
+        {viewsLabel ? ` ${viewsLabel}` : null}
+      </span>
+      <span className="h-3 w-px bg-border" aria-hidden />
+      <span className="inline-flex items-center gap-1 text-text-dim">
+        <Heart className="size-2.5" aria-hidden />
+        <span className="sr-only">likes </span>
+        {formatNumber(likes)}
+      </span>
+      <span className="inline-flex items-center gap-1 text-text-dim">
+        <MessageCircle className="size-2.5" aria-hidden />
+        <span className="sr-only">comments </span>
+        {formatNumber(comments)}
+      </span>
+    </span>
+  );
+}
+
 function TopPostPreview({
   post,
   impressionsLabel,
@@ -398,10 +444,15 @@ function TopPostPreview({
       />
       <span className="min-w-0 flex-1">
         <span className="line-clamp-2 text-sm font-medium">{post.title}</span>
-        <span className="mt-1 block text-xs text-text-muted">
+        <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-text-muted">
           {formatDate(post.publishedAt)}
-          {" · "}
-          {formatNumber(post.views)} {impressionsLabel}
+          <span className="h-3 w-px bg-border" aria-hidden />
+          <TopPostMetrics
+            views={post.views}
+            likes={post.likes}
+            comments={post.comments}
+            viewsLabel={impressionsLabel}
+          />
         </span>
         {linked ? (
           <span className="mt-1 inline-flex items-center gap-1 text-xs underline underline-offset-2">
