@@ -980,7 +980,7 @@ function TicketMetricsVisual({
           </p>
         </div>
 
-        <div title="Verkochte Weeztix-tickets" className="text-center">
+        <div title="Weeztix-shop plus gebruikt uit Appic/RA/vrienden-pools" className="text-center">
           <p className="text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
             Verkocht
           </p>

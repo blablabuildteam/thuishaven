@@ -716,7 +716,22 @@ export async function loadEventInsightsFresh(options?: {
         capacity: e.capacity,
         available: e.available,
       });
-      const sold = inv.sold;
+      const appic = appicByEdition.get(e.id);
+      const raInv = raInvByEdition.get(e.id);
+      const vrienden = vriendenByEdition.get(e.id);
+      const raListing = raByEdition.get(e.id);
+      // Weeztix event sold includes barcodes issued into Appic/RA/vrienden
+      // pools (allotment), not tickets used from those pools.
+      const splitIssued =
+        (appic?.sold ?? 0) +
+        (raInv?.sold ?? 0) +
+        (vrienden?.sold ?? 0);
+      const shopSold = Math.max(0, inv.sold - splitIssued);
+      const poolUsed =
+        (appic?.scanned ?? 0) +
+        (raInv?.scanned ?? 0) +
+        (vrienden?.scanned ?? 0);
+      const sold = shopSold + poolUsed;
       const capacity = inv.capacity;
       const fillPct =
         capacity != null && capacity > 0 ? (sold / capacity) * 100 : null;
@@ -724,16 +739,6 @@ export async function loadEventInsightsFresh(options?: {
         e.avgPriceEur != null ? Number(e.avgPriceEur) : null;
       const scanned = e.scanned ?? 0;
       const scanRatePct = sold > 0 ? (scanned / sold) * 100 : null;
-
-      const appic = appicByEdition.get(e.id);
-      const raInv = raInvByEdition.get(e.id);
-      const vrienden = vriendenByEdition.get(e.id);
-      const raListing = raByEdition.get(e.id);
-      const splitIssued =
-        (appic?.sold ?? 0) +
-        (raInv?.sold ?? 0) +
-        (vrienden?.sold ?? 0);
-      const shopSold = Math.max(0, sold - splitIssued);
       const sources: SalesSourceRow[] = [
         {
           id: "weeztix",
@@ -1220,7 +1225,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v19"],
+  ["event-insights-upcoming-v20"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1236,7 +1241,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v19"],
+  ["event-insights-past-v20"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],
