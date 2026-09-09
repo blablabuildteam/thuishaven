@@ -6,8 +6,8 @@ import {
   emailCampaignMetrics,
   marketingPosts,
   ticketInventory,
+  ticketInventoryDaily,
   ticketSaleReferrers,
-  ticketSalesDaily,
   ticketDemographics,
   weatherDaily,
   externalEvents,
@@ -29,6 +29,11 @@ import {
   fetchOpenMeteoHourlyForDays,
   type WeatherHourRow,
 } from "@/lib/weather/open-meteo";
+import {
+  dailyDeltasFromInventorySnapshots,
+  firstSnapshotDay,
+  normalizeIsoDay,
+} from "@/lib/dashboard/inventory-snapshots";
 import { normalizeWeeztixInventory } from "@/lib/integrations/weeztix/inventory";
 import {
   competeSizeFromAttending,
@@ -320,10 +325,12 @@ export type EventInsight = {
     fillPct: number | null;
     avgPriceEur: number | null;
     lastWeekSold: number | null;
-    /** Tickets sold on the event day itself (Weeztix daily curve). */
+    /** Tickets sold on the event day itself (inventory snapshot delta). */
     sameDaySold: number | null;
-    /** Weeztix daily sold counts from first sale through the event. */
+    /** Daily sold from consecutive Weeztix inventory snapshots. */
     salesByDay: Array<{ day: string; sold: number }>;
+    /** First snapshot day — curve has no Weeztix history before this. */
+    salesTrackedFrom: string | null;
     soldOutDaysBefore: number | null;
     scanned: number;
     scanRatePct: number | null;
@@ -492,21 +499,19 @@ export async function loadEventInsightsFresh(options?: {
         [],
       ),
       safeQuery(
-        "ticketSalesDaily",
+        "ticketInventoryDaily",
         () =>
           db
             .select({
-              editionId: ticketSalesDaily.editionId,
-              day: ticketSalesDaily.day,
-              sold: ticketSalesDaily.sold,
+              editionId: ticketInventoryDaily.editionId,
+              day: ticketInventoryDaily.day,
+              sold: ticketInventoryDaily.sold,
+              paidSold: ticketInventoryDaily.paidSold,
+              freeSold: ticketInventoryDaily.freeSold,
+              revenueCents: ticketInventoryDaily.revenueCents,
             })
-            .from(ticketSalesDaily)
-            .where(
-              and(
-                eq(ticketSalesDaily.platform, "weeztix"),
-                inArray(ticketSalesDaily.editionId, editionIds),
-              ),
-            ),
+            .from(ticketInventoryDaily)
+            .where(inArray(ticketInventoryDaily.editionId, editionIds)),
         [],
       ),
       safeQuery(
@@ -654,18 +659,22 @@ export async function loadEventInsightsFresh(options?: {
       postsByEdition.set(p.editionId, list);
     }
 
+    const snapshotRows = dailyRows.map((r) => ({
+      editionId: r.editionId,
+      day: normalizeIsoDay(r.day),
+      sold: r.sold,
+      paidSold: r.paidSold,
+      freeSold: r.freeSold,
+      revenueCents: r.revenueCents,
+    }));
     const dailyByEdition = new Map<string, Map<string, number>>();
-    for (const r of dailyRows) {
-      const day =
-        typeof r.day === "string"
-          ? r.day.slice(0, 10)
-          : amsterdamDay(r.day);
+    for (const r of dailyDeltasFromInventorySnapshots(snapshotRows)) {
       let m = dailyByEdition.get(r.editionId);
       if (!m) {
         m = new Map();
         dailyByEdition.set(r.editionId, m);
       }
-      m.set(day, (m.get(day) ?? 0) + (r.sold ?? 0));
+      m.set(r.day, (m.get(r.day) ?? 0) + r.sold);
     }
 
     const refsByEdition = new Map<string, Array<{ channel: string; orders: number }>>();
@@ -806,11 +815,13 @@ export async function loadEventInsightsFresh(options?: {
         },
       ];
 
-      const windowStart = shiftIsoDay(day, -6);
+      const lastWeekFrom =
+        status === "upcoming" ? shiftIsoDay(today, -6) : shiftIsoDay(day, -6);
+      const lastWeekTo = status === "upcoming" ? today : day;
       const curve = dailyByEdition.get(e.id) ?? new Map();
       let lastWeekSold = 0;
       for (const [d, n] of curve) {
-        if (d >= windowStart && d <= day) lastWeekSold += n;
+        if (d >= lastWeekFrom && d <= lastWeekTo) lastWeekSold += n;
       }
       const sameDayRaw = curve.get(day);
       const sameDaySold =
@@ -1070,6 +1081,7 @@ export async function loadEventInsightsFresh(options?: {
           lastWeekSold: lastWeekSold > 0 ? lastWeekSold : null,
           sameDaySold,
           salesByDay,
+          salesTrackedFrom: firstSnapshotDay(snapshotRows, e.id),
           soldOutDaysBefore: e.soldOutDaysBefore ?? null,
           scanned,
           scanRatePct,
@@ -1235,7 +1247,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v22"],
+  ["event-insights-upcoming-v23"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1251,7 +1263,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v22"],
+  ["event-insights-past-v23"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],

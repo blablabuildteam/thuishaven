@@ -34,7 +34,11 @@ export type AlertMeta = {
   enabled: boolean;
   allowlist: string[];
   hardDomains: string[];
-  partnerTest?: string[];
+  partnerContacts?: {
+    appic: string;
+    residentAdvisor: string;
+  };
+  partnerCc?: string[];
 };
 
 type FormState = {
@@ -235,11 +239,16 @@ export function AlertsWorkbench({
           {editingId ? "Alert bewerken" : "Nieuwe alert"}
         </h2>
         <p className="mt-1 max-w-2xl text-sm text-text-muted">
-          Weeztix is de trigger. Mail gaat uit als die drempel (of sold-out) is
-          bereikt én een aangevinkt kanaal nog tickets verkoopt. Appic- en
-          RA-alerts sturen ook een korte takedown-mail naar{" "}
-          {(meta.partnerTest ?? ["team@blablabuild.com"]).join(", ")} (test).
-          Interne alerts alleen naar {allowHint}.
+          Weeztix is de trigger. Interne alerts gaan naar {allowHint}. Appic-
+          alerts naar {meta.partnerContacts?.appic ?? "Appic-contact"}, RA-
+          alerts naar {meta.partnerContacts?.residentAdvisor ?? "RA-contact"}
+          {(meta.partnerCc?.length ?? 0) > 0 && (
+            <>
+              {" "}
+              (CC: {(meta.partnerCc ?? []).join(", ")})
+            </>
+          )}
+          .
           {!meta.enabled ? " Mail staat nu uit (ALERT_EMAIL_ENABLED)." : ""}
         </p>
 

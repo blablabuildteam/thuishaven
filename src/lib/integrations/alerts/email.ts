@@ -14,19 +14,29 @@ export type AlertEmailItem = {
   message: string;
 };
 
-function appBaseUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-    "https://thuishaven.vercel.app"
-  );
+/** Public URL for images/links in outbound mail — never localhost. */
+function emailPublicBaseUrl(): string {
+  const dedicated = process.env.EMAIL_PUBLIC_BASE_URL?.replace(/\/$/, "").trim();
+  if (dedicated) return dedicated;
+
+  const fromEnv = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "").trim();
+  if (
+    fromEnv &&
+    !fromEnv.includes("localhost") &&
+    !fromEnv.includes("127.0.0.1") &&
+    !fromEnv.includes("tools.thuishaven.nl")
+  ) {
+    return fromEnv;
+  }
+  return "https://thuishaven.vercel.app";
 }
 
 function logoUrl(): string {
-  return `${appBaseUrl()}/brand/logo-mark.png`;
+  return `${emailPublicBaseUrl()}/brand/logo-mark.png`;
 }
 
 function alertsUrl(): string {
-  return `${appBaseUrl()}/dashboard/alerts`;
+  return `${emailPublicBaseUrl()}/dashboard/alerts`;
 }
 
 function kindLabel(kind: AlertEmailItem["kind"]): string {
@@ -213,8 +223,7 @@ export function renderPartnerTakedownEmail(input: {
       },
     ],
     ctaLabel: "Open alerts in dashboard",
-    footer:
-      "Testmail naar team@blablabuild.com. Later gaat dit bericht naar Appic en Resident Advisor. Thuishaven Tools.",
+    footer: "Thuishaven Events · verzoek tickets offline te zetten.",
   });
 }
 

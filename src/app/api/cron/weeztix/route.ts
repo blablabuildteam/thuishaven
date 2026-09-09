@@ -17,7 +17,7 @@ export const maxDuration = 300;
 /**
  * GET /api/cron/weeztix
  * Vercel Cron: 08:00, 13:00, 19:00, 23:00 Europe/Amsterdam.
- * Events + voorraad + echte dagverkoop elke slot; timeToBank-curves om 08:00.
+ * Events + voorraad + inventory-snapshot elke slot; referrers/demo om 08:00.
  */
 export async function GET(request: Request) {
   if (!isCronAuthorized(request)) {

@@ -1,6 +1,6 @@
 import { eq, isNotNull } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
-import { editions, ticketInventory, ticketInventoryDaily } from "@/lib/db/schema";
+import { editions, ticketInventory } from "@/lib/db/schema";
 import {
   listWeeztixEventTickets,
   listWeeztixEvents,
@@ -366,6 +366,7 @@ async function upsertTicketInventoryForEvents(
   let failed = 0;
   let totalSold = 0;
   const errors: string[] = [];
+  const snappedEditionIds: string[] = [];
 
   async function one(item: { guid: string; editionId: string }) {
     const ticketsRes = await listWeeztixEventTickets(item.guid);
@@ -453,28 +454,6 @@ async function upsertTicketInventoryForEvents(
       });
     }
 
-    await db
-      .insert(ticketInventoryDaily)
-      .values({
-        editionId: item.editionId,
-        day: amsterdamDay(new Date()),
-        sold: summary.sold,
-        paidSold: summary.paidSold,
-        freeSold: summary.freeSold,
-        revenueCents: summary.revenueCents,
-        syncedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: [ticketInventoryDaily.editionId, ticketInventoryDaily.day],
-        set: {
-          sold: summary.sold,
-          paidSold: summary.paidSold,
-          freeSold: summary.freeSold,
-          revenueCents: summary.revenueCents,
-          syncedAt: new Date(),
-        },
-      });
-
     for (const platform of WEEZTIX_DERIVED_PLATFORMS) {
       const channel = DERIVED_PLATFORM_CHANNEL[platform];
       await upsertDerivedChannelInventory(
@@ -487,12 +466,22 @@ async function upsertTicketInventoryForEvents(
       );
     }
 
+    snappedEditionIds.push(item.editionId);
     upserted += 1;
   }
 
   for (let i = 0; i < items.length; i += concurrency) {
     const batch = items.slice(i, i + concurrency);
     await Promise.all(batch.map((item) => one(item)));
+  }
+
+  try {
+    const { snapshotWeeztixInventoryToday } = await import(
+      "@/lib/integrations/weeztix/daily"
+    );
+    await snapshotWeeztixInventoryToday(snappedEditionIds);
+  } catch {
+    // Snapshot-tabel of delta-write mag de voorraad-sync niet klemzetten.
   }
 
   try {

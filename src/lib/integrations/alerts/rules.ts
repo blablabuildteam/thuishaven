@@ -2,6 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { alertRules } from "@/lib/db/schema";
 import {
+  defaultInternalAlertRecipients,
   gateAlertRecipients,
   parseRecipientInput,
 } from "@/lib/integrations/alerts/recipients";
@@ -170,12 +171,22 @@ export async function deleteAlertRule(id: string): Promise<boolean> {
 export async function ensureDefaultAlertRule(): Promise<AlertRule | null> {
   if (!hasDatabase()) return null;
   const existing = await listAlertRules();
-  if (existing.length > 0) return existing[0];
+  if (existing.length > 0) {
+    const rule = existing[0];
+    const merged = [
+      ...new Set([
+        ...rule.recipients,
+        ...defaultInternalAlertRecipients(),
+      ]),
+    ];
+    if (merged.length > rule.recipients.length) {
+      const updated = await updateAlertRule(rule.id, { recipients: merged });
+      return updated ?? rule;
+    }
+    return rule;
+  }
 
-  const envRecipients = parseRecipientInput(process.env.ALERT_NOTIFY_EMAIL);
-  const gated = gateAlertRecipients(
-    envRecipients.length ? envRecipients : ["team@blablabuild.com"],
-  );
+  const gated = gateAlertRecipients(defaultInternalAlertRecipients());
   if (!gated.ok) return null;
 
   return createAlertRule({

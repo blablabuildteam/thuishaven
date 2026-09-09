@@ -72,6 +72,7 @@ import type {
   WeatherHourRow,
 } from "@/lib/weather/open-meteo";
 import { EventSalesCurveChart } from "@/components/dashboard/event-sales-curve-chart";
+import { formatDayShort } from "@/lib/time/amsterdam";
 import { displayEditionName } from "@/lib/editions/lineup";
 import {
   IMPACT_BAR_HEIGHTS,
@@ -920,6 +921,7 @@ function TicketMetricsVisual({
   sameDaySold,
   soldOutDaysBefore,
   salesByDay,
+  salesTrackedFrom,
   eventDay,
 }: {
   sold: number;
@@ -932,6 +934,7 @@ function TicketMetricsVisual({
   sameDaySold: number | null;
   soldOutDaysBefore: number | null;
   salesByDay: Array<{ day: string; sold: number }>;
+  salesTrackedFrom: string | null;
   eventDay: string;
 }) {
   const { available } = ticketComposition(sold, capacity, scanned);
@@ -955,13 +958,13 @@ function TicketMetricsVisual({
       lastWeekSold > 0 && {
         label: "Laatste week",
         value: `+${formatNumber(lastWeekSold)}`,
-        hint: "Verkoop in de 7 dagen vóór/op eventdag",
+        hint: "Tickets erbij in de laatste 7 dagen",
       },
     sameDaySold != null &&
       sameDaySold > 0 && {
         label: "Eventdag",
         value: `+${formatNumber(sameDaySold)}`,
-        hint: "Tickets verkocht op de eventdag zelf (Weeztix)",
+        hint: "Tickets verkocht op de eventdag zelf (snapshot-delta)",
       },
     soldOutDaysBefore != null && {
       label: "Uitverkocht",
@@ -1061,9 +1064,18 @@ function TicketMetricsVisual({
         )}
       </div>
 
-      {salesByDay.length > 0 && (
-        <EventSalesCurveChart points={salesByDay} eventDay={eventDay} />
-      )}
+      {salesByDay.length > 0 ? (
+        <EventSalesCurveChart
+          points={salesByDay}
+          eventDay={eventDay}
+          sinceDay={salesTrackedFrom}
+        />
+      ) : salesTrackedFrom ? (
+        <p className="mt-3 border-t border-border pt-3 text-[10px] text-text-dim">
+          Dagelijkse verkoop vanaf {formatDayShort(salesTrackedFrom)}. Eerste
+          punt na de volgende dagelijkse snapshot.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -1329,6 +1341,7 @@ function EventDetail({ event }: { event: EventInsight }) {
           sameDaySold={tickets.sameDaySold}
           soldOutDaysBefore={tickets.soldOutDaysBefore}
           salesByDay={tickets.salesByDay ?? []}
+          salesTrackedFrom={tickets.salesTrackedFrom ?? null}
           eventDay={event.day}
         />
 

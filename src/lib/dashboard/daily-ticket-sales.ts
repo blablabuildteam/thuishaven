@@ -6,6 +6,10 @@ import {
   ticketInventoryDaily,
   ticketSalesOnDay,
 } from "@/lib/db/schema";
+import {
+  dailyDeltasFromInventorySnapshots,
+  normalizeIsoDay,
+} from "@/lib/dashboard/inventory-snapshots";
 import { amsterdamDay, formatDayShort, shiftIsoDay } from "@/lib/time/amsterdam";
 
 export const DAILY_TICKET_SALES_WINDOW = 14;
@@ -90,8 +94,7 @@ function emptySeries(endDay: string, windowDays: number): DailyTicketSales {
 }
 
 function normalizeDay(value: string | Date): string {
-  if (typeof value === "string") return value.slice(0, 10);
-  return amsterdamDay(value);
+  return normalizeIsoDay(value);
 }
 
 export function buildDailyTicketSales(input: {
@@ -258,77 +261,41 @@ export const loadDailyTicketSales = cache(
     const onDayKeys = new Set(
       onDayRows.map((row) => `${row.editionId}:${normalizeDay(row.day)}`),
     );
-    const cumulative = new Map<
-      string,
-      Map<
-        string,
-        { sold: number; paidSold: number; freeSold: number; revenueCents: number }
-      >
-    >();
-    for (const row of inventoryRows) {
-      const day = normalizeDay(row.day);
-      const byDay = cumulative.get(row.editionId) ?? new Map();
-      byDay.set(day, {
-        sold: row.sold,
-        paidSold: row.paidSold,
-        freeSold: row.freeSold,
-        revenueCents: row.revenueCents,
-      });
-      cumulative.set(row.editionId, byDay);
-    }
-
-    const deltaRows: Array<{
-      editionId: string;
-      name: string;
-      startsAt: Date;
-      day: string;
-      sold: number;
-      paidSold: number;
-      freeSold: number;
-      revenueCents: number;
-    }> = [];
-
-    const editionMeta = new Map<
-      string,
-      { name: string; startsAt: Date }
-    >();
+    const editionMeta = new Map<string, { name: string; startsAt: Date }>();
     for (const row of inventoryRows) {
       editionMeta.set(row.editionId, { name: row.name, startsAt: row.startsAt });
     }
 
-    for (const [editionId, byDay] of cumulative) {
-      const meta = editionMeta.get(editionId);
-      if (!meta) continue;
-      let cursor = startDay;
-      while (cursor <= endDay) {
-        if (onDayKeys.has(`${editionId}:${cursor}`)) {
-          cursor = shiftIsoDay(cursor, 1);
-          continue;
-        }
-        const today = byDay.get(cursor);
-        const yesterday = byDay.get(shiftIsoDay(cursor, -1));
-        if (!today || !yesterday) {
-          cursor = shiftIsoDay(cursor, 1);
-          continue;
-        }
-        const sold = Math.max(0, today.sold - yesterday.sold);
-        if (sold <= 0) {
-          cursor = shiftIsoDay(cursor, 1);
-          continue;
-        }
-        deltaRows.push({
-          editionId,
-          name: meta.name,
-          startsAt: meta.startsAt,
-          day: cursor,
-          sold,
-          paidSold: Math.max(0, today.paidSold - yesterday.paidSold),
-          freeSold: Math.max(0, today.freeSold - yesterday.freeSold),
-          revenueCents: Math.max(0, today.revenueCents - yesterday.revenueCents),
-        });
-        cursor = shiftIsoDay(cursor, 1);
-      }
-    }
+    const deltaRows = dailyDeltasFromInventorySnapshots(
+      inventoryRows.map((row) => ({
+        editionId: row.editionId,
+        day: normalizeDay(row.day),
+        sold: row.sold,
+        paidSold: row.paidSold,
+        freeSold: row.freeSold,
+        revenueCents: row.revenueCents,
+      })),
+    )
+      .filter((row) => {
+        if (row.day < startDay || row.day > endDay || row.sold <= 0) return false;
+        return !onDayKeys.has(`${row.editionId}:${row.day}`);
+      })
+      .flatMap((row) => {
+        const meta = editionMeta.get(row.editionId);
+        if (!meta) return [];
+        return [
+          {
+            editionId: row.editionId,
+            name: meta.name,
+            startsAt: meta.startsAt,
+            day: row.day,
+            sold: row.sold,
+            paidSold: row.paidSold,
+            freeSold: row.freeSold,
+            revenueCents: row.revenueCents,
+          },
+        ];
+      });
 
     return buildDailyTicketSales({
       endDay,

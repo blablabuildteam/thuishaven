@@ -289,7 +289,7 @@ export const ticketSales = pgTable("ticket_sales", {
   syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-/** Dagelijkse sold/revenue per editie — voor mail-attributie en curves. */
+/** Dagelijkse sold/revenue per editie — snapshot-delta (niet timeToBank). */
 export const ticketSalesDaily = pgTable(
   "ticket_sales_daily",
   {

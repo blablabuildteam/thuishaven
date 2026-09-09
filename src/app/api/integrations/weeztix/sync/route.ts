@@ -16,7 +16,7 @@ export const maxDuration = 300;
  * POST /api/integrations/weeztix/sync
  * { mode: "events" } — events + optionele stats
  * { mode: "ticketStats", onlyMissing?: boolean } — historische sold_count voor edities
- * { mode: "dailySales" } — timeToBank-proxy + ticketCountToday (echte dagverkoop)
+ * { mode: "dailySales" } — referrers/demo + ticketCountToday; dagcurve via snapshots
  */
 export async function POST(req: Request) {
   const session = await auth();

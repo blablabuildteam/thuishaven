@@ -126,6 +126,17 @@ export async function listUpcomingPlatformTakedowns(): Promise<
   return groupPlatformTakedowns(findPlatformTakedowns(snaps));
 }
 
+export async function upcomingPlatformTakedownStatus(): Promise<{
+  takedowns: GroupedPlatformTakedown[];
+  upcomingEditionCount: number;
+}> {
+  const snaps = await loadEditionAlertSnapshots().catch(() => []);
+  return {
+    takedowns: groupPlatformTakedowns(findPlatformTakedowns(snaps)),
+    upcomingEditionCount: snaps.length,
+  };
+}
+
 function conflictKey(channel: string, editionId: string): string {
   return `${channel}:${editionId}`;
 }

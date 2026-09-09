@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import {
   editions,
@@ -8,7 +8,14 @@ import {
   ticketSalesDaily,
   ticketSalesOnDay,
 } from "@/lib/db/schema";
-import { amsterdamDay as amsterdamDayShared } from "@/lib/time/amsterdam";
+import {
+  dailyDeltasFromInventorySnapshots,
+  normalizeIsoDay,
+} from "@/lib/dashboard/inventory-snapshots";
+import {
+  amsterdamDay as amsterdamDayShared,
+  shiftIsoDay,
+} from "@/lib/time/amsterdam";
 import { getWeeztixEventStatistics } from "@/lib/integrations/weeztix/client";
 import { upsertWeeztixDemographics } from "@/lib/integrations/weeztix/demographics";
 
@@ -58,11 +65,10 @@ export function classifyReferrer(raw: string): string {
 
 /**
  * Weeztix `timeToBank` = minuten tussen order en bank-settlement (payment latency),
- * géén verkoopmoment vóór het event. Gem. ~uren → curves dumpen op de eventdag.
- * Referrers uit hetzelfde dashboard blijven bruikbaar.
+ * géén verkoopmoment vóór het event. Niet meer schrijven naar ticketSalesDaily —
+ * dagverkoop komt uit inventory-snapshots (sold vandaag − sold gisteren).
  *
  * Sold-out timing komt uit ticket-type `updated_at` (zie sold-out-timing.ts).
- * Deze dagcurve blijft een ruwe proxy voor mail-lift / late-window volume.
  */
 export function dailySalesFromStatistics(
   eventStart: Date,
@@ -255,7 +261,7 @@ export async function syncWeeztixDailySales(options?: {
     .limit(limit);
 
   let editionsWithCurve = 0;
-  let daysUpserted = 0;
+  const daysUpserted = 0;
   let referrersUpserted = 0;
   let demographicsUpserted = 0;
   let brevoOrders = 0;
@@ -279,33 +285,7 @@ export async function syncWeeztixDailySales(options?: {
     });
 
     const points = dailySalesFromStatistics(row.startsAt, stats.data);
-    if (points.length > 0) {
-      editionsWithCurve += 1;
-      for (const p of points) {
-        await db
-          .insert(ticketSalesDaily)
-          .values({
-            editionId: row.id,
-            platform: "weeztix",
-            day: p.day,
-            sold: p.sold,
-            revenueCents: 0,
-            syncedAt: new Date(),
-          })
-          .onConflictDoUpdate({
-            target: [
-              ticketSalesDaily.editionId,
-              ticketSalesDaily.platform,
-              ticketSalesDaily.day,
-            ],
-            set: {
-              sold: p.sold,
-              syncedAt: new Date(),
-            },
-          });
-        daysUpserted += 1;
-      }
-    }
+    if (points.length > 0) editionsWithCurve += 1;
 
     const refs = referrersFromStatistics(stats.data);
     for (const r of refs) {
@@ -443,20 +423,24 @@ export async function syncWeeztixSaleDays(options?: {
     await Promise.all(rows.slice(i, i + concurrency).map((row) => one(row)));
   }
 
-  await snapshotInventoryToday(rows.map((row) => row.id));
+  const snap = await snapshotWeeztixInventoryToday(rows.map((row) => row.id));
 
   return {
     ok: rows.length === 0 || failed < rows.length,
     attempted: rows.length,
-    daysUpserted,
+    daysUpserted: daysUpserted + snap.daysUpserted,
     ticketsToday,
     failed,
     errors,
   };
 }
 
-async function snapshotInventoryToday(editionIds: string[]): Promise<void> {
-  if (editionIds.length === 0) return;
+/** Cumulatieve Weeztix-stand van vandaag + afgeleide dagverkoop t.o.v. vorige snapshot. */
+export async function snapshotWeeztixInventoryToday(
+  editionIds: string[],
+): Promise<{ snapshots: number; daysUpserted: number }> {
+  const unique = [...new Set(editionIds.filter(Boolean))];
+  if (unique.length === 0) return { snapshots: 0, daysUpserted: 0 };
   const db = getDb();
   const day = amsterdamDayShared(new Date());
   const rows = await db
@@ -471,16 +455,110 @@ async function snapshotInventoryToday(editionIds: string[]): Promise<void> {
     .where(
       and(
         eq(ticketInventory.platform, "weeztix"),
-        inArray(ticketInventory.editionId, editionIds),
+        inArray(ticketInventory.editionId, unique),
       ),
     );
 
-  for (const row of rows) {
+  const now = new Date();
+  if (rows.length > 0) {
     await db
       .insert(ticketInventoryDaily)
+      .values(
+        rows.map((row) => ({
+          editionId: row.editionId,
+          day,
+          sold: row.sold,
+          paidSold: row.paidSold,
+          freeSold: row.freeSold,
+          revenueCents: row.revenueCents,
+          syncedAt: now,
+        })),
+      )
+      .onConflictDoUpdate({
+        target: [ticketInventoryDaily.editionId, ticketInventoryDaily.day],
+        set: {
+          sold: sql`excluded.sold`,
+          paidSold: sql`excluded.paid_sold`,
+          freeSold: sql`excluded.free_sold`,
+          revenueCents: sql`excluded.revenue_cents`,
+          syncedAt: now,
+        },
+      });
+  }
+
+  const daysUpserted = await persistSalesFromInventorySnapshots(
+    rows.map((row) => row.editionId),
+    day,
+  );
+  return { snapshots: rows.length, daysUpserted };
+}
+
+async function persistSalesFromInventorySnapshots(
+  editionIds: string[],
+  today = amsterdamDayShared(new Date()),
+): Promise<number> {
+  const unique = [...new Set(editionIds.filter(Boolean))];
+  if (unique.length === 0) return 0;
+  const db = getDb();
+  const fromDay = shiftIsoDay(today, -14);
+  const rows = await db
+    .select({
+      editionId: ticketInventoryDaily.editionId,
+      day: ticketInventoryDaily.day,
+      sold: ticketInventoryDaily.sold,
+      paidSold: ticketInventoryDaily.paidSold,
+      freeSold: ticketInventoryDaily.freeSold,
+      revenueCents: ticketInventoryDaily.revenueCents,
+    })
+    .from(ticketInventoryDaily)
+    .where(
+      and(
+        inArray(ticketInventoryDaily.editionId, unique),
+        gte(ticketInventoryDaily.day, fromDay),
+        lte(ticketInventoryDaily.day, today),
+      ),
+    );
+
+  const deltas = dailyDeltasFromInventorySnapshots(
+    rows.map((row) => ({
+      editionId: row.editionId,
+      day: normalizeIsoDay(row.day),
+      sold: row.sold,
+      paidSold: row.paidSold,
+      freeSold: row.freeSold,
+      revenueCents: row.revenueCents,
+    })),
+  ).filter((row) => row.day === today && row.sold > 0);
+
+  for (const row of deltas) {
+    await db
+      .insert(ticketSalesDaily)
       .values({
         editionId: row.editionId,
-        day,
+        platform: "weeztix",
+        day: row.day,
+        sold: row.sold,
+        revenueCents: row.revenueCents,
+        syncedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [
+          ticketSalesDaily.editionId,
+          ticketSalesDaily.platform,
+          ticketSalesDaily.day,
+        ],
+        set: {
+          sold: row.sold,
+          revenueCents: row.revenueCents,
+          syncedAt: new Date(),
+        },
+      });
+
+    await db
+      .insert(ticketSalesOnDay)
+      .values({
+        editionId: row.editionId,
+        day: row.day,
         sold: row.sold,
         paidSold: row.paidSold,
         freeSold: row.freeSold,
@@ -488,7 +566,7 @@ async function snapshotInventoryToday(editionIds: string[]): Promise<void> {
         syncedAt: new Date(),
       })
       .onConflictDoUpdate({
-        target: [ticketInventoryDaily.editionId, ticketInventoryDaily.day],
+        target: [ticketSalesOnDay.editionId, ticketSalesOnDay.day],
         set: {
           sold: row.sold,
           paidSold: row.paidSold,
@@ -498,6 +576,8 @@ async function snapshotInventoryToday(editionIds: string[]): Promise<void> {
         },
       });
   }
+
+  return deltas.length;
 }
 
 export async function recentDailyCurves(limitEditions = 3): Promise<

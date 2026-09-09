@@ -16,9 +16,14 @@ import {
   formatEventDateLong,
 } from "@/lib/integrations/alerts/event-label";
 import {
+  appicTakedownContact,
+  raTakedownContact,
+} from "@/lib/integrations/alerts/partner-contacts";
+import {
   resolveAlertRecipients,
   resolvePartnerTakedownRecipients,
 } from "@/lib/integrations/alerts/recipients";
+import type { TakedownChannel } from "@/lib/integrations/alerts/types";
 import { getAlertRule } from "@/lib/integrations/alerts/rules";
 
 const TS_ALERT = "ticketswap_after_soldout" as const;
@@ -57,10 +62,12 @@ function isPartnerTakedownType(type: string): boolean {
   return type === RA_ALERT || type === "custom";
 }
 
-function partnerPlatform(
-  type: string,
-): "Appic" | "Resident Advisor" {
+function partnerPlatform(type: string): "Appic" | "Resident Advisor" {
   return type === RA_ALERT ? "Resident Advisor" : "Appic";
+}
+
+function partnerChannel(type: string): TakedownChannel {
+  return type === RA_ALERT ? "resident_advisor" : "appic";
 }
 
 async function sendGatedAlertMail(input: {
@@ -87,12 +94,13 @@ async function sendGatedAlertMail(input: {
 }
 
 async function sendPartnerTakedownMail(input: {
+  channel: TakedownChannel;
   platform: "Appic" | "Resident Advisor";
   eventTitle: string;
   eventDate: string;
   eventFullName?: string;
 }): Promise<{ ok: true; to: string[] } | { ok: false; error: string }> {
-  const resolved = resolvePartnerTakedownRecipients();
+  const resolved = resolvePartnerTakedownRecipients(input.channel);
   if (!resolved.ok) {
     return { ok: false, error: resolved.error };
   }
@@ -100,6 +108,7 @@ async function sendPartnerTakedownMail(input: {
   const { html, text } = renderPartnerTakedownEmail(input);
   const result = await sendBrevoTransactionalEmail({
     to: resolved.to,
+    cc: resolved.cc,
     subject: `[Thuishaven] Tickets offline: ${input.eventTitle} — ${input.eventDate} (${input.platform})`,
     html,
     text,
@@ -107,7 +116,10 @@ async function sendPartnerTakedownMail(input: {
   });
 
   if (!result.ok) return { ok: false, error: result.error };
-  return { ok: true, to: resolved.to };
+  return {
+    ok: true,
+    to: [...resolved.to, ...(resolved.cc ?? [])],
+  };
 }
 
 /** Stuur mail voor actieve alerts die nog niet genotificeerd zijn. */
@@ -151,17 +163,19 @@ export async function notifyUnsentDashboardAlerts(): Promise<{
   }
 
   const partnerRows = pending.filter((row) => isPartnerTakedownType(row.type));
-  const internalRows = pending.filter((row) => !isPartnerTakedownType(row.type));
 
   let sent = 0;
   let lastError: string | null = null;
+  const partnerOk = new Set<string>();
 
   for (const row of partnerRows) {
     const fullName = row.editionName ?? row.title;
     const startsAt = row.startsAt ?? new Date();
     const eventTitle = alertEventTitle(fullName);
     const eventDate = formatEventDateLong(startsAt);
+    const channel = partnerChannel(row.type);
     const result = await sendPartnerTakedownMail({
+      channel,
       platform: partnerPlatform(row.type),
       eventTitle,
       eventDate,
@@ -171,12 +185,13 @@ export async function notifyUnsentDashboardAlerts(): Promise<{
       lastError = result.error;
       continue;
     }
-    await db
-      .update(alerts)
-      .set({ notifiedAt: new Date() })
-      .where(eq(alerts.id, row.id));
+    partnerOk.add(row.id);
     sent += 1;
   }
+
+  const internalRows = pending.filter(
+    (row) => !isPartnerTakedownType(row.type) || partnerOk.has(row.id),
+  );
 
   const byRecipients = new Map<string, typeof internalRows>();
   const recipientLists = new Map<string, string[] | undefined>();
@@ -234,15 +249,39 @@ export async function notifyUnsentDashboardAlerts(): Promise<{
   return { sent, skipped: null, error: lastError };
 }
 
-export async function sendPartnerTakedownTestEmail(): Promise<
+const partnerTakedownSample = {
+  eventTitle: "ADE Opening",
+  eventDate: formatEventDateLong(new Date("2026-10-14T18:00:00+02:00")),
+  eventFullName: "14 oktober | Thuishaven ADE Opening",
+};
+
+export async function sendAppicPartnerTakedownTestEmail(): Promise<
   { ok: true; to: string[] } | { ok: false; error: string }
 > {
   return sendPartnerTakedownMail({
-    platform: "Resident Advisor",
-    eventTitle: "ADE Opening",
-    eventDate: formatEventDateLong(new Date("2026-10-14T18:00:00+02:00")),
-    eventFullName: "14 oktober | Thuishaven ADE Opening",
+    channel: "appic",
+    platform: "Appic",
+    ...partnerTakedownSample,
   });
+}
+
+export async function sendPartnerTakedownTestEmails(): Promise<
+  { ok: true; to: string[] } | { ok: false; error: string }
+> {
+  const appic = await sendAppicPartnerTakedownTestEmail();
+  if (!appic.ok) return appic;
+
+  const ra = await sendPartnerTakedownMail({
+    channel: "resident_advisor",
+    platform: "Resident Advisor",
+    ...partnerTakedownSample,
+  });
+  if (!ra.ok) return ra;
+
+  return {
+    ok: true,
+    to: [...new Set([...appic.to, ...ra.to])],
+  };
 }
 
 export async function sendAlertTestEmail(recipients?: string[]): Promise<
@@ -257,9 +296,11 @@ export async function sendAlertTestEmail(recipients?: string[]): Promise<
   });
   if (!internal.ok) return internal;
 
-  const partner = await sendPartnerTakedownTestEmail();
+  const partner = await sendPartnerTakedownTestEmails();
   if (!partner.ok) return partner;
 
   const to = [...new Set([...internal.to, ...partner.to])];
   return { ok: true, to };
 }
+
+export { appicTakedownContact, raTakedownContact };

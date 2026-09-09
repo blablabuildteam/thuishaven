@@ -98,9 +98,11 @@ function SalesCurveTooltip({
 export function EventSalesCurveChart({
   points,
   eventDay,
+  sinceDay,
 }: {
   points: SalesDayPoint[];
   eventDay: string;
+  sinceDay?: string | null;
 }) {
   const colors = useChartColors();
   const reactId = useId();
@@ -124,6 +126,7 @@ export function EventSalesCurveChart({
         </p>
         <p className="text-[10px] text-text-dim">
           {first.label} – {last.label}
+          {sinceDay ? " · snapshot" : ""}
         </p>
       </div>
       <p className="sr-only">
