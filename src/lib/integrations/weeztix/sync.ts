@@ -366,6 +366,7 @@ async function upsertTicketInventoryForEvents(
   let failed = 0;
   let totalSold = 0;
   const errors: string[] = [];
+  const snappedEditionIds: string[] = [];
 
   async function one(item: { guid: string; editionId: string }) {
     const ticketsRes = await listWeeztixEventTickets(item.guid);
@@ -465,12 +466,22 @@ async function upsertTicketInventoryForEvents(
       );
     }
 
+    snappedEditionIds.push(item.editionId);
     upserted += 1;
   }
 
   for (let i = 0; i < items.length; i += concurrency) {
     const batch = items.slice(i, i + concurrency);
     await Promise.all(batch.map((item) => one(item)));
+  }
+
+  try {
+    const { snapshotWeeztixInventoryToday } = await import(
+      "@/lib/integrations/weeztix/daily"
+    );
+    await snapshotWeeztixInventoryToday(snappedEditionIds);
+  } catch {
+    // Snapshot-tabel of delta-write mag de voorraad-sync niet klemzetten.
   }
 
   try {

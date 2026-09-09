@@ -3,8 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { DeurverkoopCell } from "@/components/dashboard/deurverkoop-cell";
+import { ExpectedCell } from "@/components/dashboard/expected-cell";
 import { displayEditionName } from "@/lib/editions/lineup";
-import { cn, formatDate, formatNumber } from "@/lib/utils";
+import { formatTicketSheetDate } from "@/lib/time/amsterdam";
+import { cn, formatNumber } from "@/lib/utils";
 
 export type TicketPoolCell = {
   /** Check-ins (gebruikt). */
@@ -20,6 +22,8 @@ export type TicketChannelRow = {
   name: string;
   startsAt: Date;
   day: string;
+  timeLabel: string | null;
+  expected: number | null;
   weeztix: number | null;
   deurverkoop: number | null;
   ra: TicketPoolCell;
@@ -171,26 +175,46 @@ function visibleChannels(showDeurverkoop: boolean) {
     : CHANNELS.filter((col) => col.key !== "deurverkoop");
 }
 
+function sumExpected(rows: TicketChannelRow[]): number | null {
+  const values = rows.map((row) => row.expected);
+  if (values.every((n) => n == null)) return null;
+  return values.reduce<number>((sum, n) => sum + (n ?? 0), 0);
+}
+
 function TicketsTable({
   rows,
   showDeurverkoop = true,
+  showExpected = false,
   onDeurverkoopChange,
+  onExpectedChange,
 }: {
   rows: TicketChannelRow[];
   showDeurverkoop?: boolean;
+  showExpected?: boolean;
   onDeurverkoopChange?: (editionId: string, value: number | null) => void;
+  onExpectedChange?: (editionId: string, value: number | null) => void;
 }) {
   const months = groupByMonth(rows);
   const columns = visibleChannels(showDeurverkoop);
-  const colCount = 2 + columns.length + 2;
+  const leadingCols = 3 + (showExpected ? 1 : 0);
+  const colCount = leadingCols + columns.length + 2;
 
   return (
     <div className="overflow-x-auto border border-border">
-      <table className="w-full min-w-[1100px] text-left text-sm">
+      <table className="w-full min-w-[1240px] text-left text-sm">
         <thead className="border-b border-border text-[11px] tracking-wider text-text-dim uppercase">
           <tr>
             <th className="px-4 py-3 font-medium">Editie</th>
             <th className="px-4 py-3 font-medium">Datum</th>
+            <th className="px-4 py-3 font-medium">Tijd</th>
+            {showExpected && (
+              <th className="px-3 py-3 text-right font-medium">
+                Expected
+                <span className="mt-0.5 block font-normal tracking-normal text-text-dim normal-case">
+                  handmatig
+                </span>
+              </th>
+            )}
             {columns.map((col) => (
               <th
                 key={col.key}
@@ -225,16 +249,23 @@ function TicketsTable({
               month={month}
               colCount={colCount}
               columns={columns}
+              showExpected={showExpected}
               onDeurverkoopChange={onDeurverkoopChange}
+              onExpectedChange={onExpectedChange}
             />
           ))}
         </tbody>
         {rows.length > 1 && (
           <tfoot className="border-t border-border">
             <tr className="text-sm">
-              <td className="px-4 py-3 font-medium" colSpan={2}>
+              <td className="px-4 py-3 font-medium" colSpan={3}>
                 Totaal
               </td>
+              {showExpected && (
+                <td className="px-3 py-3 text-right font-mono">
+                  <ChannelCell value={sumExpected(rows)} />
+                </td>
+              )}
               {columns.map((col) => (
                 <td
                   key={col.key}
@@ -264,12 +295,16 @@ function MonthBlock({
   month,
   colCount,
   columns,
+  showExpected,
   onDeurverkoopChange,
+  onExpectedChange,
 }: {
   month: { key: string; label: string; rows: TicketChannelRow[] };
   colCount: number;
   columns: readonly (typeof CHANNELS)[number][];
+  showExpected: boolean;
   onDeurverkoopChange?: (editionId: string, value: number | null) => void;
+  onExpectedChange?: (editionId: string, value: number | null) => void;
 }) {
   return (
     <>
@@ -314,8 +349,28 @@ function MonthBlock({
               )}
             </td>
             <td className="px-4 py-3 whitespace-nowrap text-text-muted">
-              {formatDate(row.startsAt)}
+              {formatTicketSheetDate(row.day)}
             </td>
+            <td className="px-4 py-3 whitespace-nowrap text-text-muted">
+              {row.timeLabel ?? "—"}
+            </td>
+            {showExpected && (
+              <td className="px-3 py-3 text-right font-mono">
+                {onExpectedChange ? (
+                  <ExpectedCell
+                    id={row.id}
+                    name={
+                      row.isExternal ? row.name : displayEditionName(row.name)
+                    }
+                    value={row.expected}
+                    isExternal={row.isExternal}
+                    onSaved={(next) => onExpectedChange(row.id, next)}
+                  />
+                ) : (
+                  <ChannelCell value={row.expected} />
+                )}
+              </td>
+            )}
             {columns.map((col) => (
               <td
                 key={col.key}
@@ -394,16 +449,30 @@ export function TicketsChannelsList({
   const [overrides, setOverrides] = useState<Record<string, number | null>>(
     {},
   );
+  const [expectedOverrides, setExpectedOverrides] = useState<
+    Record<string, number | null>
+  >({});
 
   const applyOverrides = (rows: TicketChannelRow[]): TicketChannelRow[] =>
-    rows.map((row) =>
-      row.isExternal || !(row.id in overrides)
-        ? row
-        : { ...row, deurverkoop: overrides[row.id] ?? null },
-    );
+    rows.map((row) => {
+      const next = { ...row };
+      if (!row.isExternal && row.id in overrides) {
+        next.deurverkoop = overrides[row.id] ?? null;
+      }
+      if (row.id in expectedOverrides) {
+        const expected = expectedOverrides[row.id] ?? null;
+        next.expected = expected;
+        if (row.isExternal) next.externalAttendees = expected;
+      }
+      return next;
+    });
 
   const onDeurverkoopChange = (editionId: string, value: number | null) => {
     setOverrides((prev) => ({ ...prev, [editionId]: value }));
+  };
+
+  const onExpectedChange = (editionId: string, value: number | null) => {
+    setExpectedOverrides((prev) => ({ ...prev, [editionId]: value }));
   };
 
   const upcomingRows = applyOverrides(upcoming);
@@ -431,7 +500,9 @@ export function TicketsChannelsList({
           />
           <TicketsTable
             rows={upcomingRows}
+            showExpected
             onDeurverkoopChange={onDeurverkoopChange}
+            onExpectedChange={onExpectedChange}
           />
         </section>
       )}

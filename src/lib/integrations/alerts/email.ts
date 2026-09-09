@@ -14,19 +14,29 @@ export type AlertEmailItem = {
   message: string;
 };
 
-function appBaseUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-    "https://thuishaven.vercel.app"
-  );
+/** Public URL for images/links in outbound mail — never localhost. */
+function emailPublicBaseUrl(): string {
+  const dedicated = process.env.EMAIL_PUBLIC_BASE_URL?.replace(/\/$/, "").trim();
+  if (dedicated) return dedicated;
+
+  const fromEnv = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "").trim();
+  if (
+    fromEnv &&
+    !fromEnv.includes("localhost") &&
+    !fromEnv.includes("127.0.0.1") &&
+    !fromEnv.includes("tools.thuishaven.nl")
+  ) {
+    return fromEnv;
+  }
+  return "https://thuishaven.vercel.app";
 }
 
 function logoUrl(): string {
-  return `${appBaseUrl()}/brand/logo-mark.png`;
+  return `${emailPublicBaseUrl()}/brand/logo-mark.png`;
 }
 
 function alertsUrl(): string {
-  return `${appBaseUrl()}/dashboard/alerts`;
+  return `${emailPublicBaseUrl()}/dashboard/alerts`;
 }
 
 function kindLabel(kind: AlertEmailItem["kind"]): string {
@@ -183,6 +193,37 @@ export function renderTestAlertEmail() {
     ctaLabel: "Open alerts in dashboard",
     footer:
       "Verstuurd vanuit noreply@thuishaven.nl via Thuishaven Tools. Replies komen niet aan — check het dashboard.",
+  });
+}
+
+export function renderPartnerTakedownEmail(input: {
+  platform: "Appic" | "Resident Advisor";
+  eventTitle: string;
+  eventDate: string;
+  eventFullName?: string;
+}): { html: string; text: string } {
+  const eventLine = `${input.eventTitle} — ${input.eventDate}`;
+  const fullName =
+    input.eventFullName && input.eventFullName !== input.eventTitle
+      ? input.eventFullName
+      : null;
+
+  return renderAlertEmail({
+    eyebrow: `${input.platform} · tickets offline`,
+    title: "Dit event is uitverkocht",
+    intro: `Thuishaven ${input.eventTitle} op ${input.eventDate} is uitverkocht. Zetten jullie de tickets voor dit event offline op ${input.platform}?`,
+    items: [
+      {
+        channel: input.platform,
+        kind: "overbooking",
+        title: eventLine,
+        message: fullName
+          ? `Event in Weeztix: ${fullName}. Geen nieuwe verkopen meer op ${input.platform}, het event zit vol.`
+          : `Geen nieuwe verkopen meer op ${input.platform}, het event zit vol.`,
+      },
+    ],
+    ctaLabel: "Open alerts in dashboard",
+    footer: "Thuishaven Events · verzoek tickets offline te zetten.",
   });
 }
 

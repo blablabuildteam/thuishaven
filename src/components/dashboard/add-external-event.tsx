@@ -14,6 +14,8 @@ export function AddExternalEvent() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [date, setDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
   const [attendees, setAttendees] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +24,8 @@ export function AddExternalEvent() {
   function resetForm() {
     setName("");
     setDate("");
+    setStartTime("");
+    setEndTime("");
     setAttendees("");
     setError(null);
     setSuccess(null);
@@ -58,6 +62,8 @@ export function AddExternalEvent() {
         body: JSON.stringify({
           name,
           startsAt: date,
+          startTime,
+          endTime,
           expectedAttendees: Number(attendees),
         }),
       });
@@ -135,8 +141,8 @@ export function AddExternalEvent() {
                       Add external event
                     </h2>
                     <p className="mt-2 text-sm leading-relaxed text-text-muted">
-                      Handmatig event toevoegen — naam, datum en verwachte bezoekers
-                      (Totaal-kolom).
+                      Handmatig event toevoegen — naam, datum, tijden en verwachte
+                      bezoekers.
                     </p>
                   </div>
                   <button
@@ -188,6 +194,31 @@ export function AddExternalEvent() {
                       />
                     </div>
                   </label>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="block text-sm">
+                      <span className="mb-1.5 block text-[11px] tracking-wide text-text-dim uppercase">
+                        Starttijd
+                      </span>
+                      <input
+                        type="time"
+                        value={startTime}
+                        onChange={(e) => setStartTime(e.target.value)}
+                        className={inputClassName}
+                      />
+                    </label>
+                    <label className="block text-sm">
+                      <span className="mb-1.5 block text-[11px] tracking-wide text-text-dim uppercase">
+                        Eindtijd
+                      </span>
+                      <input
+                        type="time"
+                        value={endTime}
+                        onChange={(e) => setEndTime(e.target.value)}
+                        className={inputClassName}
+                      />
+                    </label>
+                  </div>
 
                   <label className="block text-sm">
                     <span className="mb-1.5 block text-[11px] tracking-wide text-text-dim uppercase">

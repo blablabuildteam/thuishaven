@@ -4,15 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import { LoaderCircle } from "lucide-react";
+import { ExternalLink, Heart, LoaderCircle, MessageCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type {
   MarketingPostRow,
@@ -27,7 +25,7 @@ import {
   type SocialRange,
 } from "@/lib/marketing/social-range";
 import { amsterdamDay, shiftIsoDay } from "@/lib/time/amsterdam";
-import { cn, formatNumber } from "@/lib/utils";
+import { cn, formatDate, formatNumber } from "@/lib/utils";
 
 type Props = {
   channel: SocialFeedChannel;
@@ -238,22 +236,233 @@ function DailyViewsTooltip({
   );
 }
 
-function buildTopPosts(posts: MarketingPostRow[], limit = 8) {
+type TopPostBar = {
+  id: string;
+  title: string;
+  views: number;
+  likes: number;
+  comments: number;
+  permalink: string | null;
+  image: string | null;
+  publishedAt: string | null;
+};
+
+function postImage(post: MarketingPostRow): string | null {
+  return post.storedMediaUrl || post.thumbnailUrl || post.mediaUrl;
+}
+
+function buildTopPosts(posts: MarketingPostRow[], limit = 8): TopPostBar[] {
   return [...posts]
-    .map((post) => {
-      const views = postViews(post);
-      const title = truncateTitle(post.title, 28);
-      return {
-        id: post.id,
-        title,
-        views,
-        likes: post.likeCount,
-        comments: post.commentCount,
-      };
-    })
+    .map((post) => ({
+      id: post.id,
+      title: post.title?.trim() || "Zonder titel",
+      views: postViews(post),
+      likes: post.likeCount,
+      comments: post.commentCount,
+      permalink: post.permalink,
+      image: postImage(post),
+      publishedAt: post.publishedAt,
+    }))
     .sort((a, b) => b.views - a.views)
-    .slice(0, limit)
-    .reverse();
+    .slice(0, limit);
+}
+
+function TopPostsPanel({
+  posts,
+  impressionsLabel,
+}: {
+  posts: TopPostBar[];
+  impressionsLabel: string;
+}) {
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const maxViews = posts[0]?.views ?? 0;
+  const active = posts.find((post) => post.id === hoveredId) ?? posts[0];
+
+  return (
+    <div
+      className="flex flex-1 flex-col border border-border bg-surface"
+      onMouseLeave={() => setHoveredId(null)}
+    >
+      <ol className="flex flex-1 flex-col gap-1 p-3">
+        {posts.map((post, index) => {
+          const pct = maxViews > 0 ? (post.views / maxViews) * 100 : 0;
+          const isActive = active?.id === post.id;
+          const rowClass = cn(
+            "grid grid-cols-[1.25rem_1.5rem_minmax(0,1fr)_auto] items-center gap-2 px-1 py-0.5 text-left transition",
+            isActive ? "bg-surface-hover" : "hover:bg-surface-hover/70",
+            post.permalink && "cursor-pointer",
+          );
+          const row = (
+            <>
+              <span className="text-[10px] tabular-nums text-text-dim">
+                {index + 1}
+              </span>
+              <span
+                className="size-6 shrink-0 bg-bg-elevated bg-cover bg-center"
+                style={
+                  post.image
+                    ? { backgroundImage: `url(${post.image})` }
+                    : undefined
+                }
+                aria-hidden
+              />
+              <span className="min-w-0">
+                <span
+                  className="block truncate text-[11px] leading-tight"
+                  title={post.title}
+                >
+                  {post.title}
+                </span>
+                <span className="mt-0.5 block h-1 bg-bg-elevated">
+                  <span
+                    className="block h-full bg-text"
+                    style={{ width: `${pct}%` }}
+                  />
+                </span>
+              </span>
+              <TopPostMetrics
+                views={post.views}
+                likes={post.likes}
+                comments={post.comments}
+                className="shrink-0"
+              />
+            </>
+          );
+
+          return (
+            <li key={post.id}>
+              {post.permalink ? (
+                <a
+                  href={post.permalink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={rowClass}
+                  onMouseEnter={() => setHoveredId(post.id)}
+                  onFocus={() => setHoveredId(post.id)}
+                >
+                  {row}
+                </a>
+              ) : (
+                <div
+                  className={rowClass}
+                  onMouseEnter={() => setHoveredId(post.id)}
+                >
+                  {row}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+
+      {active && (
+        <div className="border-t border-border p-3">
+          {active.permalink ? (
+            <a
+              href={active.permalink}
+              target="_blank"
+              rel="noreferrer"
+              className="flex gap-3 transition hover:bg-surface-hover/50"
+            >
+              <TopPostPreview
+                post={active}
+                impressionsLabel={impressionsLabel}
+                linked
+              />
+            </a>
+          ) : (
+            <div className="flex gap-3">
+              <TopPostPreview
+                post={active}
+                impressionsLabel={impressionsLabel}
+                linked={false}
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TopPostMetrics({
+  views,
+  likes,
+  comments,
+  viewsLabel,
+  className,
+}: {
+  views: number;
+  likes: number;
+  comments: number;
+  viewsLabel?: string;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 text-[11px] tabular-nums text-text-muted",
+        className,
+      )}
+    >
+      <span>
+        {formatNumber(views)}
+        {viewsLabel ? ` ${viewsLabel}` : null}
+      </span>
+      <span className="h-3 w-px bg-border" aria-hidden />
+      <span className="inline-flex items-center gap-1 text-text-dim">
+        <Heart className="size-2.5" aria-hidden />
+        <span className="sr-only">likes </span>
+        {formatNumber(likes)}
+      </span>
+      <span className="inline-flex items-center gap-1 text-text-dim">
+        <MessageCircle className="size-2.5" aria-hidden />
+        <span className="sr-only">comments </span>
+        {formatNumber(comments)}
+      </span>
+    </span>
+  );
+}
+
+function TopPostPreview({
+  post,
+  impressionsLabel,
+  linked,
+}: {
+  post: TopPostBar;
+  impressionsLabel: string;
+  linked: boolean;
+}) {
+  return (
+    <>
+      <span
+        className="size-16 shrink-0 bg-bg-elevated bg-cover bg-center"
+        style={
+          post.image ? { backgroundImage: `url(${post.image})` } : undefined
+        }
+        aria-hidden
+      />
+      <span className="min-w-0 flex-1">
+        <span className="line-clamp-2 text-sm font-medium">{post.title}</span>
+        <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-text-muted">
+          {formatDate(post.publishedAt)}
+          <span className="h-3 w-px bg-border" aria-hidden />
+          <TopPostMetrics
+            views={post.views}
+            likes={post.likes}
+            comments={post.comments}
+            viewsLabel={impressionsLabel}
+          />
+        </span>
+        {linked ? (
+          <span className="mt-1 inline-flex items-center gap-1 text-xs underline underline-offset-2">
+            Open post
+            <ExternalLink className="size-3" aria-hidden />
+          </span>
+        ) : null}
+      </span>
+    </>
+  );
 }
 
 async function fetchPostsForRange(
@@ -391,14 +600,6 @@ export function ChannelPerformanceCharts({
     return `${shortDay(start, range)} – ${shortDay(end, range)}`;
   }, [range]);
 
-  const tooltipStyle = {
-    background: colors.tooltipBg,
-    border: `1px solid ${colors.primary}`,
-    borderRadius: 0,
-    fontSize: 12,
-    color: colors.tooltipFg,
-  } as const;
-
   const showChartsLoading =
     (loading && allPosts.length === 0) || rangeLoading;
 
@@ -452,22 +653,23 @@ export function ChannelPerformanceCharts({
           {error}
         </p>
       ) : (
-        <div key={range} className="animate-fade-up grid gap-6 lg:grid-cols-2">
-          <div>
+        <div key={range} className="animate-fade-up grid gap-6 lg:grid-cols-2 lg:items-stretch">
+          <div className="flex flex-col">
             <h3 className="mb-3 text-xs font-medium tracking-[0.12em] text-text-dim uppercase">
               {impressionsLabel} per dag
             </h3>
             {daily.length === 0 ? (
-              <p className="border border-border px-4 py-3 text-sm text-text-muted">
+              <p className="flex-1 border border-border px-4 py-3 text-sm text-text-muted">
                 Geen publicatiedata om te plotten.
               </p>
             ) : (
-              <div className="h-56 w-full border border-border bg-surface p-3">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={daily}
-                    margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
-                  >
+              <div className="relative min-h-56 w-full flex-1 border border-border bg-surface">
+                <div className="absolute inset-0 p-3">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart
+                      data={daily}
+                      margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
+                    >
                     <defs>
                       <linearGradient
                         id={`fillChannelViews-${channel}`}
@@ -534,68 +736,26 @@ export function ChannelPerformanceCharts({
                       legendType="none"
                       isAnimationActive={false}
                     />
-                  </AreaChart>
-                </ResponsiveContainer>
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             )}
           </div>
 
-          <div>
+          <div className="flex flex-col">
             <h3 className="mb-3 text-xs font-medium tracking-[0.12em] text-text-dim uppercase">
               Top posts · {impressionsLabel}
             </h3>
             {topPosts.length === 0 ? (
-              <p className="border border-border px-4 py-3 text-sm text-text-muted">
+              <p className="flex-1 border border-border px-4 py-3 text-sm text-text-muted">
                 Geen posts in deze periode.
               </p>
             ) : (
-              <div className="h-56 w-full border border-border bg-surface p-3">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={topPosts}
-                    layout="vertical"
-                    margin={{ top: 4, right: 12, left: 4, bottom: 0 }}
-                  >
-                    <CartesianGrid
-                      stroke={colors.grid}
-                      strokeDasharray="3 3"
-                      horizontal={false}
-                    />
-                    <XAxis
-                      type="number"
-                      tick={{ fill: colors.tick, fontSize: 11 }}
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={(v) => formatNumber(Number(v))}
-                    />
-                    <YAxis
-                      type="category"
-                      dataKey="title"
-                      width={96}
-                      tick={{ fill: colors.tick, fontSize: 10 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip
-                      contentStyle={tooltipStyle}
-                      formatter={(value, name) => {
-                        const n =
-                          typeof value === "number" ? value : Number(value ?? 0);
-                        if (name === "views") {
-                          return [formatNumber(n), impressionsLabel];
-                        }
-                        return [formatNumber(n), String(name)];
-                      }}
-                    />
-                    <Bar
-                      dataKey="views"
-                      fill={colors.primary}
-                      name="views"
-                      isAnimationActive={false}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <TopPostsPanel
+                posts={topPosts}
+                impressionsLabel={impressionsLabel}
+              />
             )}
           </div>
         </div>

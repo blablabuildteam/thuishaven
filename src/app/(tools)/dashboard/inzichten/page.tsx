@@ -16,11 +16,7 @@ export const metadata = { title: "Inzichten" };
 export default async function InzichtenPage() {
   return (
     <div className="pb-24">
-      <SectionHeader
-        eyebrow="Inzichten"
-        title="Event-inzichten"
-        description="Per event: kaartverkoop × social × mail × weer × concurrentie. Klik op een event voor de details."
-      />
+      <SectionHeader eyebrow="Inzichten" title="Event-inzichten" />
 
       <Suspense fallback={<ConflictsSkeleton />}>
         <ConflictsBanner />

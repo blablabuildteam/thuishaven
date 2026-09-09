@@ -131,6 +131,7 @@ export function alertSender() {
 /** Transactional e-mail (alerts / interne notificaties). */
 export async function sendBrevoTransactionalEmail(input: {
   to: string[];
+  cc?: string[];
   subject: string;
   html: string;
   text?: string;
@@ -148,6 +149,12 @@ export async function sendBrevoTransactionalEmail(input: {
     return { ok: false, error: "Geen ontvangers" };
   }
 
+  const cc = (input.cc ?? [])
+    .flatMap((t) => t.split(","))
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .filter((email) => !recipients.includes(email));
+
   const url = `${BREVO_API}/smtp/email`;
   assertExternalReadOnly("POST", url, { allowTransactionalEmailPost: true });
   const sender = input.sender ?? defaultSender();
@@ -163,6 +170,7 @@ export async function sendBrevoTransactionalEmail(input: {
       body: JSON.stringify({
         sender,
         to: recipients.map((email) => ({ email })),
+        ...(cc.length > 0 ? { cc: cc.map((email) => ({ email })) } : {}),
         subject: input.subject,
         htmlContent: input.html,
         textContent: input.text,

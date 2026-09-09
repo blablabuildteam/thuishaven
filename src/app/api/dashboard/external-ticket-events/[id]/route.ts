@@ -67,6 +67,8 @@ export async function PATCH(
   if (updates.expectedAttendees != null) {
     patch.expectedAttendees = updates.expectedAttendees;
   }
+  if (updates.startTime !== undefined) patch.startTime = updates.startTime;
+  if (updates.endTime !== undefined) patch.endTime = updates.endTime;
   if (updates.scanned !== undefined) patch.scanned = updates.scanned;
 
   const updated = await db
@@ -78,6 +80,8 @@ export async function PATCH(
       name: externalTicketEvents.name,
       startsAt: externalTicketEvents.startsAt,
       expectedAttendees: externalTicketEvents.expectedAttendees,
+      startTime: externalTicketEvents.startTime,
+      endTime: externalTicketEvents.endTime,
       scanned: externalTicketEvents.scanned,
     });
 

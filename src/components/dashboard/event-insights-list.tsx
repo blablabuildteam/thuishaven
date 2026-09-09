@@ -71,6 +71,8 @@ import type {
   WeatherCodeIconKind,
   WeatherHourRow,
 } from "@/lib/weather/open-meteo";
+import { EventSalesCurveChart } from "@/components/dashboard/event-sales-curve-chart";
+import { formatDayShort } from "@/lib/time/amsterdam";
 import { displayEditionName } from "@/lib/editions/lineup";
 import {
   IMPACT_BAR_HEIGHTS,
@@ -78,6 +80,7 @@ import {
   organicBarFill,
 } from "@/lib/insights/impact-scale";
 import type { DemographicBucket } from "@/lib/db/schema";
+import type { TakedownChannel } from "@/lib/integrations/alerts/types";
 
 const COLLAPSE_MS = 380;
 const DETAIL_LOAD_MS = 220;
@@ -917,6 +920,9 @@ function TicketMetricsVisual({
   lastWeekSold,
   sameDaySold,
   soldOutDaysBefore,
+  salesByDay,
+  salesTrackedFrom,
+  eventDay,
 }: {
   sold: number;
   capacity: number | null;
@@ -927,6 +933,9 @@ function TicketMetricsVisual({
   lastWeekSold: number | null;
   sameDaySold: number | null;
   soldOutDaysBefore: number | null;
+  salesByDay: Array<{ day: string; sold: number }>;
+  salesTrackedFrom: string | null;
+  eventDay: string;
 }) {
   const { available } = ticketComposition(sold, capacity, scanned);
 
@@ -949,13 +958,13 @@ function TicketMetricsVisual({
       lastWeekSold > 0 && {
         label: "Laatste week",
         value: `+${formatNumber(lastWeekSold)}`,
-        hint: "Verkoop in de 7 dagen vóór/op eventdag",
+        hint: "Tickets erbij in de laatste 7 dagen",
       },
     sameDaySold != null &&
       sameDaySold > 0 && {
         label: "Eventdag",
         value: `+${formatNumber(sameDaySold)}`,
-        hint: "Tickets verkocht op de eventdag zelf (Weeztix)",
+        hint: "Tickets verkocht op de eventdag zelf (snapshot-delta)",
       },
     soldOutDaysBefore != null && {
       label: "Uitverkocht",
@@ -980,7 +989,7 @@ function TicketMetricsVisual({
           </p>
         </div>
 
-        <div title="Verkochte Weeztix-tickets" className="text-center">
+        <div title="Weeztix-shop plus gebruikt uit Appic/RA/vrienden-pools" className="text-center">
           <p className="text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
             Verkocht
           </p>
@@ -1054,6 +1063,19 @@ function TicketMetricsVisual({
           </span>
         )}
       </div>
+
+      {salesByDay.length > 0 ? (
+        <EventSalesCurveChart
+          points={salesByDay}
+          eventDay={eventDay}
+          sinceDay={salesTrackedFrom}
+        />
+      ) : salesTrackedFrom ? (
+        <p className="mt-3 border-t border-border pt-3 text-[10px] text-text-dim">
+          Dagelijkse verkoop vanaf {formatDayShort(salesTrackedFrom)}. Eerste
+          punt na de volgende dagelijkse snapshot.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -1110,7 +1132,21 @@ function EventDetailSkeleton() {
   );
 }
 
-function EventRow({ event }: { event: EventInsight }) {
+function takedownHint(channels: TakedownChannel[]): string {
+  const hasAppic = channels.includes("appic");
+  const hasRa = channels.includes("resident_advisor");
+  if (hasAppic && hasRa) return "Nog tickets op Appic en Resident Advisor";
+  if (hasAppic) return "Nog tickets op Appic";
+  return "Nog tickets op Resident Advisor";
+}
+
+function EventRow({
+  event,
+  takedownChannels,
+}: {
+  event: EventInsight;
+  takedownChannels?: TakedownChannel[];
+}) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [phase, setPhase] = useState<"loading" | "ready">("loading");
@@ -1152,7 +1188,12 @@ function EventRow({ event }: { event: EventInsight }) {
   const toggleOpen = () => setOpen((o) => !o);
 
   return (
-    <li className="border border-border bg-surface">
+    <li
+      className={cn(
+        "border border-border bg-surface",
+        takedownChannels?.length && "border-l-2 border-l-warn/70",
+      )}
+    >
       <div className="group/row transition-colors hover:bg-surface-hover/50">
         {/* Main row: date + title + metrics */}
         <div className="flex w-full items-start gap-4 px-4 py-4">
@@ -1188,6 +1229,11 @@ function EventRow({ event }: { event: EventInsight }) {
                   </span>
                 )}
               </span>
+              {takedownChannels?.length ? (
+                <span className="mt-1 block text-[11px] tracking-wide text-text-dim">
+                  {takedownHint(takedownChannels)}
+                </span>
+              ) : null}
             </span>
           </button>
           <button
@@ -1294,6 +1340,9 @@ function EventDetail({ event }: { event: EventInsight }) {
           lastWeekSold={tickets.lastWeekSold}
           sameDaySold={tickets.sameDaySold}
           soldOutDaysBefore={tickets.soldOutDaysBefore}
+          salesByDay={tickets.salesByDay ?? []}
+          salesTrackedFrom={tickets.salesTrackedFrom ?? null}
+          eventDay={event.day}
         />
 
         <div className="grid gap-x-6 gap-y-1 lg:grid-cols-2">
@@ -1420,9 +1469,16 @@ function EventDetail({ event }: { event: EventInsight }) {
                   />
                   {demographics.ageReady && (
                     <DemoMini
-                      title="Leeftijd"
+                      title={
+                        demographics.ageAvg != null
+                          ? `Leeftijd · gem. ${demographics.ageAvg}`
+                          : "Leeftijd"
+                      }
                       icon={Cake}
-                      rows={demographics.age}
+                      rows={[...demographics.age]
+                        .filter((r) => r.key !== "onbekend")
+                        .sort((a, b) => b.count - a.count)}
+                      limit={6}
                     />
                   )}
                   <DemoMini
@@ -1439,6 +1495,9 @@ function EventDetail({ event }: { event: EventInsight }) {
                     {formatPercent(demographics.coveragePct, 0)} ingevuld (
                     {formatNumber(demographics.answered)}/
                     {formatNumber(demographics.total)})
+                    {demographics.ageSampleSize > 0
+                      ? ` · leeftijd uit ${formatNumber(demographics.ageSampleSize)} geboortedata`
+                      : ""}
                   </p>
                 )}
               </>
@@ -2395,15 +2454,17 @@ function DemoMini({
   title,
   icon: Icon,
   rows,
+  limit = 3,
 }: {
   title: string;
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   rows: DemographicBucket[];
+  limit?: number;
 }) {
   const known = rows.filter((r) => r.key !== "onbekend");
   const total = known.reduce((s, r) => s + r.count, 0);
   if (!total) return null;
-  const top = known.slice(0, 3);
+  const top = known.slice(0, limit);
   return (
     <div>
       <p className="mb-1 flex items-center gap-1 text-[10px] text-text-dim">
@@ -2488,9 +2549,14 @@ function EventListHeading({
 export function EventInsightsList({
   upcoming,
   past,
+  platformAlerts = [],
 }: {
   upcoming: EventInsight[];
   past: EventInsight[];
+  platformAlerts?: Array<{
+    editionId: string;
+    channels: TakedownChannel[];
+  }>;
 }) {
   const [showAllUpcoming, setShowAllUpcoming] = useState(false);
   const [showAllPast, setShowAllPast] = useState(false);
@@ -2498,6 +2564,9 @@ export function EventInsightsList({
   const visiblePast = showAllPast ? past : past.slice(0, 8);
   const upcomingMonths = groupByMonth(visibleUpcoming);
   const pastMonths = groupByMonth(visiblePast);
+  const takedownById = new Map(
+    platformAlerts.map((a) => [a.editionId, a.channels]),
+  );
 
   return (
     <div>
@@ -2517,7 +2586,11 @@ export function EventInsightsList({
                 </p>
                 <ul className="space-y-2">
                   {m.events.map((e) => (
-                    <EventRow key={e.editionId} event={e} />
+                    <EventRow
+                      key={e.editionId}
+                      event={e}
+                      takedownChannels={takedownById.get(e.editionId)}
+                    />
                   ))}
                 </ul>
               </div>
@@ -2554,7 +2627,11 @@ export function EventInsightsList({
                 </p>
                 <ul className="space-y-2">
                   {m.events.map((e) => (
-                    <EventRow key={e.editionId} event={e} />
+                    <EventRow
+                      key={e.editionId}
+                      event={e}
+                      takedownChannels={takedownById.get(e.editionId)}
+                    />
                   ))}
                 </ul>
               </div>

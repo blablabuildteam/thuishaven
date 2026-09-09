@@ -5,7 +5,10 @@ import {
   isWeeztixCronSlot,
 } from "@/lib/integrations/cron";
 import { logIntegration } from "@/lib/integrations/log";
-import { syncWeeztixDailySales } from "@/lib/integrations/weeztix/daily";
+import {
+  syncWeeztixDailySales,
+  syncWeeztixSaleDays,
+} from "@/lib/integrations/weeztix/daily";
 import { syncWeeztixReadOnly } from "@/lib/integrations/weeztix/sync";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +17,7 @@ export const maxDuration = 300;
 /**
  * GET /api/cron/weeztix
  * Vercel Cron: 08:00, 13:00, 19:00, 23:00 Europe/Amsterdam.
- * Events + voorraad elke slot; dagcurves alleen om 08:00 (mail-lift).
+ * Events + voorraad + inventory-snapshot elke slot; referrers/demo om 08:00.
  */
 export async function GET(request: Request) {
   if (!isCronAuthorized(request)) {
@@ -35,6 +38,14 @@ export async function GET(request: Request) {
   }
 
   const events = await syncWeeztixReadOnly({ includeStats: true });
+  const saleDays = await syncWeeztixSaleDays({ limit: 120 }).catch((e) => ({
+    ok: false as const,
+    attempted: 0,
+    daysUpserted: 0,
+    ticketsToday: 0,
+    failed: 1,
+    errors: [e instanceof Error ? e.message : "saleDays mislukt"],
+  }));
   const runDaily = force || hour === 8;
   const daily = runDaily
     ? await syncWeeztixDailySales({ limit: 80, daysBack: 400 }).catch((e) => ({
@@ -62,19 +73,25 @@ export async function GET(request: Request) {
     level: ok ? "info" : "error",
     event: ok ? "cron.ok" : "cron.failed",
     message: ok
-      ? `Cron Weeztix: ${events.eventsFetched} events, ${events.editionsUpserted} edities, ${events.inventoryUpserted} voorraad${
+      ? `Cron Weeztix: ${events.eventsFetched} events, ${events.editionsUpserted} edities, ${events.inventoryUpserted} voorraad · ${saleDays.ticketsToday} tickets vandaag${
           daily
             ? ` · ${daily.editionsWithCurve} curves / ${daily.daysUpserted} dagen`
             : ""
         }`
-      : [events.error, ...(daily?.errors ?? [])].filter(Boolean).join(" · ") ||
-        "Weeztix cron mislukt",
+      : [events.error, ...saleDays.errors, ...(daily?.errors ?? [])]
+          .filter(Boolean)
+          .join(" · ") || "Weeztix cron mislukt",
     detail: {
       trigger: "vercel-cron",
       amsterdamHour: hour,
       eventsFetched: events.eventsFetched,
       editionsUpserted: events.editionsUpserted,
       inventoryUpserted: events.inventoryUpserted,
+      saleDays: {
+        daysUpserted: saleDays.daysUpserted,
+        ticketsToday: saleDays.ticketsToday,
+        failed: saleDays.failed,
+      },
       daily: daily
         ? {
             editionsWithCurve: daily.editionsWithCurve,
@@ -88,7 +105,7 @@ export async function GET(request: Request) {
 
   if (!ok) {
     console.error(
-      `[weeztix] cron.failed: ${events.error ?? daily?.errors.join("; ")}`,
+      `[weeztix] cron.failed: ${events.error ?? saleDays.errors.join("; ") ?? daily?.errors.join("; ")}`,
     );
   }
 
@@ -99,6 +116,7 @@ export async function GET(request: Request) {
       readOnly: true,
       ok,
       events,
+      saleDays,
       daily,
     },
     { status: ok ? 200 : 502 },

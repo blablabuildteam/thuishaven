@@ -1,3 +1,10 @@
+import {
+  appicTakedownContact,
+  partnerContactMeta,
+  raTakedownContact,
+} from "@/lib/integrations/alerts/partner-contacts";
+import type { TakedownChannel } from "@/lib/integrations/alerts/types";
+
 /**
  * Harde poort voor alert-mails.
  *
@@ -12,6 +19,19 @@
 export const ALERT_EMAIL_HARD_DOMAINS = [
   "thuishaven.nl",
   "blablabuild.com",
+] as const;
+
+/** Internal sold-out mismatch alerts (fallback als ALERT_NOTIFY_EMAIL leeg is). */
+export const DEFAULT_INTERNAL_ALERT_RECIPIENTS = [
+  "team@blablabuild.com",
+  "annelene@thuishaven.nl",
+  "quincy@thuishaven.nl",
+] as const;
+
+/** CC op Appic- en RA-takedownmails — Thuishaven ziet mee wat partners krijgen. */
+export const PARTNER_TAKEDOWN_CC_RECIPIENTS = [
+  "annelene@thuishaven.nl",
+  "quincy@thuishaven.nl",
 ] as const;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
@@ -140,11 +160,46 @@ export function resolveAlertRecipients(
   return gateAlertRecipients(candidates);
 }
 
+export function defaultInternalAlertRecipients(): string[] {
+  const env = parseRecipientInput(process.env.ALERT_NOTIFY_EMAIL);
+  return env.length > 0 ? env : [...DEFAULT_INTERNAL_ALERT_RECIPIENTS];
+}
+
+export function partnerTakedownCcRecipients(): string[] {
+  const env = parseList(process.env.ALERT_PARTNER_CC_EMAIL);
+  return env.length > 0 ? env.map(normalizeEmail) : [...PARTNER_TAKEDOWN_CC_RECIPIENTS];
+}
+
 export function alertRecipientMeta() {
   return {
     enabled: isAlertEmailEnabled(),
     allowlist: alertEmailAllowlist(),
     hardDomains: [...ALERT_EMAIL_HARD_DOMAINS],
-    fallbackNotify: parseList(process.env.ALERT_NOTIFY_EMAIL),
+    fallbackNotify: defaultInternalAlertRecipients(),
+    partnerContacts: partnerContactMeta(),
+    partnerCc: partnerTakedownCcRecipients(),
   };
+}
+
+export function resolvePartnerTakedownRecipients(
+  channel: TakedownChannel,
+): ResolvedAlertRecipients & { cc?: string[] } {
+  if (!isAlertEmailEnabled()) {
+    return {
+      ok: false,
+      error:
+        "ALERT_EMAIL_ENABLED staat niet op true — versturen is geblokkeerd.",
+    };
+  }
+  const email =
+    channel === "appic" ? appicTakedownContact() : raTakedownContact();
+  const primary = gateAlertRecipients([email]);
+  if (!primary.ok) return primary;
+
+  const ccGate = gateAlertRecipients(partnerTakedownCcRecipients());
+  const cc = ccGate.ok
+    ? ccGate.to.filter((e) => e !== primary.to[0])
+    : [];
+
+  return { ok: true, to: primary.to, cc: cc.length ? cc : undefined };
 }

@@ -6,14 +6,15 @@ import {
   emailCampaignMetrics,
   marketingPosts,
   ticketInventory,
+  ticketInventoryDaily,
   ticketSaleReferrers,
-  ticketSalesDaily,
   ticketDemographics,
   weatherDaily,
   externalEvents,
   raListings,
   type DemographicBucket,
 } from "@/lib/db/schema";
+import { averageAge } from "@/lib/integrations/weeztix/demographics";
 import {
   parseEditionLineup,
   editionFormat,
@@ -28,6 +29,11 @@ import {
   fetchOpenMeteoHourlyForDays,
   type WeatherHourRow,
 } from "@/lib/weather/open-meteo";
+import {
+  dailyDeltasFromInventorySnapshots,
+  firstSnapshotDay,
+  normalizeIsoDay,
+} from "@/lib/dashboard/inventory-snapshots";
 import { normalizeWeeztixInventory } from "@/lib/integrations/weeztix/inventory";
 import {
   competeSizeFromAttending,
@@ -288,8 +294,9 @@ export type EventInsightDemographics = {
   total: number;
   coveragePct: number | null;
   ageReady: boolean;
-  /** Aantal tickets waarvan we een leeftijdsbucket konden afleiden (API top-N). */
+  /** Aantal tickets waarvan we een leeftijd konden afleiden (API top-N DOB). */
   ageSampleSize: number;
+  ageAvg: number | null;
 };
 
 export type EventInsight = {
@@ -318,8 +325,12 @@ export type EventInsight = {
     fillPct: number | null;
     avgPriceEur: number | null;
     lastWeekSold: number | null;
-    /** Tickets sold on the event day itself (Weeztix daily curve). */
+    /** Tickets sold on the event day itself (inventory snapshot delta). */
     sameDaySold: number | null;
+    /** Daily sold from consecutive Weeztix inventory snapshots. */
+    salesByDay: Array<{ day: string; sold: number }>;
+    /** First snapshot day — curve has no Weeztix history before this. */
+    salesTrackedFrom: string | null;
     soldOutDaysBefore: number | null;
     scanned: number;
     scanRatePct: number | null;
@@ -488,21 +499,19 @@ export async function loadEventInsightsFresh(options?: {
         [],
       ),
       safeQuery(
-        "ticketSalesDaily",
+        "ticketInventoryDaily",
         () =>
           db
             .select({
-              editionId: ticketSalesDaily.editionId,
-              day: ticketSalesDaily.day,
-              sold: ticketSalesDaily.sold,
+              editionId: ticketInventoryDaily.editionId,
+              day: ticketInventoryDaily.day,
+              sold: ticketInventoryDaily.sold,
+              paidSold: ticketInventoryDaily.paidSold,
+              freeSold: ticketInventoryDaily.freeSold,
+              revenueCents: ticketInventoryDaily.revenueCents,
             })
-            .from(ticketSalesDaily)
-            .where(
-              and(
-                eq(ticketSalesDaily.platform, "weeztix"),
-                inArray(ticketSalesDaily.editionId, editionIds),
-              ),
-            ),
+            .from(ticketInventoryDaily)
+            .where(inArray(ticketInventoryDaily.editionId, editionIds)),
         [],
       ),
       safeQuery(
@@ -650,18 +659,22 @@ export async function loadEventInsightsFresh(options?: {
       postsByEdition.set(p.editionId, list);
     }
 
+    const snapshotRows = dailyRows.map((r) => ({
+      editionId: r.editionId,
+      day: normalizeIsoDay(r.day),
+      sold: r.sold,
+      paidSold: r.paidSold,
+      freeSold: r.freeSold,
+      revenueCents: r.revenueCents,
+    }));
     const dailyByEdition = new Map<string, Map<string, number>>();
-    for (const r of dailyRows) {
-      const day =
-        typeof r.day === "string"
-          ? r.day.slice(0, 10)
-          : amsterdamDay(r.day);
+    for (const r of dailyDeltasFromInventorySnapshots(snapshotRows)) {
       let m = dailyByEdition.get(r.editionId);
       if (!m) {
         m = new Map();
         dailyByEdition.set(r.editionId, m);
       }
-      m.set(day, (m.get(day) ?? 0) + (r.sold ?? 0));
+      m.set(r.day, (m.get(r.day) ?? 0) + r.sold);
     }
 
     const refsByEdition = new Map<string, Array<{ channel: string; orders: number }>>();
@@ -716,7 +729,22 @@ export async function loadEventInsightsFresh(options?: {
         capacity: e.capacity,
         available: e.available,
       });
-      const sold = inv.sold;
+      const appic = appicByEdition.get(e.id);
+      const raInv = raInvByEdition.get(e.id);
+      const vrienden = vriendenByEdition.get(e.id);
+      const raListing = raByEdition.get(e.id);
+      // Weeztix event sold includes barcodes issued into Appic/RA/vrienden
+      // pools (allotment), not tickets used from those pools.
+      const splitIssued =
+        (appic?.sold ?? 0) +
+        (raInv?.sold ?? 0) +
+        (vrienden?.sold ?? 0);
+      const shopSold = Math.max(0, inv.sold - splitIssued);
+      const poolUsed =
+        (appic?.scanned ?? 0) +
+        (raInv?.scanned ?? 0) +
+        (vrienden?.scanned ?? 0);
+      const sold = shopSold + poolUsed;
       const capacity = inv.capacity;
       const fillPct =
         capacity != null && capacity > 0 ? (sold / capacity) * 100 : null;
@@ -724,16 +752,6 @@ export async function loadEventInsightsFresh(options?: {
         e.avgPriceEur != null ? Number(e.avgPriceEur) : null;
       const scanned = e.scanned ?? 0;
       const scanRatePct = sold > 0 ? (scanned / sold) * 100 : null;
-
-      const appic = appicByEdition.get(e.id);
-      const raInv = raInvByEdition.get(e.id);
-      const vrienden = vriendenByEdition.get(e.id);
-      const raListing = raByEdition.get(e.id);
-      const splitIssued =
-        (appic?.sold ?? 0) +
-        (raInv?.sold ?? 0) +
-        (vrienden?.sold ?? 0);
-      const shopSold = Math.max(0, sold - splitIssued);
       const sources: SalesSourceRow[] = [
         {
           id: "weeztix",
@@ -745,7 +763,7 @@ export async function loadEventInsightsFresh(options?: {
         },
         {
           id: "appic",
-          label: "Appic Game",
+          label: "Appic",
           sold: appic != null ? (appic.scanned ?? 0) : null,
           reserved:
             appic != null
@@ -797,15 +815,21 @@ export async function loadEventInsightsFresh(options?: {
         },
       ];
 
-      const windowStart = shiftIsoDay(day, -6);
+      const lastWeekFrom =
+        status === "upcoming" ? shiftIsoDay(today, -6) : shiftIsoDay(day, -6);
+      const lastWeekTo = status === "upcoming" ? today : day;
       const curve = dailyByEdition.get(e.id) ?? new Map();
       let lastWeekSold = 0;
       for (const [d, n] of curve) {
-        if (d >= windowStart && d <= day) lastWeekSold += n;
+        if (d >= lastWeekFrom && d <= lastWeekTo) lastWeekSold += n;
       }
       const sameDayRaw = curve.get(day);
       const sameDaySold =
         sameDayRaw != null && sameDayRaw > 0 ? sameDayRaw : null;
+      const salesByDay = [...curve.entries()]
+        .filter(([, n]) => n > 0)
+        .map(([saleDay, sold]) => ({ day: saleDay, sold }))
+        .sort((a, b) => a.day.localeCompare(b.day));
 
       const w = weatherByDay.get(day);
       let weather: EventInsight["weather"] = null;
@@ -876,6 +900,7 @@ export async function loadEventInsightsFresh(options?: {
           /** Weeztix statistics geeft DOB als top-N keys (niet alle geboortedata). */
           ageReady: ageKnown > 0,
           ageSampleSize: ageKnown,
+          ageAvg: averageAge(demoRow.age ?? []),
         };
       }
 
@@ -1055,6 +1080,8 @@ export async function loadEventInsightsFresh(options?: {
               : null,
           lastWeekSold: lastWeekSold > 0 ? lastWeekSold : null,
           sameDaySold,
+          salesByDay,
+          salesTrackedFrom: firstSnapshotDay(snapshotRows, e.id),
           soldOutDaysBefore: e.soldOutDaysBefore ?? null,
           scanned,
           scanRatePct,
@@ -1220,7 +1247,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v19"],
+  ["event-insights-upcoming-v23"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1236,7 +1263,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v19"],
+  ["event-insights-past-v23"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],

@@ -461,7 +461,7 @@ export function snapshotToPromptContext(snap: InsightsSnapshot): string {
     `Inventory rijen: ${snap.weeztix.inventoryRows}`,
     `Edities met sold>0: ${snap.weeztix.editionsWithSales}`,
     `Sold (Weeztix inventory som): ${snap.weeztix.sold}`,
-    `Dagelijkse curves: ${snap.weeztix.dailyEditions} edities · ${snap.weeztix.dailyDays} dagen (orders/dag via timeToBank, proxy)`,
+    `Dagelijkse curves: ${snap.weeztix.dailyEditions} edities · ${snap.weeztix.dailyDays} dagen (inventory-snapshot delta)`,
     "Recente curves (piekdag):",
   );
   for (const c of snap.weeztix.recentCurves) {

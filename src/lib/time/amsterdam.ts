@@ -45,3 +45,46 @@ export function formatDayNl(dayIso: string): string {
     year: "numeric",
   }).format(d);
 }
+
+/** Ticketssheet-datum: "SUN 9 sep. 2026" (weekdag in Amsterdam). */
+export function formatTicketSheetDate(dayIso: string): string {
+  const d = new Date(`${dayIso}T12:00:00.000Z`);
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    timeZone: "UTC",
+  })
+    .format(d)
+    .toUpperCase();
+  const date = new Intl.DateTimeFormat("nl-NL", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(d);
+  return `${weekday} ${date}`;
+}
+
+export function amsterdamClock(input: Date): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Amsterdam",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(input);
+}
+
+export function formatEventClockRange(
+  startsAt: Date | null | undefined,
+  endsAt: Date | null | undefined,
+  startTime?: string | null,
+  endTime?: string | null,
+): string | null {
+  if (startTime || endTime) {
+    if (startTime && endTime) return `${startTime}–${endTime}`;
+    return startTime ?? endTime ?? null;
+  }
+  if (!startsAt) return null;
+  const start = amsterdamClock(startsAt);
+  if (!endsAt) return start;
+  return `${start}–${amsterdamClock(endsAt)}`;
+}
