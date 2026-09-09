@@ -9,8 +9,7 @@
 ## Tickets
 
 - [x] Figure out if Weeztix demographic stats are pre- or post-personalisation — post: `ticketMetaData` visitor fields; empty = not yet personalised (upcoming ~42% vs past ~83%)
-- [ ] Ask Weeztix whether DOB aggregation size can be raised / export API for full age distribution
-- [ ] Figure out how to best assign the amount when events are sold out
+- [x] Figure out how to best assign the amount when events are sold out
 - [ ] Clarify Wingame Appic vs Appic — separate inventory source?
 
 ## Line-up

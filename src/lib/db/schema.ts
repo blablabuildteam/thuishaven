@@ -68,6 +68,8 @@ export const editions = pgTable("editions", {
   raEventId: text("ra_event_id"),
   ticketswapEventId: text("ticketswap_event_id"),
   appicEventId: text("appic_event_id"),
+  /** Handmatige forecast — vooral voor komende events op het ticketssheet. */
+  expectedAttendees: integer("expected_attendees"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -309,6 +311,51 @@ export const ticketSalesDaily = pgTable(
       t.platform,
       t.day,
     ),
+  ],
+);
+
+/**
+ * Tickets écht verkocht op deze kalenderdag (niet de eventdag).
+ * Bron: Weeztix ticketCountToday / inventory-delta.
+ */
+export const ticketSalesOnDay = pgTable(
+  "ticket_sales_on_day",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    editionId: uuid("edition_id")
+      .notNull()
+      .references(() => editions.id),
+    day: date("day").notNull(),
+    sold: integer("sold").notNull().default(0),
+    paidSold: integer("paid_sold").notNull().default(0),
+    freeSold: integer("free_sold").notNull().default(0),
+    revenueCents: integer("revenue_cents").notNull().default(0),
+    syncedAt: timestamp("synced_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [uniqueIndex("ticket_sales_on_day_edition_day").on(t.editionId, t.day)],
+);
+
+/** Cumulatieve Weeztix-stand per Amsterdam-dag — voor dag-tot-dag delta. */
+export const ticketInventoryDaily = pgTable(
+  "ticket_inventory_daily",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    editionId: uuid("edition_id")
+      .notNull()
+      .references(() => editions.id),
+    day: date("day").notNull(),
+    sold: integer("sold").notNull().default(0),
+    paidSold: integer("paid_sold").notNull().default(0),
+    freeSold: integer("free_sold").notNull().default(0),
+    revenueCents: integer("revenue_cents").notNull().default(0),
+    syncedAt: timestamp("synced_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("ticket_inventory_daily_edition_day").on(t.editionId, t.day),
   ],
 );
 
@@ -675,6 +722,9 @@ export const externalTicketEvents = pgTable("external_ticket_events", {
   name: text("name").notNull(),
   startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
   expectedAttendees: integer("expected_attendees").notNull(),
+  /** Handmatige start/eindtijd (HH:mm), los van de startsAt-datum. */
+  startTime: text("start_time"),
+  endTime: text("end_time"),
   /** Werkelijke check-ins na afloop — handmatig ingevuld. */
   scanned: integer("scanned"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

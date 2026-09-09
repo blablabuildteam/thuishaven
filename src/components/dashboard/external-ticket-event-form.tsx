@@ -16,6 +16,8 @@ type ExternalTicketEventFormProps = {
     name: string;
     startsAt: string;
     expectedAttendees: number;
+    startTime: string | null;
+    endTime: string | null;
     scanned: number | null;
   };
 };
@@ -24,6 +26,8 @@ export function ExternalTicketEventForm({ event }: ExternalTicketEventFormProps)
   const router = useRouter();
   const [name, setName] = useState(event.name);
   const [date, setDate] = useState(externalEventDayInput(new Date(event.startsAt)));
+  const [startTime, setStartTime] = useState(event.startTime ?? "");
+  const [endTime, setEndTime] = useState(event.endTime ?? "");
   const [attendees, setAttendees] = useState(String(event.expectedAttendees));
   const [scanned, setScanned] = useState(
     event.scanned == null ? "" : String(event.scanned),
@@ -48,6 +52,8 @@ export function ExternalTicketEventForm({ event }: ExternalTicketEventFormProps)
         body: JSON.stringify({
           name,
           startsAt: date,
+          startTime,
+          endTime,
           expectedAttendees: Number(attendees),
           scanned: scannedValue,
         }),
@@ -109,7 +115,31 @@ export function ExternalTicketEventForm({ event }: ExternalTicketEventFormProps)
 
         <label className="block text-sm">
           <span className="mb-1.5 block text-[11px] tracking-wide text-text-dim uppercase">
-            Verwachte bezoekers (Totaal)
+            Starttijd
+          </span>
+          <input
+            type="time"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
+            className={inputClassName}
+          />
+        </label>
+
+        <label className="block text-sm">
+          <span className="mb-1.5 block text-[11px] tracking-wide text-text-dim uppercase">
+            Eindtijd
+          </span>
+          <input
+            type="time"
+            value={endTime}
+            onChange={(e) => setEndTime(e.target.value)}
+            className={inputClassName}
+          />
+        </label>
+
+        <label className="block text-sm sm:col-span-2">
+          <span className="mb-1.5 block text-[11px] tracking-wide text-text-dim uppercase">
+            Verwachte bezoekers (Expected / Totaal)
           </span>
           <input
             type="number"

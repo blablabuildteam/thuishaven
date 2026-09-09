@@ -14,6 +14,7 @@ import {
   raListings,
   type DemographicBucket,
 } from "@/lib/db/schema";
+import { averageAge } from "@/lib/integrations/weeztix/demographics";
 import {
   parseEditionLineup,
   editionFormat,
@@ -288,8 +289,9 @@ export type EventInsightDemographics = {
   total: number;
   coveragePct: number | null;
   ageReady: boolean;
-  /** Aantal tickets waarvan we een leeftijdsbucket konden afleiden (API top-N). */
+  /** Aantal tickets waarvan we een leeftijd konden afleiden (API top-N DOB). */
   ageSampleSize: number;
+  ageAvg: number | null;
 };
 
 export type EventInsight = {
@@ -320,6 +322,8 @@ export type EventInsight = {
     lastWeekSold: number | null;
     /** Tickets sold on the event day itself (Weeztix daily curve). */
     sameDaySold: number | null;
+    /** Weeztix daily sold counts from first sale through the event. */
+    salesByDay: Array<{ day: string; sold: number }>;
     soldOutDaysBefore: number | null;
     scanned: number;
     scanRatePct: number | null;
@@ -811,6 +815,10 @@ export async function loadEventInsightsFresh(options?: {
       const sameDayRaw = curve.get(day);
       const sameDaySold =
         sameDayRaw != null && sameDayRaw > 0 ? sameDayRaw : null;
+      const salesByDay = [...curve.entries()]
+        .filter(([, n]) => n > 0)
+        .map(([saleDay, sold]) => ({ day: saleDay, sold }))
+        .sort((a, b) => a.day.localeCompare(b.day));
 
       const w = weatherByDay.get(day);
       let weather: EventInsight["weather"] = null;
@@ -881,6 +889,7 @@ export async function loadEventInsightsFresh(options?: {
           /** Weeztix statistics geeft DOB als top-N keys (niet alle geboortedata). */
           ageReady: ageKnown > 0,
           ageSampleSize: ageKnown,
+          ageAvg: averageAge(demoRow.age ?? []),
         };
       }
 
@@ -1060,6 +1069,7 @@ export async function loadEventInsightsFresh(options?: {
               : null,
           lastWeekSold: lastWeekSold > 0 ? lastWeekSold : null,
           sameDaySold,
+          salesByDay,
           soldOutDaysBefore: e.soldOutDaysBefore ?? null,
           scanned,
           scanRatePct,
@@ -1225,7 +1235,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v20"],
+  ["event-insights-upcoming-v22"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1241,7 +1251,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v20"],
+  ["event-insights-past-v22"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],

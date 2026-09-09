@@ -6,47 +6,69 @@ import {
   loadEventInsightsFresh,
   invalidateEventInsightsCache,
 } from "@/lib/insights/event-insights";
-import { listOpenDashboardAlerts } from "@/lib/integrations/alerts";
+import { listUpcomingPlatformTakedowns } from "@/lib/integrations/alerts";
+import { alertEventTitle, formatEventDateShort } from "@/lib/integrations/alerts/event-label";
 import { hasDatabase } from "@/lib/db/client";
 import { cn } from "@/lib/utils";
 
 export async function ConflictsBanner() {
-  const openAlerts = hasDatabase()
-    ? await listOpenDashboardAlerts().catch(() => null)
-    : null;
+  const takedowns = hasDatabase()
+    ? await listUpcomingPlatformTakedowns().catch(() => [])
+    : [];
 
-  const conflicts = openAlerts?.conflicts ?? [];
-  if (!conflicts.length) return null;
+  if (!takedowns.length) return null;
+
+  const n = takedowns.length;
 
   return (
     <LoadedSection>
-      <Link
-        href="/dashboard/alerts"
+      <div
         className={cn(
-          "mb-6 flex flex-col gap-1 border px-3 py-2.5 text-sm sm:flex-row sm:items-center sm:justify-between",
-          conflicts.some((c) => c.kind === "overbooking")
-            ? "border-danger/50 bg-danger/5"
-            : "border-warn/50 bg-warn/10",
+          "mb-6 border border-warn/50 bg-warn/10 px-3 py-2.5 text-sm",
         )}
       >
-        <span>
-          <span className="font-medium">
-            {conflicts.length === 1
-              ? "1 event is uitverkocht op Weeztix, maar nog te koop elders"
-              : `${conflicts.length} events zijn uitverkocht op Weeztix, maar nog te koop elders`}
-          </span>
-          <span className="mt-0.5 block text-xs text-text-muted sm:mt-0 sm:ml-0 sm:inline sm:before:content-['_·_']">
-            RA / TicketSwap / Appic Game verkopen nog — risico op overboeking of
-            omzetlek
-          </span>
-        </span>
-        <span className="shrink-0 text-text-muted">Naar alerts →</span>
-      </Link>
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="font-medium">
+              {n === 1
+                ? "1 komend event is uitverkocht, maar nog te koop elders"
+                : `${n} komende events zijn uitverkocht, maar nog te koop elders`}
+            </p>
+            <p className="mt-0.5 text-xs text-text-muted">
+              3000 tickets verkocht, terwijl Appic of Resident Advisor nog
+              tickets toont
+            </p>
+          </div>
+          <Link
+            href="/dashboard/alerts"
+            className="shrink-0 text-text-muted hover:text-text"
+          >
+            Naar alerts →
+          </Link>
+        </div>
+        <ul className="mt-2 space-y-1 border-t border-warn/20 pt-2">
+          {takedowns.map((event) => (
+            <li key={event.editionId} className="text-xs text-text-muted">
+              <span className="font-medium text-text">
+                {formatEventDateShort(event.startsAt)} ·{" "}
+                {alertEventTitle(event.editionName)}
+              </span>
+              <span className="before:content-['_·_']">
+                {event.channels.map((c) => c.channelLabel).join(" + ")}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </LoadedSection>
   );
 }
 
 export async function EventInsightsSection() {
+  const takedownsPromise = hasDatabase()
+    ? listUpcomingPlatformTakedowns().catch(() => [])
+    : Promise.resolve([]);
+
   let eventInsights: Awaited<ReturnType<typeof loadEventInsights>> = [];
   try {
     eventInsights = await loadEventInsights({ limit: 80 });
@@ -85,10 +107,19 @@ export async function EventInsightsSection() {
     .filter((e) => e.status === "past")
     .sort((a, b) => b.day.localeCompare(a.day));
 
+  const takedowns = await takedownsPromise;
+  const platformAlerts = takedowns.map((t) => ({
+    editionId: t.editionId,
+    channels: t.channels.map((c) => c.channel),
+  }));
+
   return (
     <LoadedSection className="mb-12">
-      <EventInsightsList upcoming={upcomingInsights} past={pastInsights} />
+      <EventInsightsList
+        upcoming={upcomingInsights}
+        past={pastInsights}
+        platformAlerts={platformAlerts}
+      />
     </LoadedSection>
   );
 }
-

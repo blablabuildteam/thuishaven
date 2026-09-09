@@ -146,5 +146,25 @@ export function alertRecipientMeta() {
     allowlist: alertEmailAllowlist(),
     hardDomains: [...ALERT_EMAIL_HARD_DOMAINS],
     fallbackNotify: parseList(process.env.ALERT_NOTIFY_EMAIL),
+    partnerTest: partnerTakedownRecipients(),
   };
+}
+
+/** Test inbox until real Appic / RA addresses are allowlisted. */
+export const PARTNER_TAKEDOWN_TEST_EMAIL = "team@blablabuild.com";
+
+export function partnerTakedownRecipients(): string[] {
+  const override = process.env.ALERT_PARTNER_TEST_EMAIL?.trim();
+  return parseRecipientInput(override || PARTNER_TAKEDOWN_TEST_EMAIL);
+}
+
+export function resolvePartnerTakedownRecipients(): ResolvedAlertRecipients {
+  if (!isAlertEmailEnabled()) {
+    return {
+      ok: false,
+      error:
+        "ALERT_EMAIL_ENABLED staat niet op true — versturen is geblokkeerd.",
+    };
+  }
+  return gateAlertRecipients(partnerTakedownRecipients());
 }

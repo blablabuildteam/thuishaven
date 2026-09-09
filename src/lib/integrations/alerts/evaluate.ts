@@ -11,8 +11,10 @@ import type { AlertRule } from "@/lib/integrations/alerts/rules";
 import type {
   SecondaryChannel,
   SecondarySoldOutConflict,
+  TakedownChannel,
 } from "@/lib/integrations/alerts/types";
 import { ticketswapVenueUrl } from "@/lib/integrations/ticketswap/client";
+import { DEFAULT_WEEZTIX_SOLD_THRESHOLD } from "@/lib/integrations/weeztix/sold-out";
 
 const weeztixInv = alias(ticketInventory, "eval_weeztix_inv");
 const appicInv = alias(ticketInventory, "eval_appic_inv");
@@ -37,6 +39,24 @@ export type RuleMatch = SecondarySoldOutConflict & {
   weeztixSold: number;
 };
 
+export type PlatformTakedownMatch = SecondarySoldOutConflict & {
+  weeztixSold: number;
+  channel: TakedownChannel;
+};
+
+export type GroupedPlatformTakedown = {
+  editionId: string;
+  editionName: string;
+  startsAt: Date;
+  weeztixSold: number;
+  channels: Array<{
+    channel: TakedownChannel;
+    channelLabel: string;
+    availableCount: number | null;
+    url: string | null;
+  }>;
+};
+
 function since(): Date {
   return new Date(Date.now() - 12 * 60 * 60 * 1000);
 }
@@ -50,6 +70,14 @@ export function ruleTriggerMet(
     return true;
   }
   return false;
+}
+
+/** Sold-out for Appic/RA takedown: official flag or 3000 tickets sold. */
+export function isSoldOutForTakedown(
+  snap: Pick<EditionAlertSnapshot, "weeztixSoldOut" | "weeztixSold">,
+  threshold = DEFAULT_WEEZTIX_SOLD_THRESHOLD,
+): boolean {
+  return snap.weeztixSoldOut || snap.weeztixSold >= threshold;
 }
 
 export async function loadEditionAlertSnapshots(): Promise<
@@ -122,6 +150,89 @@ function triggerLabel(snap: EditionAlertSnapshot, rule: AlertRule): string {
   return "Weeztix-drempel bereikt";
 }
 
+function takedownTriggerLabel(snap: EditionAlertSnapshot): string {
+  if (snap.weeztixSoldOut) return "Het event is uitverkocht";
+  return `Het event is uitverkocht (${snap.weeztixSold} tickets verkocht)`;
+}
+
+function raTakedownMatch(snap: EditionAlertSnapshot): PlatformTakedownMatch {
+  return {
+    weeztixSold: snap.weeztixSold,
+    editionId: snap.editionId,
+    editionName: snap.editionName,
+    startsAt: snap.startsAt,
+    channel: "resident_advisor",
+    channelLabel: "Resident Advisor",
+    kind: "overbooking",
+    title: `${snap.editionName} is uitverkocht, maar staat nog te koop op Resident Advisor`,
+    message: `${takedownTriggerLabel(snap)}. Op Resident Advisor (${snap.raTitle ?? "listing"}) staan nog tickets. Die moeten offline.`,
+    availableCount: null,
+    url: snap.raUrl,
+  };
+}
+
+function appicTakedownMatch(snap: EditionAlertSnapshot): PlatformTakedownMatch {
+  const n = snap.appicAvailable ?? 0;
+  return {
+    weeztixSold: snap.weeztixSold,
+    editionId: snap.editionId,
+    editionName: snap.editionName,
+    startsAt: snap.startsAt,
+    channel: "appic",
+    channelLabel: "Appic",
+    kind: "revenue_leak",
+    title: `${snap.editionName} is uitverkocht, maar Appic heeft nog tickets`,
+    message: `${takedownTriggerLabel(snap)}, maar Appic toont nog ${n === 1 ? "1 ticket" : `${n} tickets`}. Die moeten offline.`,
+    availableCount: n,
+    url: null,
+  };
+}
+
+/** Upcoming sold-out events that still have tickets on Appic and/or RA. */
+export function findPlatformTakedowns(
+  snaps: EditionAlertSnapshot[],
+): PlatformTakedownMatch[] {
+  const out: PlatformTakedownMatch[] = [];
+  for (const snap of snaps) {
+    if (!isSoldOutForTakedown(snap)) continue;
+    if (snap.raOpen) out.push(raTakedownMatch(snap));
+    if ((snap.appicAvailable ?? 0) > 0) out.push(appicTakedownMatch(snap));
+  }
+  out.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  return out;
+}
+
+export function groupPlatformTakedowns(
+  matches: PlatformTakedownMatch[],
+): GroupedPlatformTakedown[] {
+  const byEdition = new Map<string, GroupedPlatformTakedown>();
+  for (const match of matches) {
+    const prev = byEdition.get(match.editionId);
+    const channel = {
+      channel: match.channel,
+      channelLabel: match.channelLabel,
+      availableCount: match.availableCount,
+      url: match.url,
+    };
+    if (!prev) {
+      byEdition.set(match.editionId, {
+        editionId: match.editionId,
+        editionName: match.editionName,
+        startsAt: match.startsAt,
+        weeztixSold: match.weeztixSold,
+        channels: [channel],
+      });
+      continue;
+    }
+    if (!prev.channels.some((c) => c.channel === match.channel)) {
+      prev.channels.push(channel);
+    }
+  }
+  return [...byEdition.values()].sort(
+    (a, b) => a.startsAt.getTime() - b.startsAt.getTime(),
+  );
+}
+
 export function matchesForRule(
   snaps: EditionAlertSnapshot[],
   rule: AlertRule,
@@ -180,8 +291,8 @@ export function matchesForRule(
         channel: "appic",
         channelLabel: "Appic Game",
         kind: "revenue_leak",
-        title: `${snap.editionName}: Appic Game actief na Weeztix-drempel`,
-        message: `${why}, maar Appic Game toont nog ${n === 1 ? "1 ticket" : `${n} tickets`}. Mogelijke omzetlek.`,
+        title: `${snap.editionName}: Appic actief na Weeztix-drempel`,
+        message: `${why}, maar Appic toont nog ${n === 1 ? "1 ticket" : `${n} tickets`}. Die moeten offline.`,
         availableCount: n,
         url: null,
       });

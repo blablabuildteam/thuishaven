@@ -70,7 +70,7 @@ export function assertExternalReadOnly(
   if (
     options?.allowStatisticsReadPost &&
     upper === "POST" &&
-    /^https:\/\/api\.weeztix\.com\/statistics\/(orders|tickets|advanced)\b/i.test(
+    /^https:\/\/api\.weeztix\.com\/statistics\/(orders|tickets|advanced|search)\b/i.test(
       url,
     )
   ) {

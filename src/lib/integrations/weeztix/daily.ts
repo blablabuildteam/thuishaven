@@ -1,10 +1,14 @@
-import { and, desc, eq, gte, isNotNull, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, lte } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import {
   editions,
+  ticketInventory,
+  ticketInventoryDaily,
   ticketSaleReferrers,
   ticketSalesDaily,
+  ticketSalesOnDay,
 } from "@/lib/db/schema";
+import { amsterdamDay as amsterdamDayShared } from "@/lib/time/amsterdam";
 import { getWeeztixEventStatistics } from "@/lib/integrations/weeztix/client";
 import { upsertWeeztixDemographics } from "@/lib/integrations/weeztix/demographics";
 
@@ -121,6 +125,66 @@ export function referrersFromStatistics(data: unknown): ReferrerPoint[] {
     .filter((r) => r.orderCount > 0);
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/**
+ * Tickets/omzet van de huidige kalenderdag uit Weeztix dashboard-aggs.
+ * `ticketCountToday.statistics.doc_count` is op dit token leeg (0);
+ * de buitenste doc_count is lifetime — die niet als “vandaag” gebruiken.
+ */
+export function saleDayFromStatistics(data: unknown): {
+  sold: number;
+  revenueCents: number;
+} {
+  const aggs = asRecord(asRecord(data)?.aggregations);
+  const today = asRecord(aggs?.ticketCountToday);
+  const todayStats = asRecord(today?.statistics);
+  const sold =
+    typeof todayStats?.doc_count === "number" ? todayStats.doc_count : 0;
+
+  const rev = asRecord(aggs?.totalRevenueToday);
+  const revStats = asRecord(rev?.statistics);
+  const revInner = asRecord(revStats?.statistics);
+  const revenueCents =
+    typeof revInner?.value === "number" ? Math.round(revInner.value) : 0;
+
+  return { sold, revenueCents };
+}
+
+async function upsertSaleDay(input: {
+  editionId: string;
+  sold: number;
+  revenueCents: number;
+}): Promise<void> {
+  if (input.sold <= 0 && input.revenueCents <= 0) return;
+  const db = getDb();
+  const day = amsterdamDayShared(new Date());
+  await db
+    .insert(ticketSalesOnDay)
+    .values({
+      editionId: input.editionId,
+      day,
+      sold: input.sold,
+      paidSold: input.sold,
+      freeSold: 0,
+      revenueCents: input.revenueCents,
+      syncedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: [ticketSalesOnDay.editionId, ticketSalesOnDay.day],
+      set: {
+        sold: input.sold,
+        paidSold: input.sold,
+        revenueCents: input.revenueCents,
+        syncedAt: new Date(),
+      },
+    });
+}
+
 export async function syncWeeztixDailySales(options?: {
   limit?: number;
   daysBack?: number;
@@ -207,6 +271,13 @@ export async function syncWeeztixDailySales(options?: {
       if (errors.length < 12) errors.push(`${guid.slice(0, 8)}: ${stats.error}`);
       return;
     }
+    const saleDay = saleDayFromStatistics(stats.data);
+    await upsertSaleDay({
+      editionId: row.id,
+      sold: saleDay.sold,
+      revenueCents: saleDay.revenueCents,
+    });
+
     const points = dailySalesFromStatistics(row.startsAt, stats.data);
     if (points.length > 0) {
       editionsWithCurve += 1;
@@ -288,6 +359,145 @@ export async function syncWeeztixDailySales(options?: {
     failed,
     errors,
   };
+}
+
+/**
+ * Tickets écht verkocht vandaag (ticketCountToday), per event in de
+ * verkoopwindow. Licht: alleen dashboard-stats, geen timeToBank-curve.
+ */
+export async function syncWeeztixSaleDays(options?: {
+  limit?: number;
+  concurrency?: number;
+}): Promise<{
+  ok: boolean;
+  attempted: number;
+  daysUpserted: number;
+  ticketsToday: number;
+  failed: number;
+  errors: string[];
+}> {
+  if (!hasDatabase()) {
+    return {
+      ok: false,
+      attempted: 0,
+      daysUpserted: 0,
+      ticketsToday: 0,
+      failed: 0,
+      errors: ["DATABASE_URL ontbreekt"],
+    };
+  }
+
+  const db = getDb();
+  const limit = options?.limit ?? 120;
+  const concurrency = Math.max(1, options?.concurrency ?? 4);
+  const from = new Date();
+  from.setUTCDate(from.getUTCDate() - 14);
+  const to = new Date();
+  to.setUTCFullYear(to.getUTCFullYear() + 1);
+
+  const rows = (
+    await db
+      .select({
+        id: editions.id,
+        name: editions.name,
+        guid: editions.weeztixEventId,
+      })
+      .from(editions)
+      .where(
+        and(
+          isNotNull(editions.weeztixEventId),
+          gte(editions.startsAt, from),
+          lte(editions.startsAt, to),
+        ),
+      )
+      .orderBy(asc(editions.startsAt))
+      .limit(limit)
+  ).filter((row) => row.guid && !/TEMPLATE/i.test(row.name));
+
+  let daysUpserted = 0;
+  let ticketsToday = 0;
+  let failed = 0;
+  const errors: string[] = [];
+
+  async function one(row: (typeof rows)[number]) {
+    const guid = row.guid;
+    if (!guid) return;
+    const stats = await getWeeztixEventStatistics(guid);
+    if (!stats.ok) {
+      failed += 1;
+      if (errors.length < 12) errors.push(`${guid.slice(0, 8)}: ${stats.error}`);
+      return;
+    }
+    const saleDay = saleDayFromStatistics(stats.data);
+    if (saleDay.sold <= 0 && saleDay.revenueCents <= 0) return;
+    await upsertSaleDay({
+      editionId: row.id,
+      sold: saleDay.sold,
+      revenueCents: saleDay.revenueCents,
+    });
+    daysUpserted += 1;
+    ticketsToday += saleDay.sold;
+  }
+
+  for (let i = 0; i < rows.length; i += concurrency) {
+    await Promise.all(rows.slice(i, i + concurrency).map((row) => one(row)));
+  }
+
+  await snapshotInventoryToday(rows.map((row) => row.id));
+
+  return {
+    ok: rows.length === 0 || failed < rows.length,
+    attempted: rows.length,
+    daysUpserted,
+    ticketsToday,
+    failed,
+    errors,
+  };
+}
+
+async function snapshotInventoryToday(editionIds: string[]): Promise<void> {
+  if (editionIds.length === 0) return;
+  const db = getDb();
+  const day = amsterdamDayShared(new Date());
+  const rows = await db
+    .select({
+      editionId: ticketInventory.editionId,
+      sold: ticketInventory.sold,
+      paidSold: ticketInventory.paidSold,
+      freeSold: ticketInventory.freeSold,
+      revenueCents: ticketInventory.revenueCents,
+    })
+    .from(ticketInventory)
+    .where(
+      and(
+        eq(ticketInventory.platform, "weeztix"),
+        inArray(ticketInventory.editionId, editionIds),
+      ),
+    );
+
+  for (const row of rows) {
+    await db
+      .insert(ticketInventoryDaily)
+      .values({
+        editionId: row.editionId,
+        day,
+        sold: row.sold,
+        paidSold: row.paidSold,
+        freeSold: row.freeSold,
+        revenueCents: row.revenueCents,
+        syncedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [ticketInventoryDaily.editionId, ticketInventoryDaily.day],
+        set: {
+          sold: row.sold,
+          paidSold: row.paidSold,
+          freeSold: row.freeSold,
+          revenueCents: row.revenueCents,
+          syncedAt: new Date(),
+        },
+      });
+  }
 }
 
 export async function recentDailyCurves(limitEditions = 3): Promise<

@@ -6,23 +6,12 @@ import {
 
 /**
  * Standaard Weeztix/Eventix visitor-velden (company-breed, 2016+).
- * Alleen aggregaties hiervan zijn veilig om te bewaren.
+ * Per ticket, gevuld bij personalisatie — niet de booker bij checkout.
+ * Lege keys = ticket nog niet gepersonaliseerd. Alleen aggregaties bewaren.
  */
 const GENDER_FIELD = "3f7b72f0-a47f-11e6-a52d-21d369c3d816";
 const CITY_FIELD = "3e4aa5b0-a1b8-11e6-b2b5-735d381b6ca7";
 const DOB_FIELD = "3679cfa0-afe0-11e6-95b9-f1a3f6ac9164";
-
-const AGE_ORDER = [
-  "0-17",
-  "18-24",
-  "25-29",
-  "30-34",
-  "35-39",
-  "40-44",
-  "45-49",
-  "50+",
-  "onbekend",
-] as const;
 
 const GENDER_ORDER = ["vrouw", "man", "non-binair", "onbekend"] as const;
 
@@ -82,17 +71,6 @@ function normalizeGender(raw: string): string {
   return s;
 }
 
-function ageBucket(age: number): (typeof AGE_ORDER)[number] {
-  if (age < 18) return "0-17";
-  if (age < 25) return "18-24";
-  if (age < 30) return "25-29";
-  if (age < 35) return "30-34";
-  if (age < 40) return "35-39";
-  if (age < 45) return "40-44";
-  if (age < 50) return "45-49";
-  return "50+";
-}
-
 function ageOnDay(dobIso: string, eventStart: Date): number | null {
   const dob = new Date(`${dobIso}T12:00:00`);
   if (Number.isNaN(dob.getTime())) return null;
@@ -129,7 +107,33 @@ function sortedBuckets(
   return rows.sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 }
 
-/** Haalt alleen geanonimiseerde tellingen uit Weeztix dashboard-statistics. */
+function sortedAgeBuckets(map: Map<string, number>): DemographicBucket[] {
+  return [...map.entries()]
+    .map(([key, count]) => ({ key, count }))
+    .sort((a, b) => {
+      if (a.key === "onbekend") return 1;
+      if (b.key === "onbekend") return -1;
+      return Number(a.key) - Number(b.key);
+    });
+}
+
+/** Gemiddelde leeftijd uit per-jaar buckets (slaat range-keys zoals 18-24 over). */
+export function averageAge(age: DemographicBucket[]): number | null {
+  let sum = 0;
+  let n = 0;
+  for (const row of age) {
+    const year = Number(row.key);
+    if (!Number.isFinite(year) || row.key === "onbekend") continue;
+    sum += year * row.count;
+    n += row.count;
+  }
+  return n > 0 ? Math.round(sum / n) : null;
+}
+
+/**
+ * Geanonimiseerde tellingen uit `aggregations.ticketMetaData`.
+ * `total` = alle tickets; `answered` = tickets met ingevuld geslacht.
+ */
 export function demographicsFromStatistics(
   data: unknown,
   eventStart: Date,
@@ -159,7 +163,7 @@ export function demographicsFromStatistics(
       continue;
     }
     const age = ageOnDay(raw.slice(0, 10), eventStart);
-    addCount(ageMap, age == null ? "onbekend" : ageBucket(age), n);
+    addCount(ageMap, age == null ? "onbekend" : String(age), n);
   }
 
   const knownGender = [...genderMap.entries()]
@@ -168,7 +172,7 @@ export function demographicsFromStatistics(
 
   return {
     gender: sortedBuckets(genderMap, GENDER_ORDER),
-    age: sortedBuckets(ageMap, AGE_ORDER),
+    age: sortedAgeBuckets(ageMap),
     city: sortedBuckets(cityMap),
     answered: knownGender,
     total,

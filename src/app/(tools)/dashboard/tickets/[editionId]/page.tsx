@@ -10,6 +10,7 @@ import {
   type DemographicBucket,
 } from "@/lib/db/schema";
 import { displayEditionName } from "@/lib/editions/lineup";
+import { averageAge } from "@/lib/integrations/weeztix/demographics";
 import { normalizeWeeztixInventory } from "@/lib/integrations/weeztix/inventory";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/utils";
 
@@ -156,7 +157,8 @@ export default async function TicketEditionPage({
   const ageKnown = (demo?.age ?? [])
     .filter((r) => r.key !== "onbekend")
     .reduce((s, r) => s + r.count, 0);
-  const ageReady = demo != null && demo.answered > 0 && ageKnown / demo.answered >= 0.4;
+  const ageReady = ageKnown > 0;
+  const ageAvg = demo ? averageAge(demo.age ?? []) : null;
 
   return (
     <div>
@@ -244,21 +246,29 @@ export default async function TicketEditionPage({
               Geslacht ingevuld voor {formatNumber(demo.answered)} van{" "}
               {formatNumber(demo.total)} tickets ({formatPercent(coverage, 0)}
               ). Lege antwoorden = nog niet gepersonaliseerd.
+              {ageReady
+                ? ` Leeftijd uit ${formatNumber(ageKnown)} meest voorkomende geboortedata.`
+                : ""}
             </p>
           )}
           <div className="mb-8 grid gap-4 lg:grid-cols-3">
             <DemoList title="Geslacht" rows={demo.gender} />
             {ageReady ? (
-              <DemoList title="Leeftijd" rows={demo.age} />
+              <DemoList
+                title={
+                  ageAvg != null
+                    ? `Leeftijd (gem. ${ageAvg})`
+                    : "Leeftijd"
+                }
+                rows={(demo.age ?? []).filter((r) => r.key !== "onbekend")}
+              />
             ) : (
               <section className="border border-border">
                 <h2 className="border-b border-border px-4 py-3 font-display text-lg tracking-[0.03em]">
                   Leeftijd
                 </h2>
                 <p className="px-4 py-6 text-sm text-text-muted">
-                  Weeztix geeft geboortedata alleen als top-waarden terug, niet
-                  als volledige leeftijdsverdeling. Geslacht en stad zijn
-                  compleet.
+                  Nog geen geboortedata in de Weeztix top-waarden.
                 </p>
               </section>
             )}
@@ -269,7 +279,8 @@ export default async function TicketEditionPage({
 
       <p className="text-xs text-text-dim">
         Aggregaties uit Weeztix visitor questions (geslacht, stad, geboortedatum
-        → leeftijdsgroep). Geen namen of e-mails.
+        → leeftijd). Leeftijd is dezelfde top-N geboortedata als in het
+        Weeztix-dashboard, geen volledige census. Geen namen of e-mails.
       </p>
     </div>
   );

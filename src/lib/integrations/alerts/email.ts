@@ -186,6 +186,38 @@ export function renderTestAlertEmail() {
   });
 }
 
+export function renderPartnerTakedownEmail(input: {
+  platform: "Appic" | "Resident Advisor";
+  eventTitle: string;
+  eventDate: string;
+  eventFullName?: string;
+}): { html: string; text: string } {
+  const eventLine = `${input.eventTitle} — ${input.eventDate}`;
+  const fullName =
+    input.eventFullName && input.eventFullName !== input.eventTitle
+      ? input.eventFullName
+      : null;
+
+  return renderAlertEmail({
+    eyebrow: `${input.platform} · tickets offline`,
+    title: "Dit event is uitverkocht",
+    intro: `Thuishaven ${input.eventTitle} op ${input.eventDate} is uitverkocht. Zetten jullie de tickets voor dit event offline op ${input.platform}?`,
+    items: [
+      {
+        channel: input.platform,
+        kind: "overbooking",
+        title: eventLine,
+        message: fullName
+          ? `Event in Weeztix: ${fullName}. Geen nieuwe verkopen meer op ${input.platform}, het event zit vol.`
+          : `Geen nieuwe verkopen meer op ${input.platform}, het event zit vol.`,
+      },
+    ],
+    ctaLabel: "Open alerts in dashboard",
+    footer:
+      "Testmail naar team@blablabuild.com. Later gaat dit bericht naar Appic en Resident Advisor. Thuishaven Tools.",
+  });
+}
+
 export function renderMismatchAlertEmail(items: AlertEmailItem[]) {
   const n = items.length;
   return renderAlertEmail({

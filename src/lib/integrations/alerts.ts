@@ -3,8 +3,11 @@ import { getDb, hasDatabase } from "@/lib/db/client";
 import { alerts } from "@/lib/db/schema";
 import {
   channelToAlertType,
+  findPlatformTakedowns,
+  groupPlatformTakedowns,
   loadEditionAlertSnapshots,
   matchesForRules,
+  type GroupedPlatformTakedown,
   type RuleMatch,
 } from "@/lib/integrations/alerts/evaluate";
 import {
@@ -15,9 +18,16 @@ import type {
   SecondaryChannel,
   SecondarySoldOutConflict,
   StoredAlert,
+  TakedownChannel,
 } from "@/lib/integrations/alerts/types";
 
-export type { SecondaryChannel, SecondarySoldOutConflict, StoredAlert };
+export type {
+  SecondaryChannel,
+  SecondarySoldOutConflict,
+  StoredAlert,
+  TakedownChannel,
+};
+export type { GroupedPlatformTakedown };
 
 const TS_ALERT = "ticketswap_after_soldout" as const;
 const RA_ALERT = "weeztix_soldout_ra_open" as const;
@@ -49,7 +59,7 @@ export async function listOpenDashboardAlerts(): Promise<{
     loadEditionAlertSnapshots().catch(() => []),
     listEnabledAlertRules().catch(() => []),
   ]);
-  const matches = matchesForRules(snaps, rules);
+  const matches = mergeAlertMatches(snaps, rules);
   const conflicts = matches.map(
     ({ ruleId: _ruleId, weeztixSold: _sold, ...conflict }) => conflict,
   );
@@ -107,6 +117,40 @@ export async function listStoredDashboardAlerts(): Promise<StoredAlert[]> {
     )
     .orderBy(desc(alerts.createdAt))
     .limit(80);
+}
+
+export async function listUpcomingPlatformTakedowns(): Promise<
+  GroupedPlatformTakedown[]
+> {
+  const snaps = await loadEditionAlertSnapshots().catch(() => []);
+  return groupPlatformTakedowns(findPlatformTakedowns(snaps));
+}
+
+function conflictKey(channel: string, editionId: string): string {
+  return `${channel}:${editionId}`;
+}
+
+function mergeAlertMatches(
+  snaps: Awaited<ReturnType<typeof loadEditionAlertSnapshots>>,
+  rules: Awaited<ReturnType<typeof listEnabledAlertRules>>,
+): RuleMatch[] {
+  const ruleMatches = matchesForRules(snaps, rules);
+  const ruleId = rules[0]?.id;
+  const platform = findPlatformTakedowns(snaps).map((match) => ({
+    ...match,
+    ruleId: ruleId ?? "",
+  }));
+
+  const seen = new Set<string>();
+  const out: RuleMatch[] = [];
+  for (const match of [...ruleMatches, ...platform]) {
+    if (!match.ruleId) continue;
+    const key = conflictKey(match.channel, match.editionId);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(match);
+  }
+  return out;
 }
 
 function matchKey(m: RuleMatch): string {
@@ -208,7 +252,7 @@ export async function refreshDashboardAlerts(_options?: {
     loadEditionAlertSnapshots().catch(() => []),
     listEnabledAlertRules().catch(() => []),
   ]);
-  const matches = matchesForRules(snaps, rules);
+  const matches = mergeAlertMatches(snaps, rules);
   await upsertRuleMatches(matches).catch(() => 0);
 
   const { notifyUnsentDashboardAlerts } = await import(

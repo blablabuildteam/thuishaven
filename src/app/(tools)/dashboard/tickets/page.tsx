@@ -1,3 +1,4 @@
+import { DailyTicketSalesChart } from "@/components/dashboard/daily-ticket-sales-chart";
 import {
   TicketsChannelsSearch,
   type TicketChannelRowInput,
@@ -7,10 +8,11 @@ import {
   type TicketPoolCell,
 } from "@/components/dashboard/tickets-channels-table";
 import { SectionHeader } from "@/components/ui/section-header";
+import { loadDailyTicketSales } from "@/lib/dashboard/daily-ticket-sales";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { editions, externalTicketEvents, ticketInventory } from "@/lib/db/schema";
 import { normalizeWeeztixInventory } from "@/lib/integrations/weeztix/inventory";
-import { amsterdamDay } from "@/lib/time/amsterdam";
+import { amsterdamDay, formatEventClockRange } from "@/lib/time/amsterdam";
 import { desc, isNotNull, and, eq, inArray } from "drizzle-orm";
 
 export const metadata = { title: "Tickets" };
@@ -50,12 +52,14 @@ export default async function TicketsPage() {
   }
 
   const db = getDb();
-  const [editionRows, extraInv, externalRows] = await Promise.all([
+  const [editionRows, extraInv, externalRows, dailySales] = await Promise.all([
     db
       .select({
         id: editions.id,
         name: editions.name,
         startsAt: editions.startsAt,
+        endsAt: editions.endsAt,
+        expectedAttendees: editions.expectedAttendees,
         sold: ticketInventory.sold,
         scanned: ticketInventory.scanned,
         capacity: ticketInventory.capacity,
@@ -94,10 +98,13 @@ export default async function TicketsPage() {
         name: externalTicketEvents.name,
         startsAt: externalTicketEvents.startsAt,
         expectedAttendees: externalTicketEvents.expectedAttendees,
+        startTime: externalTicketEvents.startTime,
+        endTime: externalTicketEvents.endTime,
         scanned: externalTicketEvents.scanned,
       })
       .from(externalTicketEvents)
       .orderBy(desc(externalTicketEvents.startsAt)),
+    loadDailyTicketSales(),
   ]);
 
   const extraByEdition = new Map<
@@ -143,6 +150,8 @@ export default async function TicketsPage() {
     name: row.name,
     startsAt: row.startsAt,
     day: amsterdamDay(row.startsAt),
+    timeLabel: formatEventClockRange(null, null, row.startTime, row.endTime),
+    expected: row.expectedAttendees,
     weeztix: null,
     deurverkoop: null,
     ra: null,
@@ -172,6 +181,8 @@ export default async function TicketsPage() {
           name: row.name,
           startsAt: row.startsAt,
           day: amsterdamDay(row.startsAt),
+          timeLabel: formatEventClockRange(row.startsAt, row.endsAt),
+          expected: row.expectedAttendees,
           weeztix: shopSold,
           deurverkoop: extra?.internal ?? null,
           ra: poolCell(extra?.ra),
@@ -200,6 +211,8 @@ export default async function TicketsPage() {
         description="Verkoop per kanaal, zoals het ticketsheet. Totaal is de som van de kanalen; gescand is Weeztix check-in."
       />
 
+      <DailyTicketSalesChart data={dailySales} />
+
       <TicketsChannelsSearch
         upcoming={serialize(upcoming)}
         past={serialize(past)}
@@ -208,9 +221,14 @@ export default async function TicketsPage() {
       <p className="mt-3 text-xs text-text-dim">
         Weeztix = shop (exclusief barcode-pools). Appic Game, RA en vriendentickets tonen
         gebruikt / gereserveerd uit Weeztix (check-ins vs poolgrootte). Deurverkoop
-        is handmatig — typ het aantal van de deurlijst in de kolom. Game Appic
-        volgt nog. Externe events zijn handmatig (verwachte bezoekers in Totaal).
-        Totaal = som van de kanalen. Gescand = Weeztix check-in.
+        is handmatig — typ het aantal van de deurlijst in de kolom. Expected is
+        een handmatige forecast voor komende events. Tijd komt uit Weeztix, of
+        handmatig bij externe events. Game Appic volgt nog. Externe events zijn
+        handmatig (verwachte bezoekers in Expected/Totaal). Totaal = som van de
+        kanalen. Gescand = Weeztix check-in. De dagcurve telt tickets die op die
+        kalenderdag zijn verkocht, gestapeld per event — niet het eventtotaal op
+        de eventdag. Die historie bouwen we zelf op via dagelijkse
+        Weeztix-snapshots.
       </p>
     </div>
   );

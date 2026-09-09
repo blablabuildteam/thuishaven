@@ -1,6 +1,6 @@
 import { eq, isNotNull } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
-import { editions, ticketInventory } from "@/lib/db/schema";
+import { editions, ticketInventory, ticketInventoryDaily } from "@/lib/db/schema";
 import {
   listWeeztixEventTickets,
   listWeeztixEvents,
@@ -452,6 +452,28 @@ async function upsertTicketInventoryForEvents(
         ...soldOutFields,
       });
     }
+
+    await db
+      .insert(ticketInventoryDaily)
+      .values({
+        editionId: item.editionId,
+        day: amsterdamDay(new Date()),
+        sold: summary.sold,
+        paidSold: summary.paidSold,
+        freeSold: summary.freeSold,
+        revenueCents: summary.revenueCents,
+        syncedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [ticketInventoryDaily.editionId, ticketInventoryDaily.day],
+        set: {
+          sold: summary.sold,
+          paidSold: summary.paidSold,
+          freeSold: summary.freeSold,
+          revenueCents: summary.revenueCents,
+          syncedAt: new Date(),
+        },
+      });
 
     for (const platform of WEEZTIX_DERIVED_PLATFORMS) {
       const channel = DERIVED_PLATFORM_CHANNEL[platform];

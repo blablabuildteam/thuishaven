@@ -66,7 +66,7 @@ export function validateAlertRuleInput(input: AlertRuleInput):
 
   const checkRa = input.checkRa !== false;
   const checkTicketswap = input.checkTicketswap !== false;
-  const checkAppic = Boolean(input.checkAppic);
+  const checkAppic = input.checkAppic !== false;
   if (!checkRa && !checkTicketswap && !checkAppic) {
     return { ok: false, error: "Kies minstens één kanaal om te checken" };
   }
@@ -185,6 +185,6 @@ export async function ensureDefaultAlertRule(): Promise<AlertRule | null> {
     soldThreshold: DEFAULT_WEEZTIX_SOLD_THRESHOLD,
     checkRa: true,
     checkTicketswap: true,
-    checkAppic: false,
+    checkAppic: true,
   });
 }
