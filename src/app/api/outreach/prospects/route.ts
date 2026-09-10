@@ -9,7 +9,7 @@ const singleSchema = z.object({
   mode: z.literal("single").optional(),
   companyName: z.string().min(2),
   type: z.enum(["agency", "company"]),
-  source: z.enum(["manual", "paste", "linkedin"]).optional(),
+  source: z.enum(["manual", "paste", "linkedin", "apollo"]).optional(),
   email: z.string().email().optional().or(z.literal("")),
   website: z.string().url().optional().or(z.literal("")),
   notes: z.string().max(500).optional().or(z.literal("")),
@@ -19,7 +19,7 @@ const pasteSchema = z.object({
   mode: z.literal("paste"),
   text: z.string().min(2).max(20_000),
   type: z.enum(["agency", "company"]),
-  source: z.enum(["manual", "paste", "linkedin"]).optional(),
+  source: z.enum(["manual", "paste", "linkedin", "apollo"]).optional(),
 });
 
 export async function POST(request: Request) {

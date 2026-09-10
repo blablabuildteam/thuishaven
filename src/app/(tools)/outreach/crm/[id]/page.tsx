@@ -77,8 +77,8 @@ export default async function CrmDossierPage({
           <p className="font-medium text-text">KvK-medewerkers ziet er raar laag uit</p>
           <p className="mt-1">
             {dossier.employeeCount} op de vestiging — bij een bekende werkgever
-            is dat vaak alleen het KvK-rechtspersoon, niet het concern. Zoek de
-            LinkedIn-schatting hiernaast en vul die in.
+            is dat vaak alleen het KvK-rechtspersoon, niet het concern. Apollo
+            (of een handmatige override) telt voor de doelgroep-fit.
           </p>
         </div>
       ) : null}

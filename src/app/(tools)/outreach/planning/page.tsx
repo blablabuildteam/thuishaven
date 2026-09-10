@@ -121,7 +121,7 @@ export default async function OutreachPlanningPage() {
           <span className="font-medium text-text">Partnerbureaus</span> (MCI,
           Live-Impact, …) zijn bestaande relaties — geen cold outreach. Suggestie:
           alleen korte open-data seintjes als jullie dat handig vinden. Cold
-          targets komen later via KvK / LinkedIn / directories.
+          targets komen via Apollo (size + regio), daarna KvK-check.
         </p>
         <ol className="mt-5 space-y-4">
           {sequenceForOpenedNoReply().map((step) => (

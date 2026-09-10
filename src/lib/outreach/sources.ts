@@ -4,6 +4,7 @@
  */
 
 export type ProspectSourceId =
+  | "apollo"
   | "kvk"
   | "bureau_import"
   | "website_scrape"
@@ -29,6 +30,25 @@ export type ProspectSource = {
 };
 
 export const PROSPECT_SOURCES: ProspectSource[] = [
+  {
+    id: "apollo",
+    name: "Apollo organisatie-zoek",
+    description:
+      "Doelgroep ophalen: 500–5.000 medewerkers, HQ in Amsterdam + ~50 km. Enige watervaste intake — geen wiki, geen KvK-targeting, geen LinkedIn-scrape.",
+    whatYouGet: [
+      "Bedrijfsnaam + website",
+      "Headcount-schatting (concern, geen vestiging)",
+      "LinkedIn company-URL",
+      "Plaats / sector",
+    ],
+    legalNote:
+      "Officiële Apollo API (credits). Geen LinkedIn-login, geen scrape.",
+    effort: "laag",
+    cost: "laag",
+    status: "ingebouwd",
+    envKeys: ["APOLLO_API_KEY"],
+    meetingQuestions: ["Apollo-account + API-key klaarzetten (gratis + credits)."],
+  },
   {
     id: "kvk",
     name: "KvK Handelsregister API",
@@ -96,9 +116,9 @@ export const PROSPECT_SOURCES: ProspectSource[] = [
   },
   {
     id: "enrichment_api",
-    name: "Enrichment partner (Apollo / Clearbit / Hunter / etc.)",
+    name: "Mail-verrijking (Hunter / Clearbit)",
     description:
-      "Verrijking: medewerkersaantal, sector, generic e-mail, soms decision-maker. Alternatief of aanvulling op KvK.",
+      "Generic events@ / info@ bij bedrijven die Apollo al vond. Apollo zelf is de doelgroep-bron.",
     whatYouGet: [
       "Employee count estimates",
       "Industry tags",
@@ -214,6 +234,14 @@ export function mockMultiSourceDiscover(): {
   duplicatesRemoved: number;
 } {
   const raw: SourceCandidate[] = [
+    {
+      source: "apollo",
+      companyName: "Adyen",
+      city: "Amsterdam",
+      website: "https://www.adyen.com",
+      employeeCount: 4000,
+      confidence: 0.9,
+    },
     {
       source: "kvk",
       companyName: "Adyen N.V.",

@@ -14,7 +14,7 @@ import {
 } from "./client";
 import { candidateFromProfiles } from "./discovery";
 import type { KvkProspectCandidate } from "./types";
-import { scoreDoelgroep } from "@/lib/outreach/doelgroep";
+import { employeeCountForFit, scoreDoelgroep } from "@/lib/outreach/doelgroep";
 
 export type EnrichKvkInput = {
   naam?: string;
@@ -128,12 +128,28 @@ export async function applyKvkCandidateToProspect(
   meta.vestigingsnummer = candidate.vestigingsnummer ?? meta.vestigingsnummer;
   meta.sbiCode = candidate.sbiCode ?? meta.sbiCode;
   meta.nonMailing = candidate.nonMailing;
+  if (candidate.employeeCount != null) {
+    meta.kvkVestigingEmployees = candidate.employeeCount;
+  }
+  const estimate =
+    typeof meta.linkedinEmployeeEstimate === "number"
+      ? meta.linkedinEmployeeEstimate
+      : row.employeeCount;
+  const employeeCount = employeeCountForFit({
+    kvkCount: candidate.employeeCount,
+    estimate,
+  });
   const scored = scoreDoelgroep({
-    employeeCount: candidate.employeeCount ?? row.employeeCount,
+    employeeCount,
     city: candidate.city ?? row.city,
   });
   meta.doelgroepFit = scored.fit;
-  meta.doelgroepReason = scored.reason;
+  meta.doelgroepReason =
+    employeeCount != null &&
+    candidate.employeeCount != null &&
+    employeeCount !== candidate.employeeCount
+      ? `Apollo ~${employeeCount} · KvK vestiging ${candidate.employeeCount} genegeerd · ${scored.reason}`
+      : scored.reason;
   if (typeof meta.source !== "string") meta.source = "kvk";
 
   const keepStatus = new Set([
@@ -150,7 +166,7 @@ export async function applyKvkCandidateToProspect(
     .set({
       kvkNumber: candidate.kvkNumber,
       sector: candidate.sector ?? row.sector,
-      employeeCount: candidate.employeeCount ?? row.employeeCount,
+      employeeCount: employeeCount ?? row.employeeCount,
       city: candidate.city ?? row.city,
       foundedAt: candidate.foundedAt
         ? new Date(`${candidate.foundedAt}T00:00:00.000Z`)

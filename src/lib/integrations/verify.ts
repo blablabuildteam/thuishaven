@@ -153,6 +153,41 @@ async function verifyDatabase(): Promise<VerifyResult> {
   }
 }
 
+async function verifyApollo(): Promise<VerifyResult> {
+  const key = process.env.APOLLO_API_KEY?.trim();
+  if (!key) {
+    return base("apollo", "Apollo doelgroep", "missing", "APOLLO_API_KEY ontbreekt");
+  }
+  try {
+    const res = await fetch("https://api.apollo.io/api/v1/auth/health", {
+      headers: {
+        "x-api-key": key,
+        "cache-control": "no-cache",
+      },
+      cache: "no-store",
+    });
+    if (res.status === 401 || res.status === 403) {
+      return base("apollo", "Apollo doelgroep", "error", `Auth geweigerd (${res.status})`);
+    }
+    if (res.ok) {
+      return base("apollo", "Apollo doelgroep", "verified", "API-key geldig");
+    }
+    return base(
+      "apollo",
+      "Apollo doelgroep",
+      "configured",
+      `Key aanwezig · health gaf ${res.status}`,
+    );
+  } catch (e) {
+    return base(
+      "apollo",
+      "Apollo doelgroep",
+      "configured",
+      `Key aanwezig · ${e instanceof Error ? e.message : "netwerkfout"}`,
+    );
+  }
+}
+
 async function verifyKvk(): Promise<VerifyResult> {
   const key = process.env.KVK_API_KEY?.trim();
   if (!key) {
@@ -824,6 +859,8 @@ export async function verifyIntegration(id: string): Promise<VerifyResult> {
       return verifyDatabase();
     case "kvk":
       return verifyKvk();
+    case "apollo":
+      return verifyApollo();
     case "open_meteo":
       return verifyOpenMeteo();
     case "weeztix":

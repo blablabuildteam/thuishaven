@@ -5,7 +5,6 @@
 import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { prospects } from "@/lib/db/schema";
-import { scoreDoelgroep } from "@/lib/outreach/doelgroep";
 import {
   applyKvkCandidateToProspect,
   enrichKnownCompany,
@@ -76,30 +75,22 @@ export async function enrichCompanyProspectsBatch(limit = 10): Promise<{
       continue;
     }
 
-    const scored = scoreDoelgroep({
-      employeeCount: found.candidate.employeeCount,
-      city: found.candidate.city,
-    });
-
     const [row] = await db
       .select({ metadata: prospects.metadata })
       .from(prospects)
       .where(eq(prospects.id, target.id))
       .limit(1);
-    const meta = { ...(row?.metadata ?? {}) };
-    meta.doelgroepFit = scored.fit;
-    meta.doelgroepReason = scored.reason;
-    await db
-      .update(prospects)
-      .set({ metadata: meta, updatedAt: new Date() })
-      .where(eq(prospects.id, target.id));
+    const meta = row?.metadata ?? {};
+    const fit = typeof meta.doelgroepFit === "string" ? meta.doelgroepFit : undefined;
+    const reason =
+      typeof meta.doelgroepReason === "string" ? meta.doelgroepReason : undefined;
 
     rows.push({
       id: target.id,
       companyName: target.companyName,
       ok: true,
-      fit: scored.fit,
-      reason: scored.reason,
+      fit,
+      reason,
     });
   }
 

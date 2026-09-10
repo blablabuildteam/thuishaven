@@ -1,20 +1,26 @@
 /**
  * Add names to the outreach list.
- * Names come from us (partner sheet, paste, LinkedIn) — KvK only enriches after.
+ * Names come from Apollo (doelgroep) or paste. KvK only enriches after.
  */
 
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { exclusions, prospects } from "@/lib/db/schema";
 import { normalizeCompanyKey } from "@/lib/outreach/data";
 import type { ProspectType } from "@/lib/outreach/data";
+import { scoreDoelgroep } from "@/lib/outreach/doelgroep";
 
-export type IntakeSource = "manual" | "paste" | "linkedin";
+export type IntakeSource = "manual" | "paste" | "linkedin" | "apollo";
 
 export type IntakeDraft = {
   companyName: string;
   email?: string | null;
   website?: string | null;
   notes?: string | null;
+  city?: string | null;
+  employeeCount?: number | null;
+  linkedinUrl?: string | null;
+  sector?: string | null;
+  apolloPage?: number | null;
 };
 
 export type IntakeRowResult = {
@@ -161,6 +167,10 @@ export async function addProspects(input: {
       continue;
     }
 
+    const scored = scoreDoelgroep({
+      employeeCount: draft.employeeCount,
+      city: draft.city,
+    });
     const [inserted] = await db
       .insert(prospects)
       .values({
@@ -168,11 +178,19 @@ export async function addProspects(input: {
         companyName,
         email,
         website: draft.website?.trim() || null,
+        city: draft.city?.trim() || null,
+        employeeCount: draft.employeeCount ?? null,
+        linkedinUrl: draft.linkedinUrl?.trim() || null,
+        sector: draft.sector?.trim() || null,
         status: email ? "ready" : "discovered",
         metadata: {
           source: input.source,
           notes: draft.notes?.trim() || undefined,
           addedAt: new Date().toISOString(),
+          linkedinEmployeeEstimate: draft.employeeCount ?? undefined,
+          apolloPage: draft.apolloPage ?? undefined,
+          doelgroepFit: scored.fit,
+          doelgroepReason: scored.reason,
         },
       })
       .returning({ id: prospects.id, companyName: prospects.companyName });

@@ -4,7 +4,6 @@ import { nl } from "date-fns/locale";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { MetricCard } from "@/components/ui/metric-card";
-import { FillHeadcountButton } from "@/components/outreach/fill-headcount-button";
 import { listCrmRecords, statusLabels } from "@/lib/outreach/crm";
 import { formatNumber } from "@/lib/utils";
 
@@ -30,13 +29,12 @@ export default async function OutreachCrmPage() {
       <SectionHeader
         eyebrow="Relaties"
         title="CRM"
-        description="KvK vult medewerkers, plaats en jubileum. Non-mailing negeren we — dat blokkeert geen mail."
+        description="Apollo vult de doelgroep. KvK keurt daarna: nummer, jubileum, vestiging. Non-mailing negeren we."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={source === "db" ? "success" : "neutral"}>
               {companies.length} dossiers
             </StatusBadge>
-            <FillHeadcountButton />
             <Link
               href="/outreach/prospects"
               className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
@@ -55,7 +53,7 @@ export default async function OutreachCrmPage() {
         <MetricCard
           label="KvK mdw checken"
           value={formatNumber(kvkOff)}
-          hint="Raar laag — LinkedIn"
+          hint="Raar laag — Apollo telt"
         />
       </div>
 

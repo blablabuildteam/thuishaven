@@ -69,6 +69,27 @@ export const DOELGROEP_STARTLIJST: string[] = [
 
 export type DoelgroepFit = "ja" | "nee" | "onbekend";
 
+/** KvK vestiging-count is often a branch (TomTom=3). Prefer Apollo/LinkedIn then. */
+export function employeeCountForFit(input: {
+  kvkCount?: number | null;
+  estimate?: number | null;
+}): number | null {
+  const kvk = input.kvkCount ?? null;
+  const estimate = input.estimate ?? null;
+  if (kvk != null && kvk < 50 && estimate != null && estimate >= 50) {
+    return estimate;
+  }
+  return kvk ?? estimate;
+}
+
+function cityInRegion(city: string): boolean {
+  const n = city.trim().toLowerCase();
+  return DOELGROEP.places.some((p) => {
+    const pl = p.toLowerCase();
+    return n === pl || n.startsWith(`${pl},`) || n.startsWith(`${pl} `);
+  });
+}
+
 export function scoreDoelgroep(input: {
   employeeCount?: number | null;
   city?: string | null;
@@ -84,13 +105,8 @@ export function scoreDoelgroep(input: {
   }
 
   const city = input.city?.trim();
-  if (city) {
-    const inRegion = DOELGROEP.places.some(
-      (p) => p.toLowerCase() === city.toLowerCase(),
-    );
-    if (!inRegion) {
-      return { fit: "nee", reason: `Buiten regio (${city})` };
-    }
+  if (city && !cityInRegion(city)) {
+    return { fit: "nee", reason: `Buiten regio (${city})` };
   }
 
   if (count == null) {

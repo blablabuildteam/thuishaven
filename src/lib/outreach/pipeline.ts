@@ -33,11 +33,11 @@ export const PIPELINE_STAGES: PipelineStage[] = [
     id: "discover",
     name: "1. Ontdekken",
     description:
-      "Prospects komen uit partnerlijst / LinkedIn / CRM — niet uit KvK-targeting. Dedupe op naam/domein/KvK.",
-    dependsOn: ["bureau-lijst of andere bron"],
-    dataSource: "CSV · CRM · LinkedIn",
-    status: "partial",
-    missing: ["Meer bronnen naast partnerlijst"],
+      "Apollo haalt bedrijven 500–5.000 mdw in AMS-regio. Dedupe vs bestaande lijst + uitsluitingen. KvK target niet.",
+    dependsOn: ["APOLLO_API_KEY"],
+    dataSource: "Apollo Organization Search",
+    status: "needs_credentials",
+    missing: ["APOLLO_API_KEY"],
   },
   {
     id: "enrich",

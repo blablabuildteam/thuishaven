@@ -32,7 +32,7 @@ const STEPS = [
   {
     n: "2",
     title: "Doelgroep vullen",
-    body: "Bedrijven 500–5.000 mdw rond Amsterdam. LinkedIn of startlijst → KvK checkt. Partnerbureaus niet gebruiken.",
+    body: "Apollo haalt 500–5.000 mdw in AMS-regio. Daarna KvK: nummer, jubileum, vestiging. Geen wiki, geen LinkedIn-scrape.",
     href: "/outreach/prospects",
     cta: "Naar prospects",
   },

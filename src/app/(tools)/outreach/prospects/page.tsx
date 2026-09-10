@@ -12,6 +12,8 @@ import {
   type ProspectStatus,
 } from "@/lib/outreach/data";
 import { hasKvkConfig } from "@/lib/integrations/kvk";
+import { hasApolloConfig } from "@/lib/integrations/apollo/client";
+import { nextApolloDiscoverPage } from "@/lib/outreach/apollo-page";
 import { formatNumber } from "@/lib/utils";
 
 export const metadata = { title: "Prospects" };
@@ -39,6 +41,8 @@ function sourceLabel(source?: string) {
       return "Geplakte lijst";
     case "manual":
       return "Startlijst / handmatig";
+    case "apollo":
+      return "Apollo doelgroep";
     default:
       return source ?? "Onbekend";
   }
@@ -126,6 +130,8 @@ export default async function ProspectsPage() {
   const pendingKvk = companies.filter((p) => !p.kvkNumber).length;
   const fit = companies.filter((p) => p.doelgroepFit === "ja").length;
   const mailable = companies.filter((p) => Boolean(p.email)).length;
+  const apolloReady = hasApolloConfig();
+  const apolloNextPage = await nextApolloDiscoverPage();
 
   return (
     <div>
@@ -135,6 +141,9 @@ export default async function ProspectsPage() {
         description="Cold outreach = bedrijven 500–5.000 mdw in Amsterdam + 50 km. De 15 partnerbureaus van Reijner zijn bestaande relaties — die mail je niet koud."
         action={
           <div className="flex flex-wrap gap-2">
+            <StatusBadge tone={apolloReady ? "success" : "danger"}>
+              {apolloReady ? "Apollo gekoppeld" : "Apollo-key ontbreekt"}
+            </StatusBadge>
             <StatusBadge tone={hasKvkConfig() ? "success" : "danger"}>
               {hasKvkConfig() ? "KvK gekoppeld" : "KvK-key ontbreekt"}
             </StatusBadge>
@@ -147,12 +156,16 @@ export default async function ProspectsPage() {
 
       <div className="stagger mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Doelgroep-bedrijven" value={formatNumber(companies.length)} />
-        <MetricCard label="Past na KvK" value={formatNumber(fit)} accent />
+        <MetricCard label="Past in doelgroep" value={formatNumber(fit)} accent />
         <MetricCard label="Nog te verrijken" value={formatNumber(pendingKvk)} />
         <MetricCard label="Met e-mail" value={formatNumber(mailable)} />
       </div>
 
-      <DoelgroepActions pendingKvk={pendingKvk} />
+      <DoelgroepActions
+        pendingKvk={pendingKvk}
+        apolloReady={apolloReady}
+        apolloNextPage={apolloNextPage}
+      />
 
       <AddProspectsForm />
 
@@ -170,7 +183,7 @@ export default async function ProspectsPage() {
         </h2>
         {companies.length === 0 ? (
           <p className="border border-border bg-surface px-4 py-5 text-sm text-text-muted">
-            Nog leeg. Zet de startlijst erop of plak namen uit LinkedIn.
+            Nog leeg. Haal de doelgroep op via Apollo (boven).
           </p>
         ) : (
           <ProspectTable rows={companies} />

@@ -105,8 +105,8 @@ export function AddProspectsForm() {
       </div>
 
       <p className="mt-2 text-sm text-text-muted">
-        Plak bedrijfsnamen uit LinkedIn. Standaard type: bedrijf. Partnerbureaus
-        niet hierin zetten.
+        Alleen extra namen die Apollo miste. Standaard type: bedrijf.
+        Partnerbureaus niet hierin zetten.
       </p>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">

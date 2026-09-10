@@ -73,8 +73,8 @@ export function LinkedinEstimateForm({
         </a>
       </div>
       <p className="text-xs text-text-dim">
-        Schatting komt automatisch uit Wikipedia/Wikidata als KvK te laag is.
-        LinkedIn alleen als je een getal wilt overschrijven.
+        Apollo vult het medewerkersaantal. Dit veld is alleen een handmatige
+        override — geen Wikipedia, geen scrape.
       </p>
       <label className="block text-sm">
         <span className="mb-1 block text-text-dim">

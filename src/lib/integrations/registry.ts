@@ -246,6 +246,18 @@ export const INTEGRATIONS: IntegrationDef[] = [
     priority: "critical",
   },
   {
+    id: "apollo",
+    name: "Apollo doelgroep",
+    tool: "outreach",
+    description:
+      "Bedrijven zoeken op medewerkersaantal + HQ-locatie (500–5.000, Amsterdam-regio). Goedkoopste legale bron i.p.v. LinkedIn-scrape.",
+    envKeys: ["APOLLO_API_KEY"],
+    askFromClient: ["Apollo API-key (gratis account + credits)"],
+    verifyHint: "Organization search",
+    docsUrl: "https://developer.apollo.io/",
+    priority: "critical",
+  },
+  {
     id: "sales_notify",
     name: "Sales notificaties",
     tool: "outreach",
