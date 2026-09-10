@@ -5,6 +5,7 @@ import {
   fillDecisionMakers,
   fillHunterEmailsForDecisionMakers,
 } from "@/lib/outreach/decision-makers";
+import { logSessionActivity } from "@/lib/audit/session-log";
 
 export const dynamic = "force-dynamic";
 
@@ -30,5 +31,20 @@ export async function POST(request: Request) {
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
+  await logSessionActivity(session, {
+    action: parsed.data.hunterEmails ? "hunter_emails" : "apollo_people",
+    summary: parsed.data.hunterEmails
+      ? `Hunter-mails: ${result.filled}/${result.processed}`
+      : `Event Managers: ${result.filled}/${result.processed}`,
+    path: "/api/outreach/people",
+    method: "POST",
+    status: 200,
+    tool: "outreach",
+    meta: {
+      hunterEmails: Boolean(parsed.data.hunterEmails),
+      filled: result.filled,
+      processed: result.processed,
+    },
+  });
   return NextResponse.json(result);
 }

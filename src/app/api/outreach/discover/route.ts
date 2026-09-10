@@ -10,6 +10,7 @@ import {
   nextApolloDiscoverPage,
   rememberApolloPage,
 } from "@/lib/outreach/apollo-page";
+import { logSessionActivity } from "@/lib/audit/session-log";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +82,21 @@ export async function POST(request: Request) {
     search.page,
     search.companies.map((c) => c.name),
   );
+
+  await logSessionActivity(session, {
+    action: "apollo_discover",
+    summary: `Apollo pagina ${search.page}: ${result.created} nieuw · ${result.duplicate} bestond al`,
+    path: "/api/outreach/discover",
+    method: "POST",
+    status: 200,
+    tool: "outreach",
+    meta: {
+      page: search.page,
+      created: result.created,
+      duplicate: result.duplicate,
+      total: search.total,
+    },
+  });
 
   return NextResponse.json({
     applied: true,

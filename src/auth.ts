@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
 import { authConfig } from "@/auth.config";
 import { findUserByEmailIncludingInactive, isUserLoginReady, verifyUserPassword } from "@/lib/auth/users";
+import { logActivity } from "@/lib/audit/activity";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -35,6 +36,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!ok) return null;
 
         if (!isUserLoginReady(user)) return null;
+
+        void logActivity({
+          userId: user.id,
+          userEmail: user.email,
+          userName: user.name,
+          tool: "auth",
+          action: "login",
+          summary: `Ingelogd · ${user.email}`,
+          path: "/login",
+          method: "POST",
+          status: 200,
+        });
 
         return {
           id: user.id,

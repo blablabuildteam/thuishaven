@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { leads, prospects } from "@/lib/db/schema";
 import { notifySalesTeam } from "@/lib/integrations/outreach";
+import { logSessionActivity } from "@/lib/audit/session-log";
 
 export const dynamic = "force-dynamic";
 
@@ -52,5 +53,14 @@ export async function POST(request: Request) {
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
+  await logSessionActivity(session, {
+    action: "sales_notify",
+    summary: `Sales-notify · ${lead.companyName}`,
+    path: "/api/outreach/leads/notify",
+    method: "POST",
+    status: 200,
+    tool: "outreach",
+    meta: { prospectId: parsed.data.prospectId, companyName: lead.companyName },
+  });
   return NextResponse.json(result);
 }

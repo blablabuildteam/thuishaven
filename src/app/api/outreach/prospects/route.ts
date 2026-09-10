@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { z } from "zod";
 import { addProspects, parseProspectPaste } from "@/lib/outreach/intake";
+import { logSessionActivity } from "@/lib/audit/session-log";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,19 @@ export async function POST(request: Request) {
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
+    await logSessionActivity(session, {
+      action: "prospects_paste",
+      summary: `Prospects geplakt: ${result.created} nieuw`,
+      path: "/api/outreach/prospects",
+      method: "POST",
+      status: 201,
+      tool: "outreach",
+      meta: {
+        created: result.created,
+        duplicate: result.duplicate,
+        type: parsed.data.type,
+      },
+    });
     return NextResponse.json(result, { status: 201 });
   }
 
@@ -89,5 +103,14 @@ export async function POST(request: Request) {
     );
   }
 
+  await logSessionActivity(session, {
+    action: "prospects_add",
+    summary: `Prospect toegevoegd · ${parsed.data.companyName}`,
+    path: "/api/outreach/prospects",
+    method: "POST",
+    status: 201,
+    tool: "outreach",
+    meta: { companyName: parsed.data.companyName, type: parsed.data.type },
+  });
   return NextResponse.json(result, { status: 201 });
 }

@@ -6,6 +6,7 @@ import {
   sendStoredDraft,
 } from "@/lib/integrations/outreach";
 import { OUTREACH_VARIANTS } from "@/lib/outreach/tone";
+import { logSessionActivity } from "@/lib/audit/session-log";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,15 @@ export async function POST(request: Request) {
     if ("error" in result) {
       return NextResponse.json(result, { status: 400 });
     }
+    await logSessionActivity(session, {
+      action: "email_send_test",
+      summary: `Testmail verstuurd · ${parsed.data.emailId}`,
+      path: "/api/outreach/emails",
+      method: "POST",
+      status: 200,
+      tool: "outreach",
+      meta: { emailId: parsed.data.emailId, action: parsed.data.action },
+    });
     return NextResponse.json(result);
   }
 
@@ -63,5 +73,17 @@ export async function POST(request: Request) {
   if ("error" in result) {
     return NextResponse.json(result, { status: 400 });
   }
+  await logSessionActivity(session, {
+    action: "email_draft",
+    summary: `Draft gemaakt · prospect ${parsed.data.prospectId}`,
+    path: "/api/outreach/emails",
+    method: "POST",
+    status: 201,
+    tool: "outreach",
+    meta: {
+      prospectId: parsed.data.prospectId,
+      variantId: parsed.data.variantId,
+    },
+  });
   return NextResponse.json(result, { status: 201 });
 }

@@ -676,6 +676,28 @@ export const usageEvents = pgTable("usage_events", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/** Admin-only user activity log (tools omgeving). Niet zichtbaar voor members. */
+export const activityEvents = pgTable(
+  "activity_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id"),
+    userEmail: text("user_email").notNull(),
+    userName: text("user_name"),
+    tool: text("tool").notNull().default("shared"),
+    action: text("action").notNull(),
+    summary: text("summary").notNull(),
+    path: text("path"),
+    method: text("method"),
+    status: integer("status"),
+    meta: jsonb("meta").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [index("activity_events_created_idx").on(t.createdAt)],
+);
+
 /* ─── Externe factoren (weer + festivals) ──────────────────────────────── */
 
 export const weatherDaily = pgTable(

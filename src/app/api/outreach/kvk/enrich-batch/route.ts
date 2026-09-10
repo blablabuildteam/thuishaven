@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { enrichCompanyProspectsBatch } from "@/lib/integrations/kvk/batch-enrich";
+import { logSessionActivity } from "@/lib/audit/session-log";
 
 export const dynamic = "force-dynamic";
 
@@ -24,5 +25,14 @@ export async function POST(request: Request) {
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
+  await logSessionActivity(session, {
+    action: "kvk_enrich_batch",
+    summary: `KvK-batch: ${result.processed} verrijkt`,
+    path: "/api/outreach/kvk/enrich-batch",
+    method: "POST",
+    status: 200,
+    tool: "outreach",
+    meta: { processed: result.processed },
+  });
   return NextResponse.json(result);
 }

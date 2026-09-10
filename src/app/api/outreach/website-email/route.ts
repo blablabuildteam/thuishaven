@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { z } from "zod";
 import { fillCompanyWebsiteEmails } from "@/lib/outreach/website-email";
+import { logSessionActivity } from "@/lib/audit/session-log";
 
 export const dynamic = "force-dynamic";
 
@@ -24,5 +25,14 @@ export async function POST(request: Request) {
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
+  await logSessionActivity(session, {
+    action: "website_email",
+    summary: `Site/generieke mails: ${result.filled}/${result.processed}`,
+    path: "/api/outreach/website-email",
+    method: "POST",
+    status: 200,
+    tool: "outreach",
+    meta: { filled: result.filled, processed: result.processed },
+  });
   return NextResponse.json(result);
 }
