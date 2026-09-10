@@ -39,6 +39,8 @@ export type OutreachProspect = {
   contacts?: string[];
   excludedReason?: string | null;
   source?: string;
+  doelgroepFit?: string;
+  doelgroepReason?: string;
 };
 
 export type OutreachLead = {
@@ -106,6 +108,12 @@ export async function listProspects(options?: {
         contacts,
         excludedReason: p.excludedReason,
         source: typeof meta.source === "string" ? meta.source : undefined,
+        doelgroepFit:
+          typeof meta.doelgroepFit === "string" ? meta.doelgroepFit : undefined,
+        doelgroepReason:
+          typeof meta.doelgroepReason === "string"
+            ? meta.doelgroepReason
+            : undefined,
       };
     }),
   };

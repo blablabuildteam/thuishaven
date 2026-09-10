@@ -31,17 +31,17 @@ const STEPS = [
   },
   {
     n: "2",
-    title: "Mail schrijven & testen",
-    body: "Kies een prospect, genereer een draft, stuur een test naar team@.",
-    href: "/outreach/emails",
-    cta: "Naar e-mails",
+    title: "Doelgroep vullen",
+    body: "Bedrijven 500–5.000 mdw rond Amsterdam. LinkedIn of startlijst → KvK checkt. Partnerbureaus niet gebruiken.",
+    href: "/outreach/prospects",
+    cta: "Naar prospects",
   },
   {
     n: "3",
-    title: "Resultaten & replies",
-    body: "Opens komen automatisch binnen. Replies uit evenement@ log je op Resultaten.",
-    href: "/outreach/analytics",
-    cta: "Naar resultaten",
+    title: "Mail & meten",
+    body: "Draft + test naar team@. Opens komen vanzelf; replies log je uit evenement@.",
+    href: "/outreach/emails",
+    cta: "Naar e-mails",
   },
 ] as const;
 

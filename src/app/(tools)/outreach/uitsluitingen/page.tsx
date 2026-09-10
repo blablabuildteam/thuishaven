@@ -13,7 +13,7 @@ export default async function ExclusionsPage() {
       <SectionHeader
         eyebrow="Filter"
         title="Uitsluitingen"
-        description="Bestaande klanten en no-go’s uit Reijners lijst. Deze bedrijven/bureaus worden niet benaderd."
+        description="Bestaande klanten en no-go’s. Nieuwe namen die hier matchen, komen niet op Prospects."
         action={
           <StatusBadge tone={source === "db" ? "success" : "neutral"}>
             {rows.length} regels · {source}
