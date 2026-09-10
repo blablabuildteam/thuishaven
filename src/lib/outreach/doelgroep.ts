@@ -72,12 +72,7 @@ export type DoelgroepFit = "ja" | "nee" | "onbekend";
 export function scoreDoelgroep(input: {
   employeeCount?: number | null;
   city?: string | null;
-  nonMailing?: boolean;
 }): { fit: DoelgroepFit; reason: string } {
-  if (input.nonMailing) {
-    return { fit: "nee", reason: "KvK non-mailing" };
-  }
-
   const count = input.employeeCount ?? null;
   if (count != null) {
     if (count < DOELGROEP.minEmployees) {

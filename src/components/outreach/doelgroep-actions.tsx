@@ -104,7 +104,7 @@ export function DoelgroepActions({ pendingKvk }: Props) {
           <p className="font-medium text-text">2. Of startlijst + KvK-check</p>
           <p className="mt-1">
             {DOELGROEP_STARTLIJST.length} werkgevers in de regio (zonder
-            partnerbureaus). Daarna KvK: size, plaats, jubileum, non-mailing.
+            partnerbureaus). Daarna KvK: medewerkers, plaats, jubileum.
           </p>
           <p className="mt-2 text-xs text-text-dim">
             Zoeken is gratis · profiel ~€0,04 per bedrijf · max 10 per klik.

@@ -21,14 +21,14 @@ export default async function OutreachCrmPage() {
   const partners = rows.filter((r) => r.partner);
   const mailed = companies.filter((r) => r.mailCount > 0).length;
   const replied = companies.filter((r) => r.replyCount > 0).length;
-  const blocked = companies.filter((r) => r.nonMailing).length;
+  const fit = companies.filter((r) => r.doelgroepFit === "ja").length;
 
   return (
     <div>
       <SectionHeader
         eyebrow="Relaties"
         title="CRM"
-        description="Één kaart per bedrijf: wie het is, of je mag mailen, en wat er al is gebeurd."
+        description="KvK vult medewerkers, plaats en jubileum. Non-mailing negeren we — dat blokkeert geen mail."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={source === "db" ? "success" : "neutral"}>
@@ -48,17 +48,7 @@ export default async function OutreachCrmPage() {
         <MetricCard label="Bedrijven" value={formatNumber(companies.length)} />
         <MetricCard label="Al gemaild" value={formatNumber(mailed)} accent />
         <MetricCard label="Met reply" value={formatNumber(replied)} />
-        <MetricCard label="KvK non-mailing" value={formatNumber(blocked)} />
-      </div>
-
-      <div className="mb-8 border border-border bg-surface px-4 py-3 text-sm text-text-muted">
-        <p className="font-medium text-text">KvK non-mailing — kort</p>
-        <p className="mt-1">
-          Het bedrijf heeft bij de Kamer van Koophandel aangegeven: gebruik ons
-          KvK-profiel niet voor reclame. Wij mailen ze dus niet omdat ze in het
-          register staan. Wél mag je ze benaderen via een andere bron (LinkedIn,
-          eigen contact, zij mailen jou).
-        </p>
+        <MetricCard label="Past in doelgroep" value={formatNumber(fit)} />
       </div>
 
       <section className="mb-10">
@@ -75,12 +65,14 @@ export default async function OutreachCrmPage() {
           </p>
         ) : (
           <div className="overflow-x-auto border border-border">
-            <table className="w-full min-w-[880px] text-left text-sm">
+            <table className="w-full min-w-[980px] text-left text-sm">
               <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
                 <tr>
                   <th className="px-4 py-3 font-medium">Bedrijf</th>
                   <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Mailen?</th>
+                  <th className="px-4 py-3 font-medium">Fit</th>
+                  <th className="px-4 py-3 font-medium">Mdw</th>
+                  <th className="px-4 py-3 font-medium">Jubileum</th>
                   <th className="px-4 py-3 font-medium">Mails</th>
                   <th className="px-4 py-3 font-medium">Replies</th>
                   <th className="px-4 py-3 font-medium">Laatst</th>
@@ -118,9 +110,7 @@ export default async function OutreachCrmPage() {
                       </StatusBadge>
                     </td>
                     <td className="px-4 py-3">
-                      {row.nonMailing ? (
-                        <StatusBadge tone="warn">niet via KvK</StatusBadge>
-                      ) : row.doelgroepFit === "ja" ? (
+                      {row.doelgroepFit === "ja" ? (
                         <StatusBadge tone="success">fit</StatusBadge>
                       ) : row.doelgroepFit === "nee" ? (
                         <StatusBadge tone="danger">
@@ -129,6 +119,12 @@ export default async function OutreachCrmPage() {
                       ) : (
                         <span className="text-xs text-text-dim">onbekend</span>
                       )}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-text-muted">
+                      {row.employeeCount ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-accent">
+                      {row.anniversaryYears ? `${row.anniversaryYears} jr` : "—"}
                     </td>
                     <td className="px-4 py-3 font-mono">{row.mailCount}</td>
                     <td className="px-4 py-3 font-mono">{row.replyCount}</td>

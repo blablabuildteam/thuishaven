@@ -236,7 +236,7 @@ export async function getCrmDossier(
         p.kvkNumber ? `KvK ${p.kvkNumber}` : null,
         p.employeeCount != null ? `${p.employeeCount} mdw` : null,
         p.city,
-        meta.nonMailing === true ? "non-mailing" : null,
+        p.anniversaryYears != null ? `${p.anniversaryYears} jr` : null,
       ]
         .filter(Boolean)
         .join(" · "),

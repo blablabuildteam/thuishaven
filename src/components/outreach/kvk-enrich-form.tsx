@@ -183,9 +183,12 @@ export function KvkEnrichForm({ prospects }: Props) {
             </dd>
           </div>
           <div>
-            <dt className="text-text-dim">Non-mailing</dt>
+            <dt className="text-text-dim">Opgericht / jubileum</dt>
             <dd className="text-text">
-              {candidate.nonMailing ? "ja — niet mailen" : "nee"}
+              {candidate.foundedAt ?? "—"}
+              {candidate.anniversaryYears
+                ? ` · ${candidate.anniversaryYears} jr`
+                : ""}
             </dd>
           </div>
           <div>

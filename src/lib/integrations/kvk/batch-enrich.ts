@@ -79,7 +79,6 @@ export async function enrichCompanyProspectsBatch(limit = 10): Promise<{
     const scored = scoreDoelgroep({
       employeeCount: found.candidate.employeeCount,
       city: found.candidate.city,
-      nonMailing: found.candidate.nonMailing,
     });
 
     const [row] = await db

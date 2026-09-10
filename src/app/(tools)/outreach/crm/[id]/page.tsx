@@ -47,13 +47,7 @@ export default async function CrmDossierPage({
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge
-              tone={
-                dossier.status === "lead"
-                  ? "accent"
-                  : dossier.nonMailing
-                    ? "warn"
-                    : "neutral"
-              }
+              tone={dossier.status === "lead" ? "accent" : "neutral"}
             >
               {statusLabels[dossier.status]}
             </StatusBadge>
@@ -72,17 +66,6 @@ export default async function CrmDossierPage({
           </div>
         }
       />
-
-      {dossier.nonMailing ? (
-        <div className="mb-6 border border-warn/40 bg-surface px-4 py-3 text-sm text-text-muted">
-          <p className="font-medium text-text">KvK non-mailing</p>
-          <p className="mt-1">
-            Dit bedrijf wil geen reclame op basis van hun KvK-inschrijving. Niet
-            mailen omdat ze in het register staan. Wél: LinkedIn, een bekend
-            contact, of als zij jou schrijven.
-          </p>
-        </div>
-      ) : null}
 
       <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Fact label="KvK" value={dossier.kvkNumber ?? "—"} />

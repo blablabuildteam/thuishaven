@@ -14,6 +14,7 @@ import {
 } from "./client";
 import { candidateFromProfiles } from "./discovery";
 import type { KvkProspectCandidate } from "./types";
+import { scoreDoelgroep } from "@/lib/outreach/doelgroep";
 
 export type EnrichKvkInput = {
   naam?: string;
@@ -127,6 +128,12 @@ export async function applyKvkCandidateToProspect(
   meta.vestigingsnummer = candidate.vestigingsnummer ?? meta.vestigingsnummer;
   meta.sbiCode = candidate.sbiCode ?? meta.sbiCode;
   meta.nonMailing = candidate.nonMailing;
+  const scored = scoreDoelgroep({
+    employeeCount: candidate.employeeCount ?? row.employeeCount,
+    city: candidate.city ?? row.city,
+  });
+  meta.doelgroepFit = scored.fit;
+  meta.doelgroepReason = scored.reason;
   if (typeof meta.source !== "string") meta.source = "kvk";
 
   const keepStatus = new Set([
