@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   BarChart3,
   Bell,
@@ -37,12 +38,15 @@ type NavItem = {
   icon?: LucideIcon;
   /** Brand mark from /public/social-icons */
   brand?: SocialBrandChannel;
+  /** Only show for admin accounts */
+  adminOnly?: boolean;
 };
 
 type NavSection = {
   id: string;
   label: string;
   items: NavItem[];
+  adminOnly?: boolean;
 };
 
 /**
@@ -76,6 +80,7 @@ const dashboardSystemNav: NavItem[] = [
   { href: "/koppelingen", label: "Bronnen", icon: Plug },
 ];
 
+/** Simpele flow voor Reijner/Yoram: agenda → bedrijven → mailen → resultaten. */
 const outreachSections: NavSection[] = [
   {
     id: "werken",
@@ -83,36 +88,65 @@ const outreachSections: NavSection[] = [
     items: [
       { href: "/outreach", label: "Overzicht", icon: Send },
       { href: "/outreach/beschikbaarheid", label: "Agenda", icon: CalendarDays },
-      { href: "/outreach/emails", label: "E-mails", icon: Mail },
-      { href: "/outreach/planning", label: "Wachtrij", icon: ClipboardList },
-    ],
-  },
-  {
-    id: "lijsten",
-    label: "Lijsten",
-    items: [
-      { href: "/outreach/crm", label: "CRM", icon: Contact },
-      { href: "/outreach/prospects", label: "Lijst vullen", icon: Users },
-      { href: "/outreach/uitsluitingen", label: "Niet mailen", icon: Ban },
-      { href: "/outreach/campaigns", label: "Campagnes", icon: Sparkles },
-    ],
-  },
-  {
-    id: "inzicht",
-    label: "Inzicht",
-    items: [
+      { href: "/outreach/crm", label: "Bedrijven", icon: Contact },
+      { href: "/outreach/emails", label: "Mailen", icon: Mail },
       { href: "/outreach/analytics", label: "Resultaten", icon: LineChart },
-      { href: "/outreach/leads", label: "Warme leads", icon: MessageSquare },
-      { href: "/outreach/kosten", label: "Kosten", icon: BarChart3 },
+    ],
+  },
+  {
+    id: "beheer",
+    label: "Beheer",
+    adminOnly: true,
+    items: [
+      {
+        href: "/outreach/prospects",
+        label: "Lijst vullen",
+        icon: Users,
+        adminOnly: true,
+      },
+      {
+        href: "/outreach/uitsluitingen",
+        label: "Niet mailen",
+        icon: Ban,
+        adminOnly: true,
+      },
+      {
+        href: "/outreach/planning",
+        label: "Wachtrij",
+        icon: ClipboardList,
+        adminOnly: true,
+      },
+      {
+        href: "/outreach/leads",
+        label: "Warme leads",
+        icon: MessageSquare,
+        adminOnly: true,
+      },
+      {
+        href: "/outreach/campaigns",
+        label: "Campagnes",
+        icon: Sparkles,
+        adminOnly: true,
+      },
+      {
+        href: "/outreach/kosten",
+        label: "Kosten",
+        icon: BarChart3,
+        adminOnly: true,
+      },
     ],
   },
 ];
 
 const outreachSystemNav: NavItem[] = [
-  { href: "/outreach/pipeline", label: "Pipeline", icon: Workflow },
-  { href: "/koppelingen", label: "Bronnen", icon: Plug },
+  {
+    href: "/outreach/pipeline",
+    label: "Pipeline",
+    icon: Workflow,
+    adminOnly: true,
+  },
+  { href: "/koppelingen", label: "Bronnen", icon: Plug, adminOnly: true },
 ];
-
 
 function isNavActive(pathname: string, href: string) {
   return (
@@ -123,6 +157,17 @@ function isNavActive(pathname: string, href: string) {
   );
 }
 
+function filterNav(items: NavItem[], isAdmin: boolean) {
+  return items.filter((item) => isAdmin || !item.adminOnly);
+}
+
+function filterSections(sections: NavSection[], isAdmin: boolean) {
+  return sections
+    .filter((s) => isAdmin || !s.adminOnly)
+    .map((s) => ({ ...s, items: filterNav(s.items, isAdmin) }))
+    .filter((s) => s.items.length > 0);
+}
+
 function NavItemIcon({ item, active }: { item: NavItem; active: boolean }) {
   if (item.brand) {
     return (
@@ -131,7 +176,6 @@ function NavItemIcon({ item, active }: { item: NavItem; active: boolean }) {
         size={16}
         className={cn(
           "opacity-90 transition-[filter]",
-          // Black glyphs: invert for dark idle + light active; cancel on dark active (yellow).
           active ? "invert dark:invert-0" : "dark:invert",
         )}
         alt=""
@@ -170,9 +214,16 @@ function NavLink({
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { data } = useSession();
+  const isAdmin = data?.user?.role === "admin";
   const isOutreach = pathname.startsWith("/outreach");
-  const sections = isOutreach ? outreachSections : dashboardSections;
-  const systemNav = isOutreach ? outreachSystemNav : dashboardSystemNav;
+  const sections = isOutreach
+    ? filterSections(outreachSections, isAdmin)
+    : dashboardSections;
+  const systemNav = filterNav(
+    isOutreach ? outreachSystemNav : dashboardSystemNav,
+    isAdmin,
+  );
 
   return (
     <div className="relative z-0 flex min-h-screen bg-bg">
@@ -231,20 +282,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             ))}
           </div>
 
-          <div className="mt-auto border-t border-border pt-4">
-            <p className="mb-1.5 px-2 text-[11px] font-medium tracking-[0.12em] text-text-dim uppercase">
-              Systeem
-            </p>
-            <nav className="space-y-0.5">
-              {systemNav.map((item) => (
-                <NavLink
-                  key={item.href}
-                  item={item}
-                  active={isNavActive(pathname, item.href)}
-                />
-              ))}
-            </nav>
-          </div>
+          {systemNav.length > 0 ? (
+            <div className="mt-auto border-t border-border pt-4">
+              <p className="mb-1.5 px-2 text-[11px] font-medium tracking-[0.12em] text-text-dim uppercase">
+                Systeem
+              </p>
+              <nav className="space-y-0.5">
+                {systemNav.map((item) => (
+                  <NavLink
+                    key={item.href}
+                    item={item}
+                    active={isNavActive(pathname, item.href)}
+                  />
+                ))}
+              </nav>
+            </div>
+          ) : (
+            <div className="mt-auto" />
+          )}
         </div>
 
         <div className="space-y-3 border-t border-border px-4 py-4">
@@ -277,17 +332,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-1">
             <ThemeToggle compact />
             <div className="flex gap-1 bg-surface p-1">
-              <ToolSwitch href="/dashboard/inzichten" active={!isOutreach} label="Dash" />
+              <ToolSwitch
+                href="/dashboard/inzichten"
+                active={!isOutreach}
+                label="Dash"
+              />
               <ToolSwitch href="/outreach" active={isOutreach} label="Out" />
             </div>
           </div>
         </header>
 
         <nav className="flex gap-1 overflow-x-auto border-b border-border px-3 py-2 lg:hidden">
-          {[
-            ...sections.flatMap((s) => s.items),
-            ...systemNav,
-          ].map((item) => {
+          {[...sections.flatMap((s) => s.items), ...systemNav].map((item) => {
             const active = isNavActive(pathname, item.href);
             return (
               <Link
@@ -328,7 +384,7 @@ function ToolSwitch({
         "px-2 py-1.5 text-center text-sm transition-colors",
         active
           ? "bg-accent text-accent-contrast"
-          : "text-text-muted hover:text-text",
+          : "text-text-muted hover:bg-surface hover:text-text",
       )}
     >
       {label}

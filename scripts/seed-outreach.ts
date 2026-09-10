@@ -166,6 +166,15 @@ async function main() {
     `(excluded overlap: ${agencyExcluded})`,
   );
 
+  const { syncExclusionsToCrm } = await import(
+    "../src/lib/outreach/exclusions-sync"
+  );
+  const crmSync = await syncExclusionsToCrm();
+  console.log(
+    "[seed] exclusions → CRM:",
+    `+${crmSync.created} · updated ${crmSync.updated} · partners left ${crmSync.partnersLeft}`,
+  );
+
   const avail = await seedAvailabilityFromMockIfEmpty();
   console.log("[seed] availability days inserted:", avail.inserted);
 

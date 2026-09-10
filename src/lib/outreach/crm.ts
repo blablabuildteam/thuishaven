@@ -14,6 +14,10 @@ import { statusLabels, type ProspectStatus, type ProspectType } from "./data";
 import { kvkHeadcountLooksOff } from "./linkedin";
 import { isSystemProspect } from "./apollo-page";
 import { scoreDoelgroep } from "./doelgroep";
+import {
+  EXISTING_CUSTOMER_REASON,
+  EXCLUSION_IMPORT_SOURCE,
+} from "./exclusions-sync";
 
 export { statusLabels };
 
@@ -50,6 +54,9 @@ export type CrmRecord = {
   doelgroepReason?: string;
   nonMailing: boolean;
   partner: boolean;
+  /** Reijner "niet mailen" / bestaande klant — in CRM, niet cold. */
+  existingCustomer: boolean;
+  excludedReason: string | null;
   mailCount: number;
   replyCount: number;
   lastTouchAt: string | null;
@@ -100,6 +107,12 @@ function mapRecord(
       typeof meta.doelgroepReason === "string" ? meta.doelgroepReason : undefined,
     nonMailing: meta.nonMailing === true,
     partner: p.type === "agency" && meta.source === "bureau_import",
+    existingCustomer:
+      meta.source === EXCLUSION_IMPORT_SOURCE ||
+      p.excludedReason === EXISTING_CUSTOMER_REASON ||
+      (p.status === "excluded" &&
+        !(p.type === "agency" && meta.source === "bureau_import")),
+    excludedReason: p.excludedReason,
     mailCount: extras.mailCount,
     replyCount: extras.replyCount,
     lastTouchAt: extras.lastTouchAt,
@@ -178,9 +191,14 @@ export async function listCrmRecords(): Promise<{
     .map((p) => {
     const mail = mailMap.get(p.id);
     const reply = replyMap.get(p.id);
-    const lastCandidates = [mail?.lastSent, reply?.lastReply, p.updatedAt].filter(
-      (d): d is Date => Boolean(d),
-    );
+    const toDate = (d: unknown): Date | null => {
+      if (!d) return null;
+      const date = d instanceof Date ? d : new Date(String(d));
+      return Number.isNaN(date.getTime()) ? null : date;
+    };
+    const lastCandidates = [mail?.lastSent, reply?.lastReply, p.updatedAt]
+      .map(toDate)
+      .filter((d): d is Date => d !== null);
     const last = lastCandidates.sort((a, b) => b.getTime() - a.getTime())[0];
     return mapRecord(p, {
       mailCount: mail?.mailCount ?? 0,

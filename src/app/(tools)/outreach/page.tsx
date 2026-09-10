@@ -1,51 +1,59 @@
 import Link from "next/link";
+import { format, parseISO } from "date-fns";
+import { nl } from "date-fns/locale";
+import { auth } from "@/auth";
 import { SectionHeader } from "@/components/ui/section-header";
 import { MetricCard } from "@/components/ui/metric-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { OutreachOnboardingTour } from "@/components/outreach/onboarding-tour";
 import { getOutreachOverview } from "@/lib/outreach/data";
-import { openAvailabilityDaysLive } from "@/lib/outreach/availability";
-import { getPublicAvailabilityUrl } from "@/lib/outreach/availability";
+import {
+  getPublicAvailabilityUrl,
+  openAvailabilityDaysLive,
+} from "@/lib/outreach/availability";
 import { outreachLiveSendBlockReason } from "@/lib/outreach/send-policy";
-import { getUsageSummary } from "@/lib/usage/store";
 import { formatNumber, formatPercent } from "@/lib/utils";
 
 export const metadata = { title: "Outreach" };
 export const dynamic = "force-dynamic";
 
-function eurFromCents(cents: number): string {
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(cents / 100);
-}
-
 const STEPS = [
   {
     n: "1",
     title: "Agenda bijwerken",
-    body: "Zet open wo–zo-dagen klaar. Dezelfde agenda deel je met prospects.",
+    body: "Zet open dagen klaar. Die agenda deel je in de mails.",
     href: "/outreach/beschikbaarheid",
     cta: "Open agenda",
   },
   {
     n: "2",
-    title: "Doelgroep vullen",
-    body: "Apollo haalt 500–5.000 mdw in AMS-regio. Daarna KvK: nummer, jubileum, vestiging. Geen wiki, geen LinkedIn-scrape.",
-    href: "/outreach/prospects",
-    cta: "Naar prospects",
+    title: "Bedrijven bekijken",
+    body: "Lijst met labels: Jubileum, Algemeen feest, Past niet, of Niet mailen.",
+    href: "/outreach/crm",
+    cta: "Naar bedrijven",
   },
   {
     n: "3",
-    title: "Mail & meten",
-    body: "Draft + test naar team@. Opens komen vanzelf; replies log je uit evenement@.",
+    title: "Mailen & volgen",
+    body: "Maak mails, verstuur, en zie opens en replies onder Resultaten.",
     href: "/outreach/emails",
-    cta: "Naar e-mails",
+    cta: "Naar mailen",
   },
 ] as const;
 
+function slotLine(dateIso: string, label?: string) {
+  let dateBit = dateIso;
+  try {
+    dateBit = format(parseISO(dateIso), "EEE d MMM yyyy", { locale: nl });
+  } catch {
+    /* keep iso */
+  }
+  return label ? `${dateBit} · ${label}` : dateBit;
+}
+
 export default async function OutreachPage() {
+  const session = await auth();
+  const isAdmin = session?.user?.role === "admin";
   const overview = await getOutreachOverview();
   const openSlots = await openAvailabilityDaysLive();
   const liveUrl = getPublicAvailabilityUrl();
@@ -54,41 +62,33 @@ export default async function OutreachPage() {
     overview.kpis.sent > 0
       ? (overview.kpis.opened / overview.kpis.sent) * 100
       : 0;
-  let usage: Awaited<ReturnType<typeof getUsageSummary>> | null = null;
-  try {
-    usage = await getUsageSummary({ sinceDays: 30, tool: "outreach" });
-  } catch (e) {
-    console.error("outreach usage", e);
-  }
 
   return (
     <div>
+      <OutreachOnboardingTour />
+
       <SectionHeader
         eyebrow="Bedrijfsevent Outreach"
         title="Overzicht"
-        description="Uitgaande mails voor bedrijfsevents: agenda, drafts, opens en replies. Live versturen blijft uit tot jullie groen licht geven."
+        description="Agenda bijwerken → bedrijven kiezen → mailen → resultaten volgen."
         action={
           <div className="flex flex-wrap gap-2">
-            <StatusBadge tone={sendBlock ? "danger" : "success"}>
-              {sendBlock ? "Live send uit" : "Live send aan"}
-            </StatusBadge>
+            {isAdmin ? (
+              <StatusBadge tone={sendBlock ? "danger" : "success"}>
+                {sendBlock ? "Live send uit" : "Live send aan"}
+              </StatusBadge>
+            ) : null}
             <StatusBadge tone={overview.source === "db" ? "success" : "neutral"}>
-              {overview.source === "db"
-                ? `${overview.prospectCount} prospects`
-                : "Mockdata"}
+              {formatNumber(overview.prospectCount)} bedrijven
             </StatusBadge>
           </div>
         }
       />
 
-      {sendBlock ? (
+      {sendBlock && isAdmin ? (
         <div className="mb-8 border border-border bg-surface px-4 py-3 text-sm text-text-muted">
-          <p className="font-medium text-text">Nu veilig in testmodus</p>
+          <p className="font-medium text-text">Testmodus</p>
           <p className="mt-1">{sendBlock}</p>
-          <p className="mt-1 text-xs text-text-dim">
-            Testsends → team@ · From zakelijk@ · reply-to evenement@ · replies
-            loggen op Resultaten
-          </p>
         </div>
       ) : null}
 
@@ -120,9 +120,9 @@ export default async function OutreachPage() {
         </ol>
       </section>
 
-      <div className="stagger mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="stagger mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <MetricCard
-          label="Prospects"
+          label="Bedrijven"
           value={formatNumber(overview.kpis.prospectsTotal)}
         />
         <MetricCard
@@ -130,31 +130,18 @@ export default async function OutreachPage() {
           value={formatNumber(overview.kpis.sent)}
           accent
         />
-        <MetricCard label="Open rate" value={formatPercent(openRate)} />
+        <MetricCard label="Geopend" value={formatPercent(openRate)} />
         <MetricCard
           label="Replies"
           value={formatNumber(overview.kpis.replied)}
         />
         <MetricCard label="Leads" value={formatNumber(overview.kpis.leads)} />
-        <Link href="/outreach/kosten" className="block">
-          <MetricCard
-            label="Kosten · 30d"
-            value={usage ? eurFromCents(usage.totalEurCents) : "—"}
-            hint={
-              usage
-                ? `${eurFromCents(usage.clientBilledEurCents)} KvK · rits-rekenaar →`
-                : "Rits-rekenaar →"
-            }
-          />
-        </Link>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="border border-border bg-surface p-4">
           <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="font-display text-2xl tracking-[0.06em]">
-              Agenda
-            </h2>
+            <h2 className="font-display text-2xl tracking-[0.06em]">Agenda</h2>
             <Link
               href="/outreach/beschikbaarheid"
               className="text-xs text-accent hover:underline"
@@ -163,7 +150,7 @@ export default async function OutreachPage() {
             </Link>
           </div>
           <p className="mb-4 text-sm text-text-muted">
-            {openSlots.length} open slots · deelbaar met prospects
+            {openSlots.length} open dagen · deelbaar in mails
           </p>
           <ul className="mb-4 space-y-1.5">
             {openSlots.slice(0, 6).map((slot) => (
@@ -172,7 +159,7 @@ export default async function OutreachPage() {
                 className="flex items-center gap-2 text-sm text-text-muted"
               >
                 <span className="size-1.5 shrink-0 rounded-full bg-accent" />
-                {slot.label ?? slot.date}
+                {slotLine(slot.date, slot.label)}
               </li>
             ))}
             {openSlots.length === 0 ? (
@@ -197,19 +184,15 @@ export default async function OutreachPage() {
               Warme leads
             </h2>
             <Link
-              href="/outreach/leads"
+              href="/outreach/analytics"
               className="text-xs text-accent hover:underline"
             >
-              Alle leads →
+              Resultaten →
             </Link>
           </div>
           {overview.leads.length === 0 ? (
             <p className="text-sm text-text-muted">
-              Nog geen warme leads. Log een positieve reply op{" "}
-              <Link href="/outreach/analytics" className="text-accent underline">
-                Resultaten
-              </Link>{" "}
-              — die verschijnt hier automatisch.
+              Nog geen warme leads. Positieve replies verschijnen hier.
             </p>
           ) : (
             <ul className="space-y-3">
@@ -226,26 +209,6 @@ export default async function OutreachPage() {
               ))}
             </ul>
           )}
-
-          <div className="mt-6 border-t border-border pt-4">
-            <p className="mb-2 text-[11px] uppercase tracking-wider text-text-dim">
-              Campagnes
-            </p>
-            <ul className="space-y-2">
-              {overview.campaigns.slice(0, 3).map((c) => (
-                <li key={c.id} className="flex items-center justify-between gap-2">
-                  <span className="text-sm text-text">{c.name}</span>
-                  <StatusBadge tone="neutral">{c.status}</StatusBadge>
-                </li>
-              ))}
-            </ul>
-            <Link
-              href="/outreach/campaigns"
-              className="mt-3 inline-block text-xs text-accent hover:underline"
-            >
-              Alle campagnes →
-            </Link>
-          </div>
         </section>
       </div>
     </div>

@@ -33,7 +33,7 @@ export default function HubPage() {
             />
             <div>
               <p className="font-display text-[11px] tracking-[0.22em] text-text-muted">
-                Tools · Fase 1
+                Tools
               </p>
               <BrandLogo
                 href={undefined}
@@ -45,8 +45,7 @@ export default function HubPage() {
 
           <div className="rule-yellow max-w-xl pb-4">
             <p className="max-w-xl text-sm leading-relaxed text-text-muted sm:text-base">
-              Marketing- & kaartverkoop naast bedrijfsevent outreach — één
-              huisstijl, één repo, klaar om te finetunen.
+              Kies waar je naartoe wilt.
             </p>
           </div>
         </header>
@@ -54,39 +53,17 @@ export default function HubPage() {
         <div className="stagger grid gap-3 sm:grid-cols-2">
           <ToolCard
             href="/dashboard"
-            eyebrow="02 · 03"
+            eyebrow="Dashboard"
             title="Marketing & Kaartverkoop"
-            description="Unified dashboard: ticketverkoop per platform, marketingkanalen, creatives, TicketSwap-alerts en AI-chat."
+            description="Ticketverkoop, marketingkanalen en alerts."
           />
           <ToolCard
             href="/outreach"
-            eyebrow="05"
-            title="Bedrijfsevent Outreach"
-            description="Prospectpipelines, AI-outbound via Brevo, jubileum-triggers, bureau-beschikbaarheid en lead routing."
-          />
-        </div>
-
-        <div className="stagger mt-3 grid gap-3 sm:grid-cols-2">
-          <ToolCard
-            href="/koppelingen"
-            eyebrow="Meeting"
-            title="Koppelingen"
-            description="API-status, verify-knoppen en checklist van wat we morgen bij Thuishaven ophalen."
-          />
-          <ToolCard
-            href="/outreach/pipeline"
             eyebrow="Outreach"
-            title="Data-pipeline"
-            description="Ontdekken → verrijken → versturen → meten. Dry-run op mockdata, klaar om live te zetten."
+            title="Bedrijfsevent Outreach"
+            description="Agenda, bedrijven mailen en resultaten volgen."
           />
         </div>
-
-        <p
-          className="animate-fade-up mt-10 font-display text-sm tracking-[0.14em] text-text-dim"
-          style={{ animationDelay: "0.35s" }}
-        >
-          Mockdata · Live koppelingen volgen
-        </p>
       </div>
     </div>
   );

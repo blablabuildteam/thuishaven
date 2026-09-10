@@ -40,21 +40,37 @@ export default async function CrmDossierPage({
   return (
     <div>
       <SectionHeader
-        eyebrow={dossier.partner ? "Partner" : "CRM"}
+        eyebrow={
+          dossier.partner
+            ? "Partner"
+            : dossier.existingCustomer
+              ? "Niet mailen"
+              : "CRM"
+        }
         title={dossier.companyName}
         description={
           dossier.partner
             ? "Bestaande relatie — geen cold mail."
-            : [dossier.city, dossier.sector, dossier.email]
-                .filter(Boolean)
-                .join(" · ") || "Nog weinig bekend"
+            : dossier.existingCustomer
+              ? dossier.excludedReason ?? "Al klant / niet mailen"
+              : [dossier.city, dossier.sector, dossier.email]
+                  .filter(Boolean)
+                  .join(" · ") || "Nog weinig bekend"
         }
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge
-              tone={dossier.status === "lead" ? "accent" : "neutral"}
+              tone={
+                dossier.status === "lead"
+                  ? "accent"
+                  : dossier.status === "excluded"
+                    ? "danger"
+                    : "neutral"
+              }
             >
-              {statusLabels[dossier.status]}
+              {dossier.existingCustomer
+                ? dossier.excludedReason ?? statusLabels[dossier.status]
+                : statusLabels[dossier.status]}
             </StatusBadge>
             <Link
               href="/outreach/crm"
@@ -62,15 +78,27 @@ export default async function CrmDossierPage({
             >
               Alle dossiers
             </Link>
-            <Link
-              href="/outreach/emails"
-              className="bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast"
-            >
-              Mail schrijven
-            </Link>
+            {!dossier.partner && !dossier.existingCustomer ? (
+              <Link
+                href="/outreach/emails"
+                className="bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast"
+              >
+                Mail schrijven
+              </Link>
+            ) : null}
           </div>
         }
       />
+
+      {dossier.existingCustomer ? (
+        <div className="mb-6 border border-danger/40 bg-surface px-4 py-3 text-sm text-text-muted">
+          <p className="font-medium text-text">Al klant / niet mailen</p>
+          <p className="mt-1">
+            Staat op de uitsluitingslijst van Reijner. Draft en send zijn
+            geblokkeerd; Apollo haalt dit bedrijf niet opnieuw binnen.
+          </p>
+        </div>
+      ) : null}
 
       {dossier.nonMailing ? (
         <div className="mb-6 border border-danger/40 bg-surface px-4 py-3 text-sm text-text-muted">

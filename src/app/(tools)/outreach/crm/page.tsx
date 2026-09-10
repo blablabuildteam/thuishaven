@@ -5,9 +5,10 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { MetricCard } from "@/components/ui/metric-card";
 import { listCrmRecords, statusLabels } from "@/lib/outreach/crm";
+import { mailAngleFor } from "@/lib/outreach/mail-angle";
 import { formatNumber } from "@/lib/utils";
 
-export const metadata = { title: "CRM" };
+export const metadata = { title: "Bedrijven" };
 export const dynamic = "force-dynamic";
 
 function fmt(iso: string | null) {
@@ -15,59 +16,95 @@ function fmt(iso: string | null) {
   return format(new Date(iso), "d MMM yyyy", { locale: nl });
 }
 
+function angleTone(id: string) {
+  if (id === "jubileum") return "accent" as const;
+  if (id === "algemeen") return "success" as const;
+  if (id === "past_niet" || id === "niet_mailen") return "danger" as const;
+  return "neutral" as const;
+}
+
 export default async function OutreachCrmPage() {
   const { rows, source } = await listCrmRecords();
-  const companies = rows.filter((r) => !r.partner);
-  const partners = rows.filter((r) => r.partner);
-  const mailed = companies.filter((r) => r.mailCount > 0).length;
-  const replied = companies.filter((r) => r.replyCount > 0).length;
-  const fit = companies.filter((r) => r.doelgroepFit === "ja").length;
-  const kvkOff = companies.filter((r) => r.kvkHeadcountOff).length;
+  const existingCustomers = rows.filter(
+    (r) => !r.partner && r.existingCustomer,
+  );
+  // Partners verborgen voor nu (later soft-campagne).
+  const companies = rows
+    .filter((r) => !r.partner && !r.existingCustomer)
+    .map((row) => ({
+      row,
+      angle: mailAngleFor({
+        status: row.status,
+        existingCustomer: row.existingCustomer,
+        doelgroepFit: row.doelgroepFit,
+        doelgroepReason: row.doelgroepReason,
+        anniversaryYears: row.anniversaryYears,
+      }),
+    }))
+    .sort(
+      (a, b) =>
+        a.angle.rank - b.angle.rank ||
+        a.row.companyName.localeCompare(b.row.companyName, "nl"),
+    );
+
+  const mailable = companies.filter(
+    (c) => c.angle.id === "jubileum" || c.angle.id === "algemeen",
+  ).length;
+  const jubileum = companies.filter((c) => c.angle.id === "jubileum").length;
+  const mailed = companies.filter((c) => c.row.mailCount > 0).length;
+  const replied = companies.filter((c) => c.row.replyCount > 0).length;
 
   return (
     <div>
       <SectionHeader
-        eyebrow="Relaties"
-        title="CRM"
-        description="Apollo vult de doelgroep. KvK keurt daarna: nummer, jubileum, vestiging. Non-mailing negeren we."
+        eyebrow="Lijst"
+        title="Bedrijven"
+        description="Gesorteerd op mailhoek: jubileum eerst, daarna algemeen feest. Labels maken duidelijk wat er gebeurt — ook bij bedrijven die (nog) niet passen."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={source === "db" ? "success" : "neutral"}>
-              {companies.length} dossiers
+              {companies.length} op de lijst
             </StatusBadge>
             <Link
-              href="/outreach/prospects"
-              className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
+              href="/outreach/emails"
+              className="bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast"
             >
-              Lijst vullen →
+              Mailen →
             </Link>
           </div>
         }
       />
 
-      <div className="stagger mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <MetricCard label="Bedrijven" value={formatNumber(companies.length)} />
-        <MetricCard label="Al gemaild" value={formatNumber(mailed)} accent />
-        <MetricCard label="Met reply" value={formatNumber(replied)} />
-        <MetricCard label="Past in doelgroep" value={formatNumber(fit)} />
+      <div className="stagger mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard label="Op de lijst" value={formatNumber(companies.length)} />
         <MetricCard
-          label="KvK mdw checken"
-          value={formatNumber(kvkOff)}
-          hint="Raar laag — Apollo telt"
+          label="Klaar om te mailen"
+          value={formatNumber(mailable)}
+          accent
+          hint="Passen in doelgroep"
+        />
+        <MetricCard
+          label="Jubileum dit/volgend jaar"
+          value={formatNumber(jubileum)}
+        />
+        <MetricCard
+          label="Al gemaild / replies"
+          value={`${formatNumber(mailed)} / ${formatNumber(replied)}`}
         />
       </div>
 
+      <p className="mb-4 text-sm text-text-muted">
+        <span className="text-text">Jubileum</span> = felicitatie-mail.{" "}
+        <span className="text-text">Algemeen feest</span> = bedrijfsfeest /
+        zomerfeest (ook als hun jubileum pas over 2–4 jaar is).{" "}
+        <span className="text-text">Past niet</span> = te klein/groot of buiten
+        regio — zichtbaar met label, niet in bulk.
+      </p>
+
       <section className="mb-10">
-        <h2 className="mb-3 font-display text-2xl tracking-[0.06em]">
-          Doelgroep
-        </h2>
         {companies.length === 0 ? (
           <p className="border border-border bg-surface px-4 py-5 text-sm text-text-muted">
-            Nog geen dossiers.{" "}
-            <Link href="/outreach/prospects" className="text-accent underline">
-              Vul de lijst
-            </Link>
-            .
+            Nog geen bedrijven. Vraag Kevin om de lijst te vullen.
           </p>
         ) : (
           <div className="overflow-x-auto border border-border">
@@ -75,17 +112,16 @@ export default async function OutreachCrmPage() {
               <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
                 <tr>
                   <th className="px-4 py-3 font-medium">Bedrijf</th>
+                  <th className="px-4 py-3 font-medium">Mailhoek</th>
                   <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Fit</th>
                   <th className="px-4 py-3 font-medium">Mdw</th>
-                  <th className="px-4 py-3 font-medium">Jubileum</th>
                   <th className="px-4 py-3 font-medium">Mails</th>
                   <th className="px-4 py-3 font-medium">Replies</th>
                   <th className="px-4 py-3 font-medium">Laatst</th>
                 </tr>
               </thead>
               <tbody>
-                {companies.map((row) => (
+                {companies.map(({ row, angle }) => (
                   <tr
                     key={row.id}
                     className="border-b border-border last:border-0 hover:bg-surface/50"
@@ -103,6 +139,14 @@ export default async function OutreachCrmPage() {
                       </p>
                     </td>
                     <td className="px-4 py-3">
+                      <StatusBadge tone={angleTone(angle.id)}>
+                        {angle.label}
+                      </StatusBadge>
+                      <p className="mt-1 max-w-[220px] text-xs text-text-dim">
+                        {angle.detail}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
                       <StatusBadge
                         tone={
                           row.status === "lead" || row.status === "replied"
@@ -115,30 +159,10 @@ export default async function OutreachCrmPage() {
                         {statusLabels[row.status]}
                       </StatusBadge>
                     </td>
-                    <td className="px-4 py-3">
-                      {row.doelgroepFit === "ja" ? (
-                        <StatusBadge tone="success">fit</StatusBadge>
-                      ) : row.doelgroepFit === "nee" ? (
-                        <StatusBadge tone="danger">
-                          {row.doelgroepReason ?? "geen fit"}
-                        </StatusBadge>
-                      ) : (
-                        <span className="text-xs text-text-dim">onbekend</span>
-                      )}
-                    </td>
                     <td className="px-4 py-3 font-mono text-text-muted">
                       {row.linkedinEmployeeEstimate != null
                         ? `~${row.linkedinEmployeeEstimate}`
                         : (row.employeeCount ?? "—")}
-                      {row.kvkHeadcountOff &&
-                      row.linkedinEmployeeEstimate == null ? (
-                        <span className="ml-1 text-[10px] uppercase tracking-wide text-warn">
-                          check LI
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-accent">
-                      {row.anniversaryYears ? `${row.anniversaryYears} jr` : "—"}
                     </td>
                     <td className="px-4 py-3 font-mono">{row.mailCount}</td>
                     <td className="px-4 py-3 font-mono">{row.replyCount}</td>
@@ -153,26 +177,31 @@ export default async function OutreachCrmPage() {
         )}
       </section>
 
-      <section>
-        <h2 className="mb-2 font-display text-2xl tracking-[0.06em]">
-          Partnerbureaus
-        </h2>
-        <p className="mb-3 text-sm text-text-muted">
-          Bestaande relatie — niet cold. Klik voor het dossier.
-        </p>
-        <ul className="columns-1 gap-x-8 sm:columns-2 lg:columns-3">
-          {partners.map((row) => (
-            <li key={row.id} className="mb-1.5 break-inside-avoid">
-              <Link
-                href={`/outreach/crm/${row.id}`}
-                className="text-sm text-text hover:text-accent"
-              >
-                {row.companyName}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
+      {existingCustomers.length > 0 ? (
+        <section>
+          <h2 className="mb-2 font-display text-2xl tracking-[0.06em]">
+            Al klant / niet mailen
+          </h2>
+          <p className="mb-3 text-sm text-text-muted">
+            {existingCustomers.length} namen — zichtbaar, niet in de mail-bulk.
+          </p>
+          <ul className="columns-1 gap-x-8 sm:columns-2 lg:columns-3">
+            {existingCustomers.map((row) => (
+              <li key={row.id} className="mb-1.5 break-inside-avoid">
+                <Link
+                  href={`/outreach/crm/${row.id}`}
+                  className="text-sm text-text hover:text-accent"
+                >
+                  {row.companyName}
+                </Link>
+                <span className="ml-1.5 text-xs text-danger">
+                  {row.excludedReason ?? "Niet mailen"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }
