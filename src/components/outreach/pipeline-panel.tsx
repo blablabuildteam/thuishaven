@@ -62,7 +62,7 @@ export function OutreachPipelinePanel() {
       <SectionHeader
         eyebrow="Volgende stap"
         title="Data-pipeline"
-        description="Zo komt outreach-data binnen: ontdekken (meerdere bronnen) → verrijken → filteren → genereren → versturen → meten → lead routen."
+        description="Apollo haalt de doelgroep. KvK keurt. Website levert events@ / info@. Daarna draft + test naar team@."
         action={
           <div className="flex flex-wrap gap-2">
             <Link

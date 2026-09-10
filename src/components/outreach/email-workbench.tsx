@@ -15,6 +15,8 @@ type WorkbenchProspect = {
   companyName: string;
   email: string | null;
   status: string;
+  source?: string;
+  nonMailing?: boolean;
 };
 
 type Props = {
@@ -28,15 +30,17 @@ export function OutreachEmailWorkbench({ prospects }: Props) {
     () =>
       prospects.filter(
         (p) =>
-          p.type === "agency" &&
+          p.type === "company" &&
+          p.source !== "bureau_import" &&
           p.status !== "excluded" &&
+          !p.nonMailing &&
           Boolean(p.email),
       ),
     [prospects],
   );
 
   const [prospectId, setProspectId] = useState(ready[0]?.id ?? "");
-  const [variantId, setVariantId] = useState<OutreachVariantId>("open_dates");
+  const [variantId, setVariantId] = useState<OutreachVariantId>("jubileum");
   const [subjectArm, setSubjectArm] = useState<OutreachSubjectArm | "auto">(
     "auto",
   );
@@ -103,9 +107,9 @@ export function OutreachEmailWorkbench({ prospects }: Props) {
   if (!ready.length) {
     return (
       <div className="border border-border bg-surface p-4 text-sm text-text-muted">
-        Geen bureaus met e-mail klaar. Check{" "}
-        <a href="/outreach/planning" className="text-accent underline">
-          Planning
+        Geen bedrijven met e-mail klaar. Zoek eerst contactmails op{" "}
+        <a href="/outreach/prospects" className="text-accent underline">
+          Lijst vullen
         </a>
         .
       </div>
@@ -125,7 +129,7 @@ export function OutreachEmailWorkbench({ prospects }: Props) {
 
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="text-xs text-text-muted">
-          Bureau
+          Bedrijf
           <select
             className="mt-1 w-full border border-border bg-bg px-3 py-2 text-sm"
             value={prospectId}
@@ -148,7 +152,7 @@ export function OutreachEmailWorkbench({ prospects }: Props) {
             }
           >
             {OUTREACH_VARIANTS.filter(
-              (v) => v.audience === "agency" || v.audience === "both",
+              (v) => v.audience === "company" || v.audience === "both",
             ).map((v) => (
               <option key={v.id} value={v.id}>
                 {v.name}

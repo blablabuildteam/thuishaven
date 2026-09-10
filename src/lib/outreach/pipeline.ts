@@ -8,6 +8,7 @@ import { openAvailabilityDays } from "@/lib/mock/availability";
 import { mailVariants } from "@/lib/mock/mail-performance";
 import { mockMultiSourceDiscover } from "@/lib/outreach/sources";
 import { hasKvkConfig } from "@/lib/integrations/kvk";
+import { hasApolloConfig } from "@/lib/integrations/apollo/client";
 
 export type PipelineStageId =
   | "discover"
@@ -102,6 +103,15 @@ export const PIPELINE_STAGES: PipelineStage[] = [
 
 export function getLivePipelineStages(): PipelineStage[] {
   return PIPELINE_STAGES.map((stage) => {
+    if (stage.id === "discover" && hasApolloConfig()) {
+      return {
+        ...stage,
+        status: "partial",
+        missing: [],
+        description:
+          "Apollo-key staat aan. Haal 25 bedrijven per keer via /outreach/prospects.",
+      };
+    }
     if (stage.id === "enrich" && hasKvkConfig()) {
       return {
         ...stage,
@@ -132,7 +142,7 @@ export async function runOutreachDryRun(): Promise<{
   steps.push({
     stage: "discover",
     ok: true,
-    summary: `Multi-source mock: ${multi.merged.length} uniek · ${multi.duplicatesRemoved} samengevoegd`,
+    summary: `Apollo-flow mock: ${multi.merged.length} uniek · ${multi.duplicatesRemoved} samengevoegd`,
     sample: {
       perBron: multi.bySource,
       voorbeelden: multi.merged.slice(0, 4).map((p) => ({

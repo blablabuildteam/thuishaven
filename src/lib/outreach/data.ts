@@ -41,6 +41,8 @@ export type OutreachProspect = {
   source?: string;
   doelgroepFit?: string;
   doelgroepReason?: string;
+  website?: string | null;
+  nonMailing?: boolean;
 };
 
 export type OutreachLead = {
@@ -87,10 +89,13 @@ export async function listProspects(options?: {
     .where(options?.type ? eq(prospects.type, options.type) : undefined)
     .orderBy(prospects.companyName);
 
-  return {
-    source: "db",
-    rows: rows.map((p) => {
+  const mapped = rows
+    .map((p) => {
       const meta = (p.metadata ?? {}) as Record<string, unknown>;
+      const source = typeof meta.source === "string" ? meta.source : undefined;
+      if (source === "system" || p.companyName === "__apollo_cursor__") {
+        return null;
+      }
       const contacts = Array.isArray(meta.contacts)
         ? meta.contacts.filter((c): c is string => typeof c === "string")
         : undefined;
@@ -104,10 +109,12 @@ export async function listProspects(options?: {
         city: p.city,
         anniversaryYears: p.anniversaryYears,
         email: p.email,
+        website: p.website,
         status: p.status,
         contacts,
         excludedReason: p.excludedReason,
-        source: typeof meta.source === "string" ? meta.source : undefined,
+        source,
+        nonMailing: meta.nonMailing === true,
         doelgroepFit:
           typeof meta.doelgroepFit === "string" ? meta.doelgroepFit : undefined,
         doelgroepReason:
@@ -115,7 +122,12 @@ export async function listProspects(options?: {
             ? meta.doelgroepReason
             : undefined,
       };
-    }),
+    })
+    .filter((p): p is NonNullable<typeof p> => Boolean(p));
+
+  return {
+    source: "db",
+    rows: mapped,
   };
 }
 
@@ -235,17 +247,7 @@ export async function listOutreachEmails(limit = 40): Promise<{
     .limit(limit);
 
   if (rows.length === 0) {
-    return {
-      source: "db",
-      rows: mockEmails.map((e) => ({
-        id: e.id,
-        prospectName: e.prospectName,
-        audience: e.audience,
-        subject: e.subject,
-        body: e.body,
-        status: e.status,
-      })),
-    };
+    return { source: "db", rows: [] };
   }
 
   return {
@@ -449,13 +451,23 @@ export async function ensureDefaultCampaigns() {
 }
 
 export async function getAgencyCampaignId(): Promise<string | null> {
+  return getCampaignIdFor("agency");
+}
+
+export async function getCompanyCampaignId(): Promise<string | null> {
+  return getCampaignIdFor("company");
+}
+
+async function getCampaignIdFor(
+  audience: ProspectType,
+): Promise<string | null> {
   if (!hasDatabase()) return null;
   await ensureDefaultCampaigns();
   const db = getDb();
   const [row] = await db
     .select({ id: campaigns.id })
     .from(campaigns)
-    .where(and(eq(campaigns.audience, "agency")))
+    .where(and(eq(campaigns.audience, audience)))
     .limit(1);
   return row?.id ?? null;
 }

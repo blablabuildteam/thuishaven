@@ -16,7 +16,7 @@ export default async function CampaignsPage() {
       <SectionHeader
         eyebrow="Lijsten"
         title="Twee outreach-stromen"
-        description="Bedrijven (jubilea via KvK, later) en partnerbureaus (open-data seintjes). Cijfers komen uit echte mails — geen demo-getallen."
+        description="Bedrijven via Apollo + KvK. Partnerbureaus zijn bestaande relaties — geen cold mail. Cijfers komen uit echte mails."
         action={
           <StatusBadge tone={source === "db" ? "success" : "neutral"}>
             {source === "db" ? "Live data" : "Mock"}

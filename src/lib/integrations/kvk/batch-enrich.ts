@@ -30,11 +30,12 @@ export async function enrichCompanyProspectsBatch(limit = 10): Promise<{
   }
 
   const db = getDb();
-  const targets = await db
+  const candidates = await db
     .select({
       id: prospects.id,
       companyName: prospects.companyName,
       kvkNumber: prospects.kvkNumber,
+      metadata: prospects.metadata,
     })
     .from(prospects)
     .where(
@@ -42,10 +43,13 @@ export async function enrichCompanyProspectsBatch(limit = 10): Promise<{
         eq(prospects.type, "company"),
         ne(prospects.status, "excluded"),
         isNull(prospects.kvkNumber),
+        sql`coalesce((${prospects.metadata}->>'kvkEnrichFails')::int, 0) < 2`,
+        sql`coalesce(${prospects.metadata}->>'source', '') <> 'system'`,
       ),
     )
     .orderBy(sql`${prospects.createdAt} asc`)
     .limit(Math.min(Math.max(limit, 1), 15));
+  const targets = candidates;
 
   const rows: BatchEnrichRow[] = [];
 
@@ -55,6 +59,7 @@ export async function enrichCompanyProspectsBatch(limit = 10): Promise<{
       kvkNummer: target.kvkNumber ?? undefined,
     });
     if (!found.ok) {
+      await markKvkFail(target.id, found.error);
       rows.push({
         id: target.id,
         companyName: target.companyName,
@@ -66,6 +71,7 @@ export async function enrichCompanyProspectsBatch(limit = 10): Promise<{
 
     const applied = await applyKvkCandidateToProspect(target.id, found.candidate);
     if (!applied.ok) {
+      await markKvkFail(target.id, applied.error ?? "Toepassen mislukt");
       rows.push({
         id: target.id,
         companyName: target.companyName,
@@ -95,4 +101,23 @@ export async function enrichCompanyProspectsBatch(limit = 10): Promise<{
   }
 
   return { ok: true, processed: rows.length, rows };
+}
+
+async function markKvkFail(id: string, error: string): Promise<void> {
+  const db = getDb();
+  const [row] = await db
+    .select({ metadata: prospects.metadata })
+    .from(prospects)
+    .where(eq(prospects.id, id))
+    .limit(1);
+  if (!row) return;
+  const meta = { ...(row.metadata ?? {}) };
+  const fails =
+    typeof meta.kvkEnrichFails === "number" ? meta.kvkEnrichFails + 1 : 1;
+  meta.kvkEnrichFails = fails;
+  meta.kvkEnrichError = error;
+  await db
+    .update(prospects)
+    .set({ metadata: meta, updatedAt: new Date() })
+    .where(eq(prospects.id, id));
 }

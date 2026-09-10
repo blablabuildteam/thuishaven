@@ -11,7 +11,7 @@ export function AddProspectsForm() {
   const [pending, startTransition] = useTransition();
   const [mode, setMode] = useState<Mode>("single");
   const [type, setType] = useState<"agency" | "company">("company");
-  const [source, setSource] = useState<"manual" | "linkedin">("linkedin");
+  const [source, setSource] = useState<"manual" | "linkedin">("manual");
   const [companyName, setCompanyName] = useState("");
   const [email, setEmail] = useState("");
   const [website, setWebsite] = useState("");
@@ -132,7 +132,7 @@ export function AddProspectsForm() {
               setSource(e.target.value === "linkedin" ? "linkedin" : "manual")
             }
           >
-            <option value="manual">Handmatig / sheet</option>
+            <option value="manual">Handmatig / extra</option>
             <option value="linkedin">Gevonden op LinkedIn</option>
           </select>
         </label>

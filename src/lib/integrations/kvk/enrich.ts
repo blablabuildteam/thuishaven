@@ -14,7 +14,11 @@ import {
 } from "./client";
 import { candidateFromProfiles } from "./discovery";
 import type { KvkProspectCandidate } from "./types";
-import { employeeCountForFit, scoreDoelgroep } from "@/lib/outreach/doelgroep";
+import {
+  employeeCountForFit,
+  preferRegionCity,
+  scoreDoelgroep,
+} from "@/lib/outreach/doelgroep";
 
 export type EnrichKvkInput = {
   naam?: string;
@@ -139,9 +143,10 @@ export async function applyKvkCandidateToProspect(
     kvkCount: candidate.employeeCount,
     estimate,
   });
+  const city = preferRegionCity(row.city, candidate.city);
   const scored = scoreDoelgroep({
     employeeCount,
-    city: candidate.city ?? row.city,
+    city,
   });
   meta.doelgroepFit = scored.fit;
   meta.doelgroepReason =
@@ -167,7 +172,7 @@ export async function applyKvkCandidateToProspect(
       kvkNumber: candidate.kvkNumber,
       sector: candidate.sector ?? row.sector,
       employeeCount: employeeCount ?? row.employeeCount,
-      city: candidate.city ?? row.city,
+      city,
       foundedAt: candidate.foundedAt
         ? new Date(`${candidate.foundedAt}T00:00:00.000Z`)
         : row.foundedAt,

@@ -47,7 +47,7 @@ export default async function OutreachPlanningPage() {
 
       <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <MetricCard label="Klaar om te mailen" value={formatNumber(plan.readyCount)} accent />
-        <MetricCard label="Uitgesloten bureaus" value={formatNumber(plan.excludedAgencyCount)} />
+        <MetricCard label="Uitgesloten" value={formatNumber(plan.excludedAgencyCount)} />
         <MetricCard label="Zonder e-mail" value={formatNumber(plan.noEmailCount)} />
         <MetricCard label="Uitsluitingen totaal" value={formatNumber(plan.exclusionCount)} />
         <MetricCard label="Drafts" value={formatNumber(plan.draftCount)} />

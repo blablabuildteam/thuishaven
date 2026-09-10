@@ -72,6 +72,16 @@ export default async function CrmDossierPage({
         }
       />
 
+      {dossier.nonMailing ? (
+        <div className="mb-6 border border-danger/40 bg-surface px-4 py-3 text-sm text-text-muted">
+          <p className="font-medium text-text">KvK non-mailing</p>
+          <p className="mt-1">
+            Dit bedrijf staat bij KvK op niet-mailen. Draft en send zijn
+            geblokkeerd.
+          </p>
+        </div>
+      ) : null}
+
       {dossier.kvkHeadcountOff ? (
         <div className="mb-6 border border-warn/40 bg-surface px-4 py-3 text-sm text-text-muted">
           <p className="font-medium text-text">KvK-medewerkers ziet er raar laag uit</p>
@@ -159,7 +169,7 @@ export default async function CrmDossierPage({
         <aside className="space-y-4">
           <section className="border border-border bg-surface p-4">
             <h2 className="mb-3 font-display text-xl tracking-[0.06em]">
-              LinkedIn
+              Headcount-override
             </h2>
             <LinkedinEstimateForm
               prospectId={dossier.id}

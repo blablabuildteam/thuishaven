@@ -16,16 +16,16 @@ export type CadencePlan = {
   notes: string[];
 };
 
-/** Conservatief start-ritme voor bureau-stream (handmatig goedkeuren later). */
+/** Conservatief start-ritme voor bedrijf-stream (handmatig goedkeuren later). */
 export const DEFAULT_AGENCY_CADENCE: CadencePlan = {
   sendWeekdays: [2, 4], // di + do
   mailsPerDay: 3,
-  batchLabel: "Eventbureaus · open data",
+  batchLabel: "Bedrijven · doelgroep",
   notes: [
-    "Alleen bureaus met e-mail, niet op uitsluitingslijst.",
+    "Alleen bedrijven met e-mail, niet op uitsluitingslijst, geen KvK non-mailing.",
+    "Partnerbureaus staan hier niet — die mail je niet koud.",
     "Geen automatische send — jij keurt batches goed in dit dashboard.",
     "Max 3 mails/dag · di & do → ~6/week, rustig opbouwen.",
-    "Afzender later via zakelijk@thuishaven.nl (bestaande Brevo), reply-to evenement@ — niet postduif@.",
   ],
 };
 
@@ -96,7 +96,7 @@ function nextSendDates(
 export async function getOutreachPlanningSnapshot(): Promise<OutreachPlanningSnapshot> {
   const [{ rows: prospects }, { rows: exclusions }, { rows: emails }, openSlots] =
     await Promise.all([
-      listProspects({ type: "agency" }),
+      listProspects({ type: "company" }),
       listExclusions(),
       listOutreachEmails(100),
       openAvailabilityDaysLive(),
@@ -109,6 +109,8 @@ export async function getOutreachPlanningSnapshot(): Promise<OutreachPlanningSna
     let blockedReason: string | null = null;
     if (p.status === "excluded") {
       blockedReason = p.excludedReason ?? "Uitgesloten";
+    } else if (p.nonMailing) {
+      blockedReason = "KvK non-mailing";
     } else if (!p.email) {
       blockedReason = "Geen e-mailadres";
     }

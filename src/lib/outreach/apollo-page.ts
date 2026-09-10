@@ -3,6 +3,8 @@ import { getDb, hasDatabase } from "@/lib/db/client";
 import { prospects } from "@/lib/db/schema";
 import { normalizeCompanyKey } from "@/lib/outreach/data";
 
+export const APOLLO_CURSOR_NAME = "__apollo_cursor__";
+
 /** Next Apollo search page so repeat clicks don't burn credits on the same 25. */
 export async function nextApolloDiscoverPage(): Promise<number> {
   if (!hasDatabase()) return 1;
@@ -16,12 +18,48 @@ export async function nextApolloDiscoverPage(): Promise<number> {
   return maxPage + 1;
 }
 
-/** Stamp the fetched page even when every name was already on the list. */
+async function upsertApolloCursor(page: number): Promise<void> {
+  if (!hasDatabase()) return;
+  const db = getDb();
+  const [existing] = await db
+    .select({ id: prospects.id, metadata: prospects.metadata })
+    .from(prospects)
+    .where(eq(prospects.companyName, APOLLO_CURSOR_NAME))
+    .limit(1);
+
+  const metadata = {
+    ...(existing?.metadata ?? {}),
+    source: "system",
+    apolloPage: page,
+  };
+  const now = new Date();
+
+  if (existing) {
+    await db
+      .update(prospects)
+      .set({ metadata, status: "excluded", updatedAt: now })
+      .where(eq(prospects.id, existing.id));
+    return;
+  }
+
+  await db.insert(prospects).values({
+    type: "company",
+    companyName: APOLLO_CURSOR_NAME,
+    status: "excluded",
+    excludedReason: "Systeem · Apollo-pagina",
+    metadata,
+  });
+}
+
+/** Stamp the fetched page even when every name was a duplicate or excluded. */
 export async function rememberApolloPage(
   page: number,
   companyNames: string[],
 ): Promise<void> {
-  if (!hasDatabase() || companyNames.length === 0) return;
+  if (!hasDatabase()) return;
+  await upsertApolloCursor(page);
+  if (companyNames.length === 0) return;
+
   const db = getDb();
   const keys = new Set(companyNames.map(normalizeCompanyKey).filter(Boolean));
   const rows = await db
@@ -43,4 +81,13 @@ export async function rememberApolloPage(
       })
       .where(eq(prospects.id, row.id));
   }
+}
+
+export function isSystemProspect(input: {
+  companyName?: string | null;
+  source?: string | null;
+}): boolean {
+  return (
+    input.source === "system" || input.companyName === APOLLO_CURSOR_NAME
+  );
 }

@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function EmailsPage() {
   const [{ rows: emails, source }, { rows: prospects }] = await Promise.all([
     listOutreachEmails(),
-    listProspects({ type: "agency" }),
+    listProspects({ type: "company" }),
   ]);
 
   return (
@@ -19,7 +19,7 @@ export default async function EmailsPage() {
       <SectionHeader
         eyebrow="Outbound"
         title="E-mails"
-        description="Drafts in Reijners tone of voice. Testsends naar team@ mogen; live prospects blijven geblokkeerd tot expliciete unlock."
+        description="Drafts voor bedrijven. Testsends naar team@ mogen; live send blijft uit. Partnerbureaus horen hier niet."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={source === "db" ? "success" : "neutral"}>
@@ -49,6 +49,12 @@ export default async function EmailsPage() {
         {" · "}
         UTM/campaign-id per verzending volgt later.
       </div>
+
+      {emails.length === 0 ? (
+        <p className="border border-border bg-surface px-4 py-5 text-sm text-text-muted">
+          Nog geen drafts. Maak er een hierboven — alleen test naar team@.
+        </p>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         {emails.map((email) => (

@@ -3,16 +3,18 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { DOELGROEP, DOELGROEP_STARTLIJST } from "@/lib/outreach/doelgroep";
+import { DOELGROEP } from "@/lib/outreach/doelgroep";
 
 type Props = {
   pendingKvk: number;
+  pendingEmail: number;
   apolloReady: boolean;
   apolloNextPage: number;
 };
 
 export function DoelgroepActions({
   pendingKvk,
+  pendingEmail,
   apolloReady,
   apolloNextPage,
 }: Props) {
@@ -48,34 +50,27 @@ export function DoelgroepActions({
     });
   }
 
-  function seedStartlijst() {
+  function fillEmails() {
     setError(null);
     setOk(null);
     startTransition(async () => {
-      const res = await fetch("/api/outreach/prospects", {
+      const res = await fetch("/api/outreach/website-email", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          mode: "paste",
-          type: "company",
-          source: "manual",
-          text: DOELGROEP_STARTLIJST.join("\n"),
-        }),
+        body: JSON.stringify({ limit: 8 }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
-        created?: number;
-        duplicate?: number;
-        excluded?: number;
+        filled?: number;
+        processed?: number;
       };
       if (!res.ok) {
-        setError(data.error ?? "Startlijst toevoegen mislukt");
+        setError(data.error ?? "Contactmails zoeken mislukt");
         return;
       }
-      const bits = [`${data.created ?? 0} bedrijven op de lijst`];
-      if (data.duplicate) bits.push(`${data.duplicate} stonden er al`);
-      if (data.excluded) bits.push(`${data.excluded} geblokkeerd (Niet mailen)`);
-      setOk(bits.join(" · "));
+      setOk(
+        `${data.filled ?? 0} adressen gevonden · ${data.processed ?? 0} sites bekeken`,
+      );
       router.refresh();
     });
   }
@@ -132,10 +127,10 @@ export function DoelgroepActions({
           </p>
         </div>
         <div className="border border-border bg-bg p-3 text-sm text-text-muted">
-          <p className="font-medium text-text">2. KvK keurt daarna</p>
+          <p className="font-medium text-text">2. KvK + publieke mail</p>
           <p className="mt-1">
-            Officieel nummer, jubileum, vestiging. Apollo-headcount blijft de
-            size-schatting.
+            KvK: nummer, jubileum, vestiging. Daarna events@ / info@ van de
+            bedrijfswebsite. Apollo-headcount blijft de size-schatting.
           </p>
         </div>
       </div>
@@ -155,20 +150,21 @@ export function DoelgroepActions({
         </button>
         <button
           type="button"
-          disabled={pending}
-          onClick={seedStartlijst}
-          className="border border-border bg-bg px-3 py-2 font-display text-sm tracking-[0.1em] disabled:opacity-60"
-        >
-          Noodlijst (zonder Apollo)
-        </button>
-        <button
-          type="button"
           disabled={pending || pendingKvk === 0}
           onClick={enrichBatch}
           className="border border-border bg-bg px-3 py-2 font-display text-sm tracking-[0.1em] disabled:opacity-60"
         >
           Verrijk 10 via KvK
           {pendingKvk ? ` (${pendingKvk} open)` : ""}
+        </button>
+        <button
+          type="button"
+          disabled={pending || pendingEmail === 0}
+          onClick={fillEmails}
+          className="border border-border bg-bg px-3 py-2 font-display text-sm tracking-[0.1em] disabled:opacity-60"
+        >
+          Zoek 8 contactmails
+          {pendingEmail ? ` (${pendingEmail} open)` : ""}
         </button>
         {ok ? <StatusBadge tone="success">{ok}</StatusBadge> : null}
         {error ? <StatusBadge tone="danger">{error}</StatusBadge> : null}

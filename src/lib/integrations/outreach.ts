@@ -7,7 +7,7 @@ import { getDb, hasDatabase } from "@/lib/db/client";
 import { leads, outreachEmails, prospects } from "@/lib/db/schema";
 import { assertExternalReadOnly } from "@/lib/integrations/read-only";
 import { availabilitySummaryForEmail } from "@/lib/outreach/availability";
-import { getAgencyCampaignId } from "@/lib/outreach/data";
+import { getAgencyCampaignId, getCompanyCampaignId } from "@/lib/outreach/data";
 import { renderOutreachHtmlEmail } from "@/lib/outreach/email-html";
 import {
   getOutreachBrevoKey,
@@ -553,8 +553,18 @@ export async function generateAndStoreDraft(input: {
   if (prospect.status === "excluded") {
     return { error: "Prospect staat op uitsluitingslijst" };
   }
+  const meta = (prospect.metadata ?? {}) as Record<string, unknown>;
+  if (meta.nonMailing === true) {
+    return { error: "KvK non-mailing — dit bedrijf niet mailen" };
+  }
+  if (prospect.type === "agency" && meta.source === "bureau_import") {
+    return { error: "Partnerbureau — geen cold mail" };
+  }
 
-  const campaignId = await getAgencyCampaignId();
+  const campaignId =
+    prospect.type === "company"
+      ? await getCompanyCampaignId()
+      : await getAgencyCampaignId();
   if (!campaignId) return { error: "Geen campagne gevonden" };
 
   const generated = await generateOutreachEmail({
@@ -633,8 +643,15 @@ export async function sendStoredDraft(input: {
   if (row.prospectStatus === "excluded") {
     return { error: "Prospect uitgesloten" };
   }
+  const rawMeta = (row.metadata ?? {}) as Record<string, unknown>;
+  if (rawMeta.nonMailing === true) {
+    return { error: "KvK non-mailing — dit bedrijf niet mailen" };
+  }
+  if (rawMeta.source === "bureau_import") {
+    return { error: "Partnerbureau — geen cold mail" };
+  }
 
-  const meta = (row.metadata ?? {}) as { contacts?: string[] };
+  const meta = rawMeta as { contacts?: string[] };
   const intended =
     row.email ??
     (Array.isArray(meta.contacts) ? meta.contacts[0] : undefined);

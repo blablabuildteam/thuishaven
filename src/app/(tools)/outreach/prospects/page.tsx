@@ -128,6 +128,7 @@ export default async function ProspectsPage() {
     (p) => p.type === "agency" && p.source !== "bureau_import",
   );
   const pendingKvk = companies.filter((p) => !p.kvkNumber).length;
+  const pendingEmail = companies.filter((p) => p.website && !p.email).length;
   const fit = companies.filter((p) => p.doelgroepFit === "ja").length;
   const mailable = companies.filter((p) => Boolean(p.email)).length;
   const apolloReady = hasApolloConfig();
@@ -163,6 +164,7 @@ export default async function ProspectsPage() {
 
       <DoelgroepActions
         pendingKvk={pendingKvk}
+        pendingEmail={pendingEmail}
         apolloReady={apolloReady}
         apolloNextPage={apolloNextPage}
       />

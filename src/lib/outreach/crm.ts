@@ -12,6 +12,7 @@ import {
 } from "@/lib/db/schema";
 import { statusLabels, type ProspectStatus, type ProspectType } from "./data";
 import { kvkHeadcountLooksOff } from "./linkedin";
+import { isSystemProspect } from "./apollo-page";
 import { scoreDoelgroep } from "./doelgroep";
 
 export { statusLabels };
@@ -104,7 +105,11 @@ function mapRecord(
       typeof meta.linkedinEmployeeEstimate === "number"
         ? meta.linkedinEmployeeEstimate
         : null,
-    kvkHeadcountOff: kvkHeadcountLooksOff(p.employeeCount),
+    kvkHeadcountOff: kvkHeadcountLooksOff(
+      typeof meta.kvkVestigingEmployees === "number"
+        ? meta.kvkVestigingEmployees
+        : p.employeeCount,
+    ),
   };
 }
 
@@ -140,7 +145,13 @@ export async function listCrmRecords(): Promise<{
     replyStats.filter((s) => s.prospectId).map((s) => [s.prospectId!, s]),
   );
 
-  const rows = people.map((p) => {
+  const rows = people
+    .filter((p) => {
+      const source =
+        typeof p.metadata?.source === "string" ? p.metadata.source : null;
+      return !isSystemProspect({ companyName: p.companyName, source });
+    })
+    .map((p) => {
     const mail = mailMap.get(p.id);
     const reply = replyMap.get(p.id);
     const lastCandidates = [mail?.lastSent, reply?.lastReply, p.updatedAt].filter(
@@ -165,6 +176,11 @@ export async function getCrmDossier(
   const db = getDb();
   const [p] = await db.select().from(prospects).where(eq(prospects.id, id)).limit(1);
   if (!p) return { dossier: null, source: "db" };
+  const source =
+    typeof p.metadata?.source === "string" ? p.metadata.source : null;
+  if (isSystemProspect({ companyName: p.companyName, source })) {
+    return { dossier: null, source: "db" };
+  }
 
   const [mails, replies, leadRows] = await Promise.all([
     db
@@ -350,12 +366,13 @@ export async function saveLinkedinEstimate(input: {
     city: row.city,
   });
   meta.doelgroepFit = scored.fit;
-  meta.doelgroepReason = `LinkedIn ~${estimate} · ${scored.reason}`;
+  meta.doelgroepReason = `Schatting ~${estimate} · ${scored.reason}`;
 
   await db
     .update(prospects)
     .set({
       metadata: meta,
+      employeeCount: estimate,
       linkedinUrl: input.linkedinUrl?.trim() || row.linkedinUrl,
       updatedAt: new Date(),
     })

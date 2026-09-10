@@ -69,25 +69,36 @@ export const DOELGROEP_STARTLIJST: string[] = [
 
 export type DoelgroepFit = "ja" | "nee" | "onbekend";
 
-/** KvK vestiging-count is often a branch (TomTom=3). Prefer Apollo/LinkedIn then. */
+/** Concern estimate (Apollo/LinkedIn) wins over KvK vestiging. */
 export function employeeCountForFit(input: {
   kvkCount?: number | null;
   estimate?: number | null;
 }): number | null {
   const kvk = input.kvkCount ?? null;
   const estimate = input.estimate ?? null;
-  if (kvk != null && kvk < 50 && estimate != null && estimate >= 50) {
-    return estimate;
-  }
-  return kvk ?? estimate;
+  if (estimate != null && estimate > 0) return estimate;
+  return kvk;
 }
 
-function cityInRegion(city: string): boolean {
-  const n = city.trim().toLowerCase();
+export function isCityInRegion(city: string): boolean {
+  const n = city
+    .trim()
+    .toLowerCase()
+    .replace(/[-–]/g, " ");
   return DOELGROEP.places.some((p) => {
     const pl = p.toLowerCase();
-    return n === pl || n.startsWith(`${pl},`) || n.startsWith(`${pl} `);
+    const token = new RegExp(`(?:^|[\\s,])${pl}(?:$|[\\s,])`);
+    return n === pl || n.startsWith(`${pl} `) || n.startsWith(`${pl},`) || token.test(n);
   });
+}
+
+export function preferRegionCity(
+  existing?: string | null,
+  incoming?: string | null,
+): string | null {
+  if (incoming && isCityInRegion(incoming)) return incoming;
+  if (existing && isCityInRegion(existing)) return existing;
+  return incoming?.trim() || existing?.trim() || null;
 }
 
 export function scoreDoelgroep(input: {
@@ -105,7 +116,7 @@ export function scoreDoelgroep(input: {
   }
 
   const city = input.city?.trim();
-  if (city && !cityInRegion(city)) {
+  if (city && !isCityInRegion(city)) {
     return { fit: "nee", reason: `Buiten regio (${city})` };
   }
 

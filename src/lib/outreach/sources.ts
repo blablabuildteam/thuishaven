@@ -94,7 +94,7 @@ export const PROSPECT_SOURCES: ProspectSource[] = [
     legalNote: "Alleen publieke zakelijke adressen; rate-limits + robots respecteren.",
     effort: "middel",
     cost: "gratis",
-    status: "gepland",
+    status: "ingebouwd",
     meetingQuestions: [
       "Akkoord dat we publieke contactmails van bedrijfswebsites ophalen?",
     ],
