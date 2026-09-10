@@ -9,7 +9,7 @@ import {
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-const STORAGE_KEY = "thuishaven-outreach-tour-v2";
+const STORAGE_KEY = "thuishaven-outreach-tour-v3";
 
 type TourStep = {
   /** Matches data-tour on a real UI element */
@@ -22,14 +22,19 @@ type TourStep = {
 
 const STEPS: TourStep[] = [
   {
+    target: "nav-lijst",
+    title: "Lijst bijwerken",
+    body: "Hier haal je zelf nieuwe bedrijven op en zoek je e-mailadressen. Drie stappen op die pagina.",
+  },
+  {
     target: "nav-bedrijven",
     title: "Bedrijven",
-    body: "Start hier. Elk bedrijf heeft een label: Jubileum, Algemeen feest, Past niet, of Niet mailen.",
+    body: "Hier staat je lijst. Labels: Jubileum, Algemeen feest, Past niet, of Niet mailen.",
   },
   {
     target: "crm-mailen",
     title: "Mailen vanaf de lijst",
-    body: "Op de bedrijvenpagina kun je met één knop naar Mailen. Labels vertellen welke hoek de mail krijgt.",
+    body: "Op de bedrijvenpagina kun je met één knop naar Mailen.",
     go: "/outreach/crm",
   },
   {
@@ -45,7 +50,7 @@ const STEPS: TourStep[] = [
   {
     target: "nav-agenda",
     title: "Agenda · optioneel",
-    body: "Alleen nodig als je open dagen wilt delen in een mail. Geen verplichte stap.",
+    body: "Alleen nodig als je open dagen wilt delen in een mail.",
   },
 ];
 

@@ -83,7 +83,7 @@ const dashboardSystemNav: NavItem[] = [
   { href: "/koppelingen", label: "Bronnen", icon: Plug },
 ];
 
-/** Simpele flow voor Reijner/Yoram: agenda → bedrijven → mailen → resultaten. */
+/** Simpele flow: lijst bijwerken → bedrijven → mailen → resultaten. */
 const outreachSections: NavSection[] = [
   {
     id: "werken",
@@ -91,10 +91,10 @@ const outreachSections: NavSection[] = [
     items: [
       { href: "/outreach", label: "Overzicht", icon: Send, tourId: "nav-overzicht" },
       {
-        href: "/outreach/beschikbaarheid",
-        label: "Agenda",
-        icon: CalendarDays,
-        tourId: "nav-agenda",
+        href: "/outreach/lijst-bijwerken",
+        label: "Lijst bijwerken",
+        icon: Users,
+        tourId: "nav-lijst",
       },
       { href: "/outreach/crm", label: "Bedrijven", icon: Contact, tourId: "nav-bedrijven" },
       { href: "/outreach/emails", label: "Mailen", icon: Mail, tourId: "nav-mailen" },
@@ -103,6 +103,12 @@ const outreachSections: NavSection[] = [
         label: "Resultaten",
         icon: LineChart,
         tourId: "nav-resultaten",
+      },
+      {
+        href: "/outreach/beschikbaarheid",
+        label: "Agenda",
+        icon: CalendarDays,
+        tourId: "nav-agenda",
       },
     ],
   },
@@ -113,7 +119,7 @@ const outreachSections: NavSection[] = [
     items: [
       {
         href: "/outreach/prospects",
-        label: "Lijst vullen",
+        label: "Lijst (technisch)",
         icon: Users,
         adminOnly: true,
       },

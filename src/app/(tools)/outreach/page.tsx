@@ -19,13 +19,20 @@ export const dynamic = "force-dynamic";
 const STEPS = [
   {
     n: "1",
+    title: "Lijst bijwerken",
+    body: "Haal nieuwe bedrijven op en vul e-mailadressen aan.",
+    href: "/outreach/lijst-bijwerken",
+    cta: "Lijst bijwerken",
+  },
+  {
+    n: "2",
     title: "Bedrijven bekijken",
-    body: "Lijst met labels: Jubileum, Algemeen feest, Past niet, of Niet mailen.",
+    body: "Labels: Jubileum, Algemeen feest, Past niet, of Niet mailen.",
     href: "/outreach/crm",
     cta: "Naar bedrijven",
   },
   {
-    n: "2",
+    n: "3",
     title: "Mailen & volgen",
     body: "Maak mails, verstuur, en zie opens en replies onder Resultaten.",
     href: "/outreach/emails",
@@ -60,7 +67,7 @@ export default async function OutreachPage() {
       <SectionHeader
         eyebrow="Bedrijfsevent Outreach"
         title="Overzicht"
-        description="Bedrijven kiezen → mailen → resultaten volgen. Agenda is optioneel."
+        description="Lijst bijwerken → bedrijven kiezen → mailen → resultaten. Agenda is optioneel."
         action={
           <div className="flex flex-wrap gap-2">
             {isAdmin ? (
@@ -86,7 +93,7 @@ export default async function OutreachPage() {
         <h2 className="mb-3 font-display text-xl tracking-[0.06em] text-text">
           Zo werkt het
         </h2>
-        <ol className="grid gap-3 md:grid-cols-2">
+        <ol className="grid gap-3 md:grid-cols-3">
           {STEPS.map((step) => (
             <li
               key={step.n}

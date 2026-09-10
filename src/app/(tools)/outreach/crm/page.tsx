@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { auth } from "@/auth";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { MetricCard } from "@/components/ui/metric-card";
@@ -25,8 +24,6 @@ function angleTone(id: string) {
 }
 
 export default async function OutreachCrmPage() {
-  const session = await auth();
-  const isAdmin = session?.user?.role === "admin";
   const { rows, source } = await listCrmRecords();
   const existingCustomers = rows.filter(
     (r) => !r.partner && r.existingCustomer,
@@ -66,14 +63,12 @@ export default async function OutreachCrmPage() {
             <StatusBadge tone={source === "db" ? "success" : "neutral"}>
               {companies.length} op de lijst
             </StatusBadge>
-            {isAdmin ? (
-              <Link
-                href="/outreach/prospects"
+            <Link
+                href="/outreach/lijst-bijwerken"
                 className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
               >
-                Lijst vullen / verrijken →
+                Lijst bijwerken →
               </Link>
-            ) : null}
             <Link
               href="/outreach/emails"
               data-tour="crm-mailen"
@@ -108,23 +103,22 @@ export default async function OutreachCrmPage() {
         <span className="text-text">Jubileum</span> = felicitatie-mail.{" "}
         <span className="text-text">Algemeen feest</span> = bedrijfsfeest /
         zomerfeest. <span className="text-text">Past niet</span> = te klein/groot
-        of buiten Amsterdam + ~50 km — zichtbaar met label, niet in bulk.
-        {isAdmin ? null : (
-          <> Lijst ophalen en verrijken doet admin via Beheer → Lijst vullen.</>
-        )}
+        of buiten Amsterdam + ~50 km — zichtbaar met label, niet in bulk. Nieuwe
+        bedrijven haal je op via{" "}
+        <Link href="/outreach/lijst-bijwerken" className="text-accent underline">
+          Lijst bijwerken
+        </Link>
+        .
       </p>
 
       <section className="mb-10">
         {companies.length === 0 ? (
           <p className="border border-border bg-surface px-4 py-5 text-sm text-text-muted">
             Nog geen bedrijven.{" "}
-            {isAdmin ? (
-              <Link href="/outreach/prospects" className="text-accent underline">
-                Vul de lijst
-              </Link>
-            ) : (
-              "Vraag Kevin om de lijst te vullen."
-            )}
+            <Link href="/outreach/lijst-bijwerken" className="text-accent underline">
+              Haal ze hier op
+            </Link>
+            .
           </p>
         ) : (
           <div className="overflow-x-auto border border-border">
