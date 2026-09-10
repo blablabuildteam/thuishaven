@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { UserMenu } from "@/components/auth/user-menu";
+import { OutreachOnboardingTour } from "@/components/outreach/onboarding-tour";
 import {
   SocialChannelIcon,
   type SocialBrandChannel,
@@ -40,6 +41,8 @@ type NavItem = {
   brand?: SocialBrandChannel;
   /** Only show for admin accounts */
   adminOnly?: boolean;
+  /** Spotlight tour target id */
+  tourId?: string;
 };
 
 type NavSection = {
@@ -86,11 +89,21 @@ const outreachSections: NavSection[] = [
     id: "werken",
     label: "Werken",
     items: [
-      { href: "/outreach", label: "Overzicht", icon: Send },
-      { href: "/outreach/beschikbaarheid", label: "Agenda", icon: CalendarDays },
-      { href: "/outreach/crm", label: "Bedrijven", icon: Contact },
-      { href: "/outreach/emails", label: "Mailen", icon: Mail },
-      { href: "/outreach/analytics", label: "Resultaten", icon: LineChart },
+      { href: "/outreach", label: "Overzicht", icon: Send, tourId: "nav-overzicht" },
+      {
+        href: "/outreach/beschikbaarheid",
+        label: "Agenda",
+        icon: CalendarDays,
+        tourId: "nav-agenda",
+      },
+      { href: "/outreach/crm", label: "Bedrijven", icon: Contact, tourId: "nav-bedrijven" },
+      { href: "/outreach/emails", label: "Mailen", icon: Mail, tourId: "nav-mailen" },
+      {
+        href: "/outreach/analytics",
+        label: "Resultaten",
+        icon: LineChart,
+        tourId: "nav-resultaten",
+      },
     ],
   },
   {
@@ -199,6 +212,7 @@ function NavLink({
   return (
     <Link
       href={item.href}
+      data-tour={item.tourId}
       className={cn(
         "flex items-center gap-2.5 px-2.5 py-2 text-sm transition-colors",
         active
@@ -349,6 +363,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
+                data-tour={item.tourId}
                 className={cn(
                   "shrink-0 px-3 py-1.5 text-sm transition-colors",
                   active
@@ -364,6 +379,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-10">{children}</main>
       </div>
+      {isOutreach ? <OutreachOnboardingTour /> : null}
     </div>
   );
 }

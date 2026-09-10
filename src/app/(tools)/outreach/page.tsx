@@ -5,7 +5,6 @@ import { auth } from "@/auth";
 import { SectionHeader } from "@/components/ui/section-header";
 import { MetricCard } from "@/components/ui/metric-card";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { OutreachOnboardingTour } from "@/components/outreach/onboarding-tour";
 import { getOutreachOverview } from "@/lib/outreach/data";
 import {
   getPublicAvailabilityUrl,
@@ -20,20 +19,13 @@ export const dynamic = "force-dynamic";
 const STEPS = [
   {
     n: "1",
-    title: "Agenda bijwerken",
-    body: "Zet open dagen klaar. Die agenda deel je in de mails.",
-    href: "/outreach/beschikbaarheid",
-    cta: "Open agenda",
-  },
-  {
-    n: "2",
     title: "Bedrijven bekijken",
     body: "Lijst met labels: Jubileum, Algemeen feest, Past niet, of Niet mailen.",
     href: "/outreach/crm",
     cta: "Naar bedrijven",
   },
   {
-    n: "3",
+    n: "2",
     title: "Mailen & volgen",
     body: "Maak mails, verstuur, en zie opens en replies onder Resultaten.",
     href: "/outreach/emails",
@@ -65,12 +57,10 @@ export default async function OutreachPage() {
 
   return (
     <div>
-      <OutreachOnboardingTour />
-
       <SectionHeader
         eyebrow="Bedrijfsevent Outreach"
         title="Overzicht"
-        description="Agenda bijwerken → bedrijven kiezen → mailen → resultaten volgen."
+        description="Bedrijven kiezen → mailen → resultaten volgen. Agenda is optioneel."
         action={
           <div className="flex flex-wrap gap-2">
             {isAdmin ? (
@@ -96,7 +86,7 @@ export default async function OutreachPage() {
         <h2 className="mb-3 font-display text-xl tracking-[0.06em] text-text">
           Zo werkt het
         </h2>
-        <ol className="grid gap-3 md:grid-cols-3">
+        <ol className="grid gap-3 md:grid-cols-2">
           {STEPS.map((step) => (
             <li
               key={step.n}
@@ -118,6 +108,10 @@ export default async function OutreachPage() {
             </li>
           ))}
         </ol>
+        <p className="mt-3 text-sm text-text-dim">
+          Agenda bijwerken is optioneel — alleen als je open dagen in een mail
+          wilt delen.
+        </p>
       </section>
 
       <div className="stagger mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -150,7 +144,7 @@ export default async function OutreachPage() {
             </Link>
           </div>
           <p className="mb-4 text-sm text-text-muted">
-            {openSlots.length} open dagen · deelbaar in mails
+            Optioneel · {openSlots.length} open dagen om in mails te delen
           </p>
           <ul className="mb-4 space-y-1.5">
             {openSlots.slice(0, 6).map((slot) => (

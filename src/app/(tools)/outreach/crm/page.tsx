@@ -67,6 +67,7 @@ export default async function OutreachCrmPage() {
             </StatusBadge>
             <Link
               href="/outreach/emails"
+              data-tour="crm-mailen"
               className="bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast"
             >
               Mailen →
