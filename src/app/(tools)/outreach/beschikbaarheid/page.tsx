@@ -19,8 +19,8 @@ export default async function BeschikbaarheidPage() {
     <div>
       <SectionHeader
         eyebrow="Agenda"
-        title="Beschikbaarheid beheren"
-        description="Zet open dagen klaar. Diezelfde data zie je op de publieke pagina die je deelt in mails."
+        title="Beschikbaarheid"
+        description="Klik op dagen in de kalender. Open dagen verschijnen op de publieke link in mails."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone="accent">{open.length} open</StatusBadge>

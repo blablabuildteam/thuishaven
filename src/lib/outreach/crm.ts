@@ -13,7 +13,7 @@ import {
 import { statusLabels, type ProspectStatus, type ProspectType } from "./data";
 import { kvkHeadcountLooksOff } from "./linkedin";
 import { isSystemProspect } from "./apollo-page";
-import { scoreDoelgroep } from "./doelgroep";
+import { scoreDoelgroep, employeeCountForFit } from "./doelgroep";
 import {
   EXISTING_CUSTOMER_REASON,
   EXCLUSION_IMPORT_SOURCE,
@@ -89,6 +89,28 @@ function mapRecord(
   extras: { mailCount: number; replyCount: number; lastTouchAt: string | null },
 ): CrmRecord {
   const meta = (p.metadata ?? {}) as Record<string, unknown>;
+  const estimate =
+    typeof meta.linkedinEmployeeEstimate === "number"
+      ? meta.linkedinEmployeeEstimate
+      : null;
+  const scored = scoreDoelgroep({
+    employeeCount: employeeCountForFit({
+      kvkCount: p.employeeCount,
+      estimate,
+    }),
+    city: p.city,
+  });
+  const storedFit =
+    typeof meta.doelgroepFit === "string" ? meta.doelgroepFit : undefined;
+  // Live herberekenen zodat KvK-plaats buiten regio niet als "fit" blijft hangen.
+  const doelgroepFit = scored.fit !== "onbekend" ? scored.fit : storedFit;
+  const doelgroepReason =
+    scored.fit !== "onbekend"
+      ? scored.reason
+      : typeof meta.doelgroepReason === "string"
+        ? meta.doelgroepReason
+        : undefined;
+
   return {
     id: p.id,
     companyName: p.companyName,
@@ -102,9 +124,8 @@ function mapRecord(
     employeeCount: p.employeeCount,
     anniversaryYears: p.anniversaryYears,
     source: typeof meta.source === "string" ? meta.source : undefined,
-    doelgroepFit: typeof meta.doelgroepFit === "string" ? meta.doelgroepFit : undefined,
-    doelgroepReason:
-      typeof meta.doelgroepReason === "string" ? meta.doelgroepReason : undefined,
+    doelgroepFit,
+    doelgroepReason,
     nonMailing: meta.nonMailing === true,
     partner: p.type === "agency" && meta.source === "bureau_import",
     existingCustomer:
@@ -117,10 +138,7 @@ function mapRecord(
     replyCount: extras.replyCount,
     lastTouchAt: extras.lastTouchAt,
     linkedinUrl: p.linkedinUrl,
-    linkedinEmployeeEstimate:
-      typeof meta.linkedinEmployeeEstimate === "number"
-        ? meta.linkedinEmployeeEstimate
-        : null,
+    linkedinEmployeeEstimate: estimate,
     decisionMakerName:
       meta.decisionMaker &&
       typeof meta.decisionMaker === "object" &&
@@ -196,7 +214,7 @@ export async function listCrmRecords(): Promise<{
       const date = d instanceof Date ? d : new Date(String(d));
       return Number.isNaN(date.getTime()) ? null : date;
     };
-    const lastCandidates = [mail?.lastSent, reply?.lastReply, p.updatedAt]
+    const lastCandidates = [mail?.lastSent, reply?.lastReply]
       .map(toDate)
       .filter((d): d is Date => d !== null);
     const last = lastCandidates.sort((a, b) => b.getTime() - a.getTime())[0];

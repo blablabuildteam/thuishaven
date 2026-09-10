@@ -21,6 +21,7 @@ import {
   type ProspectStatus,
   type ProspectType,
 } from "@/lib/mock/outreach";
+import { employeeCountForFit, scoreDoelgroep } from "@/lib/outreach/doelgroep";
 
 export { statusLabels };
 export type { ProspectStatus, ProspectType };
@@ -102,6 +103,27 @@ export async function listProspects(options?: {
       const contacts = Array.isArray(meta.contacts)
         ? meta.contacts.filter((c): c is string => typeof c === "string")
         : undefined;
+      const estimate =
+        typeof meta.linkedinEmployeeEstimate === "number"
+          ? meta.linkedinEmployeeEstimate
+          : null;
+      const scored = scoreDoelgroep({
+        employeeCount: employeeCountForFit({
+          kvkCount: p.employeeCount,
+          estimate,
+        }),
+        city: p.city,
+      });
+      const storedFit =
+        typeof meta.doelgroepFit === "string" ? meta.doelgroepFit : undefined;
+      const doelgroepFit =
+        scored.fit !== "onbekend" ? scored.fit : storedFit;
+      const doelgroepReason =
+        scored.fit !== "onbekend"
+          ? scored.reason
+          : typeof meta.doelgroepReason === "string"
+            ? meta.doelgroepReason
+            : undefined;
       return {
         id: p.id,
         type: p.type,
@@ -131,12 +153,8 @@ export async function listProspects(options?: {
           (meta.decisionMaker as { email: string }).email.includes("@")
             ? (meta.decisionMaker as { email: string }).email
             : undefined,
-        doelgroepFit:
-          typeof meta.doelgroepFit === "string" ? meta.doelgroepFit : undefined,
-        doelgroepReason:
-          typeof meta.doelgroepReason === "string"
-            ? meta.doelgroepReason
-            : undefined,
+        doelgroepFit,
+        doelgroepReason,
       };
     })
     .filter((p): p is NonNullable<typeof p> => Boolean(p));

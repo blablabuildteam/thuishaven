@@ -3,43 +3,89 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  addDays,
+  addMonths,
+  format,
+  parseISO,
+  startOfMonth,
+  startOfWeek,
+} from "date-fns";
+import { nl } from "date-fns/locale";
+import {
   dayStatusLabels,
-  formatEuro,
   type AvailabilityDay,
   type DayStatus,
 } from "@/lib/mock/availability";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { cn } from "@/lib/utils";
 
-const QUICK_STATUSES: { value: DayStatus; label: string }[] = [
-  { value: "available", label: "Open" },
-  { value: "hold", label: "In optie" },
-  { value: "booked_external", label: "Bezet" },
-  { value: "own_event", label: "Eigen event" },
-  { value: "closed", label: "Dicht" },
+const STATUSES: { value: DayStatus; label: string; swatch: string }[] = [
+  {
+    value: "available",
+    label: "Open",
+    swatch: "bg-accent text-accent-contrast",
+  },
+  { value: "hold", label: "In optie", swatch: "bg-warn text-black" },
+  {
+    value: "booked_external",
+    label: "Bezet",
+    swatch: "bg-danger text-white",
+  },
+  { value: "own_event", label: "Eigen event", swatch: "bg-danger text-white" },
+  { value: "closed", label: "Dicht", swatch: "bg-surface text-text-muted" },
 ];
+
+const WEEKDAYS = ["ma", "di", "wo", "do", "vr", "za", "zo"] as const;
 
 type Props = {
   initialDays: AvailabilityDay[];
   source: "db" | "mock";
 };
 
+function cellStyle(status: DayStatus | null | undefined) {
+  if (!status) return "border-border/60 bg-bg text-text-dim hover:border-accent";
+  if (status === "available")
+    return "border-accent bg-accent/20 text-text hover:bg-accent/30";
+  if (status === "hold")
+    return "border-warn/60 bg-warn/15 text-text hover:bg-warn/25";
+  if (status === "closed")
+    return "border-border bg-surface/50 text-text-dim line-through";
+  return "border-danger/40 bg-danger/10 text-text-muted";
+}
+
 export function AvailabilityAdmin({ initialDays, source }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [date, setDate] = useState("");
-  const [status, setStatus] = useState<DayStatus>("available");
-  const [label, setLabel] = useState("");
-  const [showAll, setShowAll] = useState(false);
+  const [brush, setBrush] = useState<DayStatus>("available");
+  const [month, setMonth] = useState(() => startOfMonth(new Date()));
+  const [selectedIso, setSelectedIso] = useState<string | null>(null);
+  const [labelDraft, setLabelDraft] = useState("");
 
-  const sorted = useMemo(
-    () => [...initialDays].sort((a, b) => a.date.localeCompare(b.date)),
-    [initialDays],
-  );
-  const openDays = sorted.filter((d) => d.status === "available");
-  const otherDays = sorted.filter((d) => d.status !== "available");
-  const visible = showAll ? sorted : openDays;
+  const byDate = useMemo(() => {
+    const m = new Map<string, AvailabilityDay>();
+    for (const d of initialDays) m.set(d.date, d);
+    return m;
+  }, [initialDays]);
+
+  const weeks = useMemo(() => {
+    const start = startOfWeek(startOfMonth(month), { weekStartsOn: 1 });
+    const rows: Date[][] = [];
+    let cursor = start;
+    for (let w = 0; w < 6; w++) {
+      const week: Date[] = [];
+      for (let i = 0; i < 7; i++) {
+        week.push(cursor);
+        cursor = addDays(cursor, 1);
+      }
+      rows.push(week);
+    }
+    return rows;
+  }, [month]);
+
+  const monthKey = format(month, "yyyy-MM");
+  const selected = selectedIso ? byDate.get(selectedIso) : undefined;
+  const openCount = initialDays.filter((d) => d.status === "available").length;
 
   async function saveDay(payload: {
     id?: string;
@@ -71,43 +117,54 @@ export function AvailabilityAdmin({ initialDays, source }: Props) {
     return true;
   }
 
-  async function addOpenDay() {
-    if (!date) return;
+  async function paintDay(iso: string) {
+    const existing = byDate.get(iso);
     const ok = await saveDay({
-      date,
-      status,
-      label: label.trim() || (status === "available" ? "Beschikbaar" : null),
+      id: existing && !existing.id.startsWith("fill-") ? existing.id : undefined,
+      date: iso,
+      status: brush,
+      dayPart: existing?.dayPart ?? "full",
+      label:
+        existing?.label ??
+        (brush === "available" ? "Beschikbaar" : dayStatusLabels[brush]),
+      priceFrom: existing?.priceFrom ?? null,
+      notes: existing?.notes ?? null,
+      areas: existing?.areas ?? [],
     });
     if (ok) {
-      setMessage(
-        status === "available"
-          ? "Open dag opgeslagen — zichtbaar op de live agenda."
-          : "Dag opgeslagen.",
-      );
-      setDate("");
-      setLabel("");
-      setStatus("available");
+      setMessage(`${format(parseISO(iso), "d MMM", { locale: nl })} → ${dayStatusLabels[brush]}`);
+      setSelectedIso(iso);
+      setLabelDraft(existing?.label ?? "");
     }
   }
 
-  async function setDayStatus(day: AvailabilityDay, next: DayStatus) {
-    await saveDay({
-      id: day.id.startsWith("fill-") ? undefined : day.id,
-      date: day.date,
-      status: next,
-      dayPart: day.dayPart,
-      label: day.label ?? null,
-      priceFrom: day.priceFrom ?? null,
-      notes: day.notes ?? null,
-      areas: day.areas ?? [],
+  async function saveLabel() {
+    if (!selectedIso) return;
+    const existing = byDate.get(selectedIso);
+    if (!existing) return;
+    const ok = await saveDay({
+      id: existing.id.startsWith("fill-") ? undefined : existing.id,
+      date: selectedIso,
+      status: existing.status,
+      dayPart: existing.dayPart,
+      label: labelDraft.trim() || null,
+      priceFrom: existing.priceFrom ?? null,
+      notes: existing.notes ?? null,
+      areas: existing.areas ?? [],
     });
+    if (ok) setMessage("Label opgeslagen");
   }
 
-  async function remove(id: string) {
-    if (id.startsWith("fill-")) return;
-    if (!confirm("Deze dag verwijderen uit de agenda?")) return;
+  async function clearDay() {
+    if (!selectedIso) return;
+    const existing = byDate.get(selectedIso);
+    if (!existing || existing.id.startsWith("fill-")) {
+      setSelectedIso(null);
+      return;
+    }
+    if (!confirm("Deze dag uit de agenda verwijderen?")) return;
     setError(null);
-    const res = await fetch(`/api/outreach/availability?id=${id}`, {
+    const res = await fetch(`/api/outreach/availability?id=${existing.id}`, {
       method: "DELETE",
     });
     if (!res.ok) {
@@ -115,165 +172,177 @@ export function AvailabilityAdmin({ initialDays, source }: Props) {
       setError(data.error ?? "Verwijderen mislukt");
       return;
     }
+    setSelectedIso(null);
     startTransition(() => router.refresh());
   }
 
   return (
-    <div className="space-y-6">
-      <div className="border border-border bg-surface p-4">
-        <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="font-display text-lg tracking-[0.06em]">
-            Snel een dag zetten
-          </h3>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="font-display text-2xl tracking-[0.06em] capitalize">
+            {format(month, "MMMM yyyy", { locale: nl })}
+          </p>
           <p className="text-xs text-text-dim">
-            {source === "db" ? "Live database" : "Mock — seed eerst"}
+            {openCount} open dagen
+            {source === "db" ? " · live" : " · mock"}
           </p>
         </div>
-        <p className="mb-4 text-sm text-text-muted">
-          Kies een datum en status. Open dagen (wo/do/vr) komen op de deelbare
-          agenda.
-        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
+            onClick={() => setMonth((m) => addMonths(m, -1))}
+          >
+            ←
+          </button>
+          <button
+            type="button"
+            className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
+            onClick={() => setMonth(startOfMonth(new Date()))}
+          >
+            Vandaag
+          </button>
+          <button
+            type="button"
+            className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
+            onClick={() => setMonth((m) => addMonths(m, 1))}
+          >
+            →
+          </button>
+        </div>
+      </div>
 
+      <div className="border border-border bg-surface p-3 sm:p-4">
+        <p className="mb-2 text-xs text-text-muted">
+          Kies een status, klik daarna op dagen in de kalender.
+        </p>
         <div className="flex flex-wrap gap-2">
-          {QUICK_STATUSES.map((s) => (
+          {STATUSES.map((s) => (
             <button
               key={s.value}
               type="button"
-              onClick={() => setStatus(s.value)}
-              className={
-                status === s.value
-                  ? "bg-accent px-3 py-1.5 font-display text-xs tracking-[0.1em] text-accent-contrast"
-                  : "border border-border bg-bg px-3 py-1.5 font-display text-xs tracking-[0.1em] text-text-muted hover:border-accent"
-              }
+              onClick={() => setBrush(s.value)}
+              className={cn(
+                "px-3 py-1.5 font-display text-xs tracking-[0.1em]",
+                brush === s.value
+                  ? s.swatch
+                  : "border border-border bg-bg text-text-muted hover:border-accent",
+              )}
             >
               {s.label}
             </button>
           ))}
         </div>
+      </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
-          <label className="text-xs text-text-muted">
-            Datum
-            <input
-              type="date"
-              className="mt-1 w-full border border-border bg-bg px-3 py-2.5 text-sm text-text"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-          </label>
-          <label className="text-xs text-text-muted">
-            Label (optioneel)
-            <input
-              className="mt-1 w-full border border-border bg-bg px-3 py-2.5 text-sm text-text"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="bijv. Hele dag · Circustent"
-            />
-          </label>
-          <div className="flex items-end">
-            <button
-              type="button"
-              disabled={!date || pending}
-              onClick={() => void addOpenDay()}
-              className="w-full bg-accent px-4 py-2.5 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50 sm:w-auto"
+      <div className="border border-border bg-surface p-3 sm:p-4">
+        <div className="mb-2 grid grid-cols-7 gap-1 sm:gap-2">
+          {WEEKDAYS.map((d) => (
+            <p
+              key={d}
+              className="text-center font-display text-[10px] tracking-[0.14em] text-text-dim sm:text-xs"
             >
-              Opslaan
-            </button>
-          </div>
-        </div>
-
-        {(error || message) && (
-          <p
-            className={`mt-3 text-sm ${error ? "text-danger" : "text-text-muted"}`}
-          >
-            {error ?? message}
-          </p>
-        )}
-      </div>
-
-      <div className="border border-border bg-surface">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
-          <div>
-            <h3 className="font-display text-lg tracking-[0.06em]">
-              Open dagen
-            </h3>
-            <p className="text-xs text-text-dim">
-              {openDays.length} open
-              {otherDays.length ? ` · ${otherDays.length} overig in DB` : ""}
+              {d}
             </p>
-          </div>
-          <button
-            type="button"
-            className="text-xs text-accent underline-offset-2 hover:underline"
-            onClick={() => setShowAll((v) => !v)}
-          >
-            {showAll ? "Alleen open tonen" : "Alles tonen"}
-          </button>
+          ))}
         </div>
-
-        {visible.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-text-muted">
-            Nog geen open dagen. Voeg hierboven een datum toe.
-          </p>
-        ) : (
-          <ul className="divide-y divide-border">
-            {visible.map((day) => (
-              <li
-                key={day.id}
-                className="flex flex-wrap items-center gap-3 px-4 py-3"
-              >
-                <div className="min-w-[7rem]">
-                  <p className="font-mono text-sm text-text">{day.date}</p>
-                  <p className="text-xs text-text-muted">
-                    {day.label ?? dayStatusLabels[day.status]}
-                  </p>
-                </div>
-                <StatusBadge
-                  tone={
-                    day.status === "available"
-                      ? "success"
-                      : day.status === "hold"
-                        ? "info"
-                        : "danger"
-                  }
-                >
-                  {dayStatusLabels[day.status]}
-                </StatusBadge>
-                {day.priceFrom != null ? (
-                  <span className="font-mono text-xs text-text-dim">
-                    {formatEuro(day.priceFrom)}
-                  </span>
-                ) : null}
-                <div className="ml-auto flex flex-wrap items-center gap-2">
-                  <select
-                    className="border border-border bg-bg px-2 py-1.5 text-xs text-text"
-                    value={day.status}
-                    disabled={pending}
-                    onChange={(e) =>
-                      void setDayStatus(day, e.target.value as DayStatus)
-                    }
+        <div className="space-y-1 sm:space-y-2">
+          {weeks.map((week, wi) => (
+            <div key={wi} className="grid grid-cols-7 gap-1 sm:gap-2">
+              {week.map((day) => {
+                const iso = format(day, "yyyy-MM-dd");
+                const inMonth = iso.startsWith(monthKey);
+                const row = byDate.get(iso);
+                const isSelected = selectedIso === iso;
+                return (
+                  <button
+                    key={iso}
+                    type="button"
+                    disabled={!inMonth || pending}
+                    onClick={() => {
+                      if (!inMonth) return;
+                      setSelectedIso(iso);
+                      setLabelDraft(row?.label ?? "");
+                      void paintDay(iso);
+                    }}
+                    className={cn(
+                      "flex min-h-[3.25rem] flex-col items-start border p-1.5 text-left transition-colors sm:min-h-[4.5rem] sm:p-2",
+                      !inMonth && "invisible",
+                      inMonth && cellStyle(row?.status),
+                      isSelected && "ring-2 ring-accent ring-offset-1 ring-offset-bg",
+                    )}
                   >
-                    {QUICK_STATUSES.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
-                  {!day.id.startsWith("fill-") ? (
-                    <button
-                      type="button"
-                      className="text-xs text-danger underline-offset-2 hover:underline"
-                      onClick={() => void remove(day.id)}
-                    >
-                      Weg
-                    </button>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+                    <span className="font-mono text-xs sm:text-sm">
+                      {format(day, "d")}
+                    </span>
+                    {row ? (
+                      <span className="mt-auto text-[10px] leading-tight text-text-muted sm:text-[11px]">
+                        {dayStatusLabels[row.status]}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
       </div>
+
+      {selectedIso ? (
+        <div className="border border-border bg-surface p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-display text-lg tracking-[0.06em]">
+                {format(parseISO(selectedIso), "EEEE d MMMM yyyy", {
+                  locale: nl,
+                })}
+              </p>
+              <p className="text-sm text-text-muted">
+                {selected
+                  ? dayStatusLabels[selected.status]
+                  : "Nog niet gezet — klik opnieuw met een status"}
+              </p>
+            </div>
+            {selected && !selected.id.startsWith("fill-") ? (
+              <button
+                type="button"
+                className="text-xs text-danger underline-offset-2 hover:underline"
+                onClick={() => void clearDay()}
+              >
+                Dag wissen
+              </button>
+            ) : null}
+          </div>
+          {selected ? (
+            <div className="mt-3 flex flex-wrap items-end gap-2">
+              <label className="min-w-[12rem] flex-1 text-xs text-text-muted">
+                Label (optioneel)
+                <input
+                  className="mt-1 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
+                  value={labelDraft}
+                  onChange={(e) => setLabelDraft(e.target.value)}
+                  placeholder="bijv. Circustent · hele dag"
+                />
+              </label>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => void saveLabel()}
+                className="bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
+              >
+                Label opslaan
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {(error || message) && (
+        <p className={`text-sm ${error ? "text-danger" : "text-text-muted"}`}>
+          {error ?? message}
+        </p>
+      )}
     </div>
   );
 }

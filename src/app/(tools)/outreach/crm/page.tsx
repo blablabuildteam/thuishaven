@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
+import { auth } from "@/auth";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { MetricCard } from "@/components/ui/metric-card";
@@ -24,11 +25,12 @@ function angleTone(id: string) {
 }
 
 export default async function OutreachCrmPage() {
+  const session = await auth();
+  const isAdmin = session?.user?.role === "admin";
   const { rows, source } = await listCrmRecords();
   const existingCustomers = rows.filter(
     (r) => !r.partner && r.existingCustomer,
   );
-  // Partners verborgen voor nu (later soft-campagne).
   const companies = rows
     .filter((r) => !r.partner && !r.existingCustomer)
     .map((row) => ({
@@ -51,20 +53,27 @@ export default async function OutreachCrmPage() {
     (c) => c.angle.id === "jubileum" || c.angle.id === "algemeen",
   ).length;
   const jubileum = companies.filter((c) => c.angle.id === "jubileum").length;
-  const mailed = companies.filter((c) => c.row.mailCount > 0).length;
-  const replied = companies.filter((c) => c.row.replyCount > 0).length;
+  const outside = companies.filter((c) => c.angle.id === "past_niet").length;
 
   return (
     <div>
       <SectionHeader
         eyebrow="Lijst"
         title="Bedrijven"
-        description="Gesorteerd op mailhoek: jubileum eerst, daarna algemeen feest. Labels maken duidelijk wat er gebeurt — ook bij bedrijven die (nog) niet passen."
+        description="Gesorteerd op mailhoek: jubileum eerst, daarna algemeen feest. Buiten regio of verkeerde grootte krijgen label Past niet."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={source === "db" ? "success" : "neutral"}>
               {companies.length} op de lijst
             </StatusBadge>
+            {isAdmin ? (
+              <Link
+                href="/outreach/prospects"
+                className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
+              >
+                Lijst vullen / verrijken →
+              </Link>
+            ) : null}
             <Link
               href="/outreach/emails"
               data-tour="crm-mailen"
@@ -89,23 +98,33 @@ export default async function OutreachCrmPage() {
           value={formatNumber(jubileum)}
         />
         <MetricCard
-          label="Al gemaild / replies"
-          value={`${formatNumber(mailed)} / ${formatNumber(replied)}`}
+          label="Past niet"
+          value={formatNumber(outside)}
+          hint="o.a. buiten regio"
         />
       </div>
 
       <p className="mb-4 text-sm text-text-muted">
         <span className="text-text">Jubileum</span> = felicitatie-mail.{" "}
         <span className="text-text">Algemeen feest</span> = bedrijfsfeest /
-        zomerfeest (ook als hun jubileum pas over 2–4 jaar is).{" "}
-        <span className="text-text">Past niet</span> = te klein/groot of buiten
-        regio — zichtbaar met label, niet in bulk.
+        zomerfeest. <span className="text-text">Past niet</span> = te klein/groot
+        of buiten Amsterdam + ~50 km — zichtbaar met label, niet in bulk.
+        {isAdmin ? null : (
+          <> Lijst ophalen en verrijken doet admin via Beheer → Lijst vullen.</>
+        )}
       </p>
 
       <section className="mb-10">
         {companies.length === 0 ? (
           <p className="border border-border bg-surface px-4 py-5 text-sm text-text-muted">
-            Nog geen bedrijven. Vraag Kevin om de lijst te vullen.
+            Nog geen bedrijven.{" "}
+            {isAdmin ? (
+              <Link href="/outreach/prospects" className="text-accent underline">
+                Vul de lijst
+              </Link>
+            ) : (
+              "Vraag Kevin om de lijst te vullen."
+            )}
           </p>
         ) : (
           <div className="overflow-x-auto border border-border">
@@ -118,7 +137,7 @@ export default async function OutreachCrmPage() {
                   <th className="px-4 py-3 font-medium">Mdw</th>
                   <th className="px-4 py-3 font-medium">Mails</th>
                   <th className="px-4 py-3 font-medium">Replies</th>
-                  <th className="px-4 py-3 font-medium">Laatst</th>
+                  <th className="px-4 py-3 font-medium">Laatst contact</th>
                 </tr>
               </thead>
               <tbody>
