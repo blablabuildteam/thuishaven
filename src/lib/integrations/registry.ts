@@ -250,10 +250,10 @@ export const INTEGRATIONS: IntegrationDef[] = [
     name: "Apollo doelgroep",
     tool: "outreach",
     description:
-      "Bedrijven zoeken op medewerkersaantal + HQ-locatie (500–5.000, Amsterdam-regio). Goedkoopste legale bron i.p.v. LinkedIn-scrape.",
+      "Doelgroep ophalen: 500–5.000 medewerkers, HQ Amsterdam + ~50 km. Key staat in Vercel. 1 credit per 25 bedrijven.",
     envKeys: ["APOLLO_API_KEY"],
-    askFromClient: ["Apollo API-key (gratis account + credits)"],
-    verifyHint: "Organization search",
+    askFromClient: ["Apollo API-key (staat in Vercel)"],
+    verifyHint: "auth/health — geen search-credits",
     docsUrl: "https://developer.apollo.io/",
     priority: "critical",
   },
@@ -292,15 +292,13 @@ export const INTEGRATIONS: IntegrationDef[] = [
     name: "LinkedIn enrichment",
     tool: "outreach",
     description:
-      "Bedrijfscontext / beslissers — officieel API of enrichment partner.",
+      "Vervangen door Apollo. Geen LinkedIn-login of scrape.",
     envKeys: ["LINKEDIN_ACCESS_TOKEN"],
     optionalEnvKeys: ["ENRICHMENT_API_KEY"],
-    askFromClient: [
-      "Voorkeur: LinkedIn Marketing/API vs. partner (Apollo/Clearbit/etc.)",
-      "Budget/akkoord voor enrichment",
-    ],
-    verifyHint: "Afhankelijk van gekozen pad",
+    askFromClient: [],
+    verifyHint: "Niet nodig — Apollo is de doelgroepbron",
     priority: "later",
+    onHold: true,
   },
   {
     id: "google_places",
@@ -318,11 +316,13 @@ export const INTEGRATIONS: IntegrationDef[] = [
     id: "enrichment",
     name: "Enrichment API",
     tool: "outreach",
-    description: "Apollo/Hunter/Clearbit-achtige verrijking naast KvK.",
+    description:
+      "Hunter/Clearbit later, als websites geen events@ hebben. Apollo is de intake.",
     envKeys: ["ENRICHMENT_API_KEY"],
-    askFromClient: ["Voorkeurspartner + budget"],
-    verifyHint: "Account/ping endpoint van gekozen vendor",
+    askFromClient: [],
+    verifyHint: "Niet nodig voor de eerste run",
     priority: "later",
+    onHold: true,
   },
 ];
 

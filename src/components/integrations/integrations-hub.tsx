@@ -90,7 +90,7 @@ const SECTIONS: Array<{
     id: "outreach",
     title: "Outreach",
     description:
-      "Prospectbronnen en sales-notificaties — nodig voor het bedrijfsevent-outreach.",
+      "Apollo haalt de doelgroep. KvK keurt daarna. Geen LinkedIn-scrape, geen wiki.",
   },
   {
     id: "shared",
@@ -482,7 +482,15 @@ export function IntegrationsHub() {
       dashboard: rows
         .filter((r) => r.tool === "dashboard")
         .sort((a, b) => Number(b.id === "weeztix") - Number(a.id === "weeztix")),
-      outreach: rows.filter((r) => r.tool === "outreach"),
+      outreach: rows
+        .filter((r) => r.tool === "outreach")
+        .sort((a, b) => {
+          const order = ["apollo", "kvk", "sales_notify"];
+          return (
+            (order.indexOf(a.id) === -1 ? 99 : order.indexOf(a.id)) -
+            (order.indexOf(b.id) === -1 ? 99 : order.indexOf(b.id))
+          );
+        }),
       shared: rows.filter((r) => r.tool === "shared"),
     };
     return byTool;
@@ -890,6 +898,22 @@ function IntegrationCard({
               )}
               {actionLabel("Sync videos")}
             </button>
+          )}
+          {row.id === "apollo" && (
+            <Link
+              href="/outreach/prospects"
+              className="border border-border px-3 py-1.5 text-sm hover:border-text"
+            >
+              Naar doelgroep
+            </Link>
+          )}
+          {row.id === "kvk" && (
+            <Link
+              href="/outreach/prospects"
+              className="border border-border px-3 py-1.5 text-sm hover:border-text"
+            >
+              Naar verrijken
+            </Link>
           )}
           {row.id === "alert_notify" && (
             <button
