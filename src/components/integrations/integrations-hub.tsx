@@ -90,7 +90,7 @@ const SECTIONS: Array<{
     id: "outreach",
     title: "Outreach",
     description:
-      "Apollo haalt de doelgroep. KvK keurt daarna. Geen LinkedIn-scrape, geen wiki.",
+      "Apollo haalt de doelgroep. KvK keurt. LinkedIn is extra: zoeken + headcount in het CRM.",
   },
   {
     id: "shared",
@@ -485,7 +485,7 @@ export function IntegrationsHub() {
       outreach: rows
         .filter((r) => r.tool === "outreach")
         .sort((a, b) => {
-          const order = ["apollo", "kvk", "sales_notify"];
+          const order = ["apollo", "kvk", "linkedin", "sales_notify"];
           return (
             (order.indexOf(a.id) === -1 ? 99 : order.indexOf(a.id)) -
             (order.indexOf(b.id) === -1 ? 99 : order.indexOf(b.id))
@@ -915,6 +915,14 @@ function IntegrationCard({
               Naar verrijken
             </Link>
           )}
+          {row.id === "linkedin" && (
+            <Link
+              href="/outreach/crm"
+              className="border border-border px-3 py-1.5 text-sm hover:border-text"
+            >
+              Test in CRM
+            </Link>
+          )}
           {row.id === "alert_notify" && (
             <button
               type="button"
@@ -942,7 +950,7 @@ function IntegrationCard({
             ))}
           </ul>
           <p className="mt-2 font-mono text-[11px] text-text-dim">
-            {row.id === "ai"
+            {row.id === "ai" || row.id === "linkedin"
               ? [...meta.envKeys, ...(meta.optionalEnvKeys ?? [])].join(" · ")
               : meta.envKeys.join(" · ")}
           </p>

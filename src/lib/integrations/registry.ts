@@ -289,16 +289,19 @@ export const INTEGRATIONS: IntegrationDef[] = [
   },
   {
     id: "linkedin",
-    name: "LinkedIn enrichment",
+    name: "LinkedIn",
     tool: "outreach",
     description:
-      "Vervangen door Apollo. Geen LinkedIn-login of scrape.",
-    envKeys: ["LINKEDIN_ACCESS_TOKEN"],
-    optionalEnvKeys: ["ENRICHMENT_API_KEY"],
-    askFromClient: [],
-    verifyHint: "Niet nodig — Apollo is de doelgroepbron",
-    priority: "later",
-    onHold: true,
+      "Naast Apollo: bedrijf + Event/Office Manager opzoeken in het CRM, headcount overschrijven. Geen scrape. Officiële API later via token.",
+    envKeys: [],
+    optionalEnvKeys: ["LINKEDIN_ACCESS_TOKEN"],
+    askFromClient: [
+      "Nu: zoeklinks in het dossier (geen login door ons)",
+      "Later: LinkedIn API-token als we people search willen automatiseren",
+    ],
+    verifyHint: "CRM-zoeklinks klaar · token optioneel",
+    docsUrl: "https://www.linkedin.com/help/linkedin",
+    priority: "high",
   },
   {
     id: "google_places",

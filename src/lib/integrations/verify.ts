@@ -153,6 +153,53 @@ async function verifyDatabase(): Promise<VerifyResult> {
   }
 }
 
+async function verifyLinkedIn(): Promise<VerifyResult> {
+  const token = process.env.LINKEDIN_ACCESS_TOKEN?.trim();
+  if (!token) {
+    return base(
+      "linkedin",
+      "LinkedIn",
+      "verified",
+      "Zoeklinks + schatting in CRM klaar. Geen API-token — handmatig testen, geen scrape.",
+    );
+  }
+  try {
+    const res = await fetch("https://api.linkedin.com/v2/userinfo", {
+      headers: { authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    if (res.ok) {
+      return base(
+        "linkedin",
+        "LinkedIn",
+        "verified",
+        "API-token geldig · CRM-zoeklinks blijven beschikbaar",
+      );
+    }
+    if (res.status === 401 || res.status === 403) {
+      return base(
+        "linkedin",
+        "LinkedIn",
+        "error",
+        `Token geweigerd (${res.status}). CRM-zoeklinks werken nog.`,
+      );
+    }
+    return base(
+      "linkedin",
+      "LinkedIn",
+      "configured",
+      `Token aanwezig · userinfo gaf ${res.status}`,
+    );
+  } catch (e) {
+    return base(
+      "linkedin",
+      "LinkedIn",
+      "configured",
+      `Token aanwezig · ${e instanceof Error ? e.message : "netwerkfout"}`,
+    );
+  }
+}
+
 async function verifyApollo(): Promise<VerifyResult> {
   const key = process.env.APOLLO_API_KEY?.trim();
   if (!key) {
@@ -861,6 +908,8 @@ export async function verifyIntegration(id: string): Promise<VerifyResult> {
       return verifyKvk();
     case "apollo":
       return verifyApollo();
+    case "linkedin":
+      return verifyLinkedIn();
     case "open_meteo":
       return verifyOpenMeteo();
     case "weeztix":
