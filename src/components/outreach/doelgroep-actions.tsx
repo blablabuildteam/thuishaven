@@ -12,6 +12,7 @@ type Props = {
   pendingKvk: number;
   pendingEmail: number;
   pendingPeople: number;
+  pendingHunter: number;
   apolloReady: boolean;
   hunterReady: boolean;
   apolloNextPage: number;
@@ -21,6 +22,7 @@ export function DoelgroepActions({
   pendingKvk,
   pendingEmail,
   pendingPeople,
+  pendingHunter,
   apolloReady,
   hunterReady,
   apolloNextPage,
@@ -70,13 +72,39 @@ export function DoelgroepActions({
         error?: string;
         filled?: number;
         processed?: number;
+        withEmail?: number;
       };
       if (!res.ok) {
         setError(data.error ?? "Decision-makers zoeken mislukt");
         return;
       }
       setOk(
-        `${data.filled ?? 0} personen · ${data.processed ?? 0} bedrijven (Apollo-credits)`,
+        `${data.filled ?? 0} personen · ${data.withEmail ?? 0} met mail · ${data.processed ?? 0} bedrijven`,
+      );
+      router.refresh();
+    });
+  }
+
+  function fillHunterEmails() {
+    setError(null);
+    setOk(null);
+    startTransition(async () => {
+      const res = await fetch("/api/outreach/people", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ limit: 8, hunterEmails: true }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        filled?: number;
+        processed?: number;
+      };
+      if (!res.ok) {
+        setError(data.error ?? "Hunter-mails mislukt");
+        return;
+      }
+      setOk(
+        `${data.filled ?? 0} Event Manager-mails · ${data.processed ?? 0} geprobeerd`,
       );
       router.refresh();
     });
@@ -101,7 +129,7 @@ export function DoelgroepActions({
         return;
       }
       setOk(
-        `${data.filled ?? 0} adressen gevonden · ${data.processed ?? 0} sites bekeken`,
+        `${data.filled ?? 0} generieke adressen · ${data.processed ?? 0} sites`,
       );
       router.refresh();
     });
@@ -149,25 +177,38 @@ export function DoelgroepActions({
         .
       </p>
 
-      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
         <div className="border border-border bg-bg p-3 text-sm text-text-muted">
-          <p className="font-medium text-text">1. Apollo haalt de doelgroep</p>
+          <p className="font-medium text-text">1. Apollo · bedrijven</p>
           <p className="mt-1">
-            Filter: {DOELGROEP.minEmployees}–{DOELGROEP.maxEmployees} mdw · HQ
-            in {DOELGROEP.regionLabel}. Dat is de enige watervaste ophaalstap —
-            geen KvK-targeting, geen LinkedIn-scrape.
+            {DOELGROEP.minEmployees}–{DOELGROEP.maxEmployees} mdw ·{" "}
+            {DOELGROEP.regionLabel}.
           </p>
           <p className="mt-2 text-xs text-text-dim">
             {apolloReady
-              ? "Key staat aan · 1 credit per 100 bedrijven."
-              : "Nog geen APOLLO_API_KEY. Gratis Apollo-account → Settings → API → key in Vercel."}
+              ? "Key aan · 1 credit / 100 bedrijven."
+              : "APOLLO_API_KEY ontbreekt (betaald plan nodig)."}
           </p>
         </div>
         <div className="border border-border bg-bg p-3 text-sm text-text-muted">
-          <p className="font-medium text-text">2. KvK + publieke mail</p>
+          <p className="font-medium text-text">
+            2. Apollo + Hunter · Event Manager
+          </p>
           <p className="mt-1">
-            KvK: nummer, jubileum, vestiging. Daarna events@ / info@ van de
-            bedrijfswebsite. Apollo-headcount blijft de size-schatting.
+            Apollo zoekt de persoon. Heeft die geen mail, dan Hunter op naam +
+            domein.
+          </p>
+          <p className="mt-2 text-xs text-text-dim">
+            {hunterReady
+              ? "Hunter-key aan."
+              : "Zet HUNTER_API_KEY voor Event Manager-mails."}
+          </p>
+        </div>
+        <div className="border border-border bg-bg p-3 text-sm text-text-muted">
+          <p className="font-medium text-text">3. KvK + generieke mail</p>
+          <p className="mt-1">
+            KvK voor jubileum/non-mailing. Site/`events@` alleen als er geen
+            persoon is.
           </p>
         </div>
       </div>
@@ -196,36 +237,39 @@ export function DoelgroepActions({
         </button>
         <button
           type="button"
-          disabled={pending || pendingEmail === 0}
-          onClick={fillEmails}
-          className="border border-border bg-bg px-3 py-2 font-display text-sm tracking-[0.1em] disabled:opacity-60"
-        >
-          Zoek 8 contactmails
-          {pendingEmail ? ` (${pendingEmail} open)` : ""}
-          {hunterReady ? " · Hunter aan" : ""}
-        </button>
-        <button
-          type="button"
           disabled={pending || pendingPeople === 0 || !apolloReady}
           onClick={fillPeople}
           className="border border-border bg-bg px-3 py-2 font-display text-sm tracking-[0.1em] disabled:opacity-60"
         >
-          Zoek 8 contactpersonen
+          Zoek 8 Event Managers
           {pendingPeople ? ` (${pendingPeople} open)` : ""}
+          {hunterReady ? " · + Hunter" : ""}
+        </button>
+        <button
+          type="button"
+          disabled={pending || pendingHunter === 0 || !hunterReady}
+          onClick={fillHunterEmails}
+          className="border border-border bg-bg px-3 py-2 font-display text-sm tracking-[0.1em] disabled:opacity-60"
+        >
+          Hunter-mail voor 8 personen
+          {pendingHunter ? ` (${pendingHunter} open)` : ""}
+        </button>
+        <button
+          type="button"
+          disabled={pending || pendingEmail === 0}
+          onClick={fillEmails}
+          className="border border-border bg-bg px-3 py-2 font-display text-sm tracking-[0.1em] disabled:opacity-60"
+        >
+          Generieke site-mail (8)
+          {pendingEmail ? ` (${pendingEmail} open)` : ""}
         </button>
         {ok ? <StatusBadge tone="success">{ok}</StatusBadge> : null}
         {error ? <StatusBadge tone="danger">{error}</StatusBadge> : null}
       </div>
       <p className="mt-3 text-xs text-text-dim">
-        Deze knoppen: Apollo{" "}
-        {formatEurFromCents(OUTREACH_RATES.apolloCreditCents)} · KvK{" "}
-        {formatEurFromCents(
-          OUTREACH_RATES.kvkCallCents * OUTREACH_RATES.kvkCallsPerCompany,
-        )}
-        /bedrijf · Hunter{" "}
-        {formatEurFromCents(OUTREACH_RATES.hunterSearchCents)} als de site leeg
-        is · 8 personen ≈{" "}
-        {formatEurFromCents(OUTREACH_RATES.apolloCreditCents * 8)}.{" "}
+        Event Manager-route: Apollo-persoon → Hunter email-finder (~
+        {formatEurFromCents(OUTREACH_RATES.hunterSearchCents)} / persoon).
+        Generieke site-mail is alleen backup.{" "}
         <Link href="/outreach/kosten" className="text-accent underline">
           Kostmeter
         </Link>

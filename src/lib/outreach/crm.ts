@@ -58,6 +58,7 @@ export type CrmRecord = {
   kvkHeadcountOff: boolean;
   decisionMakerName?: string;
   decisionMakerTitle?: string;
+  decisionMakerEmailSource?: string;
 };
 
 export type CrmDossier = CrmRecord & {
@@ -119,6 +120,15 @@ function mapRecord(
       typeof (meta.decisionMaker as { title?: string }).title === "string"
         ? (meta.decisionMaker as { title: string }).title
         : undefined,
+    decisionMakerEmailSource:
+      meta.decisionMaker &&
+      typeof meta.decisionMaker === "object" &&
+      typeof (meta.decisionMaker as { emailSource?: string }).emailSource ===
+        "string"
+        ? (meta.decisionMaker as { emailSource: string }).emailSource
+        : typeof meta.emailSource === "string"
+          ? meta.emailSource
+          : undefined,
     kvkHeadcountOff: kvkHeadcountLooksOff(
       typeof meta.kvkVestigingEmployees === "number"
         ? meta.kvkVestigingEmployees

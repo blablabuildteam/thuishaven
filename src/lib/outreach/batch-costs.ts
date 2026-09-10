@@ -97,8 +97,8 @@ export function estimateBatch(input: BatchCostInput): BatchCostEstimate {
   if (hunterCount > 0) {
     lines.push({
       id: "hunter",
-      label: "Hunter · fallback-mail",
-      detail: `Alleen als de site geen adres heeft · nu ${Math.round(hunterShare * 100)}%`,
+      label: "Hunter · Event Manager-mail",
+      detail: `Na Apollo-persoon · ~€0,09 / naam+domein · nu ${Math.round(hunterShare * 100)}%`,
       units: hunterCount,
       unitLabel: hunterCount === 1 ? "zoekopdracht" : "zoekopdrachten",
       cents: hunterCount * OUTREACH_RATES.hunterSearchCents,

@@ -134,6 +134,9 @@ export default async function ProspectsPage() {
   const fit = companies.filter((p) => p.doelgroepFit === "ja").length;
   const mailable = companies.filter((p) => Boolean(p.email)).length;
   const pendingPeople = companies.filter((p) => !p.decisionMaker).length;
+  const pendingHunter = companies.filter(
+    (p) => p.decisionMaker && !p.decisionMakerEmail,
+  ).length;
   const apolloReady = hasApolloConfig();
   const hunterReady = hasHunterConfig();
   const apolloNextPage = await nextApolloDiscoverPage();
@@ -148,6 +151,9 @@ export default async function ProspectsPage() {
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={apolloReady ? "success" : "danger"}>
               {apolloReady ? "Apollo gekoppeld" : "Apollo-key ontbreekt"}
+            </StatusBadge>
+            <StatusBadge tone={hunterReady ? "success" : "neutral"}>
+              {hunterReady ? "Hunter gekoppeld" : "Hunter optioneel"}
             </StatusBadge>
             <StatusBadge tone={hasKvkConfig() ? "success" : "danger"}>
               {hasKvkConfig() ? "KvK gekoppeld" : "KvK-key ontbreekt"}
@@ -172,6 +178,7 @@ export default async function ProspectsPage() {
         pendingKvk={pendingKvk}
         pendingEmail={pendingEmail}
         pendingPeople={pendingPeople}
+        pendingHunter={pendingHunter}
         apolloReady={apolloReady}
         hunterReady={hunterReady}
         apolloNextPage={apolloNextPage}

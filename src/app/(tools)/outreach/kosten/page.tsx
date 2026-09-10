@@ -54,8 +54,14 @@ const ritsRates = [
     payer: "gratis",
   },
   {
-    label: "Hunter · fallback",
-    detail: "1 zoekopdracht, alleen als de site leeg is",
+    label: "Hunter · Event Manager-mail",
+    detail: "Email finder: naam + domein, na Apollo-persoon",
+    amount: formatEurFromCents(OUTREACH_RATES.hunterSearchCents),
+    payer: "onze stack",
+  },
+  {
+    label: "Hunter · domain-search",
+    detail: "Generieke inbox, alleen als er geen persoon is",
     amount: formatEurFromCents(OUTREACH_RATES.hunterSearchCents),
     payer: "onze stack",
   },

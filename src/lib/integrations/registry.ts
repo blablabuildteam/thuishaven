@@ -262,9 +262,9 @@ export const INTEGRATIONS: IntegrationDef[] = [
     name: "Hunter",
     tool: "outreach",
     description:
-      "Fallback als de bedrijfswebsite geen events@ / info@ heeft. Domain-search, geen scrape.",
+      "Event Manager-mail: Apollo vindt de persoon, Hunter zoekt het adres op naam + domein. Domain-search blijft backup voor generieke inbox.",
     envKeys: ["HUNTER_API_KEY"],
-    askFromClient: ["Hunter API-key als website-mail te vaak leeg blijft"],
+    askFromClient: ["Hunter API-key voor Event Manager-mails"],
     verifyHint: "GET /v2/account — geen zoekcredits",
     docsUrl: "https://hunter.io/api-documentation/v2",
     priority: "high",

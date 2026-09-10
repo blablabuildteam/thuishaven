@@ -44,6 +44,7 @@ export type OutreachProspect = {
   website?: string | null;
   nonMailing?: boolean;
   decisionMaker?: string;
+  decisionMakerEmail?: string;
 };
 
 export type OutreachLead = {
@@ -122,6 +123,13 @@ export async function listProspects(options?: {
           typeof meta.decisionMaker === "object" &&
           typeof (meta.decisionMaker as { name?: string }).name === "string"
             ? (meta.decisionMaker as { name: string }).name
+            : undefined,
+        decisionMakerEmail:
+          meta.decisionMaker &&
+          typeof meta.decisionMaker === "object" &&
+          typeof (meta.decisionMaker as { email?: string }).email === "string" &&
+          (meta.decisionMaker as { email: string }).email.includes("@")
+            ? (meta.decisionMaker as { email: string }).email
             : undefined,
         doelgroepFit:
           typeof meta.doelgroepFit === "string" ? meta.doelgroepFit : undefined,

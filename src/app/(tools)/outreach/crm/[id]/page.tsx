@@ -199,7 +199,12 @@ export default async function CrmDossierPage({
                   }`
                 : "nog niet"}
             </p>
-            <p className="mt-1">E-mail: {dossier.email ?? "nog niet"}</p>
+            <p className="mt-1">
+              E-mail: {dossier.email ?? "nog niet"}
+              {dossier.decisionMakerEmailSource
+                ? ` · via ${dossier.decisionMakerEmailSource}`
+                : ""}
+            </p>
             <p className="mt-1">
               Website:{" "}
               {dossier.website ? (
