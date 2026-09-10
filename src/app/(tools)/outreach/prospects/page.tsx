@@ -67,7 +67,12 @@ function ProspectTable({ rows }: { rows: OutreachProspect[] }) {
               className="border-b border-border last:border-0 hover:bg-surface/50"
             >
               <td className="px-4 py-3">
-                <p className="text-text">{p.companyName}</p>
+                <Link
+                  href={`/outreach/crm/${p.id}`}
+                  className="text-text hover:text-accent"
+                >
+                  {p.companyName}
+                </Link>
                 <p className="text-xs text-text-dim">{p.city ?? p.sector ?? "—"}</p>
               </td>
               <td className="px-4 py-3">

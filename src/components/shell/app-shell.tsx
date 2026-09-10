@@ -20,6 +20,7 @@ import {
   Workflow,
   Ban,
   MessageSquare,
+  Contact,
   type LucideIcon,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
@@ -90,7 +91,8 @@ const outreachSections: NavSection[] = [
     id: "lijsten",
     label: "Lijsten",
     items: [
-      { href: "/outreach/prospects", label: "Prospects", icon: Users },
+      { href: "/outreach/crm", label: "CRM", icon: Contact },
+      { href: "/outreach/prospects", label: "Lijst vullen", icon: Users },
       { href: "/outreach/uitsluitingen", label: "Niet mailen", icon: Ban },
       { href: "/outreach/campaigns", label: "Campagnes", icon: Sparkles },
     ],
