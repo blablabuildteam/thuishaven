@@ -90,7 +90,7 @@ export default async function CrmDossierPage({
           value={dossier.employeeCount != null ? String(dossier.employeeCount) : "—"}
         />
         <Fact
-          label="Medewerkers · LinkedIn"
+          label="Medewerkers · schatting"
           value={
             dossier.linkedinEmployeeEstimate != null
               ? `~${dossier.linkedinEmployeeEstimate}`

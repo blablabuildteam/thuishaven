@@ -73,8 +73,8 @@ export function LinkedinEstimateForm({
         </a>
       </div>
       <p className="text-xs text-text-dim">
-        Gratis LinkedIn-account is genoeg. Op de bedrijfs­pagina: “X employees”.
-        Geen API, geen Sales Nav nodig.
+        Schatting komt automatisch uit Wikipedia/Wikidata als KvK te laag is.
+        LinkedIn alleen als je een getal wilt overschrijven.
       </p>
       <label className="block text-sm">
         <span className="mb-1 block text-text-dim">

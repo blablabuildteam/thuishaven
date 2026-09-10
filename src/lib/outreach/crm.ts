@@ -342,14 +342,15 @@ export async function saveLinkedinEstimate(input: {
   if (!row) return { ok: false, error: "Bedrijf niet gevonden" };
 
   const meta = { ...(row.metadata ?? {}) };
-  meta.linkedinEmployeeEstimate = Math.round(input.estimate);
+  const estimate = Math.round(input.estimate);
+  meta.linkedinEmployeeEstimate = estimate;
   meta.linkedinEstimatedAt = new Date().toISOString();
   const scored = scoreDoelgroep({
-    employeeCount: meta.linkedinEmployeeEstimate,
+    employeeCount: estimate,
     city: row.city,
   });
   meta.doelgroepFit = scored.fit;
-  meta.doelgroepReason = `LinkedIn ~${meta.linkedinEmployeeEstimate} · ${scored.reason}`;
+  meta.doelgroepReason = `LinkedIn ~${estimate} · ${scored.reason}`;
 
   await db
     .update(prospects)
