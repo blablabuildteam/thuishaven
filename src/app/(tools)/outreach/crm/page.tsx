@@ -22,6 +22,7 @@ export default async function OutreachCrmPage() {
   const mailed = companies.filter((r) => r.mailCount > 0).length;
   const replied = companies.filter((r) => r.replyCount > 0).length;
   const fit = companies.filter((r) => r.doelgroepFit === "ja").length;
+  const kvkOff = companies.filter((r) => r.kvkHeadcountOff).length;
 
   return (
     <div>
@@ -44,11 +45,16 @@ export default async function OutreachCrmPage() {
         }
       />
 
-      <div className="stagger mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="stagger mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <MetricCard label="Bedrijven" value={formatNumber(companies.length)} />
         <MetricCard label="Al gemaild" value={formatNumber(mailed)} accent />
         <MetricCard label="Met reply" value={formatNumber(replied)} />
         <MetricCard label="Past in doelgroep" value={formatNumber(fit)} />
+        <MetricCard
+          label="KvK mdw checken"
+          value={formatNumber(kvkOff)}
+          hint="Raar laag — LinkedIn"
+        />
       </div>
 
       <section className="mb-10">
@@ -121,7 +127,15 @@ export default async function OutreachCrmPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 font-mono text-text-muted">
-                      {row.employeeCount ?? "—"}
+                      {row.linkedinEmployeeEstimate != null
+                        ? `~${row.linkedinEmployeeEstimate}`
+                        : (row.employeeCount ?? "—")}
+                      {row.kvkHeadcountOff &&
+                      row.linkedinEmployeeEstimate == null ? (
+                        <span className="ml-1 text-[10px] uppercase tracking-wide text-warn">
+                          check LI
+                        </span>
+                      ) : null}
                     </td>
                     <td className="px-4 py-3 font-mono text-accent">
                       {row.anniversaryYears ? `${row.anniversaryYears} jr` : "—"}

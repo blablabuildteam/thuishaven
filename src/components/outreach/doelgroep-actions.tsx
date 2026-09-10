@@ -96,8 +96,8 @@ export function DoelgroepActions({ pendingKvk }: Props) {
             <span className="text-text">{DOELGROEP.linkedinPeopleSearch}</span>
           </p>
           <p className="mt-2 text-xs text-text-dim">
-            Geen LinkedIn-API — plak bedrijfsnamen hieronder. KvK mag deze
-            selectie niet zelf maken (geen SBI/plaats-zoekactie).
+            Gratis LinkedIn-account volstaat. Geen API, geen Sales Nav. Plak
+            namen of open per dossier de zoeklinks.
           </p>
         </div>
         <div className="border border-border bg-bg p-3 text-sm text-text-muted">

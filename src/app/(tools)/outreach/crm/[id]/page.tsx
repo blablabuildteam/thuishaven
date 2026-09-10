@@ -5,7 +5,12 @@ import { nl } from "date-fns/locale";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CrmNoteForm } from "@/components/outreach/crm-note-form";
+import { LinkedinEstimateForm } from "@/components/outreach/linkedin-estimate-form";
 import { getCrmDossier, statusLabels } from "@/lib/outreach/crm";
+import {
+  linkedinCompanySearchUrl,
+  linkedinPeopleSearchUrl,
+} from "@/lib/outreach/linkedin";
 
 export const dynamic = "force-dynamic";
 
@@ -67,11 +72,30 @@ export default async function CrmDossierPage({
         }
       />
 
+      {dossier.kvkHeadcountOff ? (
+        <div className="mb-6 border border-warn/40 bg-surface px-4 py-3 text-sm text-text-muted">
+          <p className="font-medium text-text">KvK-medewerkers ziet er raar laag uit</p>
+          <p className="mt-1">
+            {dossier.employeeCount} op de vestiging — bij een bekende werkgever
+            is dat vaak alleen het KvK-rechtspersoon, niet het concern. Zoek de
+            LinkedIn-schatting hiernaast en vul die in.
+          </p>
+        </div>
+      ) : null}
+
       <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Fact label="KvK" value={dossier.kvkNumber ?? "—"} />
         <Fact
-          label="Medewerkers"
+          label="Medewerkers · KvK"
           value={dossier.employeeCount != null ? String(dossier.employeeCount) : "—"}
+        />
+        <Fact
+          label="Medewerkers · LinkedIn"
+          value={
+            dossier.linkedinEmployeeEstimate != null
+              ? `~${dossier.linkedinEmployeeEstimate}`
+              : "—"
+          }
         />
         <Fact
           label="Jubileum"
@@ -133,6 +157,18 @@ export default async function CrmDossierPage({
         </section>
 
         <aside className="space-y-4">
+          <section className="border border-border bg-surface p-4">
+            <h2 className="mb-3 font-display text-xl tracking-[0.06em]">
+              LinkedIn
+            </h2>
+            <LinkedinEstimateForm
+              prospectId={dossier.id}
+              companySearchUrl={linkedinCompanySearchUrl(dossier.companyName)}
+              peopleSearchUrl={linkedinPeopleSearchUrl(dossier.companyName)}
+              currentEstimate={dossier.linkedinEmployeeEstimate}
+              currentUrl={dossier.linkedinUrl}
+            />
+          </section>
           <section className="border border-border bg-surface p-4">
             <h2 className="mb-3 font-display text-xl tracking-[0.06em]">
               Nieuw moment

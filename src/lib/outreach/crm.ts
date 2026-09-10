@@ -11,6 +11,8 @@ import {
   prospects,
 } from "@/lib/db/schema";
 import { statusLabels, type ProspectStatus, type ProspectType } from "./data";
+import { kvkHeadcountLooksOff } from "./linkedin";
+import { scoreDoelgroep } from "./doelgroep";
 
 export { statusLabels };
 
@@ -50,6 +52,9 @@ export type CrmRecord = {
   mailCount: number;
   replyCount: number;
   lastTouchAt: string | null;
+  linkedinUrl: string | null;
+  linkedinEmployeeEstimate: number | null;
+  kvkHeadcountOff: boolean;
 };
 
 export type CrmDossier = CrmRecord & {
@@ -94,6 +99,12 @@ function mapRecord(
     mailCount: extras.mailCount,
     replyCount: extras.replyCount,
     lastTouchAt: extras.lastTouchAt,
+    linkedinUrl: p.linkedinUrl,
+    linkedinEmployeeEstimate:
+      typeof meta.linkedinEmployeeEstimate === "number"
+        ? meta.linkedinEmployeeEstimate
+        : null,
+    kvkHeadcountOff: kvkHeadcountLooksOff(p.employeeCount),
   };
 }
 
@@ -307,6 +318,46 @@ export async function addCrmNote(input: {
   await db
     .update(prospects)
     .set({ metadata: meta, updatedAt: new Date() })
+    .where(eq(prospects.id, input.prospectId));
+
+  return { ok: true };
+}
+
+export async function saveLinkedinEstimate(input: {
+  prospectId: string;
+  estimate: number;
+  linkedinUrl?: string | null;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!hasDatabase()) return { ok: false, error: "Geen database" };
+  if (!Number.isFinite(input.estimate) || input.estimate < 1) {
+    return { ok: false, error: "Vul een schatting in (aantal mensen)" };
+  }
+
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(prospects)
+    .where(eq(prospects.id, input.prospectId))
+    .limit(1);
+  if (!row) return { ok: false, error: "Bedrijf niet gevonden" };
+
+  const meta = { ...(row.metadata ?? {}) };
+  meta.linkedinEmployeeEstimate = Math.round(input.estimate);
+  meta.linkedinEstimatedAt = new Date().toISOString();
+  const scored = scoreDoelgroep({
+    employeeCount: meta.linkedinEmployeeEstimate,
+    city: row.city,
+  });
+  meta.doelgroepFit = scored.fit;
+  meta.doelgroepReason = `LinkedIn ~${meta.linkedinEmployeeEstimate} · ${scored.reason}`;
+
+  await db
+    .update(prospects)
+    .set({
+      metadata: meta,
+      linkedinUrl: input.linkedinUrl?.trim() || row.linkedinUrl,
+      updatedAt: new Date(),
+    })
     .where(eq(prospects.id, input.prospectId));
 
   return { ok: true };
