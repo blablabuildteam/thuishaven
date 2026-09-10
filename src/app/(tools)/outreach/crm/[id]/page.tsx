@@ -189,7 +189,17 @@ export default async function CrmDossierPage({
             <h2 className="mb-3 font-display text-xl tracking-[0.06em] text-text">
               Gegevens
             </h2>
-            <p>E-mail: {dossier.email ?? "nog niet"}</p>
+            <p>
+              Contactpersoon:{" "}
+              {dossier.decisionMakerName
+                ? `${dossier.decisionMakerName}${
+                    dossier.decisionMakerTitle
+                      ? ` · ${dossier.decisionMakerTitle}`
+                      : ""
+                  }`
+                : "nog niet"}
+            </p>
+            <p className="mt-1">E-mail: {dossier.email ?? "nog niet"}</p>
             <p className="mt-1">
               Website:{" "}
               {dossier.website ? (

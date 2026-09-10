@@ -4,6 +4,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { MetricCard } from "@/components/ui/metric-card";
 import { AddProspectsForm } from "@/components/outreach/add-prospects-form";
 import { DoelgroepActions } from "@/components/outreach/doelgroep-actions";
+import { DoelgroepUniverse } from "@/components/outreach/doelgroep-universe";
 import { KvkEnrichForm } from "@/components/outreach/kvk-enrich-form";
 import {
   listProspects,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/outreach/data";
 import { hasKvkConfig } from "@/lib/integrations/kvk";
 import { hasApolloConfig } from "@/lib/integrations/apollo/client";
+import { hasHunterConfig } from "@/lib/integrations/hunter/client";
 import { nextApolloDiscoverPage } from "@/lib/outreach/apollo-page";
 import { formatNumber } from "@/lib/utils";
 
@@ -131,7 +133,9 @@ export default async function ProspectsPage() {
   const pendingEmail = companies.filter((p) => p.website && !p.email).length;
   const fit = companies.filter((p) => p.doelgroepFit === "ja").length;
   const mailable = companies.filter((p) => Boolean(p.email)).length;
+  const pendingPeople = companies.filter((p) => !p.decisionMaker).length;
   const apolloReady = hasApolloConfig();
+  const hunterReady = hasHunterConfig();
   const apolloNextPage = await nextApolloDiscoverPage();
 
   return (
@@ -162,10 +166,14 @@ export default async function ProspectsPage() {
         <MetricCard label="Met e-mail" value={formatNumber(mailable)} />
       </div>
 
+      <DoelgroepUniverse compact listedCount={companies.length} />
+
       <DoelgroepActions
         pendingKvk={pendingKvk}
         pendingEmail={pendingEmail}
+        pendingPeople={pendingPeople}
         apolloReady={apolloReady}
+        hunterReady={hunterReady}
         apolloNextPage={apolloNextPage}
       />
 
@@ -206,8 +214,8 @@ export default async function ProspectsPage() {
           Partnerbureaus · niet cold mailen
         </h2>
         <p className="mt-2 text-sm text-text-muted">
-          {partners.length} namen van Reijner. Bestaande relatie — alleen zachte
-          open-data later, niet deze cold-flow.{" "}
+          {partners.length} namen van Reijner. Bestaande relatie — niet in deze
+          cold-flow.{" "}
           <Link href="/outreach/uitsluitingen" className="text-accent underline">
             Niet mailen
           </Link>{" "}

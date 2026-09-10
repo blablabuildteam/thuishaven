@@ -4,6 +4,7 @@ import { MetricCard } from "@/components/ui/metric-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { getOutreachPlanningSnapshot } from "@/lib/outreach/planning";
 import { sequenceForOpenedNoReply } from "@/lib/outreach/sequence";
+import { FollowUpDraftButton } from "@/components/outreach/follow-up-draft-button";
 import { formatNumber } from "@/lib/utils";
 
 export const metadata = { title: "Wachtrij" };
@@ -117,12 +118,13 @@ export default async function OutreachPlanningPage() {
           Resultaten wie “follow-up klaar” is. Open-tracking blijft intern (wie
           prioriteit krijgt); in de mail zelf nooit benoemen.
         </p>
-        <p className="mt-3 max-w-2xl border border-border bg-bg px-3 py-2 text-xs text-text-muted">
-          <span className="font-medium text-text">Partnerbureaus</span> (MCI,
-          Live-Impact, …) zijn bestaande relaties — geen cold outreach. Suggestie:
-          alleen korte open-data seintjes als jullie dat handig vinden. Cold
-          targets komen via Apollo (size + regio), daarna KvK-check.
-        </p>
+        <div className="mt-4">
+          <FollowUpDraftButton />
+          <p className="mt-2 text-xs text-text-dim">
+            Alleen drafts — nooit automatisch versturen. Cron om 07:00 UTC doet
+            hetzelfde.
+          </p>
+        </div>
         <ol className="mt-5 space-y-4">
           {sequenceForOpenedNoReply().map((step) => (
             <li key={step.id} className="border border-border bg-bg p-4">
@@ -156,8 +158,8 @@ export default async function OutreachPlanningPage() {
           Voorgesteld schema
         </h2>
         <p className="mb-4 text-sm text-text-muted">
-          Conceptplanning voor de klaarstaande bureaus. Dit is een voorstel — geen
-          cron, geen auto-send.
+          Conceptplanning voor de klaarstaande bedrijven. Dit is een voorstel —
+          geen auto-send.
         </p>
         {plan.schedule.length === 0 ? (
           <p className="text-sm text-text-muted">Nog niemand in de queue.</p>
@@ -193,7 +195,7 @@ export default async function OutreachPlanningPage() {
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
               <tr>
-                <th className="px-4 py-3 font-medium">Bureau</th>
+                <th className="px-4 py-3 font-medium">Bedrijf</th>
                 <th className="px-4 py-3 font-medium">E-mail</th>
                 <th className="px-4 py-3 font-medium">Contacten</th>
                 <th className="px-4 py-3 font-medium">Status</th>

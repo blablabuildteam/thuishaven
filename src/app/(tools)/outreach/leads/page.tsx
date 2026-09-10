@@ -2,6 +2,7 @@ import Link from "next/link";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { listLeads } from "@/lib/outreach/data";
+import { LeadNotifyButton } from "@/components/outreach/lead-notify-button";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 
@@ -75,6 +76,9 @@ export default async function LeadsPage() {
                   locale: nl,
                 })}
               </p>
+              {lead.prospectId && !lead.notified ? (
+                <LeadNotifyButton prospectId={lead.prospectId} />
+              ) : null}
             </article>
           ))}
         </div>

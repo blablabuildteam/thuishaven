@@ -235,6 +235,44 @@ async function verifyApollo(): Promise<VerifyResult> {
   }
 }
 
+async function verifyHunter(): Promise<VerifyResult> {
+  const key = process.env.HUNTER_API_KEY?.trim();
+  if (!key) {
+    return base("hunter", "Hunter", "missing", "HUNTER_API_KEY ontbreekt");
+  }
+  try {
+    const q = new URLSearchParams({ api_key: key });
+    const res = await fetch(`https://api.hunter.io/v2/account?${q}`, {
+      cache: "no-store",
+    });
+    if (res.status === 401 || res.status === 403) {
+      return base("hunter", "Hunter", "error", `Auth geweigerd (${res.status})`);
+    }
+    if (!res.ok) {
+      return base(
+        "hunter",
+        "Hunter",
+        "configured",
+        `Key aanwezig · account gaf ${res.status}`,
+      );
+    }
+    const json = (await res.json().catch(() => ({}))) as {
+      data?: { email?: string; requests?: { available?: number } };
+    };
+    return base("hunter", "Hunter", "verified", "Account bereikbaar", {
+      email: json.data?.email,
+      available: json.data?.requests?.available,
+    });
+  } catch (e) {
+    return base(
+      "hunter",
+      "Hunter",
+      "configured",
+      `Key aanwezig · ${e instanceof Error ? e.message : "netwerkfout"}`,
+    );
+  }
+}
+
 async function verifyKvk(): Promise<VerifyResult> {
   const key = process.env.KVK_API_KEY?.trim();
   if (!key) {
@@ -908,6 +946,8 @@ export async function verifyIntegration(id: string): Promise<VerifyResult> {
       return verifyKvk();
     case "apollo":
       return verifyApollo();
+    case "hunter":
+      return verifyHunter();
     case "linkedin":
       return verifyLinkedIn();
     case "open_meteo":
@@ -967,11 +1007,11 @@ export async function probeConfiguredIntegrations(): Promise<VerifyResult[]> {
       (row.status !== "manual" &&
         row.status !== "on_hold" &&
         row.status !== "missing" &&
-        ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "kvk", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "tiktok", "alert_notify"].includes(
+        ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "kvk", "apollo", "hunter", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "tiktok", "alert_notify"].includes(
           row.id,
         )),
   );
-  const always = ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "tiktok", "alert_notify"];
+  const always = ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "apollo", "hunter", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "tiktok", "alert_notify"];
   const ids = new Set([
     ...toProbe.map((r) => r.id),
     ...always.filter((id) => {

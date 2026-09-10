@@ -43,7 +43,7 @@ export async function POST(request: Request) {
   const page = parsed.data.page ?? (await nextApolloDiscoverPage());
   const search = await searchDoelgroepCompanies({
     page,
-    perPage: 25,
+    perPage: 100,
   });
   if (!search.ok) {
     return NextResponse.json({ error: search.error }, { status: 400 });

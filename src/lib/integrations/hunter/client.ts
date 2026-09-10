@@ -1,0 +1,105 @@
+import { OUTREACH_RATES } from "@/lib/outreach/batch-costs";
+import { recordUsage } from "@/lib/usage/store";
+
+export function hasHunterConfig(): boolean {
+  return Boolean(process.env.HUNTER_API_KEY?.trim());
+}
+
+export type HunterEmail = {
+  email: string;
+  type?: string;
+  confidence?: number;
+  position?: string;
+};
+
+function domainFromWebsite(website: string): string | null {
+  try {
+    const url = new URL(
+      /^https?:\/\//i.test(website) ? website : `https://${website}`,
+    );
+    return url.hostname.replace(/^www\./, "") || null;
+  } catch {
+    return null;
+  }
+}
+
+const GENERIC_RANK = [
+  /^events?@/i,
+  /^evenementen@/i,
+  /^evenement@/i,
+  /^hospitality@/i,
+  /^office@/i,
+  /^info@/i,
+  /^hello@/i,
+  /^contact@/i,
+];
+
+function rank(email: string): number {
+  const i = GENERIC_RANK.findIndex((re) => re.test(email));
+  return i === -1 ? 80 : i;
+}
+
+export async function findHunterDomainEmail(
+  website: string,
+): Promise<{ ok: boolean; email?: string; error?: string }> {
+  const key = process.env.HUNTER_API_KEY?.trim();
+  if (!key) return { ok: false, error: "HUNTER_API_KEY ontbreekt" };
+  const domain = domainFromWebsite(website);
+  if (!domain) return { ok: false, error: "Geen domein" };
+
+  const q = new URLSearchParams({
+    domain,
+    api_key: key,
+    limit: "10",
+  });
+  const res = await fetch(`https://api.hunter.io/v2/domain-search?${q}`, {
+    cache: "no-store",
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    errors?: Array<{ details?: string }>;
+    data?: {
+      emails?: Array<{
+        value?: string;
+        type?: string;
+        confidence?: number;
+        position?: string;
+      }>;
+    };
+  };
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: json.errors?.[0]?.details ?? `Hunter HTTP ${res.status}`,
+    };
+  }
+
+  void recordUsage({
+    tool: "outreach",
+    vendor: "enrichment",
+    operation: "hunter_domain_search",
+    units: 1,
+    unitLabel: "zoekopdracht",
+    costEurCents: OUTREACH_RATES.hunterSearchCents,
+    meta: { domain },
+  }).catch(() => undefined);
+
+  const rows = (json.data?.emails ?? [])
+    .map((e) => ({
+      email: e.value?.trim().toLowerCase() ?? "",
+      type: e.type,
+      confidence: e.confidence,
+      position: e.position,
+    }))
+    .filter((e) => e.email.includes("@"));
+
+  const generic = rows.filter((e) => e.type === "generic");
+  const pool = generic.length ? generic : rows;
+  pool.sort(
+    (a, b) =>
+      rank(a.email) - rank(b.email) ||
+      (b.confidence ?? 0) - (a.confidence ?? 0),
+  );
+  const best = pool[0];
+  if (!best) return { ok: false, error: "Geen Hunter-treffer" };
+  return { ok: true, email: best.email };
+}

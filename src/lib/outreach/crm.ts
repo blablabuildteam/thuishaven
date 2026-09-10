@@ -56,6 +56,8 @@ export type CrmRecord = {
   linkedinUrl: string | null;
   linkedinEmployeeEstimate: number | null;
   kvkHeadcountOff: boolean;
+  decisionMakerName?: string;
+  decisionMakerTitle?: string;
 };
 
 export type CrmDossier = CrmRecord & {
@@ -105,6 +107,18 @@ function mapRecord(
       typeof meta.linkedinEmployeeEstimate === "number"
         ? meta.linkedinEmployeeEstimate
         : null,
+    decisionMakerName:
+      meta.decisionMaker &&
+      typeof meta.decisionMaker === "object" &&
+      typeof (meta.decisionMaker as { name?: string }).name === "string"
+        ? (meta.decisionMaker as { name: string }).name
+        : undefined,
+    decisionMakerTitle:
+      meta.decisionMaker &&
+      typeof meta.decisionMaker === "object" &&
+      typeof (meta.decisionMaker as { title?: string }).title === "string"
+        ? (meta.decisionMaker as { title: string }).title
+        : undefined,
     kvkHeadcountOff: kvkHeadcountLooksOff(
       typeof meta.kvkVestigingEmployees === "number"
         ? meta.kvkVestigingEmployees

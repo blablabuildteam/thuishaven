@@ -136,15 +136,17 @@ export default async function OutreachPage() {
           value={formatNumber(overview.kpis.replied)}
         />
         <MetricCard label="Leads" value={formatNumber(overview.kpis.leads)} />
-        <MetricCard
-          label="Kosten · 30d"
-          value={usage ? eurFromCents(usage.totalEurCents) : "—"}
-          hint={
-            usage
-              ? `${eurFromCents(usage.clientBilledEurCents)} KvK (hun account)`
-              : undefined
-          }
-        />
+        <Link href="/outreach/kosten" className="block">
+          <MetricCard
+            label="Kosten · 30d"
+            value={usage ? eurFromCents(usage.totalEurCents) : "—"}
+            hint={
+              usage
+                ? `${eurFromCents(usage.clientBilledEurCents)} KvK · rits-rekenaar →`
+                : "Rits-rekenaar →"
+            }
+          />
+        </Link>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

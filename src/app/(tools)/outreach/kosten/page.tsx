@@ -2,21 +2,19 @@ import Link from "next/link";
 import { SectionHeader } from "@/components/ui/section-header";
 import { MetricCard } from "@/components/ui/metric-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { BatchCostPlanner } from "@/components/outreach/batch-cost-planner";
+import { DoelgroepUniverse } from "@/components/outreach/doelgroep-universe";
 import { getUsageSummary } from "@/lib/usage/store";
 import { UNIT_COST_EUR_CENTS } from "@/lib/usage/pricing";
+import {
+  APOLLO_PAGE_SIZE,
+  OUTREACH_RATES,
+  formatEurFromCents,
+} from "@/lib/outreach/batch-costs";
 import { formatNumber } from "@/lib/utils";
 
 export const metadata = { title: "Kosten · Outreach" };
 export const dynamic = "force-dynamic";
-
-function eurFromCents(cents: number): string {
-  return new Intl.NumberFormat("nl-NL", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(cents / 100);
-}
 
 const vendorLabel: Record<string, string> = {
   openai: "OpenAI (tokens)",
@@ -24,9 +22,44 @@ const vendorLabel: Record<string, string> = {
   brevo: "Brevo (e-mail)",
   kvk: "KvK API",
   google_places: "Google Places",
-  enrichment: "Enrichment",
+  enrichment: "Apollo / Hunter",
   other: "Overig",
 };
+
+const ritsRates = [
+  {
+    label: "Apollo · rits ophalen",
+    detail: `1 credit per pagina, nu ${APOLLO_PAGE_SIZE} bedrijven`,
+    amount: formatEurFromCents(OUTREACH_RATES.apolloCreditCents),
+    payer: "onze stack",
+  },
+  {
+    label: "Apollo · contactpersoon",
+    detail: "1 credit per bedrijf (conservatief)",
+    amount: formatEurFromCents(OUTREACH_RATES.apolloCreditCents),
+    payer: "onze stack",
+  },
+  {
+    label: "KvK · verrijken",
+    detail: `${OUTREACH_RATES.kvkCallsPerCompany} API-calls per bedrijf`,
+    amount: formatEurFromCents(
+      OUTREACH_RATES.kvkCallCents * OUTREACH_RATES.kvkCallsPerCompany,
+    ),
+    payer: "hun factuur",
+  },
+  {
+    label: "Website-mail",
+    detail: "events@ / info@ van de publieke site",
+    amount: "€ 0,00",
+    payer: "gratis",
+  },
+  {
+    label: "Hunter · fallback",
+    detail: "1 zoekopdracht, alleen als de site leeg is",
+    amount: formatEurFromCents(OUTREACH_RATES.hunterSearchCents),
+    payer: "onze stack",
+  },
+];
 
 export default async function OutreachKostenPage() {
   let summary: Awaited<ReturnType<typeof getUsageSummary>>;
@@ -51,32 +84,84 @@ export default async function OutreachKostenPage() {
       <SectionHeader
         eyebrow="Outreach"
         title="Kostmeter"
-        description="Tokens en API-verbruik van de outreach-tool. KvK-credits lopen via het Thuishaven-account; AI/Brevo via onze stack tot anders afgesproken."
+        description="Geschatte omvang van de hele doelgroep, wat dat kost, en wat een rits kost. KvK loopt via hun account; Apollo en Hunter via onze keys tot anders afgesproken."
         action={
-          <Link
-            href="/koppelingen"
-            className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
-          >
-            Koppelingen →
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/outreach/prospects"
+              className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
+            >
+              Lijst vullen →
+            </Link>
+            <Link
+              href="/koppelingen"
+              className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
+            >
+              Koppelingen →
+            </Link>
+          </div>
         }
       />
+
+      <DoelgroepUniverse />
+
+      <BatchCostPlanner />
+
+      <section className="mb-8 border border-border bg-surface p-4">
+        <h2 className="mb-1 font-display text-2xl tracking-[0.06em]">
+          Tarief per stap
+        </h2>
+        <p className="mb-4 text-sm text-text-muted">
+          Indicatie op huidige plannen. Apollo Basic rekenen we op ~€0,08 per
+          credit; Hunter Starter ~€0,09 per domain-search. KvK volgt hun
+          Developer Portal.
+        </p>
+        <ul className="divide-y divide-border text-sm">
+          {ritsRates.map((row) => (
+            <li
+              key={row.label}
+              className="flex flex-wrap items-start justify-between gap-3 py-3"
+            >
+              <div>
+                <p className="text-text">{row.label}</p>
+                <p className="text-xs text-text-muted">{row.detail}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <StatusBadge
+                  tone={
+                    row.payer === "hun factuur"
+                      ? "accent"
+                      : row.payer === "gratis"
+                        ? "neutral"
+                        : "info"
+                  }
+                >
+                  {row.payer}
+                </StatusBadge>
+                <p className="w-20 text-right font-display text-xs tracking-[0.08em] text-text">
+                  {row.amount}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <div className="stagger mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           label="Totaal · 30 dagen"
-          value={eurFromCents(summary.totalEurCents)}
+          value={formatEurFromCents(summary.totalEurCents)}
           accent
           hint="Geschat op basis van unit-prijzen"
         />
         <MetricCard
           label="Op hun account"
-          value={eurFromCents(summary.clientBilledEurCents)}
+          value={formatEurFromCents(summary.clientBilledEurCents)}
           hint="Nu: KvK credits"
         />
         <MetricCard
           label="Onze stack"
-          value={eurFromCents(summary.ourStackEurCents)}
+          value={formatEurFromCents(summary.ourStackEurCents)}
           hint="AI + Brevo + Places e.d."
         />
         <MetricCard
@@ -106,7 +191,7 @@ export default async function OutreachKostenPage() {
                     )}
                   </span>
                   <span className="font-display tracking-wide text-text">
-                    {eurFromCents(row.costEurCents)}
+                    {formatEurFromCents(row.costEurCents)}
                   </span>
                 </div>
                 <div className="h-2 bg-bg">
@@ -153,7 +238,7 @@ export default async function OutreachKostenPage() {
                     <p className="text-xs text-text-muted">{rate.note}</p>
                   </div>
                   <p className="shrink-0 font-display text-xs tracking-[0.08em] text-text-muted">
-                    {eurFromCents(rate.centsPerUnit)} / {rate.unitLabel}
+                    {formatEurFromCents(rate.centsPerUnit)} / {rate.unitLabel}
                   </p>
                 </li>
               ))}
@@ -200,7 +285,7 @@ export default async function OutreachKostenPage() {
                     {formatNumber(Math.round(e.units))} {e.unitLabel}
                   </td>
                   <td className="py-3 font-display tracking-wide">
-                    {eurFromCents(e.costEurCents)}
+                    {formatEurFromCents(e.costEurCents)}
                   </td>
                 </tr>
               ))}

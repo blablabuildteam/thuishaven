@@ -43,6 +43,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Ongeldige JSON" }, { status: 400 });
   }
 
+  json = normalizeInboundPayload(json);
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
@@ -77,10 +78,53 @@ export async function POST(request: Request) {
   return NextResponse.json(result, { status: 201 });
 }
 
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+/** Brevo inbound parse + generic mailbox-forward payloads. */
+function normalizeInboundPayload(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object") return raw;
+  const o = raw as Record<string, unknown>;
+  const item =
+    Array.isArray(o.items) && o.items[0] && typeof o.items[0] === "object"
+      ? (o.items[0] as Record<string, unknown>)
+      : o;
+  const from =
+    firstString(
+      o.fromEmail,
+      o.from,
+      o.From,
+      o.sender,
+      o.Sender,
+      item.From,
+      item.from,
+    ) ?? "";
+  const emailMatch = from.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return {
+    fromEmail: emailMatch?.[0] ?? from,
+    subject: firstString(o.subject, o.Subject, item.Subject, item.subject),
+    bodyPreview: firstString(
+      o.bodyPreview,
+      o.text,
+      o.TextBody,
+      o.ExtractedMarkdown,
+      item.TextBody,
+      item.text,
+    ),
+    outreachEmailId: o.outreachEmailId,
+    receivedAt: o.receivedAt,
+    skipLead: o.skipLead,
+  };
+}
+
 export async function GET() {
   return NextResponse.json({
     ok: true,
     service: "outreach-inbound-reply",
-    hint: "POST { fromEmail, subject?, bodyPreview?, outreachEmailId? }",
+    hint: "POST JSON (fromEmail/subject/body) of Brevo inbound-parse. Forward evenement@ hierheen.",
   });
 }

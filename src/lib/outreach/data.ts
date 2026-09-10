@@ -43,10 +43,12 @@ export type OutreachProspect = {
   doelgroepReason?: string;
   website?: string | null;
   nonMailing?: boolean;
+  decisionMaker?: string;
 };
 
 export type OutreachLead = {
   id: string;
+  prospectId?: string;
   companyName: string;
   summary: string | null;
   createdAt: string;
@@ -115,6 +117,12 @@ export async function listProspects(options?: {
         excludedReason: p.excludedReason,
         source,
         nonMailing: meta.nonMailing === true,
+        decisionMaker:
+          meta.decisionMaker &&
+          typeof meta.decisionMaker === "object" &&
+          typeof (meta.decisionMaker as { name?: string }).name === "string"
+            ? (meta.decisionMaker as { name: string }).name
+            : undefined,
         doelgroepFit:
           typeof meta.doelgroepFit === "string" ? meta.doelgroepFit : undefined,
         doelgroepReason:
@@ -189,6 +197,7 @@ export async function listLeads(): Promise<{
   const rows = await db
     .select({
       id: leads.id,
+      prospectId: leads.prospectId,
       summary: leads.summary,
       createdAt: leads.createdAt,
       notifiedAt: leads.notifiedAt,
@@ -203,6 +212,7 @@ export async function listLeads(): Promise<{
     source: "db",
     rows: rows.map((r) => ({
       id: r.id,
+      prospectId: r.prospectId,
       companyName: r.companyName,
       summary: r.summary,
       createdAt: r.createdAt.toISOString(),

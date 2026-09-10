@@ -1,21 +1,28 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { DOELGROEP } from "@/lib/outreach/doelgroep";
+import { formatEurFromCents, OUTREACH_RATES } from "@/lib/outreach/batch-costs";
+import { UNIVERSE } from "@/lib/outreach/universe";
 
 type Props = {
   pendingKvk: number;
   pendingEmail: number;
+  pendingPeople: number;
   apolloReady: boolean;
+  hunterReady: boolean;
   apolloNextPage: number;
 };
 
 export function DoelgroepActions({
   pendingKvk,
   pendingEmail,
+  pendingPeople,
   apolloReady,
+  hunterReady,
   apolloNextPage,
 }: Props) {
   const router = useRouter();
@@ -45,6 +52,31 @@ export function DoelgroepActions({
       }
       setOk(
         `${data.created ?? 0} nieuw · ${data.duplicate ?? 0} bestond al · ${data.total ?? 0} in Apollo`,
+      );
+      router.refresh();
+    });
+  }
+
+  function fillPeople() {
+    setError(null);
+    setOk(null);
+    startTransition(async () => {
+      const res = await fetch("/api/outreach/people", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ limit: 8 }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        filled?: number;
+        processed?: number;
+      };
+      if (!res.ok) {
+        setError(data.error ?? "Decision-makers zoeken mislukt");
+        return;
+      }
+      setOk(
+        `${data.filled ?? 0} personen · ${data.processed ?? 0} bedrijven (Apollo-credits)`,
       );
       router.refresh();
     });
@@ -109,7 +141,12 @@ export function DoelgroepActions({
       <p className="mt-2 text-sm text-text-muted">
         {DOELGROEP.minEmployees}–{DOELGROEP.maxEmployees} medewerkers ·{" "}
         {DOELGROEP.regionLabel} · {DOELGROEP.trigger}. Partnerbureaus horen
-        hier niet bij.
+        hier niet bij. Geschat {UNIVERSE.fitLow}–{UNIVERSE.fitHigh} bedrijven
+        in dit filter —{" "}
+        <Link href="/outreach/kosten" className="text-accent underline">
+          hele lijst en kosten
+        </Link>
+        .
       </p>
 
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
@@ -122,7 +159,7 @@ export function DoelgroepActions({
           </p>
           <p className="mt-2 text-xs text-text-dim">
             {apolloReady
-              ? "Key staat aan · 1 credit per 25 bedrijven (goedkoopste legale bron)."
+              ? "Key staat aan · 1 credit per 100 bedrijven."
               : "Nog geen APOLLO_API_KEY. Gratis Apollo-account → Settings → API → key in Vercel."}
           </p>
         </div>
@@ -145,8 +182,8 @@ export function DoelgroepActions({
           {pending
             ? "Bezig…"
             : apolloNextPage > 1
-              ? `Haal volgende 25 op (pagina ${apolloNextPage})`
-              : "Haal 25 bedrijven op"}
+              ? `Haal volgende 100 op (pagina ${apolloNextPage})`
+              : "Haal 100 bedrijven op"}
         </button>
         <button
           type="button"
@@ -165,10 +202,34 @@ export function DoelgroepActions({
         >
           Zoek 8 contactmails
           {pendingEmail ? ` (${pendingEmail} open)` : ""}
+          {hunterReady ? " · Hunter aan" : ""}
+        </button>
+        <button
+          type="button"
+          disabled={pending || pendingPeople === 0 || !apolloReady}
+          onClick={fillPeople}
+          className="border border-border bg-bg px-3 py-2 font-display text-sm tracking-[0.1em] disabled:opacity-60"
+        >
+          Zoek 8 contactpersonen
+          {pendingPeople ? ` (${pendingPeople} open)` : ""}
         </button>
         {ok ? <StatusBadge tone="success">{ok}</StatusBadge> : null}
         {error ? <StatusBadge tone="danger">{error}</StatusBadge> : null}
       </div>
+      <p className="mt-3 text-xs text-text-dim">
+        Deze knoppen: Apollo{" "}
+        {formatEurFromCents(OUTREACH_RATES.apolloCreditCents)} · KvK{" "}
+        {formatEurFromCents(
+          OUTREACH_RATES.kvkCallCents * OUTREACH_RATES.kvkCallsPerCompany,
+        )}
+        /bedrijf · Hunter{" "}
+        {formatEurFromCents(OUTREACH_RATES.hunterSearchCents)} als de site leeg
+        is · 8 personen ≈{" "}
+        {formatEurFromCents(OUTREACH_RATES.apolloCreditCents * 8)}.{" "}
+        <Link href="/outreach/kosten" className="text-accent underline">
+          Kostmeter
+        </Link>
+      </p>
     </div>
   );
 }

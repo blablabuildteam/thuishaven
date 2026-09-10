@@ -12,6 +12,8 @@ import {
   outreachEmails,
   prospects,
 } from "@/lib/db/schema";
+import { notifySalesTeam } from "@/lib/integrations/outreach";
+import { getOutreachTestRecipient } from "@/lib/outreach/send-policy";
 
 export type RecordInboundReplyInput = {
   fromEmail: string;
@@ -125,6 +127,52 @@ export async function recordInboundReply(
     row = byEmail;
   }
 
+  const fromDomain = fromEmail.split("@")[1] ?? "";
+  if (!row && fromDomain) {
+    const [byDomain] = await db
+      .select({
+        id: outreachEmails.id,
+        prospectId: outreachEmails.prospectId,
+        status: outreachEmails.status,
+        openedAt: outreachEmails.openedAt,
+        repliedAt: outreachEmails.repliedAt,
+        companyName: prospects.companyName,
+      })
+      .from(outreachEmails)
+      .innerJoin(prospects, eq(outreachEmails.prospectId, prospects.id))
+      .where(
+        sql`${outreachEmails.status} <> 'draft'
+          and ${prospects.website} is not null
+          and replace(replace(lower(${prospects.website}), 'https://', ''), 'http://', '')
+            like ${"%" + fromDomain + "%"}`,
+      )
+      .orderBy(sql`${outreachEmails.sentAt} desc nulls last`)
+      .limit(1);
+    row = byDomain;
+  }
+
+  if (!row && subject) {
+    const [bySubject] = await db
+      .select({
+        id: outreachEmails.id,
+        prospectId: outreachEmails.prospectId,
+        status: outreachEmails.status,
+        openedAt: outreachEmails.openedAt,
+        repliedAt: outreachEmails.repliedAt,
+        companyName: prospects.companyName,
+      })
+      .from(outreachEmails)
+      .innerJoin(prospects, eq(outreachEmails.prospectId, prospects.id))
+      .where(
+        sql`${outreachEmails.status} <> 'draft'
+          and length(${prospects.companyName}) > 3
+          and ${subject} ilike '%' || ${prospects.companyName} || '%'`,
+      )
+      .orderBy(sql`${outreachEmails.sentAt} desc nulls last`)
+      .limit(1);
+    row = bySubject;
+  }
+
   if (!row) {
     return { ok: true, matched: false, reason: "no_matching_mail" };
   }
@@ -202,6 +250,19 @@ export async function recordInboundReply(
         summary,
       });
       leadCreated = true;
+      const testTo = getOutreachTestRecipient().toLowerCase();
+      const skipNotify =
+        fromEmail === testTo || fromEmail.endsWith("@blablabuild.com");
+      if (!skipNotify) {
+        await notifySalesTeam({
+          companyName: row.companyName,
+          summary,
+          email: fromEmail,
+          prospectId: row.prospectId,
+          outreachEmailId: row.id,
+          persistLead: false,
+        });
+      }
     }
   }
 

@@ -109,7 +109,7 @@ export function getLivePipelineStages(): PipelineStage[] {
         status: "partial",
         missing: [],
         description:
-          "Apollo-key staat aan. Haal 25 bedrijven per keer via /outreach/prospects.",
+          "Apollo-key staat aan. Haal 100 bedrijven per keer via /outreach/prospects.",
       };
     }
     if (stage.id === "enrich" && hasKvkConfig()) {

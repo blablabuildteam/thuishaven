@@ -35,7 +35,7 @@ export const UNIT_COST_EUR_CENTS: Record<
   kvk: {
     unitLabel: "API-call",
     centsPerUnit: 2, // €0.02 — placeholder tot hun tarief bekend is
-    note: "Credits op Thuishaven KvK-account; tarief bevestigen",
+    note: "3 calls per bedrijf ≈ €0,06 · credits op hun KvK-account",
   },
   google_places: {
     unitLabel: "zoekopdracht",
@@ -43,9 +43,9 @@ export const UNIT_COST_EUR_CENTS: Record<
     note: "Places Text Text-schatting",
   },
   enrichment: {
-    unitLabel: "lookup",
-    centsPerUnit: 5,
-    note: "Afhankelijk van partner (Apollo/Hunter/…)",
+    unitLabel: "credit",
+    centsPerUnit: 8,
+    note: "Apollo ~€0,08 / credit · Hunter ~€0,09 / zoekopdracht",
   },
   other: {
     unitLabel: "eenheid",

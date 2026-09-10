@@ -5,6 +5,7 @@
 import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { prospects } from "@/lib/db/schema";
+import { findHunterDomainEmail, hasHunterConfig } from "@/lib/integrations/hunter/client";
 
 const PATHS = ["/", "/contact", "/contact-ons", "/nl/contact", "/over-ons", "/about"];
 const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
@@ -161,8 +162,15 @@ export async function fillCompanyWebsiteEmails(limit = 8): Promise<{
 
   for (const target of targets) {
     if (!target.website) continue;
-    const hit = await findPublicCompanyEmail(target.website);
+    let hit = await findPublicCompanyEmail(target.website);
     const meta = { ...(target.metadata ?? {}) };
+    if (!hit && hasHunterConfig()) {
+      const hunter = await findHunterDomainEmail(target.website);
+      if (hunter.ok && hunter.email) {
+        hit = { email: hunter.email, sourceUrl: "hunter.io" };
+        meta.emailSource = "hunter";
+      }
+    }
     if (!hit) {
       meta.websiteEmailFails =
         typeof meta.websiteEmailFails === "number"
@@ -177,7 +185,9 @@ export async function fillCompanyWebsiteEmails(limit = 8): Promise<{
         id: target.id,
         companyName: target.companyName,
         ok: false,
-        error: "Geen events@ / info@ op de site",
+        error: hasHunterConfig()
+          ? "Geen events@ op de site, Hunter ook leeg"
+          : "Geen events@ / info@ op de site",
       });
       continue;
     }

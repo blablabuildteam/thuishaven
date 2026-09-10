@@ -250,12 +250,24 @@ export const INTEGRATIONS: IntegrationDef[] = [
     name: "Apollo doelgroep",
     tool: "outreach",
     description:
-      "Doelgroep ophalen: 500–5.000 medewerkers, HQ Amsterdam + ~50 km. Key staat in Vercel. 1 credit per 25 bedrijven.",
+      "Doelgroep ophalen: 500–5.000 medewerkers, HQ Amsterdam + ~50 km. Key staat in Vercel. 1 credit per 100 bedrijven.",
     envKeys: ["APOLLO_API_KEY"],
     askFromClient: ["Apollo API-key (staat in Vercel)"],
     verifyHint: "auth/health — geen search-credits",
     docsUrl: "https://developer.apollo.io/",
     priority: "critical",
+  },
+  {
+    id: "hunter",
+    name: "Hunter",
+    tool: "outreach",
+    description:
+      "Fallback als de bedrijfswebsite geen events@ / info@ heeft. Domain-search, geen scrape.",
+    envKeys: ["HUNTER_API_KEY"],
+    askFromClient: ["Hunter API-key als website-mail te vaak leeg blijft"],
+    verifyHint: "GET /v2/account — geen zoekcredits",
+    docsUrl: "https://hunter.io/api-documentation/v2",
+    priority: "high",
   },
   {
     id: "sales_notify",
@@ -320,7 +332,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     name: "Enrichment API",
     tool: "outreach",
     description:
-      "Hunter/Clearbit later, als websites geen events@ hebben. Apollo is de intake.",
+      "Oude generic-key. Hunter staat als aparte bron; deze laten we uit.",
     envKeys: ["ENRICHMENT_API_KEY"],
     askFromClient: [],
     verifyHint: "Niet nodig voor de eerste run",

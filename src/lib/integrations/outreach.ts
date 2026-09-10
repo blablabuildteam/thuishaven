@@ -457,14 +457,13 @@ export async function notifySalesTeam(input: {
   email?: string;
   prospectId?: string;
   outreachEmailId?: string;
+  persistLead?: boolean;
 }): Promise<{ ok: boolean; error?: string; testMode?: boolean }> {
   const blocked = outreachTestSendBlockReason();
   if (blocked) return { ok: false, error: blocked };
 
-  // Persist lead even when notify mail is blocked? No — full notify path locked.
-  // Still allow DB lead create without mail when unlocked below.
   const key = getOutreachBrevoKey();
-  if (!key) return { ok: false, error: "BREVO_OUTREACH_API_KEY ontbreekt" };
+  if (!key) return { ok: false, error: "BREVO_API_KEY ontbreekt" };
 
   const recipients = salesNotifyRecipients();
   const resolved = resolveOutreachRecipients(recipients);
@@ -513,12 +512,19 @@ export async function notifySalesTeam(input: {
 
   if (hasDatabase() && input.prospectId) {
     const db = getDb();
-    await db.insert(leads).values({
-      prospectId: input.prospectId,
-      outreachEmailId: input.outreachEmailId,
-      summary: input.summary,
-      notifiedAt: new Date(),
-    });
+    if (input.persistLead !== false) {
+      await db.insert(leads).values({
+        prospectId: input.prospectId,
+        outreachEmailId: input.outreachEmailId,
+        summary: input.summary,
+        notifiedAt: new Date(),
+      });
+    } else {
+      await db
+        .update(leads)
+        .set({ notifiedAt: new Date() })
+        .where(eq(leads.prospectId, input.prospectId));
+    }
     await db
       .update(prospects)
       .set({ status: "lead", updatedAt: new Date() })
@@ -567,9 +573,14 @@ export async function generateAndStoreDraft(input: {
       : await getAgencyCampaignId();
   if (!campaignId) return { error: "Geen campagne gevonden" };
 
+  const dm =
+    meta.decisionMaker && typeof meta.decisionMaker === "object"
+      ? (meta.decisionMaker as { name?: string })
+      : null;
   const generated = await generateOutreachEmail({
     type: prospect.type,
     companyName: prospect.companyName,
+    contactName: dm?.name,
     sector: prospect.sector ?? undefined,
     anniversaryYears: prospect.anniversaryYears ?? undefined,
     variantId: input.variantId,
