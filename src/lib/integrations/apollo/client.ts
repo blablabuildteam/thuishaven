@@ -169,7 +169,8 @@ export async function searchDecisionMakers(input: {
   if (domain) body.q_organization_domains_list = [domain];
   else body.q_organization_name = input.companyName;
 
-  const res = await fetch("https://api.apollo.io/api/v1/mixed_people/search", {
+  // New People API search (0 credits) — returns obfuscated last names, no emails.
+  const res = await fetch("https://api.apollo.io/api/v1/mixed_people/api_search", {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -184,12 +185,15 @@ export async function searchDecisionMakers(input: {
     error?: string;
     message?: string;
     people?: Array<{
+      id?: string;
       name?: string;
       first_name?: string;
       last_name?: string;
+      last_name_obfuscated?: string;
       title?: string;
       email?: string;
       linkedin_url?: string;
+      has_email?: boolean;
     }>;
   };
 
@@ -206,21 +210,96 @@ export async function searchDecisionMakers(input: {
     vendor: "enrichment",
     operation: "apollo_people_search",
     units: 1,
-    unitLabel: "credit",
-    costEurCents: OUTREACH_RATES.apolloCreditCents,
-    meta: { companyName: input.companyName },
+    unitLabel: "search",
+    costEurCents: 0,
+    meta: { companyName: input.companyName, endpoint: "api_search" },
   }).catch(() => undefined);
 
-  const people = (json.people ?? [])
-    .map((p) => ({
-      name:
-        p.name?.trim() ||
-        [p.first_name, p.last_name].filter(Boolean).join(" ").trim(),
-      title: p.title ?? undefined,
-      email: p.email && p.email.includes("@") ? p.email : undefined,
-      linkedinUrl: p.linkedin_url ?? undefined,
-    }))
-    .filter((p) => p.name);
+  const candidates = [...(json.people ?? [])].sort((a, b) => {
+    const ae = a.has_email === true ? 0 : 1;
+    const be = b.has_email === true ? 0 : 1;
+    return ae - be;
+  });
+
+  const people: ApolloPerson[] = [];
+  const top = candidates[0];
+  if (top?.id) {
+    const enriched = await enrichApolloPerson(key, top.id);
+    if (enriched) people.push(enriched);
+  }
+
+  if (people.length === 0) {
+    for (const raw of candidates.slice(0, 3)) {
+      const parts = [raw.first_name, raw.last_name]
+        .map((s) => (typeof s === "string" ? s.trim() : ""))
+        .filter((s) => s && s.toLowerCase() !== "undefined");
+      const name = raw.name?.trim() || parts.join(" ").trim();
+      if (name.length >= 2) {
+        people.push({
+          name,
+          title: raw.title ?? undefined,
+          email: raw.email && raw.email.includes("@") ? raw.email : undefined,
+          linkedinUrl: raw.linkedin_url ?? undefined,
+        });
+      }
+    }
+  }
 
   return { ok: true, people };
+}
+
+/** Unlock full name + work email for a person id from api_search (uses credits). */
+async function enrichApolloPerson(
+  key: string,
+  personId: string,
+): Promise<ApolloPerson | null> {
+  const res = await fetch("https://api.apollo.io/api/v1/people/match", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "cache-control": "no-cache",
+      "x-api-key": key,
+    },
+    body: JSON.stringify({ id: personId }),
+    cache: "no-store",
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    message?: string;
+    person?: {
+      name?: string;
+      first_name?: string;
+      last_name?: string;
+      title?: string;
+      email?: string;
+      linkedin_url?: string;
+    };
+  };
+  if (!res.ok || !json.person) return null;
+
+  void recordUsage({
+    tool: "outreach",
+    vendor: "enrichment",
+    operation: "apollo_people_match",
+    units: 1,
+    unitLabel: "credit",
+    costEurCents: OUTREACH_RATES.apolloCreditCents,
+    meta: { personId },
+  }).catch(() => undefined);
+
+  const p = json.person;
+  const name =
+    p.name?.trim() ||
+    [p.first_name, p.last_name]
+      .map((s) => (typeof s === "string" ? s.trim() : ""))
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+  if (!name) return null;
+  return {
+    name,
+    title: p.title ?? undefined,
+    email: p.email && p.email.includes("@") ? p.email : undefined,
+    linkedinUrl: p.linkedin_url ?? undefined,
+  };
 }
