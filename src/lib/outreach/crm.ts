@@ -75,7 +75,16 @@ export type CrmRecord = {
   kvkHeadcountOff: boolean;
   decisionMakerName?: string;
   decisionMakerTitle?: string;
+  decisionMakerEmail?: string;
   decisionMakerEmailSource?: string;
+  decisionMakerLinkedin?: string;
+  contacts: Array<{
+    name: string;
+    title?: string;
+    email?: string;
+    linkedinUrl?: string;
+  }>;
+  kvkMatchWeak: boolean;
   /** Missing pieces for enrichment. */
   incomplete: boolean;
 };
@@ -149,6 +158,48 @@ function mapRecord(
     typeof (meta.decisionMaker as { name?: string }).name === "string"
       ? (meta.decisionMaker as { name: string }).name
       : undefined;
+  const decisionMakerTitle =
+    meta.decisionMaker &&
+    typeof meta.decisionMaker === "object" &&
+    typeof (meta.decisionMaker as { title?: string }).title === "string"
+      ? (meta.decisionMaker as { title: string }).title
+      : undefined;
+  const decisionMakerEmail =
+    meta.decisionMaker &&
+    typeof meta.decisionMaker === "object" &&
+    typeof (meta.decisionMaker as { email?: string }).email === "string" &&
+    (meta.decisionMaker as { email: string }).email.includes("@")
+      ? (meta.decisionMaker as { email: string }).email
+      : undefined;
+  const decisionMakerLinkedin =
+    meta.decisionMaker &&
+    typeof meta.decisionMaker === "object" &&
+    typeof (meta.decisionMaker as { linkedinUrl?: string }).linkedinUrl ===
+      "string"
+      ? (meta.decisionMaker as { linkedinUrl: string }).linkedinUrl
+      : undefined;
+  const contactsRaw = Array.isArray(meta.contacts) ? meta.contacts : [];
+  let contacts = contactsRaw
+    .filter((c): c is Record<string, unknown> => Boolean(c) && typeof c === "object")
+    .map((c) => ({
+      name: typeof c.name === "string" ? c.name : "",
+      title: typeof c.title === "string" ? c.title : undefined,
+      email:
+        typeof c.email === "string" && c.email.includes("@")
+          ? c.email
+          : undefined,
+      linkedinUrl:
+        typeof c.linkedinUrl === "string" ? c.linkedinUrl : undefined,
+    }))
+    .filter((c) => c.name.length >= 2);
+  if (contacts.length === 0 && decisionMakerName) {
+    contacts.push({
+      name: decisionMakerName,
+      title: decisionMakerTitle,
+      email: decisionMakerEmail,
+      linkedinUrl: decisionMakerLinkedin,
+    });
+  }
   const incomplete =
     !p.email ||
     fitCount == null ||
@@ -192,12 +243,8 @@ function mapRecord(
     lastTouchAt: extras.lastTouchAt,
     linkedinUrl: p.linkedinUrl,
     decisionMakerName,
-    decisionMakerTitle:
-      meta.decisionMaker &&
-      typeof meta.decisionMaker === "object" &&
-      typeof (meta.decisionMaker as { title?: string }).title === "string"
-        ? (meta.decisionMaker as { title: string }).title
-        : undefined,
+    decisionMakerTitle,
+    decisionMakerEmail,
     decisionMakerEmailSource:
       meta.decisionMaker &&
       typeof meta.decisionMaker === "object" &&
@@ -207,9 +254,12 @@ function mapRecord(
         : typeof meta.emailSource === "string"
           ? meta.emailSource
           : undefined,
+    decisionMakerLinkedin,
+    contacts,
     kvkHeadcountOff: kvkHeadcountLooksOff(
       kvkEmployeeCount ?? p.employeeCount,
     ),
+    kvkMatchWeak: meta.kvkMatchWeak === true,
     incomplete,
   };
 }

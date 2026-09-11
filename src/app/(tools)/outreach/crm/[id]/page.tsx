@@ -307,25 +307,44 @@ export default async function CrmDossierPage({
           </section>
           <section className="border border-border bg-surface p-4 text-sm text-text-muted">
             <h2 className="mb-3 font-display text-xl tracking-[0.06em] text-text">
-              Contact
+              Contactpersonen
             </h2>
-            <p>
-              Contactpersoon:{" "}
-              {dossier.decisionMakerName
-                ? `${dossier.decisionMakerName}${
-                    dossier.decisionMakerTitle
-                      ? ` · ${dossier.decisionMakerTitle}`
-                      : ""
-                  }`
-                : "nog niet"}
-            </p>
-            <p className="mt-1">
-              E-mail: {dossier.email ?? "nog niet"}
-              {dossier.decisionMakerEmailSource
-                ? ` · via ${dossier.decisionMakerEmailSource}`
-                : ""}
-            </p>
-            <p className="mt-1">
+            {dossier.contacts.length > 0 ? (
+              <ul className="space-y-3">
+                {dossier.contacts.map((c) => (
+                  <li key={`${c.name}-${c.title ?? ""}`}>
+                    <p className="font-medium text-text">{c.name}</p>
+                    <p className="text-xs">
+                      {[c.title, c.email ?? "geen e-mail"]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                    {c.linkedinUrl ? (
+                      <a
+                        href={c.linkedinUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-accent underline"
+                      >
+                        LinkedIn
+                      </a>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>
+                Nog geen Event/Office Manager. Haal ze op via{" "}
+                <Link
+                  href="/outreach/lijst-bijwerken"
+                  className="text-accent underline"
+                >
+                  Lijst bijwerken → stap 3
+                </Link>
+                .
+              </p>
+            )}
+            <p className="mt-3">
               Website:{" "}
               {dossier.website ? (
                 <a
@@ -340,6 +359,11 @@ export default async function CrmDossierPage({
                 "—"
               )}
             </p>
+            {dossier.kvkMatchWeak ? (
+              <p className="mt-3 text-warn">
+                KvK-naammatch twijfelachtig — check KvK-nummer op het dossier.
+              </p>
+            ) : null}
             {dossier.lastLead ? (
               <p className="mt-3 text-text">{dossier.lastLead.summary}</p>
             ) : null}

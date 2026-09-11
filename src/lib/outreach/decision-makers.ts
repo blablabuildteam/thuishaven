@@ -134,17 +134,33 @@ export async function fillDecisionMakers(limit = 8): Promise<{
 
     const person = found.people[0]!;
     const resolved = await resolvePersonEmail(person, target);
-    const dm: DecisionMaker = {
-      name: person.name,
-      title: person.title,
-      email: resolved.email,
-      linkedinUrl: person.linkedinUrl,
-      source: "apollo",
-      emailSource: resolved.emailSource,
-      hunterScore: resolved.hunterScore,
-    };
+    const contacts: DecisionMaker[] = [];
+    for (let i = 0; i < found.people.length; i++) {
+      const p = found.people[i]!;
+      const emailResolved =
+        i === 0
+          ? resolved
+          : p.email?.includes("@")
+            ? { email: p.email, emailSource: "apollo" as const }
+            : {};
+      contacts.push({
+        name: p.name,
+        title: p.title,
+        email: emailResolved.email,
+        linkedinUrl: p.linkedinUrl,
+        source: "apollo",
+        emailSource: emailResolved.emailSource,
+        hunterScore: i === 0 ? resolved.hunterScore : undefined,
+      });
+    }
+    // Primary: prefer someone with email, else first (usually Event Manager).
+    const primary =
+      contacts.find((c) => c.email?.includes("@")) ?? contacts[0]!;
+    const dm: DecisionMaker = primary;
     meta.decisionMaker = dm;
+    meta.contacts = contacts;
     meta.decisionMakerAt = new Date().toISOString();
+    meta.peopleEnrichedAt = new Date().toISOString();
     if (resolved.emailSource === "hunter") {
       meta.emailSource = "hunter";
     }

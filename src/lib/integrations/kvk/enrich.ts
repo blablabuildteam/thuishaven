@@ -15,6 +15,10 @@ import {
 import { candidateFromProfiles } from "./discovery";
 import type { KvkProspectCandidate } from "./types";
 import {
+  KVK_MATCH_WEAK_THRESHOLD,
+  scoreCompanyNameMatch,
+} from "./match";
+import {
   cityForFit,
   employeeCountForFit,
   preferRegionCity,
@@ -27,7 +31,14 @@ export type EnrichKvkInput = {
 };
 
 export type EnrichKvkResult =
-  | { ok: true; candidate: KvkProspectCandidate; matches: number }
+  | {
+      ok: true;
+      candidate: KvkProspectCandidate;
+      matches: number;
+      matchScore: number;
+      matchExact: boolean;
+      matchWeak: boolean;
+    }
   | { ok: false; error: string };
 
 function digitsOnly(value: string): string {
@@ -65,16 +76,26 @@ export async function enrichKnownCompany(
     });
     if (zoek.error) return { ok: false, error: zoek.error };
     const hits = zoek.data?.resultaten ?? [];
-    const exact = hits.find(
-      (h) => h.naam?.trim().toLowerCase() === naam.toLowerCase(),
-    );
-    const hit = exact ?? hits[0];
-    if (!hit?.kvkNummer) {
+    const ranked = hits
+      .filter((h) => h.kvkNummer && h.naam)
+      .map((h) => ({
+        hit: h,
+        ...scoreCompanyNameMatch(naam, h.naam!),
+      }))
+      .sort((a, b) => b.score - a.score);
+    const best = ranked[0];
+    if (!best?.hit.kvkNummer) {
       return { ok: false, error: "Geen KvK-treffer op deze bedrijfsnaam." };
     }
-    kvk = hit.kvkNummer;
-    vestigingsnummer = hit.vestigingsnummer;
-    zoekHit = hit;
+    if (best.score < 0.35) {
+      return {
+        ok: false,
+        error: `KvK-treffer twijfelachtig (“${best.hit.naam}” ≠ “${naam}”). Vul een KvK-nummer in.`,
+      };
+    }
+    kvk = best.hit.kvkNummer;
+    vestigingsnummer = best.hit.vestigingsnummer;
+    zoekHit = best.hit;
   }
 
   const basis = await kvkBasisprofiel(kvk);
@@ -106,16 +127,24 @@ export async function enrichKnownCompany(
     return { ok: false, error: "KvK-profiel kon niet worden omgezet." };
   }
 
+  const nameCheck = naam
+    ? scoreCompanyNameMatch(naam, candidate.companyName)
+    : { score: 1, exact: true };
+
   return {
     ok: true,
     candidate,
     matches: zoekHit ? 1 : 1,
+    matchScore: nameCheck.score,
+    matchExact: nameCheck.exact,
+    matchWeak: nameCheck.score < KVK_MATCH_WEAK_THRESHOLD,
   };
 }
 
 export async function applyKvkCandidateToProspect(
   prospectId: string,
   candidate: KvkProspectCandidate,
+  match?: { score: number; exact: boolean; weak: boolean },
 ): Promise<{ ok: true; prospectId: string } | { ok: false; error: string }> {
   if (!hasDatabase()) return { ok: false, error: "Geen database" };
 
@@ -133,11 +162,21 @@ export async function applyKvkCandidateToProspect(
   meta.vestigingsnummer = candidate.vestigingsnummer ?? meta.vestigingsnummer;
   meta.sbiCode = candidate.sbiCode ?? meta.sbiCode;
   meta.nonMailing = candidate.nonMailing;
+  /** Vestiging-headcount is indicatief — niet leidend voor fit. */
   if (candidate.employeeCount != null) {
     meta.kvkVestigingEmployees = candidate.employeeCount;
   }
   if (candidate.city) {
     meta.kvkCity = candidate.city;
+  }
+  if (candidate.foundedAt) {
+    meta.kvkFoundedAt = candidate.foundedAt;
+  }
+  if (match) {
+    meta.kvkMatchScore = match.score;
+    meta.kvkMatchExact = match.exact;
+    meta.kvkMatchWeak = match.weak;
+    meta.kvkMatchedName = candidate.companyName;
   }
   const apolloEstimate =
     typeof meta.apolloEmployeeCount === "number"
@@ -148,8 +187,7 @@ export async function applyKvkCandidateToProspect(
   const apolloCity =
     typeof meta.apolloCity === "string"
       ? meta.apolloCity
-      : // Oudere Apollo-rijen: city vóór KvK was vaak de Apollo-plaats.
-        null;
+      : null;
   if (!meta.apolloCity && row.city && !candidate.city) {
     meta.apolloCity = row.city;
   } else if (
@@ -158,7 +196,6 @@ export async function applyKvkCandidateToProspect(
     candidate.city &&
     row.city !== candidate.city
   ) {
-    // Bewaar eerdere plaats als Apollo-signaal als die in de regio lag.
     meta.apolloCity = row.city;
   }
 
@@ -170,7 +207,6 @@ export async function applyKvkCandidateToProspect(
     apolloCity: (meta.apolloCity as string | undefined) ?? apolloCity,
     kvkCity: candidate.city,
   });
-  // Display city: regio-voorkeur, anders Apollo, anders KvK.
   const city =
     preferRegionCity(
       typeof meta.apolloCity === "string" ? meta.apolloCity : row.city,
@@ -182,6 +218,9 @@ export async function applyKvkCandidateToProspect(
   });
   meta.doelgroepFit = scored.fit;
   const bits = [scored.reason];
+  if (match?.weak) {
+    bits.unshift(`KvK-match twijfelachtig (${candidate.companyName})`);
+  }
   if (
     apolloEstimate != null &&
     candidate.employeeCount != null &&
@@ -208,6 +247,7 @@ export async function applyKvkCandidateToProspect(
     .set({
       kvkNumber: candidate.kvkNumber,
       sector: candidate.sector ?? row.sector,
+      // Bewaar fit-headcount; overschrijf niet met pure KvK-vestiging.
       employeeCount: employeeCount ?? row.employeeCount,
       city,
       foundedAt: candidate.foundedAt

@@ -70,7 +70,11 @@ export async function enrichCompanyProspectsBatch(limit = 10): Promise<{
       continue;
     }
 
-    const applied = await applyKvkCandidateToProspect(target.id, found.candidate);
+    const applied = await applyKvkCandidateToProspect(target.id, found.candidate, {
+      score: found.matchScore,
+      exact: found.matchExact,
+      weak: found.matchWeak,
+    });
     if (!applied.ok) {
       await markKvkFail(target.id, applied.error ?? "Toepassen mislukt");
       rows.push({

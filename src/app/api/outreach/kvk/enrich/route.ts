@@ -82,6 +82,11 @@ export async function POST(request: Request) {
   const applied = await applyKvkCandidateToProspect(
     prospectMatch.id,
     result.candidate,
+    {
+      score: result.matchScore,
+      exact: result.matchExact,
+      weak: result.matchWeak,
+    },
   );
   if (!applied.ok) {
     return NextResponse.json(applied, { status: 400 });

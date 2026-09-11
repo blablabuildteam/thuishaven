@@ -32,6 +32,16 @@ type CrmRow = {
   source?: string;
   doelgroepReason?: string;
   decisionMakerName?: string;
+  decisionMakerTitle?: string;
+  decisionMakerEmail?: string;
+  decisionMakerLinkedin?: string;
+  contacts: Array<{
+    name: string;
+    title?: string;
+    email?: string;
+    linkedinUrl?: string;
+  }>;
+  kvkMatchWeak?: boolean;
 };
 
 type Angle = {
@@ -335,6 +345,7 @@ export function CrmCompaniesTable({ rows }: Props) {
             <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
               <tr>
                 <th className="px-4 py-3 font-medium">Bedrijf</th>
+                <th className="px-4 py-3 font-medium">Contact</th>
                 <th className="px-4 py-3 font-medium">Mailkans</th>
                 <th className="px-4 py-3 font-medium">Mdw</th>
                 <th className="px-4 py-3 font-medium">Jubileum</th>
@@ -362,15 +373,45 @@ export function CrmCompaniesTable({ rows }: Props) {
                       {!row.inRegion && (row.city || row.kvkCity || row.apolloCity)
                         ? " · buiten regio"
                         : ""}
-                      {row.email ? ` · ${row.email}` : " · geen e-mail"}
                       {` · ${sourceLabel(row.source)}`}
+                      {row.kvkMatchWeak ? " · KvK-match checken" : ""}
                     </p>
+                  </td>
+                  <td className="px-4 py-3">
+                    {row.contacts?.length || row.decisionMakerName ? (
+                      <div className="space-y-1.5">
+                        {(row.contacts?.length
+                          ? row.contacts
+                          : [
+                              {
+                                name: row.decisionMakerName!,
+                                title: row.decisionMakerTitle,
+                                email: row.decisionMakerEmail,
+                                linkedinUrl: row.decisionMakerLinkedin,
+                              },
+                            ]
+                        ).slice(0, 3).map((c) => (
+                          <div key={`${c.name}-${c.title ?? ""}`}>
+                            <p className="text-sm text-text">{c.name}</p>
+                            <p className="text-xs text-text-dim">
+                              {[c.title, c.email ?? "geen mail"]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-text-dim">
+                        Nog geen contact — stap 3 Lijst bijwerken
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge tone={angleTone(angle.id)}>
                       {angle.label}
                     </StatusBadge>
-                    <p className="mt-1 max-w-[220px] text-xs text-text-dim">
+                    <p className="mt-1 max-w-[200px] text-xs text-text-dim">
                       {angle.detail}
                     </p>
                   </td>

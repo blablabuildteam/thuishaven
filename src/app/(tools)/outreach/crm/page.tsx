@@ -91,21 +91,23 @@ export default async function OutreachCrmPage() {
 
       <div className="mb-6 space-y-2 border border-border bg-surface px-4 py-3 text-sm text-text-muted">
         <p>
-          <strong className="text-text">Waar komen bedrijven vandaan?</strong>{" "}
-          Vooral via <em>Lijst bijwerken</em> (Apollo: midgroot + AMS-regio),
-          plus handmatige namen. Uitsluitingen staan apart onderaan.
+          <strong className="text-text">KvK</strong> gebruiken we vooral voor{" "}
+          <em>oprichtingsdatum</em> (jubileum), KvK-nummer, non-mailing,
+          website/SBI en vestigingsplaats. Medewerkers-aantal uit KvK is alleen
+          vestiging — niet leidend. Matches worden op naam gescoord; twijfel =
+          flag.
         </p>
         <p>
-          <strong className="text-text">Medewerkers:</strong> Apollo =
-          concern-schatting (voorkeur). KvK = vaak alleen de vestiging (soms
-          5–20). Lage KvK telt <em>niet</em> meer als “te klein / past niet” —
-          die worden “Onvolledig” tot er een Apollo- of handmatige schatting is.
+          <strong className="text-text">Medewerkers:</strong> beste bron hier is{" "}
+          <em>Apollo</em> (LinkedIn-achtige concern-schatting). Officiële
+          LinkedIn Company API hebben we niet; op het dossier kun je handmatig
+          een LinkedIn-schatting zetten.
         </p>
         <p>
-          <strong className="text-text">Buiten Amsterdam:</strong> Apollo’s
-          plaatsfilter is zacht; oude rijen zonder hard-filter zitten er nog in.
-          Nieuwe batches skippen bekende buiten-plaatsen. Filter op{" "}
-          <em>Buiten</em> of vul KvK/Apollo-plaats aan.
+          <strong className="text-text">Contacten:</strong> Apollo zoekt Event /
+          Office / Facilities Manager (+ Hunter voor mail). Kolom{" "}
+          <em>Contact</em> toont tot 3 personen — anders eerst stap 3 op Lijst
+          bijwerken.
         </p>
       </div>
 

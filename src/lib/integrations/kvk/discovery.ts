@@ -185,7 +185,7 @@ export function candidateFromProfiles(input: {
     employeeCount: input.vestiging?.totaalWerkzamePersonen,
     foundedAt: founded?.toISOString().slice(0, 10),
     anniversaryYears: founded
-      ? matchingJubilee(founded) ?? anniversaryYearsAt(founded) ?? undefined
+      ? anniversaryYearsAt(founded) ?? undefined
       : undefined,
     sector,
     sbiCode,

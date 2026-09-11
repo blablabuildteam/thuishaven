@@ -377,8 +377,9 @@ export function ListFillWorkbench({
           Bedrijfsgegevens aanvullen
         </h2>
         <p className="mt-2 max-w-2xl text-sm text-text-muted">
-          Haalt KvK-info op: plaats, medewerkers, jubileum. Bedrijven die al
-          “past niet” scoren, worden overgeslagen.
+          Haalt bij KvK vooral oprichtingsdatum (jubileum), KvK-nummer,
+          non-mailing en plaats. Vestiging-medewerkers zijn alleen ter info —
+          niet leidend voor fit. Twijfelachtige naammatch wordt gemarkeerd.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button
@@ -421,8 +422,9 @@ export function ListFillWorkbench({
           E-mailadressen zoeken
         </h2>
         <p className="mt-2 max-w-2xl text-sm text-text-muted">
-          Zoekt eerst de Event / Office Manager, daarna hun e-mail. Als dat niet
-          lukt: generiek adres van de website (events@ / info@).
+          Zoekt Event / Office / Facilities Manager via Apollo (tot 3
+          contactopties per bedrijf). Daarna e-mail via Apollo of Hunter. Die
+          personen verschijnen in de CRM-kolom Contact.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button

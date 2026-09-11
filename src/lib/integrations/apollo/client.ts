@@ -237,32 +237,40 @@ export async function searchDecisionMakers(input: {
   }).catch(() => undefined);
 
   const candidates = [...(json.people ?? [])].sort((a, b) => {
+    const titleScore = (t?: string) => {
+      const s = (t ?? "").toLowerCase();
+      if (s.includes("event")) return 0;
+      if (s.includes("office") || s.includes("facilit")) return 1;
+      if (s.includes("workplace") || s.includes("people")) return 2;
+      return 3;
+    };
     const ae = a.has_email === true ? 0 : 1;
     const be = b.has_email === true ? 0 : 1;
-    return ae - be;
+    return ae - be || titleScore(a.title) - titleScore(b.title);
   });
 
   const people: ApolloPerson[] = [];
-  const top = candidates[0];
-  if (top?.id) {
-    const enriched = await enrichApolloPerson(key, top.id);
-    if (enriched) people.push(enriched);
-  }
-
-  if (people.length === 0) {
-    for (const raw of candidates.slice(0, 3)) {
-      const parts = [raw.first_name, raw.last_name]
-        .map((s) => (typeof s === "string" ? s.trim() : ""))
-        .filter((s) => s && s.toLowerCase() !== "undefined");
-      const name = raw.name?.trim() || parts.join(" ").trim();
-      if (name.length >= 2) {
-        people.push({
-          name,
-          title: raw.title ?? undefined,
-          email: raw.email && raw.email.includes("@") ? raw.email : undefined,
-          linkedinUrl: raw.linkedin_url ?? undefined,
-        });
+  // Unlock #1 fully (credit). Keep 2 more from search as contact-opties (naam/titel/LI).
+  for (let i = 0; i < Math.min(candidates.length, 3); i++) {
+    const raw = candidates[i]!;
+    if (i === 0 && raw.id) {
+      const enriched = await enrichApolloPerson(key, raw.id);
+      if (enriched) {
+        people.push(enriched);
+        continue;
       }
+    }
+    const parts = [raw.first_name, raw.last_name]
+      .map((s) => (typeof s === "string" ? s.trim() : ""))
+      .filter((s) => s && s.toLowerCase() !== "undefined");
+    const name = raw.name?.trim() || parts.join(" ").trim();
+    if (name.length >= 2) {
+      people.push({
+        name,
+        title: raw.title ?? undefined,
+        email: raw.email && raw.email.includes("@") ? raw.email : undefined,
+        linkedinUrl: raw.linkedin_url ?? undefined,
+      });
     }
   }
 
