@@ -17,8 +17,10 @@ import {
 } from "@/lib/integrations/apollo/criteria";
 import { addProspects } from "@/lib/outreach/intake";
 import {
+  getApolloUniverseSnapshot,
   nextApolloDiscoverPage,
   rememberApolloPage,
+  rememberApolloUniverse,
 } from "@/lib/outreach/apollo-page";
 import { logSessionActivity } from "@/lib/audit/session-log";
 
@@ -34,17 +36,19 @@ const criteriaSchema = z
 
 const schema = z.object({
   apply: z.boolean().optional(),
+  /** Alleen Apollo-totaal ophalen (per_page=1, 1 credit). */
+  countOnly: z.boolean().optional(),
   page: z.number().int().min(1).max(40).optional(),
   criteria: criteriaSchema,
 });
 
 export async function GET() {
-  const nextPage = await nextApolloDiscoverPage();
-  const criteria = DEFAULT_APOLLO_CRITERIA;
+  const universe = await getApolloUniverseSnapshot();
   return NextResponse.json({
     configured: hasApolloConfig(),
-    nextPage,
-    criteria,
+    nextPage: universe.nextPage,
+    universe,
+    criteria: universe.criteria,
     employeeRangeOptions: APOLLO_EMPLOYEE_RANGES,
     placePresets: [
       {
@@ -64,7 +68,7 @@ export async function GET() {
       },
     ],
     hint: hasApolloConfig()
-      ? `POST { apply: true } haalt pagina ${nextPage} (1 Apollo-credit). apply:false telt matches zonder te bewaren.`
+      ? `Apollo-universum (laatst): ${universe.total || "nog niet geteld"}. POST countOnly:true of apply:false telt (1 credit).`
       : "Zet APOLLO_API_KEY in Vercel / .env.local",
   });
 }
@@ -81,14 +85,44 @@ export async function POST(request: Request) {
   }
 
   const criteria = normalizeCriteria(parsed.data.criteria);
-  const page = parsed.data.page ?? (await nextApolloDiscoverPage());
+  const countOnly = parsed.data.countOnly === true;
+  const page = countOnly
+    ? 1
+    : (parsed.data.page ?? (await nextApolloDiscoverPage()));
   const search = await searchDoelgroepCompanies({
     page,
-    perPage: 100,
+    perPage: countOnly ? 1 : 100,
     criteria,
   });
   if (!search.ok) {
     return NextResponse.json({ error: search.error }, { status: 400 });
+  }
+
+  await rememberApolloUniverse({
+    total: search.total,
+    criteria: search.criteria,
+  });
+
+  if (countOnly) {
+    await logSessionActivity(session, {
+      action: "apollo_count",
+      summary: `Apollo-universum ~${search.total} · ${criteriaSummary(search.criteria)}`,
+      path: "/api/outreach/discover",
+      method: "POST",
+      status: 200,
+      tool: "outreach",
+      meta: { total: search.total, criteria: search.criteria, countOnly: true },
+    });
+    return NextResponse.json({
+      ok: true,
+      countOnly: true,
+      creditUsed: 1,
+      total: search.total,
+      totalPages: Math.ceil(search.total / 100),
+      criteria: search.criteria,
+      criteriaLabel: criteriaSummary(search.criteria),
+      note: "Apollo soft-match op HQ-locatie + size. Wij filteren daarna hard op plaats bij binnenhalen.",
+    });
   }
 
   const split = splitByRegion(search.companies);
@@ -100,6 +134,7 @@ export async function POST(request: Request) {
       applied: false,
       creditUsed: 1,
       total: search.total,
+      totalPages: Math.ceil(search.total / 100),
       page: search.page,
       criteria: search.criteria,
       criteriaLabel: criteriaSummary(search.criteria),
@@ -146,7 +181,7 @@ export async function POST(request: Request) {
 
   await logSessionActivity(session, {
     action: "apollo_discover",
-    summary: `Apollo pagina ${search.page}: ${result.created} nieuw · ${split.outOfRegion.length} buiten regio overgeslagen`,
+    summary: `Apollo pagina ${search.page}: ${result.created} nieuw · universe ~${search.total}`,
     path: "/api/outreach/discover",
     method: "POST",
     status: 200,
@@ -164,6 +199,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     applied: true,
     total: search.total,
+    totalPages: Math.ceil(search.total / 100),
     page: search.page,
     nextPage: search.page + 1,
     criteria: search.criteria,

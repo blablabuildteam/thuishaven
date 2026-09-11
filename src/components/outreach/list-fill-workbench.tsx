@@ -24,6 +24,11 @@ type Props = {
   companyCount: number;
   withEmailCount: number;
   outOfRegionCount: number;
+  apolloUniverseTotal: number;
+  apolloUniverseCheckedAt: string | null;
+  apolloUniverseLabel: string;
+  apolloOnList: number;
+  apolloRemainingApprox: number | null;
 };
 
 type Preview = {
@@ -71,6 +76,11 @@ export function ListFillWorkbench({
   companyCount,
   withEmailCount,
   outOfRegionCount,
+  apolloUniverseTotal,
+  apolloUniverseCheckedAt,
+  apolloUniverseLabel,
+  apolloOnList,
+  apolloRemainingApprox,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -83,6 +93,11 @@ export function ListFillWorkbench({
   });
   const [keywords, setKeywords] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [universeTotal, setUniverseTotal] = useState(apolloUniverseTotal);
+  const [universeLabel, setUniverseLabel] = useState(apolloUniverseLabel);
+  const [universeCheckedAt, setUniverseCheckedAt] = useState(
+    apolloUniverseCheckedAt,
+  );
 
   function criteriaBody(): ApolloSearchCriteria {
     return {
@@ -146,8 +161,7 @@ export function ListFillWorkbench({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          apply: false,
-          page: apolloNextPage,
+          countOnly: true,
           criteria: criteriaBody(),
         }),
       });
@@ -161,25 +175,30 @@ export function ListFillWorkbench({
         );
         return;
       }
+      const total = Number(data.total ?? 0);
+      setUniverseTotal(total);
+      setUniverseLabel(
+        typeof data.criteriaLabel === "string"
+          ? data.criteriaLabel
+          : universeLabel,
+      );
+      setUniverseCheckedAt(new Date().toISOString());
       setPreview({
-        total: Number(data.total ?? 0),
-        pageKeep: Number(data.pageKeep ?? 0),
-        pageOutOfRegion: Number(data.pageOutOfRegion ?? 0),
-        pageUnknownCity: Number(data.pageUnknownCity ?? 0),
+        total,
+        pageKeep: 0,
+        pageOutOfRegion: 0,
+        pageUnknownCity: 0,
         criteriaLabel:
           typeof data.criteriaLabel === "string"
             ? data.criteriaLabel
             : "Criteria",
-        keepSample: Array.isArray(data.keepSample)
-          ? (data.keepSample as Preview["keepSample"])
-          : [],
-        droppedSample: Array.isArray(data.droppedSample)
-          ? (data.droppedSample as Preview["droppedSample"])
-          : [],
+        keepSample: [],
+        droppedSample: [],
       });
       setOk(
-        `Apollo vindt ~${Number(data.total ?? 0)} matches · op deze pagina houden we ${Number(data.pageKeep ?? 0)} (1 credit gebruikt)`,
+        `Apollo vindt nu ~${total.toLocaleString("nl-NL")} bedrijven · ±${Math.ceil(total / 100)} batches van 100 (1 credit)`,
       );
+      router.refresh();
     });
   }
 
@@ -234,6 +253,66 @@ export function ListFillWorkbench({
 
   return (
     <div className="space-y-6">
+      <section className="border border-accent/40 bg-surface p-4 sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="font-display text-sm tracking-[0.16em] text-text-dim">
+              Apollo-universum (live)
+            </p>
+            <p className="mt-1 font-display text-4xl tracking-[0.04em] text-text">
+              {universeTotal > 0
+                ? `~${universeTotal.toLocaleString("nl-NL")}`
+                : "—"}
+            </p>
+            <p className="mt-1 max-w-xl text-sm text-text-muted">
+              {universeLabel || "Huidige criteria"} · max 100 per batch ·{" "}
+              {universeTotal > 0
+                ? `±${Math.ceil(universeTotal / 100)} credits om alles op te halen`
+                : "druk op Ververs telling"}
+            </p>
+            {universeCheckedAt ? (
+              <p className="mt-1 text-xs text-text-dim">
+                Laatst geteld:{" "}
+                {new Date(universeCheckedAt).toLocaleString("nl-NL")}
+              </p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            disabled={pending || !apolloReady}
+            onClick={previewCount}
+            className="bg-accent px-4 py-2.5 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
+          >
+            {pending ? "Bezig…" : "Ververs telling (1 credit)"}
+          </button>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <Stat
+            label="Al via Apollo op de lijst"
+            value={String(apolloOnList)}
+          />
+          <Stat
+            label="Nog te halen (approx.)"
+            value={
+              universeTotal > 0
+                ? `~${Math.max(0, universeTotal - apolloOnList).toLocaleString("nl-NL")}`
+                : "—"
+            }
+            hint="Apollo-totaal − al binnengehaald"
+          />
+          <Stat
+            label="Volgende batch"
+            value={String(apolloNextPage)}
+            hint="pagina"
+          />
+        </div>
+        <p className="mt-3 text-xs text-text-dim">
+          Dit is Apollo’s soft HQ-match. Bij binnenhalen filteren we hard op
+          plaats in de ring. Vergelijking: kern ~354 · alleen Amsterdam ~272
+          (zelfde size-band).
+        </p>
+      </section>
+
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat label="Bedrijven op de lijst" value={String(companyCount)} />
         <Stat label="Met e-mailadres" value={String(withEmailCount)} />
@@ -387,7 +466,7 @@ export function ListFillWorkbench({
             onClick={previewCount}
             className="border border-border bg-bg px-4 py-2.5 font-display text-sm tracking-[0.1em] hover:border-accent disabled:opacity-50"
           >
-            {pending ? "Bezig…" : "Tel matches (1 credit)"}
+            {pending ? "Bezig…" : "Tel opnieuw (1 credit)"}
           </button>
           <button
             type="button"
@@ -397,8 +476,16 @@ export function ListFillWorkbench({
                 "/api/outreach/discover",
                 { apply: true, criteria: criteriaBody() },
                 (d) => {
+                  const total = Number(d.total ?? 0);
+                  if (total > 0) {
+                    setUniverseTotal(total);
+                    setUniverseCheckedAt(new Date().toISOString());
+                    if (typeof d.criteriaLabel === "string") {
+                      setUniverseLabel(d.criteriaLabel);
+                    }
+                  }
                   const dropped = Number(d.pageOutOfRegion ?? 0);
-                  const base = `${Number(d.created ?? 0)} nieuw · ${Number(d.duplicate ?? 0)} stonden al`;
+                  const base = `${Number(d.created ?? 0)} nieuw · ${Number(d.duplicate ?? 0)} stonden al · Apollo-totaal ~${total}`;
                   return dropped
                     ? `${base} · ${dropped} buiten regio overgeslagen`
                     : base;

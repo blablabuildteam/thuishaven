@@ -6,7 +6,7 @@ import { listProspects } from "@/lib/outreach/data";
 import { hasKvkConfig } from "@/lib/integrations/kvk";
 import { hasApolloConfig } from "@/lib/integrations/apollo/client";
 import { hasHunterConfig } from "@/lib/integrations/hunter/client";
-import { nextApolloDiscoverPage } from "@/lib/outreach/apollo-page";
+import { nextApolloDiscoverPage, getApolloUniverseSnapshot } from "@/lib/outreach/apollo-page";
 import { countAutoFillPending } from "@/lib/outreach/auto-fill";
 
 export const metadata = { title: "Lijst bijwerken" };
@@ -14,7 +14,10 @@ export const dynamic = "force-dynamic";
 
 export default async function LijstBijwerkenPage() {
   const { rows } = await listProspects();
-  const pending = await countAutoFillPending();
+  const [pending, universe] = await Promise.all([
+    countAutoFillPending(),
+    getApolloUniverseSnapshot(),
+  ]);
   const companies = rows.filter(
     (p) =>
       p.type === "company" &&
@@ -22,6 +25,7 @@ export default async function LijstBijwerkenPage() {
       p.source !== "exclusion_import",
   );
   const pipeline = companies.filter((p) => p.doelgroepFit !== "nee");
+  const apolloOnList = companies.filter((p) => p.source === "apollo").length;
   const withEmail = pipeline.filter((p) => Boolean(p.email)).length;
   const outOfRegion = companies.filter((p) =>
     Boolean(p.doelgroepReason?.startsWith("Buiten regio")),
@@ -30,6 +34,10 @@ export default async function LijstBijwerkenPage() {
   const hunterReady = hasHunterConfig();
   const kvkReady = hasKvkConfig();
   const apolloNextPage = await nextApolloDiscoverPage();
+  const remainingApprox =
+    universe.total > 0
+      ? Math.max(0, universe.total - apolloOnList)
+      : null;
 
   return (
     <div>
@@ -65,6 +73,11 @@ export default async function LijstBijwerkenPage() {
         companyCount={pipeline.length}
         withEmailCount={withEmail}
         outOfRegionCount={outOfRegion}
+        apolloUniverseTotal={universe.total}
+        apolloUniverseCheckedAt={universe.checkedAt}
+        apolloUniverseLabel={universe.criteriaLabel}
+        apolloOnList={apolloOnList}
+        apolloRemainingApprox={remainingApprox}
       />
     </div>
   );
