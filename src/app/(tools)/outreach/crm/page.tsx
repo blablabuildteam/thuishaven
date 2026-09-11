@@ -37,14 +37,17 @@ export default async function OutreachCrmPage() {
     (c) => c.angle.id === "jubileum" || c.angle.id === "algemeen",
   ).length;
   const jubileum = companies.filter((c) => c.angle.id === "jubileum").length;
-  const outside = companies.filter((c) => c.angle.id === "past_niet").length;
+  const incomplete = companies.filter(
+    (c) => c.angle.id === "nog_checken" || c.row.incomplete,
+  ).length;
+  const missingMdw = companies.filter((c) => c.row.employeeCount == null).length;
 
   return (
     <div>
       <SectionHeader
         eyebrow="Lijst"
         title="Bedrijven"
-        description="Filter op mailhoek of regio. Apollo- en KvK-medewerkers staan naast elkaar — Apollo telt voor de fit."
+        description="Zoek op naam, filter op mailkans (jubileum ≤16 mnd of cold mail). Medewerkers: hover voor Apollo/KvK-bron."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={source === "db" ? "success" : "neutral"}>
@@ -67,32 +70,44 @@ export default async function OutreachCrmPage() {
         }
       />
 
-      <div className="stagger mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="stagger mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Op de lijst" value={formatNumber(companies.length)} />
         <MetricCard
           label="Klaar om te mailen"
           value={formatNumber(mailable)}
           accent
-          hint="Passen in doelgroep"
+          hint="Jubileum of cold mail"
         />
         <MetricCard
-          label="Jubileum dit/volgend jaar"
+          label="Jubileum ≤16 mnd"
           value={formatNumber(jubileum)}
         />
         <MetricCard
-          label="Past niet"
-          value={formatNumber(outside)}
-          hint="o.a. buiten regio"
+          label="Nog aanvullen"
+          value={formatNumber(incomplete)}
+          hint={`${missingMdw} zonder bruikbare mdw`}
         />
       </div>
 
-      <p className="mb-4 text-sm text-text-muted">
-        Buiten regio komt vaak doordat Apollo een bedrijf via AMS-filter vindt,
-        maar KvK daarna de <em>juridische vestiging</em> elders zet (bijv.
-        Roermond). Die krijgen label Past niet — filter{" "}
-        <span className="text-text">Klaar om te mailen</span> toont alleen wat
-        je wilt mailen.
-      </p>
+      <div className="mb-6 space-y-2 border border-border bg-surface px-4 py-3 text-sm text-text-muted">
+        <p>
+          <strong className="text-text">Waar komen bedrijven vandaan?</strong>{" "}
+          Vooral via <em>Lijst bijwerken</em> (Apollo: midgroot + AMS-regio),
+          plus handmatige namen. Uitsluitingen staan apart onderaan.
+        </p>
+        <p>
+          <strong className="text-text">Medewerkers:</strong> Apollo =
+          concern-schatting (voorkeur). KvK = vaak alleen de vestiging (soms
+          5–20). Lage KvK telt <em>niet</em> meer als “te klein / past niet” —
+          die worden “Onvolledig” tot er een Apollo- of handmatige schatting is.
+        </p>
+        <p>
+          <strong className="text-text">Buiten Amsterdam:</strong> Apollo’s
+          plaatsfilter is zacht; oude rijen zonder hard-filter zitten er nog in.
+          Nieuwe batches skippen bekende buiten-plaatsen. Filter op{" "}
+          <em>Buiten</em> of vul KvK/Apollo-plaats aan.
+        </p>
+      </div>
 
       <section className="mb-10">
         {companies.length === 0 ? (

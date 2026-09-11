@@ -27,7 +27,7 @@ const STEPS = [
   {
     n: "2",
     title: "Bedrijven bekijken",
-    body: "Labels: Jubileum, Algemeen feest, Past niet, of Niet mailen.",
+    body: "Labels: Jubileum, Cold mail, Onvolledig, Past niet, of Niet mailen.",
     href: "/outreach/crm",
     cta: "Naar bedrijven",
   },

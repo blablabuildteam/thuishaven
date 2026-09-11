@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { CrmNoteForm } from "@/components/outreach/crm-note-form";
 import { LinkedinEstimateForm } from "@/components/outreach/linkedin-estimate-form";
 import { getCrmDossier, statusLabels } from "@/lib/outreach/crm";
+import { mailAngleFor } from "@/lib/outreach/mail-angle";
 import {
   linkedinCompanySearchUrl,
   linkedinPeopleSearchUrl,
@@ -23,8 +24,8 @@ const kindLabel: Record<string, string> = {
   reply: "Reply",
   note: "Notitie",
   call: "Belletje",
-  linkedin: "LinkedIn",
-  kvk: "KvK",
+  linkedin: "Contact",
+  kvk: "Systeem",
   lead: "Lead",
 };
 
@@ -36,6 +37,14 @@ export default async function CrmDossierPage({
   const { id } = await params;
   const { dossier } = await getCrmDossier(id);
   if (!dossier) notFound();
+
+  const angle = mailAngleFor({
+    status: dossier.status,
+    existingCustomer: dossier.existingCustomer,
+    doelgroepFit: dossier.doelgroepFit,
+    doelgroepReason: dossier.doelgroepReason,
+    anniversaryYears: dossier.anniversaryYears,
+  });
 
   return (
     <div>
@@ -59,6 +68,19 @@ export default async function CrmDossierPage({
         }
         action={
           <div className="flex flex-wrap gap-2">
+            <StatusBadge
+              tone={
+                angle.id === "jubileum"
+                  ? "accent"
+                  : angle.id === "algemeen"
+                    ? "success"
+                    : angle.id === "past_niet" || angle.id === "niet_mailen"
+                      ? "danger"
+                      : "neutral"
+              }
+            >
+              {angle.label}
+            </StatusBadge>
             <StatusBadge
               tone={
                 dossier.status === "lead"
@@ -90,6 +112,8 @@ export default async function CrmDossierPage({
         }
       />
 
+      <p className="mb-6 text-sm text-text-muted">{angle.detail}</p>
+
       {dossier.existingCustomer ? (
         <div className="mb-6 border border-danger/40 bg-surface px-4 py-3 text-sm text-text-muted">
           <p className="font-medium text-text">Al klant / niet mailen</p>
@@ -110,13 +134,25 @@ export default async function CrmDossierPage({
         </div>
       ) : null}
 
-      {dossier.kvkHeadcountOff ? (
+      {dossier.incomplete && !dossier.existingCustomer ? (
         <div className="mb-6 border border-warn/40 bg-surface px-4 py-3 text-sm text-text-muted">
-          <p className="font-medium text-text">KvK-medewerkers ziet er raar laag uit</p>
+          <p className="font-medium text-text">Dossier onvolledig</p>
           <p className="mt-1">
-            {dossier.kvkEmployeeCount ?? dossier.employeeCount} op de vestiging —
-            dat is vaak alleen het KvK-rechtspersoon. Apollo telt voor de
-            doelgroep-fit.
+            {[
+              dossier.employeeCount == null ? "geen bruikbare mdw" : null,
+              !dossier.email ? "geen e-mail" : null,
+              !dossier.decisionMakerName ? "geen contactpersoon" : null,
+              !dossier.inRegion && !(dossier.city || dossier.apolloCity)
+                ? "plaats onbekend"
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ") || "Nog gegevens nodig"}
+            . Vul aan via{" "}
+            <Link href="/outreach/lijst-bijwerken" className="text-accent underline">
+              Lijst bijwerken
+            </Link>{" "}
+            of de headcount-override hiernaast.
           </p>
         </div>
       ) : null}
@@ -124,7 +160,15 @@ export default async function CrmDossierPage({
       <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Fact label="KvK" value={dossier.kvkNumber ?? "—"} />
         <Fact
-          label="Medewerkers · Apollo"
+          label="Mdw (voor fit)"
+          value={
+            dossier.employeeCount != null
+              ? `~${dossier.employeeCount}`
+              : "—"
+          }
+        />
+        <Fact
+          label="Apollo mdw"
           value={
             dossier.apolloEmployeeCount != null
               ? `~${dossier.apolloEmployeeCount}`
@@ -132,17 +176,25 @@ export default async function CrmDossierPage({
           }
         />
         <Fact
-          label="Medewerkers · KvK"
+          label="KvK mdw (vestiging)"
           value={
             dossier.kvkEmployeeCount != null
-              ? String(dossier.kvkEmployeeCount)
+              ? `${dossier.kvkEmployeeCount}${
+                  dossier.kvkHeadcountOff ? " · vaak te laag" : ""
+                }`
               : "—"
           }
         />
         <Fact
-          label="Jubileum"
+          label="Leeftijd / jubileum"
           value={
-            dossier.anniversaryYears ? `${dossier.anniversaryYears} jaar` : "—"
+            dossier.anniversaryYears != null
+              ? `${dossier.anniversaryYears} jr${
+                  angle.jubileeMark
+                    ? ` → ${angle.jubileeMark}`
+                    : ""
+                }`
+              : "—"
           }
         />
         <Fact
@@ -153,19 +205,38 @@ export default async function CrmDossierPage({
               : dossier.doelgroepReason ?? "Onbekend"
           }
         />
-        <Fact
-          label="Plaats · Apollo"
-          value={dossier.apolloCity ?? "—"}
-        />
+        <Fact label="Plaats · Apollo" value={dossier.apolloCity ?? "—"} />
         <Fact label="Plaats · KvK" value={dossier.kvkCity ?? "—"} />
-        <Fact label="Regio" value={dossier.inRegion ? "In ~50 km" : "Buiten"} />
+        <Fact
+          label="Regio"
+          value={dossier.inRegion ? "In ~50 km" : "Buiten / onbekend"}
+        />
+        <Fact
+          label="Bron"
+          value={
+            dossier.source === "apollo"
+              ? "Apollo"
+              : dossier.source === "paste"
+                ? "Handmatig"
+                : dossier.source ?? "—"
+          }
+        />
+        <Fact label="Mails verstuurd" value={String(dossier.mailCount)} />
+        <Fact
+          label="Opens / replies"
+          value={`${dossier.openCount} / ${dossier.replyCount}`}
+        />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
         <section className="border border-border bg-surface p-4">
-          <h2 className="mb-4 font-display text-2xl tracking-[0.06em]">
-            Contactmomenten
+          <h2 className="mb-1 font-display text-2xl tracking-[0.06em]">
+            Activiteit
           </h2>
+          <p className="mb-4 text-sm text-text-muted">
+            Alles wat er gebeurd is: ophalen, KvK, contact, mails, opens,
+            clicks, replies.
+          </p>
           {dossier.timeline.length === 0 ? (
             <p className="text-sm text-text-muted">
               Nog niets gelogd. Stuur een testmail of schrijf hieronder een
@@ -183,12 +254,19 @@ export default async function CrmDossierPage({
                       tone={
                         item.kind === "reply" || item.kind === "lead"
                           ? "accent"
-                          : item.kind === "kvk"
+                          : item.status === "opened" ||
+                              item.status === "clicked"
                             ? "info"
-                            : "neutral"
+                            : item.kind === "kvk"
+                              ? "info"
+                              : "neutral"
                       }
                     >
-                      {kindLabel[item.kind] ?? item.kind}
+                      {item.title.startsWith("Mail geopend")
+                        ? "Open"
+                        : item.title.startsWith("Link geklikt")
+                          ? "Click"
+                          : kindLabel[item.kind] ?? item.kind}
                     </StatusBadge>
                     <span className="text-xs text-text-dim">{fmt(item.at)}</span>
                   </div>
@@ -207,8 +285,12 @@ export default async function CrmDossierPage({
         <aside className="space-y-4">
           <section className="border border-border bg-surface p-4">
             <h2 className="mb-3 font-display text-xl tracking-[0.06em]">
-              Headcount-override
+              Headcount handmatig
             </h2>
+            <p className="mb-3 text-xs text-text-muted">
+              Als Apollo ontbreekt of raar is: zet hier een schatting (telt voor
+              fit).
+            </p>
             <LinkedinEstimateForm
               prospectId={dossier.id}
               companySearchUrl={linkedinCompanySearchUrl(dossier.companyName)}
@@ -225,7 +307,7 @@ export default async function CrmDossierPage({
           </section>
           <section className="border border-border bg-surface p-4 text-sm text-text-muted">
             <h2 className="mb-3 font-display text-xl tracking-[0.06em] text-text">
-              Gegevens
+              Contact
             </h2>
             <p>
               Contactpersoon:{" "}
@@ -258,8 +340,6 @@ export default async function CrmDossierPage({
                 "—"
               )}
             </p>
-            <p className="mt-1">Mails: {dossier.mailCount}</p>
-            <p className="mt-1">Replies: {dossier.replyCount}</p>
             {dossier.lastLead ? (
               <p className="mt-3 text-text">{dossier.lastLead.summary}</p>
             ) : null}

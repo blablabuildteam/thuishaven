@@ -47,10 +47,12 @@ export type CrmRecord = {
   city: string | null;
   sector: string | null;
   kvkNumber: string | null;
-  /** Fit-headcount (Apollo heeft voorkeur). */
+  /** Fit-headcount (Apollo/handmatig heeft voorkeur). */
   employeeCount: number | null;
   /** Apollo concern-schatting. */
   apolloEmployeeCount: number | null;
+  /** Handmatige / LinkedIn-schatting. */
+  linkedinEmployeeEstimate: number | null;
   /** KvK-vestiging (vaak lager). */
   kvkEmployeeCount: number | null;
   anniversaryYears: number | null;
@@ -66,14 +68,16 @@ export type CrmRecord = {
   existingCustomer: boolean;
   excludedReason: string | null;
   mailCount: number;
+  openCount: number;
   replyCount: number;
   lastTouchAt: string | null;
   linkedinUrl: string | null;
-  linkedinEmployeeEstimate: number | null;
   kvkHeadcountOff: boolean;
   decisionMakerName?: string;
   decisionMakerTitle?: string;
   decisionMakerEmailSource?: string;
+  /** Missing pieces for enrichment. */
+  incomplete: boolean;
 };
 
 export type CrmDossier = CrmRecord & {
@@ -94,20 +98,26 @@ function notesFromMeta(meta: Record<string, unknown>): CrmNote[] {
 
 function mapRecord(
   p: typeof prospects.$inferSelect,
-  extras: { mailCount: number; replyCount: number; lastTouchAt: string | null },
+  extras: {
+    mailCount: number;
+    openCount: number;
+    replyCount: number;
+    lastTouchAt: string | null;
+  },
 ): CrmRecord {
   const meta = (p.metadata ?? {}) as Record<string, unknown>;
   const apolloEmployeeCount =
     typeof meta.apolloEmployeeCount === "number"
       ? meta.apolloEmployeeCount
-      : typeof meta.linkedinEmployeeEstimate === "number"
-        ? meta.linkedinEmployeeEstimate
-        : null;
+      : null;
+  const linkedinEmployeeEstimate =
+    typeof meta.linkedinEmployeeEstimate === "number"
+      ? meta.linkedinEmployeeEstimate
+      : null;
   const kvkEmployeeCount =
     typeof meta.kvkVestigingEmployees === "number"
       ? meta.kvkVestigingEmployees
-      : // Oudere rijen: employeeCount was soms puur KvK.
-        apolloEmployeeCount == null
+      : apolloEmployeeCount == null && linkedinEmployeeEstimate == null
         ? p.employeeCount
         : null;
   const apolloCity =
@@ -117,7 +127,7 @@ function mapRecord(
   const fitCity = cityForFit({ apolloCity, kvkCity: kvkCity ?? p.city });
   const fitCount = employeeCountForFit({
     kvkCount: kvkEmployeeCount ?? p.employeeCount,
-    estimate: apolloEmployeeCount,
+    estimate: apolloEmployeeCount ?? linkedinEmployeeEstimate,
   });
   const scored = scoreDoelgroep({
     employeeCount: fitCount,
@@ -133,6 +143,19 @@ function mapRecord(
         ? meta.doelgroepReason
         : undefined;
   const inRegion = fitCity ? isCityInRegion(fitCity) : false;
+  const decisionMakerName =
+    meta.decisionMaker &&
+    typeof meta.decisionMaker === "object" &&
+    typeof (meta.decisionMaker as { name?: string }).name === "string"
+      ? (meta.decisionMaker as { name: string }).name
+      : undefined;
+  const incomplete =
+    !p.email ||
+    fitCount == null ||
+    !fitCity ||
+    !decisionMakerName ||
+    doelgroepFit === "onbekend" ||
+    !doelgroepFit;
 
   return {
     id: p.id,
@@ -146,6 +169,7 @@ function mapRecord(
     kvkNumber: p.kvkNumber,
     employeeCount: fitCount,
     apolloEmployeeCount,
+    linkedinEmployeeEstimate,
     kvkEmployeeCount,
     anniversaryYears: p.anniversaryYears,
     apolloCity,
@@ -163,16 +187,11 @@ function mapRecord(
         !(p.type === "agency" && meta.source === "bureau_import")),
     excludedReason: p.excludedReason,
     mailCount: extras.mailCount,
+    openCount: extras.openCount,
     replyCount: extras.replyCount,
     lastTouchAt: extras.lastTouchAt,
     linkedinUrl: p.linkedinUrl,
-    linkedinEmployeeEstimate: apolloEmployeeCount,
-    decisionMakerName:
-      meta.decisionMaker &&
-      typeof meta.decisionMaker === "object" &&
-      typeof (meta.decisionMaker as { name?: string }).name === "string"
-        ? (meta.decisionMaker as { name: string }).name
-        : undefined,
+    decisionMakerName,
     decisionMakerTitle:
       meta.decisionMaker &&
       typeof meta.decisionMaker === "object" &&
@@ -191,6 +210,7 @@ function mapRecord(
     kvkHeadcountOff: kvkHeadcountLooksOff(
       kvkEmployeeCount ?? p.employeeCount,
     ),
+    incomplete,
   };
 }
 
@@ -207,6 +227,7 @@ export async function listCrmRecords(): Promise<{
     .select({
       prospectId: outreachEmails.prospectId,
       mailCount: sql<number>`count(*) filter (where ${outreachEmails.status} <> 'draft')::int`,
+      openCount: sql<number>`count(*) filter (where ${outreachEmails.openedAt} is not null)::int`,
       lastSent: sql<Date | null>`max(${outreachEmails.sentAt})`,
     })
     .from(outreachEmails)
@@ -246,6 +267,7 @@ export async function listCrmRecords(): Promise<{
     const last = lastCandidates.sort((a, b) => b.getTime() - a.getTime())[0];
     return mapRecord(p, {
       mailCount: mail?.mailCount ?? 0,
+      openCount: mail?.openCount ?? 0,
       replyCount: reply?.replyCount ?? 0,
       lastTouchAt: last?.toISOString() ?? null,
     });
@@ -298,7 +320,12 @@ export async function getCrmDossier(
       at: (mail.sentAt ?? mail.createdAt).toISOString(),
       kind: "mail",
       title: mail.status === "draft" ? "Conceptmail" : "Mail verstuurd",
-      detail: mail.subject,
+      detail: [
+        mail.subject,
+        mail.status !== "draft" ? `status: ${mail.status}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
       status: mail.status,
     });
     if (mail.openedAt) {
@@ -309,6 +336,16 @@ export async function getCrmDossier(
         title: "Mail geopend",
         detail: mail.subject,
         status: "opened",
+      });
+    }
+    if (mail.clickedAt) {
+      timeline.push({
+        id: `click-${mail.id}`,
+        at: mail.clickedAt.toISOString(),
+        kind: "mail",
+        title: "Link geklikt",
+        detail: mail.subject,
+        status: "clicked",
       });
     }
   }
@@ -339,6 +376,23 @@ export async function getCrmDossier(
     });
   }
 
+  if (typeof meta.addedAt === "string") {
+    const src =
+      typeof meta.source === "string" ? meta.source : "onbekend";
+    timeline.push({
+      id: `added-${p.id}`,
+      at: meta.addedAt,
+      kind: "kvk",
+      title: "Op de lijst gezet",
+      detail:
+        src === "apollo"
+          ? "Binnengehaald via Apollo"
+          : src === "paste"
+            ? "Handmatig / plaklijst"
+            : `Bron: ${src}`,
+    });
+  }
+
   if (typeof meta.kvkEnrichedAt === "string") {
     timeline.push({
       id: `kvk-${p.id}`,
@@ -347,9 +401,49 @@ export async function getCrmDossier(
       title: "KvK-profiel opgehaald",
       detail: [
         p.kvkNumber ? `KvK ${p.kvkNumber}` : null,
-        p.employeeCount != null ? `${p.employeeCount} mdw` : null,
-        p.city,
-        p.anniversaryYears != null ? `${p.anniversaryYears} jr` : null,
+        typeof meta.kvkVestigingEmployees === "number"
+          ? `KvK ${meta.kvkVestigingEmployees} mdw (vestiging)`
+          : null,
+        typeof meta.apolloEmployeeCount === "number"
+          ? `Apollo ~${meta.apolloEmployeeCount}`
+          : null,
+        typeof meta.kvkCity === "string"
+          ? meta.kvkCity
+          : p.city,
+        p.anniversaryYears != null ? `${p.anniversaryYears} jr oud` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    });
+  }
+
+  if (
+    meta.decisionMaker &&
+    typeof meta.decisionMaker === "object" &&
+    typeof (meta.decisionMaker as { name?: string }).name === "string"
+  ) {
+    const dm = meta.decisionMaker as {
+      name: string;
+      title?: string;
+      email?: string;
+      emailSource?: string;
+      foundAt?: string;
+    };
+    timeline.push({
+      id: `dm-${p.id}`,
+      at:
+        typeof dm.foundAt === "string"
+          ? dm.foundAt
+          : typeof meta.peopleEnrichedAt === "string"
+            ? meta.peopleEnrichedAt
+            : p.updatedAt.toISOString(),
+      kind: "linkedin",
+      title: "Contactpersoon gevonden",
+      detail: [
+        dm.name,
+        dm.title,
+        dm.email,
+        dm.emailSource ? `via ${dm.emailSource}` : null,
       ]
         .filter(Boolean)
         .join(" · "),
@@ -369,12 +463,14 @@ export async function getCrmDossier(
   timeline.sort((a, b) => +new Date(b.at) - +new Date(a.at));
 
   const lastTouch = timeline[0]?.at ?? p.updatedAt.toISOString();
+  const sentMails = mails.filter((m) => m.status !== "draft");
 
   return {
     source: "db",
     dossier: {
       ...mapRecord(p, {
-        mailCount: mails.filter((m) => m.status !== "draft").length,
+        mailCount: sentMails.length,
+        openCount: sentMails.filter((m) => m.openedAt).length,
         replyCount: replies.length,
         lastTouchAt: lastTouch,
       }),

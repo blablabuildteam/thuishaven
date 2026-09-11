@@ -29,7 +29,7 @@ const STEPS: TourStep[] = [
   {
     target: "nav-bedrijven",
     title: "Bedrijven",
-    body: "Hier staat je lijst. Labels: Jubileum, Algemeen feest, Past niet, of Niet mailen.",
+    body: "Hier staat je lijst. Labels: Jubileum, Cold mail, Onvolledig, Past niet, of Niet mailen.",
   },
   {
     target: "crm-mailen",

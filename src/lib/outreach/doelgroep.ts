@@ -69,14 +69,17 @@ export const DOELGROEP_STARTLIJST: string[] = [
 
 export type DoelgroepFit = "ja" | "nee" | "onbekend";
 
-/** Concern estimate (Apollo) wins over KvK vestiging — die is vaak te laag. */
+/** Concern estimate (Apollo / handmatig) wins; ignore suspiciously low KvK vestiging. */
 export function employeeCountForFit(input: {
   kvkCount?: number | null;
   estimate?: number | null;
 }): number | null {
-  const kvk = input.kvkCount ?? null;
   const estimate = input.estimate ?? null;
   if (estimate != null && estimate > 0) return estimate;
+  const kvk = input.kvkCount ?? null;
+  if (kvk == null) return null;
+  // KvK-vestiging met <50 mdw is vrijwel nooit de concern — niet als "te klein" afwijzen.
+  if (kvk < 50) return null;
   return kvk;
 }
 
