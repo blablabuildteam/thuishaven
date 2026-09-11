@@ -16,6 +16,7 @@ type Props = {
   pendingEmail: number;
   pendingPeople: number;
   pendingHunter: number;
+  pendingHeadcount: number;
   apolloReady: boolean;
   hunterReady: boolean;
   kvkReady: boolean;
@@ -62,6 +63,7 @@ export function ListFillWorkbench({
   pendingEmail,
   pendingPeople,
   pendingHunter,
+  pendingHeadcount,
   apolloReady,
   hunterReady,
   kvkReady,
@@ -181,6 +183,55 @@ export function ListFillWorkbench({
     });
   }
 
+  const openWork =
+    pendingKvk +
+    pendingPeople +
+    pendingHunter +
+    pendingEmail +
+    pendingHeadcount;
+
+  function autoFill(withDiscover: boolean) {
+    setError(null);
+    setOk(null);
+    startTransition(async () => {
+      const res = await fetch("/api/outreach/auto-fill", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          discover: withDiscover,
+          fillHeadcounts: true,
+          criteria: criteriaBody(),
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as Record<
+        string,
+        unknown
+      >;
+      if (!res.ok) {
+        setError(
+          typeof data.error === "string" ? data.error : "Auto-aanvullen mislukt",
+        );
+        return;
+      }
+      const discover = data.discover as
+        | { created?: number; duplicate?: number }
+        | undefined;
+      const parts = [
+        discover
+          ? `${Number(discover.created ?? 0)} nieuw opgehaald`
+          : null,
+        Number(data.headcountFilled ?? 0)
+          ? `${Number(data.headcountFilled)} mdw via Apollo`
+          : null,
+        `KvK ${Number(data.kvkOk ?? 0)}`,
+        `contacten ${Number(data.peopleFilled ?? 0)}`,
+        `mails ${Number(data.hunterFilled ?? 0) + Number(data.websiteFilled ?? 0)}`,
+      ].filter(Boolean);
+      setOk(parts.join(" · "));
+      router.refresh();
+    });
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid gap-3 sm:grid-cols-3">
@@ -188,10 +239,52 @@ export function ListFillWorkbench({
         <Stat label="Met e-mailadres" value={String(withEmailCount)} />
         <Stat
           label="Nog open"
-          value={`${pendingKvk + pendingPeople + pendingHunter + pendingEmail}`}
-          hint="gegevens / mails"
+          value={String(openWork)}
+          hint="mdw / KvK / contact / mail"
         />
       </div>
+
+      <section className="border border-accent/40 bg-surface p-4 sm:p-5">
+        <p className="font-display text-sm tracking-[0.16em] text-text-dim">
+          Automatisch
+        </p>
+        <h2 className="mt-1 font-display text-2xl tracking-[0.06em]">
+          Alles aanvullen
+        </h2>
+        <p className="mt-2 max-w-2xl text-sm text-text-muted">
+          Geen handmatig werk: Apollo-mdw waar die ontbreekt → KvK
+          (oprichtingsdatum) → Event/Office Managers → Hunter/website-mail.
+          Draait door tot de wachtrij leeg is (binnen credits/limieten).
+        </p>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            disabled={pending || openWork === 0}
+            onClick={() => autoFill(false)}
+            className="bg-accent px-4 py-2.5 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
+          >
+            {pending
+              ? "Bezig (kan even duren)…"
+              : openWork === 0
+                ? "Niets meer open"
+                : `Vul ${openWork} open items aan`}
+          </button>
+          <button
+            type="button"
+            disabled={pending || !apolloReady}
+            onClick={() => autoFill(true)}
+            className="border border-border bg-bg px-4 py-2.5 font-display text-sm tracking-[0.1em] hover:border-accent disabled:opacity-50"
+          >
+            {pending
+              ? "Bezig…"
+              : "Haal 100 op + vul alles aan"}
+          </button>
+        </div>
+        <p className="mt-3 text-xs text-text-dim">
+          Open: {pendingHeadcount} mdw · {pendingKvk} KvK · {pendingPeople}{" "}
+          contact · {pendingHunter} Hunter · {pendingEmail} website-mail
+        </p>
+      </section>
 
       {outOfRegionCount > 0 ? (
         <p className="border border-border bg-surface px-4 py-3 text-sm text-text-muted">
@@ -203,7 +296,7 @@ export function ListFillWorkbench({
 
       <section className="border border-border bg-surface p-4 sm:p-5">
         <p className="font-display text-sm tracking-[0.16em] text-text-dim">
-          Stap 1
+          Stap 1 (optioneel los)
         </p>
         <h2 className="mt-1 font-display text-2xl tracking-[0.06em]">
           Nieuwe bedrijven ophalen

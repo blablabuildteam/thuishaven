@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
+import { auth } from "@/auth";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CrmNoteForm } from "@/components/outreach/crm-note-form";
@@ -35,8 +36,12 @@ export default async function CrmDossierPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const { dossier } = await getCrmDossier(id);
+  const [{ dossier }, session] = await Promise.all([
+    getCrmDossier(id),
+    auth(),
+  ]);
   if (!dossier) notFound();
+  const isAdmin = session?.user?.role === "admin";
 
   const angle = mailAngleFor({
     status: dossier.status,
@@ -283,22 +288,48 @@ export default async function CrmDossierPage({
         </section>
 
         <aside className="space-y-4">
-          <section className="border border-border bg-surface p-4">
-            <h2 className="mb-3 font-display text-xl tracking-[0.06em]">
-              Headcount handmatig
-            </h2>
-            <p className="mb-3 text-xs text-text-muted">
-              Als Apollo ontbreekt of raar is: zet hier een schatting (telt voor
-              fit).
-            </p>
-            <LinkedinEstimateForm
-              prospectId={dossier.id}
-              companySearchUrl={linkedinCompanySearchUrl(dossier.companyName)}
-              peopleSearchUrl={linkedinPeopleSearchUrl(dossier.companyName)}
-              currentEstimate={dossier.linkedinEmployeeEstimate}
-              currentUrl={dossier.linkedinUrl}
-            />
-          </section>
+          {isAdmin ? (
+            <section className="border border-border bg-surface p-4">
+              <h2 className="mb-3 font-display text-xl tracking-[0.06em]">
+                Headcount override (admin)
+              </h2>
+              <p className="mb-3 text-xs text-text-muted">
+                Alleen noodgeval — normaal vult Apollo dit automatisch.
+              </p>
+              <LinkedinEstimateForm
+                prospectId={dossier.id}
+                companySearchUrl={linkedinCompanySearchUrl(dossier.companyName)}
+                peopleSearchUrl={linkedinPeopleSearchUrl(dossier.companyName)}
+                currentEstimate={dossier.linkedinEmployeeEstimate}
+                currentUrl={dossier.linkedinUrl}
+              />
+            </section>
+          ) : (
+            <section className="border border-border bg-surface p-4 text-sm text-text-muted">
+              <h2 className="mb-2 font-display text-xl tracking-[0.06em] text-text">
+                Medewerkers
+              </h2>
+              <p>
+                Komt automatisch uit Apollo (bij ophalen of via{" "}
+                <Link
+                  href="/outreach/lijst-bijwerken"
+                  className="text-accent underline"
+                >
+                  Alles aanvullen
+                </Link>
+                ). Geen handmatige LinkedIn-invoer.
+              </p>
+              <p className="mt-2 font-mono text-text">
+                Fit:{" "}
+                {dossier.employeeCount != null
+                  ? `~${dossier.employeeCount}`
+                  : "nog niet"}
+                {dossier.apolloEmployeeCount != null
+                  ? ` · Apollo ~${dossier.apolloEmployeeCount}`
+                  : ""}
+              </p>
+            </section>
+          )}
           <section className="border border-border bg-surface p-4">
             <h2 className="mb-3 font-display text-xl tracking-[0.06em]">
               Nieuw moment

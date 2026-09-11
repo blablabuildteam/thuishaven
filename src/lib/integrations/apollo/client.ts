@@ -157,6 +157,17 @@ const DECISION_TITLES = [
   "internal communications",
   "people operations",
   "workplace manager",
+  "evenementenmanager",
+  "event coördinator",
+  "event coordinator",
+  "office management",
+  "facilitair manager",
+  "facility manager",
+  "hoofd facilitair",
+  "manager facilities",
+  "interne communicatie",
+  "hr manager",
+  "people manager",
 ];
 
 function domainFromWebsite(website?: string | null): string | null {
@@ -169,6 +180,67 @@ function domainFromWebsite(website?: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+/** Fill missing concern headcount via Apollo org enrich (domain). */
+export async function enrichOrganizationHeadcount(
+  website?: string | null,
+): Promise<{
+  ok: boolean;
+  error?: string;
+  employeeCount?: number;
+  city?: string;
+}> {
+  const key = process.env.APOLLO_API_KEY?.trim();
+  if (!key) return { ok: false, error: "APOLLO_API_KEY ontbreekt" };
+  const domain = domainFromWebsite(website);
+  if (!domain) return { ok: false, error: "Geen website/domein" };
+
+  const res = await fetch("https://api.apollo.io/api/v1/organizations/enrich", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "cache-control": "no-cache",
+      "x-api-key": key,
+    },
+    body: JSON.stringify({ domain }),
+    cache: "no-store",
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    message?: string;
+    organization?: {
+      estimated_num_employees?: number;
+      city?: string;
+      primary_domain?: string;
+    };
+  };
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: json.error ?? json.message ?? `Apollo HTTP ${res.status}`,
+    };
+  }
+
+  void recordUsage({
+    tool: "outreach",
+    vendor: "enrichment",
+    operation: "apollo_org_enrich",
+    units: 1,
+    unitLabel: "credit",
+    costEurCents: OUTREACH_RATES.apolloCreditCents,
+    meta: { domain },
+  }).catch(() => undefined);
+
+  const org = json.organization;
+  if (!org?.estimated_num_employees) {
+    return { ok: false, error: "Geen medewerkers in Apollo-enrich" };
+  }
+  return {
+    ok: true,
+    employeeCount: org.estimated_num_employees,
+    city: org.city,
+  };
 }
 
 export async function searchDecisionMakers(input: {
@@ -250,13 +322,19 @@ export async function searchDecisionMakers(input: {
   });
 
   const people: ApolloPerson[] = [];
-  // Unlock #1 fully (credit). Keep 2 more from search as contact-opties (naam/titel/LI).
+  // Unlock up to 2 people with email preference (credits). Keep a 3rd search hit as option.
+  let unlocks = 0;
   for (let i = 0; i < Math.min(candidates.length, 3); i++) {
     const raw = candidates[i]!;
-    if (i === 0 && raw.id) {
+    const wantUnlock =
+      unlocks < 2 &&
+      Boolean(raw.id) &&
+      (unlocks === 0 || raw.has_email === true || i < 2);
+    if (wantUnlock && raw.id) {
       const enriched = await enrichApolloPerson(key, raw.id);
       if (enriched) {
         people.push(enriched);
+        unlocks += 1;
         continue;
       }
     }

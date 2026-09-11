@@ -98,10 +98,9 @@ export default async function OutreachCrmPage() {
           flag.
         </p>
         <p>
-          <strong className="text-text">Medewerkers:</strong> beste bron hier is{" "}
-          <em>Apollo</em> (LinkedIn-achtige concern-schatting). Officiële
-          LinkedIn Company API hebben we niet; op het dossier kun je handmatig
-          een LinkedIn-schatting zetten.
+          <strong className="text-text">Medewerkers:</strong> automatisch via{" "}
+          <em>Apollo</em> (zoek + org-enrich op domein). Geen handmatige
+          LinkedIn-invoer in de member-flow.
         </p>
         <p>
           <strong className="text-text">Contacten:</strong> Apollo zoekt Event /

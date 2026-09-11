@@ -7,12 +7,14 @@ import { hasKvkConfig } from "@/lib/integrations/kvk";
 import { hasApolloConfig } from "@/lib/integrations/apollo/client";
 import { hasHunterConfig } from "@/lib/integrations/hunter/client";
 import { nextApolloDiscoverPage } from "@/lib/outreach/apollo-page";
+import { countAutoFillPending } from "@/lib/outreach/auto-fill";
 
 export const metadata = { title: "Lijst bijwerken" };
 export const dynamic = "force-dynamic";
 
 export default async function LijstBijwerkenPage() {
   const { rows } = await listProspects();
+  const pending = await countAutoFillPending();
   const companies = rows.filter(
     (p) =>
       p.type === "company" &&
@@ -20,12 +22,6 @@ export default async function LijstBijwerkenPage() {
       p.source !== "exclusion_import",
   );
   const pipeline = companies.filter((p) => p.doelgroepFit !== "nee");
-  const pendingKvk = pipeline.filter((p) => !p.kvkNumber).length;
-  const pendingEmail = pipeline.filter((p) => p.website && !p.email).length;
-  const pendingPeople = pipeline.filter((p) => !p.decisionMaker).length;
-  const pendingHunter = pipeline.filter(
-    (p) => p.decisionMaker && !p.decisionMakerEmail,
-  ).length;
   const withEmail = pipeline.filter((p) => Boolean(p.email)).length;
   const outOfRegion = companies.filter((p) =>
     Boolean(p.doelgroepReason?.startsWith("Buiten regio")),
@@ -40,7 +36,7 @@ export default async function LijstBijwerkenPage() {
       <SectionHeader
         eyebrow="Leads binnenhalen"
         title="Lijst bijwerken"
-        description="Hier haal je zelf nieuwe bedrijven op en vul je e-mailadressen aan. Daarna mail je via Bedrijven → Mailen."
+        description="Eén knop vult KvK, contactpersonen en e-mails automatisch aan. Geen handmatig LinkedIn-werk nodig."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={apolloReady ? "success" : "danger"}>
@@ -57,10 +53,11 @@ export default async function LijstBijwerkenPage() {
       />
 
       <ListFillWorkbench
-        pendingKvk={pendingKvk}
-        pendingEmail={pendingEmail}
-        pendingPeople={pendingPeople}
-        pendingHunter={pendingHunter}
+        pendingKvk={pending.kvk}
+        pendingEmail={pending.website}
+        pendingPeople={pending.people}
+        pendingHunter={pending.hunter}
+        pendingHeadcount={pending.headcount}
         apolloReady={apolloReady}
         hunterReady={hunterReady}
         kvkReady={kvkReady}

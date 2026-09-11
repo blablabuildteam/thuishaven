@@ -156,7 +156,7 @@ export async function fillCompanyWebsiteEmails(limit = 8): Promise<{
       ),
     )
     .orderBy(sql`${prospects.createdAt} asc`)
-    .limit(Math.min(Math.max(limit, 1), 8));
+    .limit(Math.min(Math.max(limit, 1), 15));
 
   const rows: WebsiteEmailRow[] = [];
   let filled = 0;

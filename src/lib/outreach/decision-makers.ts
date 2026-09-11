@@ -101,7 +101,7 @@ export async function fillDecisionMakers(limit = 8): Promise<{
       ),
     )
     .orderBy(sql`${prospects.createdAt} asc`)
-    .limit(Math.min(Math.max(limit, 1), 8));
+    .limit(Math.min(Math.max(limit, 1), 15));
 
   const rows: DecisionMakerRow[] = [];
   let filled = 0;
@@ -246,7 +246,7 @@ export async function fillHunterEmailsForDecisionMakers(limit = 8): Promise<{
       ),
     )
     .orderBy(sql`${prospects.createdAt} asc`)
-    .limit(Math.min(Math.max(limit, 1), 8));
+    .limit(Math.min(Math.max(limit, 1), 15));
 
   const rows: DecisionMakerRow[] = [];
   let filled = 0;

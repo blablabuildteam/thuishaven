@@ -10,7 +10,7 @@ import { logSessionActivity } from "@/lib/audit/session-log";
 export const dynamic = "force-dynamic";
 
 const schema = z.object({
-  limit: z.number().int().min(1).max(8).optional(),
+  limit: z.number().int().min(1).max(15).optional(),
   /** Alleen Hunter-mail voor bestaande Event Managers zonder e-mail. */
   hunterEmails: z.boolean().optional(),
 });
