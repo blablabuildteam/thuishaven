@@ -8,6 +8,7 @@ config({ path: ".env.local" });
 
 import { endDb } from "../src/lib/db/client";
 import { searchDoelgroepCompanies } from "../src/lib/integrations/apollo/client";
+import { keepForIntake } from "../src/lib/integrations/apollo/criteria";
 import { rememberApolloPage } from "../src/lib/outreach/apollo-page";
 import { addProspects } from "../src/lib/outreach/intake";
 
@@ -35,10 +36,15 @@ async function main() {
 
     if (search.companies.length === 0) break;
 
+    const keep = keepForIntake(search.companies);
+    console.log(
+      `[apollo] pagina ${page} · ${keep.length}/${search.companies.length} in regio (of onbekende plaats)`,
+    );
+
     const added = await addProspects({
       type: "company",
       source: "apollo",
-      drafts: search.companies.map((c) => ({
+      drafts: keep.map((c) => ({
         companyName: c.name,
         website: c.website ?? null,
         linkedinUrl: c.linkedinUrl ?? null,

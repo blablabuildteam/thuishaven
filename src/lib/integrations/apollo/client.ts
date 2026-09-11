@@ -3,9 +3,14 @@
  * 1 credit per page (max 100 rows). Not a LinkedIn scrape.
  */
 
-import { DOELGROEP } from "@/lib/outreach/doelgroep";
 import { OUTREACH_RATES } from "@/lib/outreach/batch-costs";
 import { recordUsage } from "@/lib/usage/store";
+import {
+  DEFAULT_APOLLO_CRITERIA,
+  normalizeCriteria,
+  placesForPreset,
+  type ApolloSearchCriteria,
+} from "./criteria";
 
 export function hasApolloConfig(): boolean {
   return Boolean(process.env.APOLLO_API_KEY?.trim());
@@ -27,16 +32,15 @@ export type ApolloSearchResult = {
   page: number;
   total: number;
   companies: ApolloCompany[];
+  criteria: ApolloSearchCriteria;
 };
-
-function locations(): string[] {
-  return DOELGROEP.places.map((p) => `${p}, Netherlands`);
-}
 
 export async function searchDoelgroepCompanies(options?: {
   page?: number;
   perPage?: number;
+  criteria?: Partial<ApolloSearchCriteria> | null;
 }): Promise<ApolloSearchResult> {
+  const criteria = normalizeCriteria(options?.criteria ?? DEFAULT_APOLLO_CRITERIA);
   const key = process.env.APOLLO_API_KEY?.trim();
   if (!key) {
     return {
@@ -45,11 +49,25 @@ export async function searchDoelgroepCompanies(options?: {
       page: 1,
       total: 0,
       companies: [],
+      criteria,
     };
   }
 
   const page = options?.page ?? 1;
   const perPage = Math.min(options?.perPage ?? 100, 100);
+  const locations = placesForPreset(criteria.placePreset).map(
+    (p) => `${p}, Netherlands`,
+  );
+
+  const body: Record<string, unknown> = {
+    page,
+    per_page: perPage,
+    organization_locations: locations,
+    organization_num_employees_ranges: criteria.employeeRanges,
+  };
+  if (criteria.keywordTags.length > 0) {
+    body.q_organization_keyword_tags = criteria.keywordTags;
+  }
 
   const res = await fetch("https://api.apollo.io/api/v1/mixed_companies/search", {
     method: "POST",
@@ -58,12 +76,7 @@ export async function searchDoelgroepCompanies(options?: {
       "cache-control": "no-cache",
       "x-api-key": key,
     },
-    body: JSON.stringify({
-      page,
-      per_page: perPage,
-      organization_locations: locations(),
-      organization_num_employees_ranges: ["501,1000", "1001,2000", "2001,5000"],
-    }),
+    body: JSON.stringify(body),
     cache: "no-store",
   });
 
@@ -89,6 +102,7 @@ export async function searchDoelgroepCompanies(options?: {
       page,
       total: 0,
       companies: [],
+      criteria,
     };
   }
 
@@ -99,7 +113,13 @@ export async function searchDoelgroepCompanies(options?: {
     units: 1,
     unitLabel: "credit",
     costEurCents: OUTREACH_RATES.apolloCreditCents,
-    meta: { page, perPage },
+    meta: {
+      page,
+      perPage,
+      placePreset: criteria.placePreset,
+      employeeRanges: criteria.employeeRanges,
+      keywordTags: criteria.keywordTags,
+    },
   }).catch(() => undefined);
 
   const companies = (json.organizations ?? [])
@@ -119,6 +139,7 @@ export async function searchDoelgroepCompanies(options?: {
     page: json.pagination?.page ?? page,
     total: json.pagination?.total_entries ?? companies.length,
     companies,
+    criteria,
   };
 }
 

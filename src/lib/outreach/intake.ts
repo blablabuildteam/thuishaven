@@ -7,7 +7,7 @@ import { getDb, hasDatabase } from "@/lib/db/client";
 import { exclusions, prospects } from "@/lib/db/schema";
 import { normalizeCompanyKey } from "@/lib/outreach/data";
 import type { ProspectType } from "@/lib/outreach/data";
-import { scoreDoelgroep } from "@/lib/outreach/doelgroep";
+import { isCityInRegion, scoreDoelgroep } from "@/lib/outreach/doelgroep";
 
 export type IntakeSource = "manual" | "paste" | "linkedin" | "apollo";
 
@@ -163,6 +163,21 @@ export async function addProspects(input: {
         status: "duplicate",
         reason: "Stond al op de lijst",
         id: match.id,
+      });
+      continue;
+    }
+
+    /** Apollo: alleen binnen de regio-allowlist (bekende buitenplaats → skip). */
+    if (
+      input.source === "apollo" &&
+      draft.city?.trim() &&
+      !isCityInRegion(draft.city)
+    ) {
+      excluded += 1;
+      rows.push({
+        companyName,
+        status: "excluded",
+        reason: `Buiten regio (${draft.city.trim()})`,
       });
       continue;
     }

@@ -19,13 +19,17 @@ export default async function LijstBijwerkenPage() {
       p.status !== "excluded" &&
       p.source !== "exclusion_import",
   );
-  const pendingKvk = companies.filter((p) => !p.kvkNumber).length;
-  const pendingEmail = companies.filter((p) => p.website && !p.email).length;
-  const pendingPeople = companies.filter((p) => !p.decisionMaker).length;
-  const pendingHunter = companies.filter(
+  const pipeline = companies.filter((p) => p.doelgroepFit !== "nee");
+  const pendingKvk = pipeline.filter((p) => !p.kvkNumber).length;
+  const pendingEmail = pipeline.filter((p) => p.website && !p.email).length;
+  const pendingPeople = pipeline.filter((p) => !p.decisionMaker).length;
+  const pendingHunter = pipeline.filter(
     (p) => p.decisionMaker && !p.decisionMakerEmail,
   ).length;
-  const withEmail = companies.filter((p) => Boolean(p.email)).length;
+  const withEmail = pipeline.filter((p) => Boolean(p.email)).length;
+  const outOfRegion = companies.filter((p) =>
+    Boolean(p.doelgroepReason?.startsWith("Buiten regio")),
+  ).length;
   const apolloReady = hasApolloConfig();
   const hunterReady = hasHunterConfig();
   const kvkReady = hasKvkConfig();
@@ -61,8 +65,9 @@ export default async function LijstBijwerkenPage() {
         hunterReady={hunterReady}
         kvkReady={kvkReady}
         apolloNextPage={apolloNextPage}
-        companyCount={companies.length}
+        companyCount={pipeline.length}
         withEmailCount={withEmail}
+        outOfRegionCount={outOfRegion}
       />
     </div>
   );

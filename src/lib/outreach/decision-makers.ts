@@ -97,6 +97,7 @@ export async function fillDecisionMakers(limit = 8): Promise<{
         sql`coalesce(${prospects.metadata}->>'source', '') <> 'system'`,
         sql`${prospects.metadata}->>'decisionMaker' is null`,
         sql`coalesce((${prospects.metadata}->>'decisionMakerFails')::int, 0) < 2`,
+        sql`coalesce(${prospects.metadata}->>'doelgroepFit', '') <> 'nee'`,
       ),
     )
     .orderBy(sql`${prospects.createdAt} asc`)
@@ -225,6 +226,7 @@ export async function fillHunterEmailsForDecisionMakers(limit = 8): Promise<{
         sql`${prospects.metadata}->>'decisionMaker' is not null`,
         sql`coalesce(${prospects.metadata}->'decisionMaker'->>'email', '') = ''`,
         sql`coalesce((${prospects.metadata}->>'hunterEmailFails')::int, 0) < 2`,
+        sql`coalesce(${prospects.metadata}->>'doelgroepFit', '') <> 'nee'`,
       ),
     )
     .orderBy(sql`${prospects.createdAt} asc`)

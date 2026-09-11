@@ -21,7 +21,7 @@ import {
   type ProspectStatus,
   type ProspectType,
 } from "@/lib/mock/outreach";
-import { employeeCountForFit, scoreDoelgroep } from "@/lib/outreach/doelgroep";
+import { employeeCountForFit, cityForFit, scoreDoelgroep } from "@/lib/outreach/doelgroep";
 
 export { statusLabels };
 export type { ProspectStatus, ProspectType };
@@ -106,13 +106,19 @@ export async function listProspects(options?: {
       const estimate =
         typeof meta.linkedinEmployeeEstimate === "number"
           ? meta.linkedinEmployeeEstimate
-          : null;
+          : typeof meta.apolloEmployeeCount === "number"
+            ? meta.apolloEmployeeCount
+            : null;
+      const apolloCity =
+        typeof meta.apolloCity === "string" ? meta.apolloCity : null;
+      const kvkCity =
+        typeof meta.kvkCity === "string" ? meta.kvkCity : p.city;
       const scored = scoreDoelgroep({
         employeeCount: employeeCountForFit({
           kvkCount: p.employeeCount,
           estimate,
         }),
-        city: p.city,
+        city: cityForFit({ apolloCity, kvkCity }),
       });
       const storedFit =
         typeof meta.doelgroepFit === "string" ? meta.doelgroepFit : undefined;

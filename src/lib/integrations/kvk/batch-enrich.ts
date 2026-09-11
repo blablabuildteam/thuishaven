@@ -45,6 +45,7 @@ export async function enrichCompanyProspectsBatch(limit = 10): Promise<{
         isNull(prospects.kvkNumber),
         sql`coalesce((${prospects.metadata}->>'kvkEnrichFails')::int, 0) < 2`,
         sql`coalesce(${prospects.metadata}->>'source', '') <> 'system'`,
+        sql`coalesce(${prospects.metadata}->>'doelgroepFit', '') <> 'nee'`,
       ),
     )
     .orderBy(sql`${prospects.createdAt} asc`)

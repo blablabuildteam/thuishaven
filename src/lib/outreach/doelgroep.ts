@@ -138,3 +138,8 @@ export function scoreDoelgroep(input: {
 
   return { fit: "ja", reason: `${count} mdw · ${city ?? "regio ok"}` };
 }
+
+/** Skip further spend (KvK/people/mail) when we already know it doesn't fit. */
+export function isDoelgroepRejected(meta: Record<string, unknown> | null | undefined): boolean {
+  return meta?.doelgroepFit === "nee";
+}

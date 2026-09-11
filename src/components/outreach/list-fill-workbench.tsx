@@ -4,6 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { StatusBadge } from "@/components/ui/status-badge";
+import {
+  APOLLO_EMPLOYEE_RANGES,
+  DEFAULT_APOLLO_CRITERIA,
+  type ApolloSearchCriteria,
+  type PlacePreset,
+} from "@/lib/integrations/apollo/criteria";
 
 type Props = {
   pendingKvk: number;
@@ -16,7 +22,40 @@ type Props = {
   apolloNextPage: number;
   companyCount: number;
   withEmailCount: number;
+  outOfRegionCount: number;
 };
+
+type Preview = {
+  total: number;
+  pageKeep: number;
+  pageOutOfRegion: number;
+  pageUnknownCity: number;
+  criteriaLabel: string;
+  keepSample: Array<{
+    name: string;
+    city: string | null;
+    employeeCount: number | null;
+  }>;
+  droppedSample: Array<{ name: string; city: string | null }>;
+};
+
+const PLACE_OPTIONS: { id: PlacePreset; label: string; hint: string }[] = [
+  {
+    id: "ring",
+    label: "Amsterdam + ~50 km",
+    hint: "Volledige ring (standaard)",
+  },
+  {
+    id: "kern",
+    label: "Kern",
+    hint: "Amsterdam, Amstelveen, Schiphol, Zaandam…",
+  },
+  {
+    id: "amsterdam",
+    label: "Alleen Amsterdam",
+    hint: "Strakste filter",
+  },
+];
 
 export function ListFillWorkbench({
   pendingKvk,
@@ -29,11 +68,45 @@ export function ListFillWorkbench({
   apolloNextPage,
   companyCount,
   withEmailCount,
+  outOfRegionCount,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
+  const [criteria, setCriteria] = useState<ApolloSearchCriteria>({
+    ...DEFAULT_APOLLO_CRITERIA,
+    employeeRanges: [...DEFAULT_APOLLO_CRITERIA.employeeRanges],
+    keywordTags: [],
+  });
+  const [keywords, setKeywords] = useState("");
+  const [preview, setPreview] = useState<Preview | null>(null);
+
+  function criteriaBody(): ApolloSearchCriteria {
+    return {
+      ...criteria,
+      keywordTags: keywords
+        .split(/[,;]+/)
+        .map((t) => t.trim())
+        .filter(Boolean)
+        .slice(0, 8),
+    };
+  }
+
+  function toggleRange(id: string) {
+    setPreview(null);
+    setCriteria((c) => {
+      const has = c.employeeRanges.includes(id);
+      const next = has
+        ? c.employeeRanges.filter((r) => r !== id)
+        : [...c.employeeRanges, id];
+      return {
+        ...c,
+        employeeRanges:
+          next.length > 0 ? next : [...DEFAULT_APOLLO_CRITERIA.employeeRanges],
+      };
+    });
+  }
 
   function run(
     path: string,
@@ -63,6 +136,51 @@ export function ListFillWorkbench({
     });
   }
 
+  function previewCount() {
+    setError(null);
+    setOk(null);
+    startTransition(async () => {
+      const res = await fetch("/api/outreach/discover", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          apply: false,
+          page: apolloNextPage,
+          criteria: criteriaBody(),
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as Record<
+        string,
+        unknown
+      >;
+      if (!res.ok) {
+        setError(
+          typeof data.error === "string" ? data.error : "Teller mislukt",
+        );
+        return;
+      }
+      setPreview({
+        total: Number(data.total ?? 0),
+        pageKeep: Number(data.pageKeep ?? 0),
+        pageOutOfRegion: Number(data.pageOutOfRegion ?? 0),
+        pageUnknownCity: Number(data.pageUnknownCity ?? 0),
+        criteriaLabel:
+          typeof data.criteriaLabel === "string"
+            ? data.criteriaLabel
+            : "Criteria",
+        keepSample: Array.isArray(data.keepSample)
+          ? (data.keepSample as Preview["keepSample"])
+          : [],
+        droppedSample: Array.isArray(data.droppedSample)
+          ? (data.droppedSample as Preview["droppedSample"])
+          : [],
+      });
+      setOk(
+        `Apollo vindt ~${Number(data.total ?? 0)} matches · op deze pagina houden we ${Number(data.pageKeep ?? 0)} (1 credit gebruikt)`,
+      );
+    });
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid gap-3 sm:grid-cols-3">
@@ -75,6 +193,14 @@ export function ListFillWorkbench({
         />
       </div>
 
+      {outOfRegionCount > 0 ? (
+        <p className="border border-border bg-surface px-4 py-3 text-sm text-text-muted">
+          {outOfRegionCount} bestaande bedrijven staan buiten de regio — die
+          slaan we over bij aanvullen/mailen. Filter in Bedrijven op{" "}
+          <strong className="text-text">Buiten regio</strong> om ze te zien.
+        </p>
+      ) : null}
+
       <section className="border border-border bg-surface p-4 sm:p-5">
         <p className="font-display text-sm tracking-[0.16em] text-text-dim">
           Stap 1
@@ -83,17 +209,107 @@ export function ListFillWorkbench({
           Nieuwe bedrijven ophalen
         </h2>
         <p className="mt-2 max-w-2xl text-sm text-text-muted">
-          Haalt midgrote bedrijven op in Amsterdam + omgeving (zo’n 500–5.000
-          medewerkers). Apollo levert max <strong>100 per keer</strong> (= 1
-          credit). Je kunt dit meerdere keren doen voor de volgende batch.
+          Apollo zoekt op HQ-plaats + medewerkers. Wij bewaren alleen bedrijven
+          waarvan de Apollo-plaats in de gekozen ring valt (of nog onbekend
+          is). Max <strong>100 per keer</strong> = 1 credit.
         </p>
+
+        <div className="mt-5 space-y-4 border-t border-border pt-4">
+          <div>
+            <p className="font-display text-xs tracking-[0.14em] text-text-dim">
+              Medewerkers (Apollo-ranges)
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {APOLLO_EMPLOYEE_RANGES.map((r) => {
+                const on = criteria.employeeRanges.includes(r.id);
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    disabled={pending}
+                    onClick={() => toggleRange(r.id)}
+                    className={
+                      on
+                        ? "border border-accent bg-accent/10 px-3 py-1.5 text-sm text-text"
+                        : "border border-border px-3 py-1.5 text-sm text-text-muted hover:border-accent"
+                    }
+                  >
+                    {r.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <p className="font-display text-xs tracking-[0.14em] text-text-dim">
+              Regio-preset
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {PLACE_OPTIONS.map((p) => {
+                const on = criteria.placePreset === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    disabled={pending}
+                    title={p.hint}
+                    onClick={() => {
+                      setPreview(null);
+                      setCriteria((c) => ({ ...c, placePreset: p.id }));
+                    }}
+                    className={
+                      on
+                        ? "border border-accent bg-accent/10 px-3 py-1.5 text-sm text-text"
+                        : "border border-border px-3 py-1.5 text-sm text-text-muted hover:border-accent"
+                    }
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="font-display text-xs tracking-[0.14em] text-text-dim">
+              Keywords (optioneel, Apollo)
+              <input
+                value={keywords}
+                onChange={(e) => {
+                  setPreview(null);
+                  setKeywords(e.target.value);
+                }}
+                placeholder="bijv. technology, finance"
+                className="mt-2 block w-full max-w-md border border-border bg-bg px-3 py-2 text-sm text-text"
+              />
+            </label>
+          </div>
+        </div>
+
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button
             type="button"
             disabled={pending || !apolloReady}
+            onClick={previewCount}
+            className="border border-border bg-bg px-4 py-2.5 font-display text-sm tracking-[0.1em] hover:border-accent disabled:opacity-50"
+          >
+            {pending ? "Bezig…" : "Tel matches (1 credit)"}
+          </button>
+          <button
+            type="button"
+            disabled={pending || !apolloReady}
             onClick={() =>
-              run("/api/outreach/discover", { apply: true }, (d) =>
-                `${Number(d.created ?? 0)} nieuw · ${Number(d.duplicate ?? 0)} stonden al op de lijst`,
+              run(
+                "/api/outreach/discover",
+                { apply: true, criteria: criteriaBody() },
+                (d) => {
+                  const dropped = Number(d.pageOutOfRegion ?? 0);
+                  const base = `${Number(d.created ?? 0)} nieuw · ${Number(d.duplicate ?? 0)} stonden al`;
+                  return dropped
+                    ? `${base} · ${dropped} buiten regio overgeslagen`
+                    : base;
+                },
               )
             }
             className="bg-accent px-4 py-2.5 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
@@ -101,7 +317,7 @@ export function ListFillWorkbench({
             {pending
               ? "Bezig…"
               : apolloNextPage > 1
-                ? `Haal volgende 100 bedrijven op`
+                ? `Haal volgende 100 op`
                 : "Haal 100 bedrijven op"}
           </button>
           {!apolloReady ? (
@@ -114,6 +330,43 @@ export function ListFillWorkbench({
             </span>
           )}
         </div>
+
+        {preview ? (
+          <div className="mt-4 border border-border bg-bg p-4 text-sm">
+            <p className="font-medium text-text">{preview.criteriaLabel}</p>
+            <p className="mt-1 text-text-muted">
+              Apollo-totaal ~{preview.total.toLocaleString("nl-NL")} · deze
+              pagina: {preview.pageKeep} bewaren
+              {preview.pageOutOfRegion
+                ? ` · ${preview.pageOutOfRegion} buiten regio weg`
+                : ""}
+              {preview.pageUnknownCity
+                ? ` · ${preview.pageUnknownCity} zonder plaats`
+                : ""}
+            </p>
+            {preview.keepSample.length > 0 ? (
+              <ul className="mt-3 space-y-1 text-text-muted">
+                {preview.keepSample.map((c) => (
+                  <li key={c.name}>
+                    {c.name}
+                    {c.city ? ` · ${c.city}` : ""}
+                    {c.employeeCount != null
+                      ? ` · ~${c.employeeCount} mdw`
+                      : ""}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {preview.droppedSample.length > 0 ? (
+              <p className="mt-3 text-xs text-text-dim">
+                Voorbeelden overgeslagen:{" "}
+                {preview.droppedSample
+                  .map((c) => `${c.name} (${c.city ?? "?"})`)
+                  .join(", ")}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </section>
 
       <section className="border border-border bg-surface p-4 sm:p-5">
@@ -124,8 +377,8 @@ export function ListFillWorkbench({
           Bedrijfsgegevens aanvullen
         </h2>
         <p className="mt-2 max-w-2xl text-sm text-text-muted">
-          Haalt KvK-info op: plaats, medewerkers, jubileum. Daarna zie je of
-          een bedrijf past (of “Past niet”).
+          Haalt KvK-info op: plaats, medewerkers, jubileum. Bedrijven die al
+          “past niet” scoren, worden overgeslagen.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button
@@ -199,52 +452,46 @@ export function ListFillWorkbench({
                   `${Number(d.filled ?? 0)} e-mails gevonden · ${Number(d.processed ?? 0)} geprobeerd`,
               )
             }
-            className="border border-border bg-bg px-4 py-2.5 font-display text-sm tracking-[0.1em] disabled:opacity-50"
+            className="border border-border bg-bg px-4 py-2.5 font-display text-sm tracking-[0.1em] hover:border-accent disabled:opacity-50"
           >
-            {pendingHunter === 0
-              ? "Geen open e-mails"
-              : `Zoek 8 e-mails (${pendingHunter} open)`}
+            {pending
+              ? "Bezig…"
+              : pendingHunter === 0
+                ? "Geen open Hunter-mails"
+                : `Hunter-mail (${pendingHunter} open)`}
           </button>
           <button
             type="button"
             disabled={pending || pendingEmail === 0}
             onClick={() =>
               run("/api/outreach/website-email", { limit: 8 }, (d) =>
-                `${Number(d.filled ?? 0)} website-mails · ${Number(d.processed ?? 0)} sites`,
+                `${Number(d.filled ?? 0)} website-mails · ${Number(d.processed ?? 0)} geprobeerd`,
               )
             }
-            className="border border-border bg-bg px-4 py-2.5 font-display text-sm tracking-[0.1em] disabled:opacity-50"
+            className="border border-border bg-bg px-4 py-2.5 font-display text-sm tracking-[0.1em] hover:border-accent disabled:opacity-50"
           >
-            {pendingEmail === 0
-              ? "Geen website-mails open"
-              : `Website-mail (8) · ${pendingEmail} open`}
+            {pending
+              ? "Bezig…"
+              : pendingEmail === 0
+                ? "Geen open website-mails"
+                : `Website-mail (${pendingEmail} open)`}
           </button>
         </div>
-        {!hunterReady ? (
-          <p className="mt-3 text-xs text-text-dim">
-            Extra e-mailzoeken staat uit tot Kevin de koppeling aanzet — contact
-            zoeken werkt wel.
-          </p>
-        ) : null}
       </section>
 
-      {(ok || error) && (
-        <div className="flex flex-wrap gap-2">
-          {ok ? <StatusBadge tone="success">{ok}</StatusBadge> : null}
-          {error ? <StatusBadge tone="danger">{error}</StatusBadge> : null}
-        </div>
-      )}
+      {error ? (
+        <p className="text-sm text-danger" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {ok ? <p className="text-sm text-text-muted">{ok}</p> : null}
 
       <p className="text-sm text-text-muted">
         Klaar? Ga naar{" "}
         <Link href="/outreach/crm" className="text-accent underline">
           Bedrijven
         </Link>{" "}
-        om te zien wie past, en daarna naar{" "}
-        <Link href="/outreach/emails" className="text-accent underline">
-          Mailen
-        </Link>
-        .
+        om te filteren en te mailen.
       </p>
     </div>
   );
@@ -261,13 +508,11 @@ function Stat({
 }) {
   return (
     <div className="border border-border bg-surface px-4 py-3">
-      <p className="text-[11px] uppercase tracking-wider text-text-dim">
+      <p className="font-display text-xs tracking-[0.14em] text-text-dim">
         {label}
       </p>
-      <p className="mt-1 font-display text-2xl tracking-[0.06em] text-text">
-        {value}
-      </p>
-      {hint ? <p className="mt-0.5 text-xs text-text-dim">{hint}</p> : null}
+      <p className="mt-1 font-display text-2xl tracking-[0.06em]">{value}</p>
+      {hint ? <p className="text-xs text-text-dim">{hint}</p> : null}
     </div>
   );
 }
