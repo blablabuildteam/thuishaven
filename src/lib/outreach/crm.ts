@@ -13,7 +13,7 @@ import {
 import { statusLabels, type ProspectStatus, type ProspectType } from "./data";
 import { kvkHeadcountLooksOff } from "./linkedin";
 import { isSystemProspect } from "./apollo-page";
-import { scoreDoelgroep, employeeCountForFit } from "./doelgroep";
+import { scoreDoelgroep, employeeCountForFit, cityForFit, isCityInRegion } from "./doelgroep";
 import {
   EXISTING_CUSTOMER_REASON,
   EXCLUSION_IMPORT_SOURCE,
@@ -47,8 +47,16 @@ export type CrmRecord = {
   city: string | null;
   sector: string | null;
   kvkNumber: string | null;
+  /** Fit-headcount (Apollo heeft voorkeur). */
   employeeCount: number | null;
+  /** Apollo concern-schatting. */
+  apolloEmployeeCount: number | null;
+  /** KvK-vestiging (vaak lager). */
+  kvkEmployeeCount: number | null;
   anniversaryYears: number | null;
+  apolloCity: string | null;
+  kvkCity: string | null;
+  inRegion: boolean;
   source?: string;
   doelgroepFit?: string;
   doelgroepReason?: string;
@@ -89,20 +97,34 @@ function mapRecord(
   extras: { mailCount: number; replyCount: number; lastTouchAt: string | null },
 ): CrmRecord {
   const meta = (p.metadata ?? {}) as Record<string, unknown>;
-  const estimate =
-    typeof meta.linkedinEmployeeEstimate === "number"
-      ? meta.linkedinEmployeeEstimate
-      : null;
+  const apolloEmployeeCount =
+    typeof meta.apolloEmployeeCount === "number"
+      ? meta.apolloEmployeeCount
+      : typeof meta.linkedinEmployeeEstimate === "number"
+        ? meta.linkedinEmployeeEstimate
+        : null;
+  const kvkEmployeeCount =
+    typeof meta.kvkVestigingEmployees === "number"
+      ? meta.kvkVestigingEmployees
+      : // Oudere rijen: employeeCount was soms puur KvK.
+        apolloEmployeeCount == null
+        ? p.employeeCount
+        : null;
+  const apolloCity =
+    typeof meta.apolloCity === "string" ? meta.apolloCity : null;
+  const kvkCity =
+    typeof meta.kvkCity === "string" ? meta.kvkCity : null;
+  const fitCity = cityForFit({ apolloCity, kvkCity: kvkCity ?? p.city });
+  const fitCount = employeeCountForFit({
+    kvkCount: kvkEmployeeCount ?? p.employeeCount,
+    estimate: apolloEmployeeCount,
+  });
   const scored = scoreDoelgroep({
-    employeeCount: employeeCountForFit({
-      kvkCount: p.employeeCount,
-      estimate,
-    }),
-    city: p.city,
+    employeeCount: fitCount,
+    city: fitCity,
   });
   const storedFit =
     typeof meta.doelgroepFit === "string" ? meta.doelgroepFit : undefined;
-  // Live herberekenen zodat KvK-plaats buiten regio niet als "fit" blijft hangen.
   const doelgroepFit = scored.fit !== "onbekend" ? scored.fit : storedFit;
   const doelgroepReason =
     scored.fit !== "onbekend"
@@ -110,6 +132,7 @@ function mapRecord(
       : typeof meta.doelgroepReason === "string"
         ? meta.doelgroepReason
         : undefined;
+  const inRegion = fitCity ? isCityInRegion(fitCity) : false;
 
   return {
     id: p.id,
@@ -121,8 +144,13 @@ function mapRecord(
     city: p.city,
     sector: p.sector,
     kvkNumber: p.kvkNumber,
-    employeeCount: p.employeeCount,
+    employeeCount: fitCount,
+    apolloEmployeeCount,
+    kvkEmployeeCount,
     anniversaryYears: p.anniversaryYears,
+    apolloCity,
+    kvkCity,
+    inRegion,
     source: typeof meta.source === "string" ? meta.source : undefined,
     doelgroepFit,
     doelgroepReason,
@@ -138,7 +166,7 @@ function mapRecord(
     replyCount: extras.replyCount,
     lastTouchAt: extras.lastTouchAt,
     linkedinUrl: p.linkedinUrl,
-    linkedinEmployeeEstimate: estimate,
+    linkedinEmployeeEstimate: apolloEmployeeCount,
     decisionMakerName:
       meta.decisionMaker &&
       typeof meta.decisionMaker === "object" &&
@@ -161,9 +189,7 @@ function mapRecord(
           ? meta.emailSource
           : undefined,
     kvkHeadcountOff: kvkHeadcountLooksOff(
-      typeof meta.kvkVestigingEmployees === "number"
-        ? meta.kvkVestigingEmployees
-        : p.employeeCount,
+      kvkEmployeeCount ?? p.employeeCount,
     ),
   };
 }

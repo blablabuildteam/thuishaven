@@ -84,8 +84,8 @@ export function ListFillWorkbench({
         </h2>
         <p className="mt-2 max-w-2xl text-sm text-text-muted">
           Haalt midgrote bedrijven op in Amsterdam + omgeving (zo’n 500–5.000
-          medewerkers). Je kunt dit meerdere keren doen voor de volgende
-          batch.
+          medewerkers). Apollo levert max <strong>100 per keer</strong> (= 1
+          credit). Je kunt dit meerdere keren doen voor de volgende batch.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button

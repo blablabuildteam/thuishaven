@@ -15,6 +15,7 @@ import {
 import { candidateFromProfiles } from "./discovery";
 import type { KvkProspectCandidate } from "./types";
 import {
+  cityForFit,
   employeeCountForFit,
   preferRegionCity,
   scoreDoelgroep,
@@ -135,26 +136,62 @@ export async function applyKvkCandidateToProspect(
   if (candidate.employeeCount != null) {
     meta.kvkVestigingEmployees = candidate.employeeCount;
   }
-  const estimate =
-    typeof meta.linkedinEmployeeEstimate === "number"
-      ? meta.linkedinEmployeeEstimate
-      : row.employeeCount;
+  if (candidate.city) {
+    meta.kvkCity = candidate.city;
+  }
+  const apolloEstimate =
+    typeof meta.apolloEmployeeCount === "number"
+      ? meta.apolloEmployeeCount
+      : typeof meta.linkedinEmployeeEstimate === "number"
+        ? meta.linkedinEmployeeEstimate
+        : null;
+  const apolloCity =
+    typeof meta.apolloCity === "string"
+      ? meta.apolloCity
+      : // Oudere Apollo-rijen: city vóór KvK was vaak de Apollo-plaats.
+        null;
+  if (!meta.apolloCity && row.city && !candidate.city) {
+    meta.apolloCity = row.city;
+  } else if (
+    !meta.apolloCity &&
+    row.city &&
+    candidate.city &&
+    row.city !== candidate.city
+  ) {
+    // Bewaar eerdere plaats als Apollo-signaal als die in de regio lag.
+    meta.apolloCity = row.city;
+  }
+
   const employeeCount = employeeCountForFit({
     kvkCount: candidate.employeeCount,
-    estimate,
+    estimate: apolloEstimate,
   });
-  const city = preferRegionCity(row.city, candidate.city);
+  const fitCity = cityForFit({
+    apolloCity: (meta.apolloCity as string | undefined) ?? apolloCity,
+    kvkCity: candidate.city,
+  });
+  // Display city: regio-voorkeur, anders Apollo, anders KvK.
+  const city =
+    preferRegionCity(
+      typeof meta.apolloCity === "string" ? meta.apolloCity : row.city,
+      candidate.city,
+    ) ?? fitCity;
   const scored = scoreDoelgroep({
     employeeCount,
-    city,
+    city: fitCity,
   });
   meta.doelgroepFit = scored.fit;
-  meta.doelgroepReason =
-    employeeCount != null &&
+  const bits = [scored.reason];
+  if (
+    apolloEstimate != null &&
     candidate.employeeCount != null &&
-    employeeCount !== candidate.employeeCount
-      ? `Apollo ~${employeeCount} · KvK vestiging ${candidate.employeeCount} genegeerd · ${scored.reason}`
-      : scored.reason;
+    apolloEstimate !== candidate.employeeCount
+  ) {
+    bits.unshift(
+      `Apollo ~${apolloEstimate} · KvK vestiging ${candidate.employeeCount}`,
+    );
+  }
+  meta.doelgroepReason = bits.join(" · ");
   if (typeof meta.source !== "string") meta.source = "kvk";
 
   const keepStatus = new Set([

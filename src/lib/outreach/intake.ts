@@ -187,7 +187,10 @@ export async function addProspects(input: {
           source: input.source,
           notes: draft.notes?.trim() || undefined,
           addedAt: new Date().toISOString(),
+          /** Apollo concern-headcount — voorkeur boven KvK-vestiging. */
+          apolloEmployeeCount: draft.employeeCount ?? undefined,
           linkedinEmployeeEstimate: draft.employeeCount ?? undefined,
+          apolloCity: draft.city?.trim() || undefined,
           apolloPage: draft.apolloPage ?? undefined,
           doelgroepFit: scored.fit,
           doelgroepReason: scored.reason,

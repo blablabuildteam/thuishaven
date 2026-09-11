@@ -69,7 +69,7 @@ export const DOELGROEP_STARTLIJST: string[] = [
 
 export type DoelgroepFit = "ja" | "nee" | "onbekend";
 
-/** Concern estimate (Apollo/LinkedIn) wins over KvK vestiging. */
+/** Concern estimate (Apollo) wins over KvK vestiging — die is vaak te laag. */
 export function employeeCountForFit(input: {
   kvkCount?: number | null;
   estimate?: number | null;
@@ -78,6 +78,18 @@ export function employeeCountForFit(input: {
   const estimate = input.estimate ?? null;
   if (estimate != null && estimate > 0) return estimate;
   return kvk;
+}
+
+/** Regio: Apollo-HQ wint als die in de ring valt; anders KvK-plaats. */
+export function cityForFit(input: {
+  apolloCity?: string | null;
+  kvkCity?: string | null;
+}): string | null {
+  const apollo = input.apolloCity?.trim() || null;
+  const kvk = input.kvkCity?.trim() || null;
+  if (apollo && isCityInRegion(apollo)) return apollo;
+  if (kvk && isCityInRegion(kvk)) return kvk;
+  return apollo || kvk;
 }
 
 export function isCityInRegion(city: string): boolean {

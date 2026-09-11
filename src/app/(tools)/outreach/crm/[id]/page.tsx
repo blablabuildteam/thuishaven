@@ -114,9 +114,9 @@ export default async function CrmDossierPage({
         <div className="mb-6 border border-warn/40 bg-surface px-4 py-3 text-sm text-text-muted">
           <p className="font-medium text-text">KvK-medewerkers ziet er raar laag uit</p>
           <p className="mt-1">
-            {dossier.employeeCount} op de vestiging — bij een bekende werkgever
-            is dat vaak alleen het KvK-rechtspersoon, niet het concern. Apollo
-            (of een handmatige override) telt voor de doelgroep-fit.
+            {dossier.kvkEmployeeCount ?? dossier.employeeCount} op de vestiging —
+            dat is vaak alleen het KvK-rechtspersoon. Apollo telt voor de
+            doelgroep-fit.
           </p>
         </div>
       ) : null}
@@ -124,14 +124,18 @@ export default async function CrmDossierPage({
       <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Fact label="KvK" value={dossier.kvkNumber ?? "—"} />
         <Fact
-          label="Medewerkers · KvK"
-          value={dossier.employeeCount != null ? String(dossier.employeeCount) : "—"}
+          label="Medewerkers · Apollo"
+          value={
+            dossier.apolloEmployeeCount != null
+              ? `~${dossier.apolloEmployeeCount}`
+              : "—"
+          }
         />
         <Fact
-          label="Medewerkers · schatting"
+          label="Medewerkers · KvK"
           value={
-            dossier.linkedinEmployeeEstimate != null
-              ? `~${dossier.linkedinEmployeeEstimate}`
+            dossier.kvkEmployeeCount != null
+              ? String(dossier.kvkEmployeeCount)
               : "—"
           }
         />
@@ -149,6 +153,12 @@ export default async function CrmDossierPage({
               : dossier.doelgroepReason ?? "Onbekend"
           }
         />
+        <Fact
+          label="Plaats · Apollo"
+          value={dossier.apolloCity ?? "—"}
+        />
+        <Fact label="Plaats · KvK" value={dossier.kvkCity ?? "—"} />
+        <Fact label="Regio" value={dossier.inRegion ? "In ~50 km" : "Buiten"} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
