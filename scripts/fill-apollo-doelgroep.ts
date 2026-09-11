@@ -9,19 +9,28 @@ config({ path: ".env.local" });
 import { endDb } from "../src/lib/db/client";
 import { searchDoelgroepCompanies } from "../src/lib/integrations/apollo/client";
 import { keepForIntake } from "../src/lib/integrations/apollo/criteria";
-import { rememberApolloPage } from "../src/lib/outreach/apollo-page";
+import {
+  nextApolloDiscoverPage,
+  rememberApolloPage,
+  rememberApolloUniverse,
+} from "../src/lib/outreach/apollo-page";
 import { addProspects } from "../src/lib/outreach/intake";
 
 const PER_PAGE = 100;
-const MAX_PAGES = 12;
+const MAX_PAGES = 20;
 
 async function main() {
-  let page = 1;
+  let page = await nextApolloDiscoverPage();
   let total = 0;
   let created = 0;
   let duplicate = 0;
   let excluded = 0;
   let fetched = 0;
+  let kept = 0;
+  let skippedOut = 0;
+  const startPage = page;
+
+  console.log(`[apollo] start vanaf pagina ${page}`);
 
   while (page <= MAX_PAGES) {
     const search = await searchDoelgroepCompanies({ page, perPage: PER_PAGE });
@@ -30,6 +39,10 @@ async function main() {
     }
     total = search.total;
     fetched += search.companies.length;
+    await rememberApolloUniverse({
+      total: search.total,
+      criteria: search.criteria,
+    });
     console.log(
       `[apollo] pagina ${page} · ${search.companies.length} namen · Apollo-totaal ${total}`,
     );
@@ -37,8 +50,10 @@ async function main() {
     if (search.companies.length === 0) break;
 
     const keep = keepForIntake(search.companies);
+    skippedOut += search.companies.length - keep.length;
+    kept += keep.length;
     console.log(
-      `[apollo] pagina ${page} · ${keep.length}/${search.companies.length} in regio (of onbekende plaats)`,
+      `[apollo] pagina ${page} · ${keep.length}/${search.companies.length} bewaren`,
     );
 
     const added = await addProspects({
@@ -65,13 +80,13 @@ async function main() {
       search.companies.map((c) => c.name),
     );
 
-    if (page * PER_PAGE >= total) break;
+    if (page * PER_PAGE >= total || search.companies.length < PER_PAGE) break;
     page += 1;
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((r) => setTimeout(r, 350));
   }
 
   console.log(
-    `[apollo] klaar · nieuw ${created} · bestond al ${duplicate} · uitgesloten ${excluded} · opgehaald ${fetched} · Apollo zegt ${total}`,
+    `[apollo] klaar · pagina's ${startPage}–${page} · nieuw ${created} · bestond al ${duplicate} · buiten regio overgeslagen ${skippedOut} · bewaard ${kept} · Apollo zegt ${total}`,
   );
 }
 
