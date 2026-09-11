@@ -5,11 +5,31 @@ import Link from "next/link";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { statusLabels, type CrmRecord } from "@/lib/outreach/crm";
+import { statusLabels } from "@/lib/mock/outreach";
 import { mailAngleFor, type MailAngleId } from "@/lib/outreach/mail-angle";
 
+/** Client-safe shape — avoid importing server crm.ts (postgres) into the browser. */
+type CrmRow = {
+  id: string;
+  companyName: string;
+  status: keyof typeof statusLabels;
+  email: string | null;
+  city: string | null;
+  kvkCity: string | null;
+  apolloCity: string | null;
+  inRegion: boolean;
+  employeeCount: number | null;
+  apolloEmployeeCount: number | null;
+  kvkEmployeeCount: number | null;
+  anniversaryYears: number | null;
+  lastTouchAt: string | null;
+  kvkHeadcountOff: boolean;
+  mailCount: number;
+  replyCount: number;
+};
+
 type Row = {
-  row: CrmRecord;
+  row: CrmRow;
   angle: ReturnType<typeof mailAngleFor>;
 };
 
