@@ -8,7 +8,10 @@ import {
   type TicketPoolCell,
 } from "@/components/dashboard/tickets-channels-table";
 import { SectionHeader } from "@/components/ui/section-header";
-import { loadDailyTicketSales } from "@/lib/dashboard/daily-ticket-sales";
+import {
+  DAILY_TICKET_SALES_WINDOW,
+  loadDailyTicketSales,
+} from "@/lib/dashboard/daily-ticket-sales";
 import { DASHBOARD_TTL_MS, rememberTtl } from "@/lib/cache/ttl";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { editions, externalTicketEvents, ticketInventory } from "@/lib/db/schema";
@@ -39,7 +42,10 @@ function poolCell(row: PoolInventory | undefined): TicketPoolCell {
 
 const loadTicketsSheetRows = cache(async () => {
   const db = getDb();
-  return rememberTtl("tickets:sheet", DASHBOARD_TTL_MS, () =>
+  return rememberTtl(
+    `tickets:sheet:${DAILY_TICKET_SALES_WINDOW}`,
+    DASHBOARD_TTL_MS,
+    () =>
     Promise.all([
       db
         .select({
@@ -236,8 +242,8 @@ export default async function TicketsPage() {
         handmatig (verwachte bezoekers in Expected/Totaal). Totaal = som van de
         kanalen. Gescand = Weeztix check-in. De dagcurve telt tickets die op die
         kalenderdag zijn verkocht, gestapeld per event — niet het eventtotaal op
-        de eventdag. Die historie bouwen we zelf op via dagelijkse
-        Weeztix-snapshots.
+        de eventdag. Historie komt uit de Weeztix order-histogram (zelfde bron
+        als Insights), aangevuld met dagelijkse snapshots voor vandaag.
       </p>
     </div>
   );

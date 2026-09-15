@@ -5,6 +5,7 @@ import { getDb, hasDatabase } from "@/lib/db/client";
 import {
   editions,
   ticketInventoryDaily,
+  ticketSalesDaily,
   ticketSalesOnDay,
 } from "@/lib/db/schema";
 import {
@@ -13,7 +14,19 @@ import {
 } from "@/lib/dashboard/inventory-snapshots";
 import { amsterdamDay, formatDayShort, shiftIsoDay } from "@/lib/time/amsterdam";
 
-export const DAILY_TICKET_SALES_WINDOW = 14;
+/** Venue-wide stacked bars; same Weeztix order-histogram as Insights. */
+export const DAILY_TICKET_SALES_WINDOW = 30;
+
+type DailyTicketSalesRow = {
+  editionId: string;
+  name: string;
+  startsAt: Date;
+  day: string;
+  sold: number;
+  paidSold?: number;
+  freeSold?: number;
+  revenueCents?: number;
+};
 
 /** High-contrast qualitative palette; adjacent hues stay far apart in the stack. */
 const EVENT_COLORS = [
@@ -95,19 +108,37 @@ function normalizeDay(value: string | Date): string {
   return normalizeIsoDay(value);
 }
 
+/**
+ * Prefer the Weeztix order histogram per event (full onsale window).
+ * Snapshot / ticketCountToday rows only fill events with no histogram,
+ * plus today when the histogram has not caught up yet.
+ */
+export function mergeDailyTicketSalesRows(input: {
+  endDay: string;
+  orderRows: DailyTicketSalesRow[];
+  snapshotRows: DailyTicketSalesRow[];
+}): DailyTicketSalesRow[] {
+  const orderEditionIds = new Set(
+    input.orderRows.map((row) => row.editionId),
+  );
+  const orderKeys = new Set(
+    input.orderRows.map(
+      (row) => `${row.editionId}:${normalizeDay(row.day)}`,
+    ),
+  );
+  const fallback = input.snapshotRows.filter((row) => {
+    const day = normalizeDay(row.day);
+    if (!day || orderKeys.has(`${row.editionId}:${day}`)) return false;
+    if (!orderEditionIds.has(row.editionId)) return true;
+    return day === input.endDay;
+  });
+  return [...input.orderRows, ...fallback];
+}
+
 export function buildDailyTicketSales(input: {
   endDay: string;
   windowDays: number;
-  rows: Array<{
-    editionId: string;
-    name: string;
-    startsAt: Date;
-    day: string;
-    sold: number;
-    paidSold?: number;
-    freeSold?: number;
-    revenueCents?: number;
-  }>;
+  rows: DailyTicketSalesRow[];
 }): DailyTicketSales {
   const windowDays = Math.max(1, input.windowDays);
   const startDay = shiftIsoDay(input.endDay, -(windowDays - 1));
@@ -230,7 +261,25 @@ async function loadDailyTicketSalesFresh(
     const startDay = shiftIsoDay(endDay, -(windowDays - 1));
     const prevDay = shiftIsoDay(startDay, -1);
 
-    const [onDayRows, inventoryRows] = await Promise.all([
+    const [orderRows, onDayRows, inventoryRows] = await Promise.all([
+      db
+        .select({
+          editionId: ticketSalesDaily.editionId,
+          name: editions.name,
+          startsAt: editions.startsAt,
+          day: ticketSalesDaily.day,
+          sold: ticketSalesDaily.sold,
+          revenueCents: ticketSalesDaily.revenueCents,
+        })
+        .from(ticketSalesDaily)
+        .innerJoin(editions, eq(editions.id, ticketSalesDaily.editionId))
+        .where(
+          and(
+            eq(ticketSalesDaily.platform, "weeztix"),
+            gte(ticketSalesDaily.day, startDay),
+            lte(ticketSalesDaily.day, endDay),
+          ),
+        ),
       db
         .select({
           editionId: ticketSalesOnDay.editionId,
@@ -313,18 +362,29 @@ async function loadDailyTicketSalesFresh(
     return buildDailyTicketSales({
       endDay,
       windowDays,
-      rows: [
-        ...onDayRows.map((row) => ({
+      rows: mergeDailyTicketSalesRows({
+        endDay,
+        orderRows: orderRows.map((row) => ({
           editionId: row.editionId,
           name: row.name,
           startsAt: row.startsAt,
           day: normalizeDay(row.day),
           sold: row.sold,
-          paidSold: row.paidSold,
-          freeSold: row.freeSold,
           revenueCents: row.revenueCents,
         })),
-        ...deltaRows,
-      ],
+        snapshotRows: [
+          ...onDayRows.map((row) => ({
+            editionId: row.editionId,
+            name: row.name,
+            startsAt: row.startsAt,
+            day: normalizeDay(row.day),
+            sold: row.sold,
+            paidSold: row.paidSold,
+            freeSold: row.freeSold,
+            revenueCents: row.revenueCents,
+          })),
+          ...deltaRows,
+        ],
+      }),
     });
 }

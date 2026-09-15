@@ -262,9 +262,7 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
         <p className="border border-border px-4 py-3 text-sm text-text-muted">
           Nog geen dagverkoop in dit venster. De grafiek telt tickets die op
           die kalenderdag zijn verkocht — niet het eventtotaal op de
-          eventdag. Weeztix levert die historie niet via onze huidige API;
-          vanaf nu bewaren we elke sync een dagstand, zodat de staven zich
-          vullen.
+          eventdag.
         </p>
       </section>
     );
@@ -283,7 +281,7 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
             <BarChart
               data={chartData}
               margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
-              barCategoryGap="18%"
+              barCategoryGap="8%"
             >
               <CartesianGrid
                 stroke={colors.grid}
@@ -321,7 +319,7 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
                   stackId="sold"
                   fill={event.color}
                   name={displayEditionName(event.name)}
-                  maxBarSize={40}
+                  maxBarSize={22}
                   isAnimationActive={false}
                 />
               ))}
@@ -331,8 +329,7 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
       </div>
       {data.days.filter((day) => day.total > 0).length < data.windowDays ? (
         <p className="mt-2 text-[11px] text-text-muted">
-          Lege dagen hebben nog geen snapshot. Weeztix geeft via deze API geen
-          14-dagenhistorie; de rest vult zich na elke sync.
+          Geen staaf = geen Weeztix-verkoop op die dag.
         </p>
       ) : null}
     </section>
