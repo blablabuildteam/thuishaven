@@ -72,7 +72,7 @@ import type {
   WeatherHourRow,
 } from "@/lib/weather/open-meteo";
 import { EventSalesCurveChart } from "@/components/dashboard/event-sales-curve-chart";
-import { formatDayShort } from "@/lib/time/amsterdam";
+import { amsterdamDay, formatDayShort } from "@/lib/time/amsterdam";
 import { displayEditionName } from "@/lib/editions/lineup";
 import {
   IMPACT_BAR_HEIGHTS,
@@ -1140,11 +1140,28 @@ function takedownHint(channels: TakedownChannel[]): string {
   return "Nog tickets op Resident Advisor";
 }
 
+function daysFromToday(day: string): number {
+  const today = amsterdamDay(new Date());
+  const ms =
+    Date.parse(`${day}T12:00:00.000Z`) -
+    Date.parse(`${today}T12:00:00.000Z`);
+  return Math.round(ms / 86_400_000);
+}
+
+function upcomingWhenLabel(day: string): string {
+  const days = daysFromToday(day);
+  if (days <= 0) return "Vandaag";
+  if (days === 1) return "Morgen";
+  return `Over ${days}d`;
+}
+
 function EventRow({
   event,
+  variant,
   takedownChannels,
 }: {
   event: EventInsight;
+  variant: "upcoming" | "past";
   takedownChannels?: TakedownChannel[];
 }) {
   const [open, setOpen] = useState(false);
@@ -1186,15 +1203,25 @@ function EventRow({
   const artists = event.artists.filter(Boolean);
 
   const toggleOpen = () => setOpen((o) => !o);
+  const isUpcoming = variant === "upcoming";
+  const whenLabel = isUpcoming ? upcomingWhenLabel(event.day) : null;
 
   return (
     <li
       className={cn(
-        "border border-border bg-surface",
+        "border",
+        isUpcoming
+          ? "border-border-strong bg-surface"
+          : "border-border/80 bg-bg-elevated",
         takedownChannels?.length && "border-l-2 border-l-warn/70",
       )}
     >
-      <div className="group/row transition-colors hover:bg-surface-hover/50">
+      <div
+        className={cn(
+          "group/row transition-colors",
+          isUpcoming ? "hover:bg-surface-hover/50" : "hover:bg-surface-hover/30",
+        )}
+      >
         {/* Main row: date + title + metrics */}
         <div className="flex w-full items-start gap-4 px-4 py-4">
           <button
@@ -1204,17 +1231,32 @@ function EventRow({
             className="flex min-w-0 flex-1 items-start gap-4 text-left"
           >
             <span
-              className="flex w-12 shrink-0 flex-col items-center text-text-muted"
-              title={dateLabel}
-              aria-label={dateLabel}
+              className={cn(
+                "flex w-12 shrink-0 flex-col items-center",
+                isUpcoming ? "text-text" : "text-text-muted",
+              )}
+              title={whenLabel ? `${dateLabel} · ${whenLabel}` : dateLabel}
+              aria-label={
+                whenLabel ? `${dateLabel} · ${whenLabel}` : dateLabel
+              }
             >
-              <span className="text-[9px] font-medium leading-none tracking-[0.08em] text-text-dim capitalize">
+              <span
+                className={cn(
+                  "text-[9px] font-medium leading-none tracking-[0.08em] capitalize",
+                  isUpcoming ? "text-text-muted" : "text-text-dim",
+                )}
+              >
                 {weekdayLabel}
               </span>
               <span className="mt-0.5 font-mono text-[2.25rem] font-bold leading-none tabular-nums">
                 {dayNum}
               </span>
-              <span className="mt-0.5 text-[9px] font-medium leading-none tracking-[0.14em] text-text-dim uppercase">
+              <span
+                className={cn(
+                  "mt-0.5 text-[9px] font-medium leading-none tracking-[0.14em] uppercase",
+                  isUpcoming ? "text-text-muted" : "text-text-dim",
+                )}
+              >
                 {monthLabel}
               </span>
             </span>
@@ -1223,6 +1265,11 @@ function EventRow({
                 <span className="text-[15px] font-medium leading-snug" title={event.name}>
                   {displayEditionName(event.name)}
                 </span>
+                {whenLabel && (
+                  <span className="text-[10px] font-medium tracking-[0.12em] text-text-muted uppercase">
+                    {whenLabel}
+                  </span>
+                )}
                 {artists.length > 0 && (
                   <span className="text-xs text-text-dim">
                     {artists.join(" · ")}
@@ -2518,14 +2565,21 @@ function EventListHeading({
   eyebrow,
   title,
   count,
+  live,
 }: {
   id: string;
   eyebrow: string;
   title: string;
   count: number;
+  live?: boolean;
 }) {
   return (
-    <div className="mb-5 flex items-end justify-between gap-4 border-b border-border pb-3">
+    <div
+      className={cn(
+        "mb-5 flex items-end justify-between gap-4 border-b pb-3",
+        live ? "border-border-strong" : "border-border",
+      )}
+    >
       <div className="min-w-0">
         <p className="mb-1 text-[11px] font-medium tracking-[0.14em] text-text-dim uppercase">
           {eyebrow}
@@ -2577,6 +2631,7 @@ export function EventInsightsList({
             eyebrow="Planning"
             title="Komende events"
             count={upcoming.length}
+            live
           />
           <div className="space-y-6">
             {upcomingMonths.map((m) => (
@@ -2589,6 +2644,7 @@ export function EventInsightsList({
                     <EventRow
                       key={e.editionId}
                       event={e}
+                      variant="upcoming"
                       takedownChannels={takedownById.get(e.editionId)}
                     />
                   ))}
@@ -2630,6 +2686,7 @@ export function EventInsightsList({
                     <EventRow
                       key={e.editionId}
                       event={e}
+                      variant="past"
                       takedownChannels={takedownById.get(e.editionId)}
                     />
                   ))}
