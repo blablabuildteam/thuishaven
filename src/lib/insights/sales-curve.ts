@@ -37,16 +37,8 @@ export function buildSalesCurveSeries(
   const days = [...byDay.keys()].sort();
   const firstSale = days[0]!;
   const lastSale = days[days.length - 1]!;
-  const gapToEvent =
-    eventDay && eventDay > lastSale
-      ? Math.round(
-          (Date.parse(`${eventDay}T12:00:00.000Z`) -
-            Date.parse(`${lastSale}T12:00:00.000Z`)) /
-            86_400_000,
-        )
-      : 0;
   const end =
-    eventDay && eventDay > lastSale && gapToEvent <= 21 ? eventDay : lastSale;
+    eventDay && eventDay > lastSale ? eventDay : lastSale;
 
   const activityDays = extraDays
     .map((day) => day.slice(0, 10))

@@ -205,6 +205,15 @@ export async function linkCampaignsToEditions(options?: {
       }
     }
 
+    // Hollandse Haven
+    if (/hollandse\s+haven/i.test(name)) {
+      for (const ed of editionIndex) {
+        if (ed.lineup.kind !== "hollandse_haven") continue;
+        if (daysBetween(ed.startsAt, sentAt) > 180) continue;
+        bump(ed.id, 0.6, "Hollandse Haven");
+      }
+    }
+
     // "dit weekend" / "aankomend weekend"
     if (/weekend/i.test(name) || /aankomend/i.test(name)) {
       for (const ed of editionIndex) {
@@ -236,7 +245,7 @@ export async function linkCampaignsToEditions(options?: {
         if (campNorm.includes(key) || campKeys.includes(key)) {
           bump(
             ed.id,
-            artist === ed.lineup.headliner ? 0.55 : 0.4,
+            artist === ed.lineup.headliner ? 0.55 : 0.5,
             `Artiest “${artist}” in mail`,
           );
         }

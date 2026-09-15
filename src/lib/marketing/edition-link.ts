@@ -120,9 +120,9 @@ function offerWindow(offer: string | undefined, text: string): { before: number;
     offer === "aftermovie" ||
     offer === "recap" ||
     offer === "door" ||
-    /\b(set|aftermovie|recap|relive|full set|outdoor & indoor)\b/i.test(text)
+    /\b(set|aftermovie|recap|relive|full set|outdoor & indoor|throwback)\b/i.test(text)
   ) {
-    return { before: 14, after: 60 };
+    return { before: 14, after: 150 };
   }
   if (offer === "early_bird") return { before: 120, after: 0 };
   if (offer === "sold_out") return { before: 60, after: 3 };
@@ -178,17 +178,24 @@ export function scorePostAgainstEditions(input: {
   ];
 
   for (const ed of input.editionIndex) {
+    let inWindow = true;
+    let deltaDays = 0;
     if (input.publishedAt) {
-      const deltaDays =
+      deltaDays =
         (ed.startsAt.getTime() - input.publishedAt.getTime()) / 86400000;
-      if (deltaDays < -window.after || deltaDays > window.before) continue;
+      const maxAfter = Math.max(window.after, 21);
+      const maxBefore = Math.max(window.before, 120);
+      if (deltaDays < -maxAfter || deltaDays > maxBefore) continue;
+      inWindow = !(deltaDays < -window.after || deltaDays > window.before);
 
-      if (deltaDays >= 0 && deltaDays <= 14) {
-        bump(ed.id, 0.15, "Publicatie ≤14d vóór event");
-      } else if (deltaDays > 14 && deltaDays <= 45) {
-        bump(ed.id, 0.08, "Publicatie 2–6 weken vóór event");
-      } else if (deltaDays < 0 && deltaDays >= -7) {
-        bump(ed.id, 0.12, "Publicatie kort ná event");
+      if (inWindow) {
+        if (deltaDays >= 0 && deltaDays <= 14) {
+          bump(ed.id, 0.15, "Publicatie ≤14d vóór event");
+        } else if (deltaDays > 14 && deltaDays <= 45) {
+          bump(ed.id, 0.08, "Publicatie 2–6 weken vóór event");
+        } else if (deltaDays < 0 && deltaDays >= -7) {
+          bump(ed.id, 0.12, "Publicatie kort ná event");
+        }
       }
     }
 
@@ -199,9 +206,10 @@ export function scorePostAgainstEditions(input: {
         textNorm.includes(key) ||
         artistPool.some((a) => a === key || a.includes(key) || key.includes(a))
       ) {
+        const headliner = artist === ed.lineup.headliner;
         bump(
           ed.id,
-          artist === ed.lineup.headliner ? 0.55 : 0.4,
+          headliner ? 0.55 : 0.5,
           `Artiest “${artist}” in post`,
         );
       }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   CartesianGrid,
   Line,
@@ -75,7 +76,59 @@ const EMPTY_MAILS: Array<{ sentAt: string | null; name: string }> = [];
 const ICON_SIZE = 12;
 const PLOT_RIGHT = 36;
 
+function flyoutPosition(
+  x: number,
+  y: number,
+  width = 220,
+): { left: number; top: number; transform: string } {
+  const pad = 12;
+  const flipLeft = x > window.innerWidth - width - pad;
+  const flipUp = y > window.innerHeight - 220;
+  return {
+    left: flipLeft ? x - 10 : x + 12,
+    top: flipUp ? y - 10 : y + 12,
+    transform: `${flipLeft ? "translateX(-100%)" : ""} ${flipUp ? "translateY(-100%)" : ""}`.trim(),
+  };
+}
+
+function ActivityList({
+  activities,
+}: {
+  activities: SalesCurvePoint["activities"];
+}) {
+  const shown = activities.slice(0, 6);
+  const extra = activities.length - shown.length;
+  if (shown.length === 0) return null;
+  return (
+    <ul className="mt-2 space-y-1 border-t border-border pt-1.5">
+      {shown.map((activity, index) => (
+        <li
+          key={`${activity.kind}-${index}`}
+          className="flex items-start gap-1.5"
+        >
+          <SocialChannelIcon
+            channel={activity.kind === "mail" ? "mail" : activity.channel}
+            size={11}
+            className="mt-0.5"
+          />
+          <span className="min-w-0 leading-snug text-text line-clamp-2">
+            {activity.title}
+          </span>
+        </li>
+      ))}
+      {extra > 0 && (
+        <li className="text-[10px] text-text-dim">+{extra} meer</li>
+      )}
+    </ul>
+  );
+}
+
 function MarketingActivityRow({ series }: { series: SalesCurvePoint[] }) {
+  const [hover, setHover] = useState<{
+    row: SalesCurvePoint;
+    x: number;
+    y: number;
+  } | null>(null);
   const marks = series
     .map((row, index) => ({ row, index }))
     .filter(({ row }) => row.activities.length > 0);
@@ -84,9 +137,7 @@ function MarketingActivityRow({ series }: { series: SalesCurvePoint[] }) {
 
   return (
     <div className="mt-1 flex items-center gap-0">
-      <p className="w-8 shrink-0 text-[9px] leading-none tracking-[0.08em] text-text-dim uppercase">
-        Post
-      </p>
+      <div className="w-8 shrink-0" aria-hidden />
       <div
         className="relative h-5 flex-1"
         style={{ marginRight: PLOT_RIGHT }}
@@ -100,8 +151,17 @@ function MarketingActivityRow({ series }: { series: SalesCurvePoint[] }) {
           return (
             <div
               key={row.day}
-              className="group absolute top-0 z-10 -translate-x-1/2 hover:z-20"
+              className="absolute top-0 -translate-x-1/2"
               style={{ left: `${left}%` }}
+              onMouseEnter={(event) => {
+                const rect = event.currentTarget.getBoundingClientRect();
+                setHover({
+                  row,
+                  x: rect.left + rect.width / 2,
+                  y: rect.top,
+                });
+              }}
+              onMouseLeave={() => setHover(null)}
             >
               <div className="flex items-center justify-center gap-px">
                 {channels.map((channel) => (
@@ -112,35 +172,29 @@ function MarketingActivityRow({ series }: { series: SalesCurvePoint[] }) {
                   />
                 ))}
               </div>
-              <div className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1 hidden w-52 -translate-x-1/2 border border-border bg-surface px-2.5 py-2 text-xs shadow-sm group-hover:block">
-                <p className="font-medium">
-                  {formatDayNl(row.day)}
-                  {row.isEvent ? " · eventdag" : ""}
-                </p>
-                <ul className="mt-1.5 space-y-1">
-                  {row.activities.slice(0, 6).map((activity, activityIndex) => (
-                    <li
-                      key={`${activity.kind}-${activityIndex}`}
-                      className="flex items-start gap-1.5"
-                    >
-                      <SocialChannelIcon
-                        channel={
-                          activity.kind === "mail" ? "mail" : activity.channel
-                        }
-                        size={11}
-                        className="mt-0.5"
-                      />
-                      <span className="min-w-0 leading-snug text-text line-clamp-2">
-                        {activity.title}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
             </div>
           );
         })}
       </div>
+      {hover && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="pointer-events-none max-w-[220px] border border-border bg-surface px-2.5 py-2 text-xs shadow-md"
+              style={{
+                position: "fixed",
+                zIndex: 80,
+                ...flyoutPosition(hover.x, hover.y),
+              }}
+            >
+              <p className="font-medium">
+                {formatDayNl(hover.row.day)}
+                {hover.row.isEvent ? " · eventdag" : ""}
+              </p>
+              <ActivityList activities={hover.row.activities} />
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
@@ -149,33 +203,35 @@ function SalesCurveTooltip({
   active,
   payload,
   coordinate,
-  viewBox,
   colors,
+  containerRef,
 }: {
   active?: boolean;
   payload?: Array<{ payload?: SalesCurvePoint }>;
   coordinate?: { x?: number; y?: number };
-  viewBox?: { x?: number; y?: number; width?: number; height?: number };
   colors: { tooltipBg: string; tooltipFg: string; primary: string };
+  containerRef: { current: HTMLDivElement | null };
 }) {
-  if (!active || !payload?.length) return null;
+  if (!active || !payload?.length || typeof document === "undefined") {
+    return null;
+  }
   const point = payload[0]?.payload;
   if (!point) return null;
-  const x = coordinate?.x ?? 0;
-  const width = viewBox?.width ?? 0;
-  const flipLeft = width > 0 && x > width - 220;
-  const activities = point.activities ?? [];
-  const shown = activities.slice(0, 6);
-  const extra = activities.length - shown.length;
 
-  return (
+  const rect = containerRef.current?.getBoundingClientRect();
+  const x = (rect?.left ?? 0) + (coordinate?.x ?? 0);
+  const y = (rect?.top ?? 0) + (coordinate?.y ?? 0);
+
+  return createPortal(
     <div
-      className="max-w-[220px] border px-2.5 py-2 text-xs shadow-sm"
+      className="pointer-events-none max-w-[220px] border px-2.5 py-2 text-xs shadow-md"
       style={{
+        position: "fixed",
+        zIndex: 80,
         background: colors.tooltipBg,
         borderColor: colors.primary,
         color: colors.tooltipFg,
-        transform: flipLeft ? "translateX(-100%)" : undefined,
+        ...flyoutPosition(x, y),
       }}
     >
       <p className="font-medium">
@@ -189,29 +245,9 @@ function SalesCurveTooltip({
       <p className="mt-0.5 font-mono tabular-nums text-text-dim">
         {formatNumber(point.cumulative)} cumulatief
       </p>
-      {shown.length > 0 && (
-        <ul className="mt-2 space-y-1 border-t border-border pt-1.5">
-          {shown.map((activity, index) => (
-            <li
-              key={`${activity.kind}-${index}`}
-              className="flex items-start gap-1.5"
-            >
-              <SocialChannelIcon
-                channel={activity.kind === "mail" ? "mail" : activity.channel}
-                size={11}
-                className="mt-0.5"
-              />
-              <span className="min-w-0 leading-snug text-text line-clamp-2">
-                {activity.title}
-              </span>
-            </li>
-          ))}
-          {extra > 0 && (
-            <li className="text-[10px] text-text-dim">+{extra} meer</li>
-          )}
-        </ul>
-      )}
-    </div>
+      <ActivityList activities={point.activities ?? []} />
+    </div>,
+    document.body,
   );
 }
 
@@ -235,6 +271,7 @@ export function EventSalesCurveChart({
 }) {
   const colors = useChartColors();
   const reactId = useId();
+  const chartRef = useRef<HTMLDivElement>(null);
   const activityDays = useMemo(
     () => marketingActivitiesByDay({ posts, mails }),
     [posts, mails],
@@ -270,7 +307,7 @@ export function EventSalesCurveChart({
         {formatNumber(total)} tickets van {formatDayNl(first.day)} tot{" "}
         {formatDayNl(last.day)}. Hover een dag voor tickets en marketing.
       </p>
-      <div className="h-28 w-full overflow-visible">
+      <div ref={chartRef} className="h-28 w-full overflow-visible">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={series}
@@ -301,9 +338,11 @@ export function EventSalesCurveChart({
             />
             <Tooltip
               cursor={{ stroke: colors.primary, strokeOpacity: 0.25 }}
-              content={<SalesCurveTooltip colors={colors} />}
-              allowEscapeViewBox={{ x: false, y: false }}
-              wrapperStyle={{ zIndex: 20, pointerEvents: "none" }}
+              content={
+                <SalesCurveTooltip colors={colors} containerRef={chartRef} />
+              }
+              allowEscapeViewBox={{ x: true, y: true }}
+              wrapperStyle={{ zIndex: 80, pointerEvents: "none" }}
             />
             {eventInRange && (
               <ReferenceLine

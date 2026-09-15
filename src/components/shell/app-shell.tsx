@@ -104,8 +104,8 @@ const dashboardSections: NavSection[] = [
 ];
 
 const dashboardSystemNav: NavItem[] = [
-  { href: "/dashboard/logs", label: "Log", icon: ScrollText },
-  { href: "/koppelingen", label: "Bronnen", icon: Plug },
+  { href: "/dashboard/logs", label: "Log", icon: ScrollText, adminOnly: true },
+  { href: "/koppelingen", label: "Bronnen", icon: Plug, adminOnly: true },
 ];
 
 /** Simpele flow: lijst bijwerken → bedrijven → mailen → resultaten. */
