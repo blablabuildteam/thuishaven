@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** Edities = event-dashboard (één plek). */
+/** Edities lived on the old events dashboard; Inzichten is the landing now. */
 export default function EditiesRedirectPage() {
-  redirect("/dashboard");
+  redirect("/dashboard/inzichten");
 }

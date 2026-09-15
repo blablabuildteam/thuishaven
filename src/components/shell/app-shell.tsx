@@ -249,7 +249,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="relative z-0 flex min-h-screen bg-bg">
       <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-border bg-bg lg:flex">
         <div className="border-b border-border px-4 py-4">
-          <Link href="/" className="group flex items-center gap-3">
+          <Link href="/dashboard/inzichten" className="group flex items-center gap-3">
             <Image
               src="/brand/logo-mark.png"
               alt=""
@@ -326,18 +326,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <ThemeToggle className="w-full justify-center" />
           <UserMenu />
           <Link
-            href="/"
+            href="/dashboard/inzichten"
             className="flex items-center gap-2 text-xs text-text-muted transition-colors hover:text-text"
           >
             <Home className="size-3.5" />
-            Hub
+            Inzichten
           </Link>
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border bg-bg/95 px-4 py-3 backdrop-blur-md lg:hidden">
-          <Link href="/" className="flex items-center gap-2">
+          <Link href="/dashboard/inzichten" className="flex items-center gap-2">
             <Image
               src="/brand/logo-mark.png"
               alt=""

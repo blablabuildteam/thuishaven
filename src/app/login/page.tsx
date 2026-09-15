@@ -7,7 +7,7 @@ export const metadata = { title: "Inloggen" };
 
 export default async function LoginPage() {
   const session = await auth();
-  if (session?.user) redirect("/");
+  if (session?.user) redirect("/dashboard/inzichten");
 
   return (
     <Suspense

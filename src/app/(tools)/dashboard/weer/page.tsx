@@ -23,10 +23,10 @@ export default async function WeatherPage() {
         description="Eventdag: °C en regen naast sold. Outdoor mei–sept."
         action={
           <Link
-            href="/dashboard"
+            href="/dashboard/inzichten"
             className="border border-border px-3 py-2 text-sm hover:border-text"
           >
-            Events
+            Inzichten
           </Link>
         }
       />

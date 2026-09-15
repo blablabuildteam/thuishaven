@@ -9,7 +9,11 @@ import Image from "next/image";
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/";
+  const requested = searchParams.get("callbackUrl") || "/dashboard/inzichten";
+  const callbackUrl =
+    requested === "/" || requested === "/dashboard"
+      ? "/dashboard/inzichten"
+      : requested;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
