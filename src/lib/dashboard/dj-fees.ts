@@ -3,10 +3,12 @@ import { z } from "zod";
 import {
   addDjFeeRangeToSpend,
   DJ_FEES_FROM_YEAR,
+  djFeeSpendMidpoint,
   djFeesFromDate,
   emptyDjFeeSpend,
   formatDjFeeSpend,
   isDjFeeRangeId,
+  rankDjFeeInvestment,
   type DjFeeArtistSource,
   type DjFeeArtistView,
   type DjFeeEventView,
@@ -277,6 +279,7 @@ export type DjFeeInsightsRow = {
   spendLabel: string;
   priced: number;
   missing: number;
+  investmentLevel: 1 | 2 | 3 | 4 | 5 | null;
 };
 
 export type DjFeeInsightsSummary = {
@@ -349,19 +352,23 @@ export async function loadDjFeeInsightsSummary(): Promise<DjFeeInsightsSummary> 
   let eventsPriced = 0;
   let eventsIncomplete = 0;
   const rows: DjFeeInsightsRow[] = [];
+  const mids: Array<number | null> = [];
 
   for (const edition of editionRows) {
     const artists = byEdition.get(edition.id) ?? [];
     if (artists.length === 0) continue;
     const spend = emptyDjFeeSpend();
-    for (const artist of artists) addDjFeeRangeToSpend(spend, artist.feeRange);
-    for (const artist of artists) addDjFeeRangeToSpend(totalSpend, artist.feeRange);
+    for (const artist of artists) {
+      addDjFeeRangeToSpend(spend, artist.feeRange);
+      addDjFeeRangeToSpend(totalSpend, artist.feeRange);
+    }
     if (spend.priced > 0) eventsPriced += 1;
     if (spend.missing > 0) eventsIncomplete += 1;
 
     const day = amsterdamDay(edition.startsAt);
     const sold = edition.sold ?? 0;
     const capacity = edition.capacity;
+    mids.push(djFeeSpendMidpoint(spend));
     rows.push({
       name: edition.name,
       day,
@@ -372,7 +379,16 @@ export async function loadDjFeeInsightsSummary(): Promise<DjFeeInsightsSummary> 
       spendLabel: formatDjFeeSpend(spend),
       priced: spend.priced,
       missing: spend.missing,
+      investmentLevel: null,
     });
+  }
+
+  const rank = rankDjFeeInvestment(
+    mids.filter((mid): mid is number => mid != null),
+  );
+  for (let i = 0; i < rows.length; i++) {
+    const mid = mids[i];
+    rows[i]!.investmentLevel = rank && mid != null ? rank(mid) : null;
   }
 
   return {

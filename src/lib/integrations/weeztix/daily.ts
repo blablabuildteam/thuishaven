@@ -16,15 +16,23 @@ import {
   amsterdamDay as amsterdamDayShared,
   shiftIsoDay,
 } from "@/lib/time/amsterdam";
-import { getWeeztixEventStatistics } from "@/lib/integrations/weeztix/client";
+import {
+  getWeeztixEvent,
+  getWeeztixEventStatistics,
+  weeztixPost,
+} from "@/lib/integrations/weeztix/client";
 import { upsertWeeztixDemographics } from "@/lib/integrations/weeztix/demographics";
 
 const BUCKET_MINUTES = 20;
-/** Max lookback vanaf eventstart voor timeToBank-buckets (~2 jaar). */
+/** Max lookback vanaf eventstart voor de dagcurve (~2 jaar). */
 const MAX_LOOKBACK_DAYS = 800;
 
-type DayPoint = { day: string; sold: number };
+type DayPoint = { day: string; sold: number; revenueCents?: number };
 type ReferrerPoint = { referrer: string; channel: string; orderCount: number };
+
+function isoOffset(d: Date): string {
+  return d.toISOString().replace(/\.\d{3}Z$/, "+00:00");
+}
 
 function amsterdamDay(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -106,6 +114,126 @@ export function dailySalesFromStatistics(
   return [...byDay.entries()]
     .map(([day, sold]) => ({ day, sold }))
     .sort((a, b) => a.day.localeCompare(b.day));
+}
+
+function eventAggNode(
+  data: unknown,
+  aggName: string,
+  eventGuid: string,
+): Record<string, unknown> | null {
+  const aggs = asRecord(asRecord(data)?.aggregations);
+  const root = asRecord(aggs?.[aggName]);
+  if (!root) return null;
+  const direct = asRecord(root[eventGuid]);
+  if (direct) return direct;
+  for (const [key, value] of Object.entries(root)) {
+    if (key === "doc_count" || key === "meta") continue;
+    const node = asRecord(value);
+    if (node) return node;
+  }
+  return null;
+}
+
+function histogramBuckets(node: Record<string, unknown> | null): Array<{
+  key_as_string?: unknown;
+  key?: unknown;
+  doc_count?: unknown;
+  statistics?: unknown;
+}> {
+  const stats = asRecord(node?.statistics) ?? node;
+  const buckets = stats?.buckets;
+  return Array.isArray(buckets)
+    ? (buckets as Array<{
+        key_as_string?: unknown;
+        key?: unknown;
+        doc_count?: unknown;
+        statistics?: unknown;
+      }>)
+    : [];
+}
+
+/**
+ * Echte verkoopdag uit Weeztix order-aggregatie (`timeunit: day`).
+ * `eventCounts.doc_count` is tickets, niet orders.
+ */
+export function dailySalesFromOrderAggregations(
+  eventGuid: string,
+  data: unknown,
+): Array<{ day: string; sold: number; revenueCents: number }> {
+  const countNode = eventAggNode(data, "eventCounts", eventGuid);
+  const revenueNode = eventAggNode(data, "eventRevenues", eventGuid);
+  const revenueByDay = new Map<string, number>();
+  for (const bucket of histogramBuckets(revenueNode)) {
+    const day = String(bucket.key_as_string ?? "").slice(0, 10);
+    const inner = asRecord(asRecord(bucket.statistics)?.statistics)
+      ?? asRecord(bucket.statistics);
+    const value = inner?.value;
+    if (!day || typeof value !== "number") continue;
+    revenueByDay.set(day, Math.max(0, Math.round(value)));
+  }
+
+  const points: Array<{ day: string; sold: number; revenueCents: number }> = [];
+  for (const bucket of histogramBuckets(countNode)) {
+    const day = String(bucket.key_as_string ?? "").slice(0, 10);
+    const sold = typeof bucket.doc_count === "number" ? bucket.doc_count : 0;
+    if (!day || sold <= 0) continue;
+    points.push({
+      day,
+      sold,
+      revenueCents: revenueByDay.get(day) ?? 0,
+    });
+  }
+  return points.sort((a, b) => a.day.localeCompare(b.day));
+}
+
+async function fetchWeeztixOrderDayCurve(input: {
+  eventGuid: string;
+  companyId: string;
+  start: Date;
+  end: Date;
+}): Promise<Array<{ day: string; sold: number; revenueCents: number }>> {
+  const res = await weeztixPost({
+    path: `/statistics/orders/${input.companyId}`,
+    companyGuid: input.companyId,
+    body: {
+      offset: 0,
+      limit: 0,
+      start: isoOffset(input.start),
+      end: isoOffset(input.end),
+      timeunit: "day",
+      events: [input.eventGuid],
+    },
+  });
+  if (!res.ok) return [];
+  return dailySalesFromOrderAggregations(input.eventGuid, res.data);
+}
+
+async function upsertDailySalesCurve(input: {
+  editionId: string;
+  points: Array<{ day: string; sold: number; revenueCents: number }>;
+}): Promise<number> {
+  if (input.points.length === 0) return 0;
+  const db = getDb();
+  const now = new Date();
+  await db
+    .delete(ticketSalesDaily)
+    .where(
+      and(
+        eq(ticketSalesDaily.editionId, input.editionId),
+        eq(ticketSalesDaily.platform, "weeztix"),
+      ),
+    );
+  await db.insert(ticketSalesDaily).values(
+    input.points.map((point) => ({
+      editionId: input.editionId,
+      platform: "weeztix" as const,
+      day: point.day,
+      sold: point.sold,
+      revenueCents: point.revenueCents,
+      syncedAt: now,
+    })),
+  );
+  return input.points.length;
 }
 
 /** Referrers uit Weeztix statistics — Brevo-klikken via Arenametrix routage. */
@@ -261,12 +389,24 @@ export async function syncWeeztixDailySales(options?: {
     .limit(limit);
 
   let editionsWithCurve = 0;
-  const daysUpserted = 0;
+  let daysUpserted = 0;
   let referrersUpserted = 0;
   let demographicsUpserted = 0;
   let brevoOrders = 0;
   let failed = 0;
   const errors: string[] = [];
+  let cachedCompanyId: string | undefined =
+    process.env.WEEZTIX_COMPANY_GUID?.trim() || undefined;
+
+  async function companyIdFor(guid: string): Promise<string | undefined> {
+    if (cachedCompanyId) return cachedCompanyId;
+    const event = await getWeeztixEvent(guid);
+    if (event.ok && typeof event.event.company_id === "string") {
+      cachedCompanyId = event.event.company_id;
+      return cachedCompanyId;
+    }
+    return undefined;
+  }
 
   async function one(row: (typeof rows)[number]) {
     const guid = row.guid;
@@ -284,8 +424,31 @@ export async function syncWeeztixDailySales(options?: {
       revenueCents: saleDay.revenueCents,
     });
 
-    const points = dailySalesFromStatistics(row.startsAt, stats.data);
-    if (points.length > 0) editionsWithCurve += 1;
+    const companyId = await companyIdFor(guid);
+    if (companyId) {
+      const curveEnd = new Date(
+        Math.min(
+          Date.now() + 2 * 86_400_000,
+          row.startsAt.getTime() + 2 * 86_400_000,
+        ),
+      );
+      const curveStart = new Date(
+        row.startsAt.getTime() - MAX_LOOKBACK_DAYS * 86_400_000,
+      );
+      const curve = await fetchWeeztixOrderDayCurve({
+        eventGuid: guid,
+        companyId,
+        start: curveStart,
+        end: curveEnd,
+      });
+      if (curve.length > 0) {
+        daysUpserted += await upsertDailySalesCurve({
+          editionId: row.id,
+          points: curve,
+        });
+        editionsWithCurve += 1;
+      }
+    }
 
     const refs = referrersFromStatistics(stats.data);
     for (const r of refs) {

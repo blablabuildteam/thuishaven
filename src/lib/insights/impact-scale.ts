@@ -63,3 +63,19 @@ export function organicBarFill(level: ImpactLevel): string {
       return "bg-success";
   }
 }
+
+/** DJ-fees: 1 = lage investering → 5 = zeer hoge investering. */
+export function djFeeBarFill(level: ImpactLevel): string {
+  switch (level) {
+    case 1:
+      return "bg-text-dim";
+    case 2:
+      return "bg-text-muted";
+    case 3:
+      return "bg-accent";
+    case 4:
+      return "bg-warn";
+    case 5:
+      return "bg-danger";
+  }
+}

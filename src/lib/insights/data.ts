@@ -8,6 +8,7 @@ import {
   ticketSalesDaily,
   ticketswapListings,
 } from "@/lib/db/schema";
+import { displayEditionName } from "@/lib/editions/lineup";
 
 export type InsightsSnapshot = {
   generatedAt: string;
@@ -114,6 +115,24 @@ export type InsightsSnapshot = {
       label: string;
       n: number;
       avgLift: number;
+    }>;
+  };
+  djFees?: {
+    fromYear: number;
+    events: number;
+    eventsPriced: number;
+    eventsIncomplete: number;
+    spendLabel: string;
+    rows: Array<{
+      name: string;
+      day: string;
+      status: "upcoming" | "past";
+      fillPct: number | null;
+      sold: number;
+      spendLabel: string;
+      priced: number;
+      missing: number;
+      investmentLevel: 1 | 2 | 3 | 4 | 5 | null;
     }>;
   };
   notes: string[];
@@ -408,6 +427,16 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
     notes.push("Creatives/vision kon niet geladen worden.");
   }
 
+  let djFeesBlock: InsightsSnapshot["djFees"];
+  try {
+    const { loadDjFeeInsightsSummary } = await import(
+      "@/lib/dashboard/dj-fees"
+    );
+    djFeesBlock = await loadDjFeeInsightsSummary();
+  } catch {
+    notes.push("DJ-fees snapshot kon niet geladen worden.");
+  }
+
   return {
     generatedAt: new Date().toISOString(),
     brevo: {
@@ -431,6 +460,7 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
     weather: weatherBlock,
     editions: editionsBlock,
     creatives: creativesBlock,
+    djFees: djFeesBlock,
     notes,
   };
 }
@@ -461,7 +491,7 @@ export function snapshotToPromptContext(snap: InsightsSnapshot): string {
     `Inventory rijen: ${snap.weeztix.inventoryRows}`,
     `Edities met sold>0: ${snap.weeztix.editionsWithSales}`,
     `Sold (Weeztix inventory som): ${snap.weeztix.sold}`,
-    `Dagelijkse curves: ${snap.weeztix.dailyEditions} edities · ${snap.weeztix.dailyDays} dagen (inventory-snapshot delta)`,
+    `Dagelijkse curves: ${snap.weeztix.dailyEditions} edities · ${snap.weeztix.dailyDays} dagen (Weeztix-orderhistogram)`,
     "Recente curves (piekdag):",
   );
   for (const c of snap.weeztix.recentCurves) {
@@ -561,6 +591,22 @@ export function snapshotToPromptContext(snap: InsightsSnapshot): string {
       for (const a of snap.creatives.aggregates) {
         lines.push(`- ${a.label}: avgLift=${a.avgLift} n=${a.n}`);
       }
+    }
+  }
+
+  if (snap.djFees) {
+    lines.push(
+      "",
+      `=== DJ-fees vanaf ${snap.djFees.fromYear} (bandbreedtes, geen exacte bedragen) ===`,
+      `Events met DJs: ${snap.djFees.events} · met range: ${snap.djFees.eventsPriced} · incompleet: ${snap.djFees.eventsIncomplete}`,
+      `Som bandbreedte: ${snap.djFees.spendLabel}`,
+      "Investering 1–5 = quintiel t.o.v. andere events met ingevulde DJ-fees (1 laag, 5 zeer hoog).",
+      "Per event (recent):",
+    );
+    for (const row of snap.djFees.rows) {
+      lines.push(
+        `- ${row.day} ${displayEditionName(row.name)} | ${row.status} | investment=${row.investmentLevel != null ? `${row.investmentLevel}/5` : "n/a"} | spend=${row.spendLabel} | DJs ${row.priced} met range / ${row.missing} open | sold=${row.sold} | fill=${row.fillPct != null ? `${Math.round(row.fillPct)}%` : "n/a"}`,
+      );
     }
   }
 

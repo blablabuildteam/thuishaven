@@ -43,6 +43,8 @@ type NavItem = {
   brand?: SocialBrandChannel;
   /** Only show for admin accounts */
   adminOnly?: boolean;
+  /** Visible but not clickable until the feature is ready */
+  disabled?: boolean;
   /** Spotlight tour target id */
   tourId?: string;
   /** Extra nav affordance */
@@ -85,8 +87,18 @@ const dashboardSections: NavSection[] = [
     id: "marketing-paid",
     label: "Marketing (paid)",
     items: [
-      { href: "/dashboard/paid/meta", label: "Meta", brand: "instagram" },
-      { href: "/dashboard/paid/tiktok", label: "TikTok", brand: "tiktok" },
+      {
+        href: "/dashboard/paid/meta",
+        label: "Meta",
+        brand: "instagram",
+        disabled: true,
+      },
+      {
+        href: "/dashboard/paid/tiktok",
+        label: "TikTok",
+        brand: "tiktok",
+        disabled: true,
+      },
     ],
   },
 ];
@@ -207,8 +219,13 @@ function NavItemIcon({ item, active }: { item: NavItem; active: boolean }) {
         channel={item.brand}
         size={16}
         className={cn(
-          "opacity-90 transition-[filter]",
-          active ? "invert dark:invert-0" : "dark:invert",
+          "transition-[filter]",
+          item.disabled
+            ? "opacity-40 grayscale"
+            : cn(
+                "opacity-90",
+                active ? "invert dark:invert-0" : "dark:invert",
+              ),
         )}
         alt=""
       />
@@ -230,6 +247,28 @@ function NavLink({
   active: boolean;
   badgeCount?: number | null;
 }) {
+  const content = (
+    <>
+      <NavItemIcon item={item} active={active} />
+      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+      {item.badge === "dj-fees-pending" ? (
+        <DjFeesNavBadge count={badgeCount ?? null} active={active} />
+      ) : null}
+    </>
+  );
+
+  if (item.disabled) {
+    return (
+      <span
+        aria-disabled="true"
+        title="Nog niet beschikbaar"
+        className="flex cursor-not-allowed items-center gap-2.5 px-2.5 py-2 text-sm text-text-dim opacity-60"
+      >
+        {content}
+      </span>
+    );
+  }
+
   return (
     <Link
       href={item.href}
@@ -241,11 +280,7 @@ function NavLink({
           : "text-text-muted hover:bg-surface hover:text-text",
       )}
     >
-      <NavItemIcon item={item} active={active} />
-      <span className="min-w-0 flex-1 truncate">{item.label}</span>
-      {item.badge === "dj-fees-pending" ? (
-        <DjFeesNavBadge count={badgeCount ?? null} active={active} />
-      ) : null}
+      {content}
     </Link>
   );
 }
@@ -313,7 +348,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <NavLink
                       key={item.href}
                       item={item}
-                      active={isNavActive(pathname, item.href)}
+                      active={!item.disabled && isNavActive(pathname, item.href)}
                       badgeCount={
                         item.badge === "dj-fees-pending" ? djFeesPending : null
                       }
@@ -386,7 +421,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <nav className="flex gap-1 overflow-x-auto border-b border-border px-3 py-2 lg:hidden">
           {[...sections.flatMap((s) => s.items), ...systemNav].map((item) => {
-            const active = isNavActive(pathname, item.href);
+            const active = !item.disabled && isNavActive(pathname, item.href);
+            if (item.disabled) {
+              return (
+                <span
+                  key={item.href}
+                  aria-disabled="true"
+                  title="Nog niet beschikbaar"
+                  className="inline-flex shrink-0 cursor-not-allowed items-center gap-1.5 px-3 py-1.5 text-sm text-text-dim opacity-60"
+                >
+                  {item.label}
+                </span>
+              );
+            }
             return (
               <Link
                 key={item.href}

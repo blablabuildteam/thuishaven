@@ -6,7 +6,7 @@ import {
   cpcCents,
   ctrPercent,
   type MarketingAdsBundle,
-} from "@/lib/marketing/ads";
+} from "@/lib/marketing/ad-metrics";
 import { cn, formatEuroFromCents, formatNumber, formatPercent } from "@/lib/utils";
 
 export function PaidAdsView({

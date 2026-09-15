@@ -61,15 +61,22 @@ function useChartColors() {
 function SalesCurveTooltip({
   active,
   payload,
+  coordinate,
+  viewBox,
   colors,
 }: {
   active?: boolean;
   payload?: Array<{ payload?: SalesCurvePoint }>;
+  coordinate?: { x?: number; y?: number };
+  viewBox?: { x?: number; y?: number; width?: number; height?: number };
   colors: { tooltipBg: string; tooltipFg: string; primary: string };
 }) {
   if (!active || !payload?.length) return null;
   const point = payload[0]?.payload;
   if (!point) return null;
+  const x = coordinate?.x ?? 0;
+  const width = viewBox?.width ?? 0;
+  const flipLeft = width > 0 && x > width - 132;
 
   return (
     <div
@@ -78,6 +85,7 @@ function SalesCurveTooltip({
         background: colors.tooltipBg,
         borderColor: colors.primary,
         color: colors.tooltipFg,
+        transform: flipLeft ? "translateX(-100%)" : undefined,
       }}
     >
       <p className="font-medium">
@@ -117,12 +125,13 @@ export function EventSalesCurveChart({
   const first = series[0]!;
   const last = series[series.length - 1]!;
   const eventInRange = series.some((row) => row.isEvent);
+  const yMax = Math.max(...series.map((row) => row.cumulative), 0);
 
   return (
     <div className="mt-3 border-t border-border pt-3">
       <div className="mb-2 flex items-end justify-between gap-3">
         <p className="text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
-          Verkoop per dag
+          Verkoopverloop
         </p>
         <p className="text-[10px] text-text-dim">
           {first.label} – {last.label}
@@ -133,11 +142,11 @@ export function EventSalesCurveChart({
         {formatNumber(total)} tickets van {formatDayNl(first.day)} tot{" "}
         {formatDayNl(last.day)}. Hover een dag voor het aantal.
       </p>
-      <div className="h-28 w-full">
+      <div className="h-28 w-full overflow-visible">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={series}
-            margin={{ top: 8, right: 8, left: -18, bottom: 0 }}
+            margin={{ top: 8, right: 36, left: -10, bottom: 0 }}
           >
             <CartesianGrid
               stroke={colors.grid}
@@ -157,14 +166,15 @@ export function EventSalesCurveChart({
               axisLine={false}
               tickLine={false}
               allowDecimals={false}
-              width={36}
+              width={42}
+              domain={[0, yMax]}
               tickFormatter={(value) => formatNumber(Number(value))}
             />
             <Tooltip
               cursor={{ stroke: colors.primary, strokeOpacity: 0.25 }}
               content={<SalesCurveTooltip colors={colors} />}
-              allowEscapeViewBox={{ x: true, y: true }}
-              wrapperStyle={{ zIndex: 20 }}
+              allowEscapeViewBox={{ x: false, y: false }}
+              wrapperStyle={{ zIndex: 20, pointerEvents: "none" }}
             />
             {eventInRange && (
               <ReferenceLine
@@ -181,7 +191,7 @@ export function EventSalesCurveChart({
             )}
             <Line
               type="linear"
-              dataKey="sold"
+              dataKey="cumulative"
               stroke={colors.primary}
               strokeWidth={1.75}
               dot={false}

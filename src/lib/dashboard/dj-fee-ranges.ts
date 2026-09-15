@@ -152,6 +152,45 @@ export function djFeeSpendMidpoint(spend: DjFeeSpend): number | null {
   return Math.round((spend.min + spend.max) / 2);
 }
 
+export type DjFeeInvestmentLevel = 1 | 2 | 3 | 4 | 5;
+
+export function djFeeInvestmentLevelLabel(level: DjFeeInvestmentLevel): string {
+  if (level === 5) return "zeer hoge DJ-fee investering";
+  if (level === 4) return "hoge DJ-fee investering";
+  if (level === 3) return "gemiddelde DJ-fee investering";
+  if (level === 2) return "lage DJ-fee investering";
+  return "zeer lage DJ-fee investering";
+}
+
+/** Rank spend midpoints vs other events (quintiles). Same 1–5 language as organic. */
+export function rankDjFeeInvestment(
+  midpoints: number[],
+): ((mid: number) => DjFeeInvestmentLevel) | null {
+  if (midpoints.length === 0) return null;
+  const values = [...midpoints].sort((a, b) => a - b);
+  const lo = values[0]!;
+  const hi = values[values.length - 1]!;
+  if (lo === hi) return () => 3;
+  const at = (p: number) => {
+    const idx = (values.length - 1) * p;
+    const a = Math.floor(idx);
+    const b = Math.ceil(idx);
+    if (a === b) return values[a]!;
+    return values[a]! + (values[b]! - values[a]!) * (idx - a);
+  };
+  const t1 = at(0.2);
+  const t2 = at(0.4);
+  const t3 = at(0.6);
+  const t4 = at(0.8);
+  return (mid: number): DjFeeInvestmentLevel => {
+    if (mid <= t1) return 1;
+    if (mid <= t2) return 2;
+    if (mid <= t3) return 3;
+    if (mid <= t4) return 4;
+    return 5;
+  };
+}
+
 export const DJ_FEES_FROM_YEAR = 2026;
 
 export function djFeesFromDate(): Date {

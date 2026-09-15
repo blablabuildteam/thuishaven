@@ -64,5 +64,10 @@ export async function POST(request: Request) {
     meta: { editionId: parsed.data.editionId, artistId: result.artist.id },
   });
 
+  const { invalidateEventInsightsCache } = await import(
+    "@/lib/insights/event-insights"
+  );
+  await invalidateEventInsightsCache();
+
   return NextResponse.json({ ok: true, artist: result.artist }, { status: 201 });
 }

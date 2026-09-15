@@ -64,6 +64,11 @@ export async function PATCH(
     },
   });
 
+  const { invalidateEventInsightsCache } = await import(
+    "@/lib/insights/event-insights"
+  );
+  await invalidateEventInsightsCache();
+
   return NextResponse.json({ ok: true, artist: result.artist });
 }
 
@@ -98,6 +103,11 @@ export async function DELETE(
     tool: "dashboard",
     meta: { artistId: id },
   });
+
+  const { invalidateEventInsightsCache } = await import(
+    "@/lib/insights/event-insights"
+  );
+  await invalidateEventInsightsCache();
 
   return NextResponse.json({ ok: true });
 }

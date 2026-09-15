@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNotNull, lt, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, sql } from "drizzle-orm";
 import { unstable_cache, revalidateTag } from "next/cache";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import {
@@ -8,13 +8,26 @@ import {
   marketingPosts,
   ticketInventory,
   ticketInventoryDaily,
+  ticketSalesDaily,
   ticketSaleReferrers,
   ticketDemographics,
   weatherDaily,
   externalEvents,
   raListings,
+  djFeeArtists,
   type DemographicBucket,
 } from "@/lib/db/schema";
+import {
+  addDjFeeRangeToSpend,
+  emptyDjFeeSpend,
+  formatDjFeeSpend,
+  isDjFeeRangeId,
+  djFeeSpendMidpoint,
+  rankDjFeeInvestment,
+  type DjFeeRangeId,
+  type DjFeeSpend,
+  type DjFeeInvestmentLevel,
+} from "@/lib/dashboard/dj-fee-ranges";
 import { averageAge } from "@/lib/integrations/weeztix/demographics";
 import {
   parseEditionLineup,
@@ -36,6 +49,10 @@ import {
   normalizeIsoDay,
 } from "@/lib/dashboard/inventory-snapshots";
 import { normalizeWeeztixInventory } from "@/lib/integrations/weeztix/inventory";
+import {
+  preferCompleteSalesCurve,
+  type SalesDayPoint,
+} from "@/lib/insights/sales-curve";
 import {
   competeSizeFromAttending,
   genreLabel,
@@ -321,6 +338,18 @@ export type EventInsightPaid = {
   roas: number | null;
 };
 
+export type EventInsightDjFeeArtist = {
+  name: string;
+  feeRange: DjFeeRangeId | null;
+  isTenHour: boolean;
+};
+
+export type EventInsightDjFees = {
+  artists: EventInsightDjFeeArtist[];
+  spend: DjFeeSpend;
+  spendLabel: string;
+};
+
 export type EventInsight = {
   editionId: string;
   name: string;
@@ -349,10 +378,12 @@ export type EventInsight = {
     lastWeekSold: number | null;
     /** Tickets sold on the event day itself (inventory snapshot delta). */
     sameDaySold: number | null;
-    /** Daily sold from consecutive Weeztix inventory snapshots. */
+    /** Daily sold from Weeztix order histogram, else snapshot-delta. */
     salesByDay: Array<{ day: string; sold: number }>;
-    /** First snapshot day — curve has no Weeztix history before this. */
+    /** First day on the plotted curve. */
     salesTrackedFrom: string | null;
+    /** orders = full onsale window; snapshots = days since inventory snapshots. */
+    salesCurveSource: "orders" | "snapshots" | null;
     soldOutDaysBefore: number | null;
     scanned: number;
     scanRatePct: number | null;
@@ -378,6 +409,7 @@ export type EventInsight = {
   emailCampaigns: EventInsightMail[];
   paidAds: EventInsightPaidAd[];
   paid: EventInsightPaid;
+  djFees: EventInsightDjFees;
   referrers: Array<{ channel: string; orders: number }>;
   competingFestivals: CompetingEvent[];
   /** Overall same-day competition pressure (from listed competitors). */
@@ -385,7 +417,24 @@ export type EventInsight = {
   /** Combined organic promo impact (engagement + lift correlation). */
   organicImpactLevel: OrganicImpactLevel | null;
   organicImpactScore: number;
+  /** 1–5 vs other events with priced DJ-fees. Null without ranges. */
+  djFeeInvestmentLevel: DjFeeInvestmentLevel | null;
 };
+
+function asDjFeeRange(value: string | null): DjFeeRangeId | null {
+  if (!value || !isDjFeeRangeId(value)) return null;
+  return value;
+}
+
+function packDjFees(artists: EventInsightDjFeeArtist[]): EventInsightDjFees {
+  const spend = emptyDjFeeSpend();
+  for (const artist of artists) addDjFeeRangeToSpend(spend, artist.feeRange);
+  return {
+    artists,
+    spend,
+    spendLabel: formatDjFeeSpend(spend),
+  };
+}
 
 function weatherTone(kind: WeatherKind): "positive" | "neutral" | "caution" {
   if (kind === "ideal") return "positive";
@@ -487,7 +536,7 @@ export async function loadEventInsightsFresh(options?: {
   const minDay = filtered[filtered.length - 1]!.startsAt;
   const maxDay = filtered[0]!.startsAt;
 
-  const [weatherRows, camps, festivals, dailyRows, posts, refs, appicRows, raInvRows, vriendenRows, raRows, demoRows, ads] =
+  const [weatherRows, camps, festivals, dailyRows, orderRows, posts, refs, appicRows, raInvRows, vriendenRows, raRows, demoRows, ads, feeArtistRows] =
     await Promise.all([
       safeQuery(
         "weather",
@@ -537,6 +586,24 @@ export async function loadEventInsightsFresh(options?: {
             })
             .from(ticketInventoryDaily)
             .where(inArray(ticketInventoryDaily.editionId, editionIds)),
+        [],
+      ),
+      safeQuery(
+        "ticketSalesDaily",
+        () =>
+          db
+            .select({
+              editionId: ticketSalesDaily.editionId,
+              day: ticketSalesDaily.day,
+              sold: ticketSalesDaily.sold,
+            })
+            .from(ticketSalesDaily)
+            .where(
+              and(
+                eq(ticketSalesDaily.platform, "weeztix"),
+                inArray(ticketSalesDaily.editionId, editionIds),
+              ),
+            ),
         [],
       ),
       safeQuery(
@@ -662,6 +729,27 @@ export async function loadEventInsightsFresh(options?: {
             .orderBy(desc(marketingAds.spendCents)),
         [],
       ),
+      safeQuery(
+        "djFeeArtists",
+        () =>
+          db
+            .select({
+              editionId: djFeeArtists.editionId,
+              name: djFeeArtists.name,
+              feeRange: djFeeArtists.feeRange,
+              isTenHour: djFeeArtists.isTenHour,
+              sortOrder: djFeeArtists.sortOrder,
+              createdAt: djFeeArtists.createdAt,
+            })
+            .from(djFeeArtists)
+            .where(
+              and(
+                isNull(djFeeArtists.removedAt),
+                inArray(djFeeArtists.editionId, editionIds),
+              ),
+            ),
+        [],
+      ),
     ]);
 
     const weatherByDay = new Map(
@@ -702,6 +790,21 @@ export async function loadEventInsightsFresh(options?: {
       adsByEdition.set(ad.editionId, list);
     }
 
+    const feesByEdition = new Map<string, EventInsightDjFeeArtist[]>();
+    const feeSorted = [...feeArtistRows].sort((a, b) => {
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+      return a.createdAt.getTime() - b.createdAt.getTime();
+    });
+    for (const row of feeSorted) {
+      const list = feesByEdition.get(row.editionId) ?? [];
+      list.push({
+        name: row.name,
+        feeRange: asDjFeeRange(row.feeRange),
+        isTenHour: row.isTenHour,
+      });
+      feesByEdition.set(row.editionId, list);
+    }
+
     const snapshotRows = dailyRows.map((r) => ({
       editionId: r.editionId,
       day: normalizeIsoDay(r.day),
@@ -718,6 +821,28 @@ export async function loadEventInsightsFresh(options?: {
         dailyByEdition.set(r.editionId, m);
       }
       m.set(r.day, (m.get(r.day) ?? 0) + r.sold);
+    }
+
+    const orderByEdition = new Map<string, Map<string, number>>();
+    for (const r of orderRows) {
+      const day = normalizeIsoDay(r.day);
+      const soldCount = Number(r.sold) || 0;
+      if (!day || soldCount <= 0) continue;
+      let m = orderByEdition.get(r.editionId);
+      if (!m) {
+        m = new Map();
+        orderByEdition.set(r.editionId, m);
+      }
+      m.set(day, (m.get(day) ?? 0) + soldCount);
+    }
+
+    function pointsFromMap(
+      map: Map<string, number> | undefined,
+    ): SalesDayPoint[] {
+      if (!map) return [];
+      return [...map.entries()]
+        .map(([day, sold]) => ({ day, sold }))
+        .sort((a, b) => a.day.localeCompare(b.day));
     }
 
     const refsByEdition = new Map<string, Array<{ channel: string; orders: number }>>();
@@ -861,7 +986,14 @@ export async function loadEventInsightsFresh(options?: {
       const lastWeekFrom =
         status === "upcoming" ? shiftIsoDay(today, -6) : shiftIsoDay(day, -6);
       const lastWeekTo = status === "upcoming" ? today : day;
-      const curve = dailyByEdition.get(e.id) ?? new Map();
+      const snapshotDays = pointsFromMap(dailyByEdition.get(e.id));
+      const chosen = preferCompleteSalesCurve({
+        sold,
+        orderDays: pointsFromMap(orderByEdition.get(e.id)),
+        snapshotDays,
+      });
+      const curve = new Map(chosen.points.map((p) => [p.day, p.sold]));
+      dailyByEdition.set(e.id, curve);
       let lastWeekSold = 0;
       for (const [d, n] of curve) {
         if (d >= lastWeekFrom && d <= lastWeekTo) lastWeekSold += n;
@@ -869,10 +1001,11 @@ export async function loadEventInsightsFresh(options?: {
       const sameDayRaw = curve.get(day);
       const sameDaySold =
         sameDayRaw != null && sameDayRaw > 0 ? sameDayRaw : null;
-      const salesByDay = [...curve.entries()]
-        .filter(([, n]) => n > 0)
-        .map(([saleDay, sold]) => ({ day: saleDay, sold }))
-        .sort((a, b) => a.day.localeCompare(b.day));
+      const salesByDay = chosen.points.filter((p) => p.sold > 0);
+      const salesTrackedFrom =
+        chosen.source === "orders"
+          ? (salesByDay[0]?.day ?? null)
+          : firstSnapshotDay(snapshotRows, e.id);
 
       const w = weatherByDay.get(day);
       let weather: EventInsight["weather"] = null;
@@ -1149,7 +1282,8 @@ export async function loadEventInsightsFresh(options?: {
           lastWeekSold: lastWeekSold > 0 ? lastWeekSold : null,
           sameDaySold,
           salesByDay,
-          salesTrackedFrom: firstSnapshotDay(snapshotRows, e.id),
+          salesTrackedFrom,
+          salesCurveSource: chosen.source,
           soldOutDaysBefore: e.soldOutDaysBefore ?? null,
           scanned,
           scanRatePct,
@@ -1161,11 +1295,13 @@ export async function loadEventInsightsFresh(options?: {
         emailCampaigns,
         paidAds,
         paid,
+        djFees: packDjFees(feesByEdition.get(e.id) ?? []),
         referrers,
         competingFestivals: competing,
         competitionLevel: summarizeCompetition(competing).level,
         organicImpactLevel: null,
         organicImpactScore: 0,
+        djFeeInvestmentLevel: null,
       };
 
       const organic0 = summarizeOrganicImpact(socialPosts);
@@ -1284,6 +1420,7 @@ export async function loadEventInsightsFresh(options?: {
   // Upcoming/past are cached separately — annotate after merge so cohorts
   // include the full set. Mode "all" (recovery path) annotates here.
   if (mode === "all") {
+    applyDjFeeInvestment(insights);
     applyAnomalies(insights);
   }
   if (mode === "upcoming") {
@@ -1293,6 +1430,23 @@ export async function loadEventInsightsFresh(options?: {
     return insights.filter((e) => e.status === "past");
   }
   return insights;
+}
+
+function applyDjFeeInvestment(events: EventInsight[]): void {
+  const rank = rankDjFeeInvestment(
+    events
+      .map((event) =>
+        event.djFees ? djFeeSpendMidpoint(event.djFees.spend) : null,
+      )
+      .filter((mid): mid is number => mid != null),
+  );
+  for (const event of events) {
+    const mid = event.djFees
+      ? djFeeSpendMidpoint(event.djFees.spend)
+      : null;
+    event.djFeeInvestmentLevel =
+      rank && mid != null ? rank(mid) : null;
+  }
 }
 
 function applyAnomalies(events: EventInsight[]): void {
@@ -1317,7 +1471,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v24"],
+  ["event-insights-upcoming-v28"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1333,7 +1487,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v24"],
+  ["event-insights-past-v28"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],
@@ -1364,6 +1518,7 @@ export async function loadEventInsights(options?: {
   ]);
 
   const merged = [...upcoming, ...past];
+  applyDjFeeInvestment(merged);
   applyAnomalies(merged);
   return merged;
 }

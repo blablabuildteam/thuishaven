@@ -74,10 +74,17 @@ import type {
 } from "@/lib/weather/open-meteo";
 import { EventSalesCurveChart } from "@/components/dashboard/event-sales-curve-chart";
 import { amsterdamDay, formatDayShort } from "@/lib/time/amsterdam";
-import { displayEditionName } from "@/lib/editions/lineup";
+import { displayEditionName, normalizeArtistKey } from "@/lib/editions/lineup";
+import {
+  djFeeInvestmentLevelLabel,
+  djFeeRangeDef,
+  formatDjFeeSpend,
+  type DjFeeInvestmentLevel,
+} from "@/lib/dashboard/dj-fee-ranges";
 import {
   IMPACT_BAR_HEIGHTS,
   competitionBarFill,
+  djFeeBarFill,
   organicBarFill,
 } from "@/lib/insights/impact-scale";
 import type { DemographicBucket } from "@/lib/db/schema";
@@ -142,6 +149,7 @@ function insightChipIcon(insight: AnomalyInsight) {
   if (insight.dimension === "scan") return ScanLine;
   if (insight.dimension === "social") return Share2;
   if (insight.dimension === "pricing") return Euro;
+  if (insight.dimension === "dj_fees") return BadgeEuro;
   if (insight.dimension === "soldout") return TrendingUp;
   if (insight.dimension === "same_day") return Clock;
   return Ticket;
@@ -155,6 +163,7 @@ const INSIGHT_DIMENSION_LABEL: Record<AnomalyInsight["dimension"], string> = {
   social: "Social",
   email: "Mail",
   pricing: "Prijs",
+  dj_fees: "DJ-fees",
   soldout: "Uitverkocht",
   same_day: "Last-minute",
 };
@@ -931,6 +940,7 @@ function TicketMetricsVisual({
   soldOutDaysBefore,
   salesByDay,
   salesTrackedFrom,
+  salesCurveSource,
   eventDay,
 }: {
   sold: number;
@@ -944,6 +954,7 @@ function TicketMetricsVisual({
   soldOutDaysBefore: number | null;
   salesByDay: Array<{ day: string; sold: number }>;
   salesTrackedFrom: string | null;
+  salesCurveSource: "orders" | "snapshots" | null;
   eventDay: string;
 }) {
   const { available } = ticketComposition(sold, capacity, scanned);
@@ -1077,9 +1088,11 @@ function TicketMetricsVisual({
         <EventSalesCurveChart
           points={salesByDay}
           eventDay={eventDay}
-          sinceDay={salesTrackedFrom}
+          sinceDay={
+            salesCurveSource === "snapshots" ? salesTrackedFrom : null
+          }
         />
-      ) : salesTrackedFrom ? (
+      ) : salesTrackedFrom && salesCurveSource !== "orders" ? (
         <p className="mt-3 border-t border-border pt-3 text-[10px] text-text-dim">
           Dagelijkse verkoop vanaf {formatDayShort(salesTrackedFrom)}. Eerste
           punt na de volgende dagelijkse snapshot.
@@ -1398,6 +1411,7 @@ function EventDetail({ event }: { event: EventInsight }) {
           soldOutDaysBefore={tickets.soldOutDaysBefore}
           salesByDay={tickets.salesByDay ?? []}
           salesTrackedFrom={tickets.salesTrackedFrom ?? null}
+          salesCurveSource={tickets.salesCurveSource ?? null}
           eventDay={event.day}
         />
 
@@ -1595,7 +1609,11 @@ function EventDetail({ event }: { event: EventInsight }) {
             />
 
             <SectionDivider label="Line-up" />
-            <LineupBlock artists={event.artists} />
+            <LineupBlock
+              artists={event.artists}
+              djFees={event.djFees}
+              investmentLevel={event.djFeeInvestmentLevel}
+            />
           </div>
         </div>
 
@@ -2371,6 +2389,56 @@ function OrganicImpactLevelBars({ level }: { level: OrganicImpactLevel }) {
   );
 }
 
+function DjFeeInvestmentVerdict({
+  level,
+  spendLabel,
+  missing,
+}: {
+  level: DjFeeInvestmentLevel;
+  spendLabel: string;
+  missing: number;
+}) {
+  const label = djFeeInvestmentLevelLabel(level);
+  return (
+    <div className="flex items-center gap-2.5">
+      <DjFeeInvestmentLevelBars level={level} />
+      <div className="min-w-0">
+        <p className="text-xs font-medium capitalize text-text">{label}</p>
+        <p className="text-[10px] text-text-dim">
+          Totaal bandbreedte {spendLabel} t.o.v. andere events
+          {missing > 0
+            ? ` · ${missing} DJ${missing === 1 ? "" : "s"} zonder range`
+            : ""}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function DjFeeInvestmentLevelBars({ level }: { level: DjFeeInvestmentLevel }) {
+  const label = djFeeInvestmentLevelLabel(level);
+  const fill = djFeeBarFill(level);
+  return (
+    <span
+      className="inline-flex h-3 shrink-0 items-end gap-0.5"
+      title={label}
+      aria-label={label}
+      role="img"
+    >
+      {IMPACT_BAR_HEIGHTS.map((h, i) => (
+        <span
+          key={h}
+          className={cn(
+            "w-1 rounded-[1px]",
+            h,
+            i < level ? fill : "bg-border",
+          )}
+        />
+      ))}
+    </span>
+  );
+}
+
 function CompetitionBlock({
   festivals,
   parties,
@@ -2533,38 +2601,101 @@ function CompetitionLevelBars({ level }: { level: CompetitionLevel }) {
   );
 }
 
-function LineupBlock({ artists }: { artists: string[] }) {
-  const names = artists.length > 0 ? artists : [];
+function LineupBlock({
+  artists,
+  djFees,
+  investmentLevel,
+}: {
+  artists: string[];
+  djFees?: EventInsight["djFees"];
+  investmentLevel?: EventInsight["djFeeInvestmentLevel"];
+}) {
+  const feeRows = djFees?.artists ?? [];
+  const feeByKey = new Map(
+    feeRows.map((row) => [normalizeArtistKey(row.name), row]),
+  );
+  const names: string[] = [];
+  const seen = new Set<string>();
+  for (const name of artists) {
+    const key = normalizeArtistKey(name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    names.push(name);
+  }
+  for (const row of feeRows) {
+    const key = normalizeArtistKey(row.name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    names.push(row.name);
+  }
+
   return (
     <div className="space-y-2">
+      {investmentLevel != null && djFees && djFees.spend.priced > 0 && (
+        <DjFeeInvestmentVerdict
+          level={investmentLevel}
+          spendLabel={djFees.spendLabel}
+          missing={djFees.spend.missing}
+        />
+      )}
+      {investmentLevel == null && djFees && djFees.spend.priced > 0 && (
+        <p className="text-[11px] text-text-muted">
+          Line-up spend {formatDjFeeSpend(djFees.spend)}
+          {djFees.spend.missing > 0
+            ? ` · ${djFees.spend.missing} DJ${djFees.spend.missing === 1 ? "" : "s"} zonder range`
+            : ""}
+        </p>
+      )}
       {names.length === 0 ? (
         <div className="border border-dashed border-border px-3 py-2 text-xs text-text-dim">
           Geen DJs bekend
         </div>
       ) : (
         <ul className="space-y-1.5">
-          {names.slice(0, 10).map((name) => (
-            <li
-              key={name}
-              className="flex items-center gap-3 border border-border px-2.5 py-1.5 text-xs"
-            >
-              <Music2
-                className="size-3.5 shrink-0 text-text-dim"
-                strokeWidth={1.5}
-              />
-              <span className="min-w-0 flex-1 truncate font-medium">{name}</span>
-              <span className="inline-flex items-center gap-1 text-text-dim">
-                <Euro className="size-3" strokeWidth={1.5} />
-                fee —
-              </span>
-              <span className="inline-flex items-center gap-1 text-text-dim">
-                <TrendingUp className="size-3" strokeWidth={1.5} />
-                pop. —
-              </span>
-            </li>
-          ))}
+          {names.slice(0, 10).map((name) => {
+            const fee = feeByKey.get(normalizeArtistKey(name));
+            const rangeLabel = djFeeRangeDef(fee?.feeRange ?? null)?.label;
+            return (
+              <li
+                key={name}
+                className="flex items-center gap-3 border border-border px-2.5 py-1.5 text-xs"
+              >
+                <Music2
+                  className="size-3.5 shrink-0 text-text-dim"
+                  strokeWidth={1.5}
+                />
+                <span className="min-w-0 flex-1 truncate font-medium">
+                  {name}
+                  {fee?.isTenHour ? (
+                    <span className="ml-1.5 text-[10px] tracking-wide text-text-dim uppercase">
+                      10HRS
+                    </span>
+                  ) : null}
+                </span>
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1",
+                    rangeLabel ? "text-text-muted" : "text-text-dim",
+                  )}
+                >
+                  <Euro className="size-3" strokeWidth={1.5} />
+                  {rangeLabel ?? "fee —"}
+                </span>
+                <span className="inline-flex items-center gap-1 text-text-dim">
+                  <TrendingUp className="size-3" strokeWidth={1.5} />
+                  pop. —
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
+      <Link
+        href="/dashboard/dj-fees"
+        className="inline-block text-[11px] underline underline-offset-2 hover:text-text"
+      >
+        DJ-fees bijwerken →
+      </Link>
     </div>
   );
 }

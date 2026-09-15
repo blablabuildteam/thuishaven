@@ -9,10 +9,14 @@
  *
  * Future dimensions (data not wired yet):
  * - paid media: ROAS / spend vs fill
- * - DJ fees: fee vs fill, headliner popularity vs velocity
  */
 
 import type { EditionFormat } from "@/lib/editions/lineup";
+import {
+  djFeeSpendMidpoint,
+  formatDjFeeSpend,
+  type DjFeeSpend,
+} from "@/lib/dashboard/dj-fee-ranges";
 import {
   IMPACT_LEVELS,
   isHighImpact,
@@ -37,7 +41,8 @@ export type AnomalyDimension =
   | "email"
   | "pricing"
   | "soldout"
-  | "same_day";
+  | "same_day"
+  | "dj_fees";
 
 export type AnomalyFact = {
   label: string;
@@ -91,6 +96,10 @@ export type AnomalyEventInput = {
   }>;
   competitionLevel: CompetitionLevel | null;
   organicImpactLevel: OrganicImpactLevel | null;
+  djFeeInvestmentLevel?: 1 | 2 | 3 | 4 | 5 | null;
+  djFees?: {
+    spend: DjFeeSpend;
+  } | null;
 };
 
 type WeatherBand = "ideal" | "ok" | "poor";
@@ -109,6 +118,7 @@ type CohortStats = {
   fill: MetricStats | null;
   scan: MetricStats | null;
   price: MetricStats | null;
+  fee: MetricStats | null;
   sameDayShare: MetricStats | null;
   soldOutDays: MetricStats | null;
 };
@@ -118,6 +128,7 @@ export type AnomalyBaselines = {
   byKey: Map<string, CohortStats>;
   fillByCompetition: Record<CompetitionLevel, number | null>;
   fillByOrganic: Record<OrganicImpactLevel, number | null>;
+  fillByDjFee: Record<ImpactLevel, number | null>;
   fillWithMail: number | null;
   fillWithoutMail: number | null;
   fillByWeatherOutdoor: Record<WeatherBand, number | null>;
@@ -260,6 +271,7 @@ function emptyCohort(label: string): CohortStats {
     fill: null,
     scan: null,
     price: null,
+    fee: null,
     sameDayShare: null,
     soldOutDays: null,
   };
@@ -272,6 +284,7 @@ function buildCohortStats(
   const fill: number[] = [];
   const scan: number[] = [];
   const price: number[] = [];
+  const fee: number[] = [];
   const sameDay: number[] = [];
   const soldOutDays: number[] = [];
 
@@ -286,6 +299,10 @@ function buildCohortStats(
     if (e.tickets.avgPriceEur != null && e.tickets.avgPriceEur > 0) {
       price.push(e.tickets.avgPriceEur);
     }
+    const feeMid = e.djFees?.spend
+      ? djFeeSpendMidpoint(e.djFees.spend)
+      : null;
+    if (feeMid != null) fee.push(feeMid);
     const share = sameDayShare(e);
     if (share != null) sameDay.push(share);
     if (isSoldOut(e) && e.tickets.soldOutDaysBefore != null) {
@@ -298,6 +315,7 @@ function buildCohortStats(
     fill: metricStats(fill),
     scan: metricStats(scan),
     price: metricStats(price),
+    fee: metricStats(fee),
     sameDayShare: metricStats(sameDay),
     soldOutDays: metricStats(soldOutDays),
   };
@@ -389,6 +407,9 @@ export function computeBaselines(
   const fillByOrganic = Object.fromEntries(
     IMPACT_LEVELS.map((level) => [level, null]),
   ) as Record<OrganicImpactLevel, number | null>;
+  const fillByDjFee = Object.fromEntries(
+    IMPACT_LEVELS.map((level) => [level, null]),
+  ) as Record<ImpactLevel, number | null>;
   const fillByWeatherOutdoor: Record<WeatherBand, number | null> = {
     ideal: null,
     ok: null,
@@ -401,6 +422,9 @@ export function computeBaselines(
   const organicBuckets = Object.fromEntries(
     IMPACT_LEVELS.map((level) => [level, [] as number[]]),
   ) as Record<OrganicImpactLevel, number[]>;
+  const djFeeBuckets = Object.fromEntries(
+    IMPACT_LEVELS.map((level) => [level, [] as number[]]),
+  ) as Record<ImpactLevel, number[]>;
   const weatherBuckets: Record<WeatherBand, number[]> = {
     ideal: [],
     ok: [],
@@ -415,6 +439,7 @@ export function computeBaselines(
     if (fill != null) {
       if (e.competitionLevel) competeBuckets[e.competitionLevel].push(fill);
       if (e.organicImpactLevel) organicBuckets[e.organicImpactLevel].push(fill);
+      if (e.djFeeInvestmentLevel) djFeeBuckets[e.djFeeInvestmentLevel].push(fill);
       if (hasMail(e)) withMail.push(fill);
       else withoutMail.push(fill);
       if (e.isOutdoor && e.weather) {
@@ -441,6 +466,7 @@ export function computeBaselines(
   for (const level of IMPACT_LEVELS) {
     fillByCompetition[level] = mean(competeBuckets[level]);
     fillByOrganic[level] = mean(organicBuckets[level]);
+    fillByDjFee[level] = mean(djFeeBuckets[level]);
   }
   for (const band of ["ideal", "ok", "poor"] as const) {
     fillByWeatherOutdoor[band] = mean(weatherBuckets[band]);
@@ -466,6 +492,7 @@ export function computeBaselines(
     byKey: statsByKey,
     fillByCompetition,
     fillByOrganic,
+    fillByDjFee,
     fillWithMail: mean(withMail),
     fillWithoutMail: mean(withoutMail),
     fillByWeatherOutdoor,
@@ -994,6 +1021,107 @@ function detectPricing(
   return null;
 }
 
+function detectDjFees(
+  e: AnomalyEventInput,
+  baselines: AnomalyBaselines,
+): AnomalyInsight | null {
+  if (e.status !== "past") return null;
+  const spend = e.djFees?.spend;
+  if (!spend || spend.priced < 1) return null;
+  const fill = e.tickets.fillPct;
+  if (fill == null || e.tickets.sold <= 0) return null;
+  const level = e.djFeeInvestmentLevel ?? null;
+  const spendLabel = formatDjFeeSpend(spend);
+  const soldOut = isSoldOut(e);
+  const highFill = mean(
+    ([4, 5] as ImpactLevel[]).flatMap((l) => {
+      const v = baselines.fillByDjFee[l];
+      return v == null ? [] : [v];
+    }),
+  );
+  const lowFill = mean(
+    ([1, 2] as ImpactLevel[]).flatMap((l) => {
+      const v = baselines.fillByDjFee[l];
+      return v == null ? [] : [v];
+    }),
+  );
+
+  if (level != null && isHighImpact(level)) {
+    const investLabel =
+      level === 5 ? "Zeer hoge DJ-fee investering" : "Hoge DJ-fee investering";
+    if (soldOut || fill >= 92) {
+      return {
+        text: `${investLabel} — toch vol`,
+        tone: "positive",
+        dimension: "dj_fees",
+        significance: 0.5,
+        detail: `${investLabel.toLowerCase()} t.o.v. andere events (${spendLabel}, ${spend.priced} DJ${spend.priced === 1 ? "" : "s"} met range). Dit event was ${fmtPct(fill)} vol — de duurdere line-up werd dus gedragen. Fees zijn bandbreedtes, geen exacte bedragen.`,
+        facts: facts(
+          ["Investering", `${level}/5`],
+          ["DJ-fees", spendLabel],
+          ["Bezetting", fmtPct(fill)],
+        ),
+      };
+    }
+    if (highFill != null && fill <= highFill - 12) {
+      return {
+        text: `${investLabel}, maar de verkoop bleef achter`,
+        tone: "caution",
+        dimension: "dj_fees",
+        significance: sigFromPp(highFill - fill, 22),
+        detail: `${investLabel.toLowerCase()} t.o.v. andere events (${spendLabel}). Dit event was ${fmtPct(fill)} vol; events met een vergelijkbare DJ-fee investering zitten meestal rond ${fmtPct(highFill)} vol. Fees zijn bandbreedtes, geen exacte bedragen.`,
+        facts: facts(
+          ["Investering", `${level}/5`],
+          ["Dit event", fmtPct(fill)],
+          ["Events met hoge DJ-fees", fmtPct(highFill)],
+          ["DJ-fees", spendLabel],
+        ),
+      };
+    }
+  }
+
+  if (level != null && isLowImpact(level) && (soldOut || fill >= 92)) {
+    return {
+      text: "Lage DJ-fee investering — toch vol",
+      tone: "positive",
+      dimension: "dj_fees",
+      significance: 0.46,
+      detail: `Lage DJ-fee investering t.o.v. andere events (${spendLabel}). Dit event was ${fmtPct(fill)} vol${lowFill != null ? `; events met een lage investering zitten meestal rond ${fmtPct(lowFill)} vol` : ""}. Fees zijn bandbreedtes, geen exacte bedragen.`,
+      facts: facts(
+        ["Investering", `${level}/5`],
+        ["DJ-fees", spendLabel],
+        ["Bezetting", fmtPct(fill)],
+        ["Events met lage DJ-fees", lowFill != null ? fmtPct(lowFill) : null],
+      ),
+    };
+  }
+
+  const mid = djFeeSpendMidpoint(spend);
+  const cohort = resolveCohort(e, baselines, "fee");
+  if (mid == null || !cohort?.fee) return null;
+  const rel = ((mid - cohort.fee.median) / Math.max(1, cohort.fee.median)) * 100;
+  if (Math.abs(rel) < 22) return null;
+  const expensive = rel > 0;
+  const significance = Math.min(1, Math.abs(rel) / 55);
+
+  if (expensive && fill <= 72) {
+    return {
+      text: `DJ-fees hoger dan gebruikelijk, event ${fmtPct(fill)} vol`,
+      tone: "caution",
+      dimension: "dj_fees",
+      significance: Math.max(significance, 0.4),
+      detail: `De DJ-fee bandbreedte was ${spendLabel} (midden ±${fmtEur(mid)}). Vergelijkbare ${cohort.label} zitten rond ${fmtEur(cohort.fee.median)}. Toch was dit event maar ${fmtPct(fill)} vol. Fees zijn bandbreedtes, geen exacte bedragen.`,
+      facts: facts(
+        ["DJ-fees dit event", spendLabel],
+        ["Vergelijkbare " + cohort.label, fmtEur(cohort.fee.median)],
+        ["Bezetting", fmtPct(fill)],
+      ),
+    };
+  }
+
+  return null;
+}
+
 function detectSoldout(
   e: AnomalyEventInput,
   baselines: AnomalyBaselines,
@@ -1126,6 +1254,7 @@ const DETECTORS: Array<
   detectSocial,
   detectEmail,
   detectPricing,
+  detectDjFees,
   detectSoldout,
   detectSameDay,
 ];

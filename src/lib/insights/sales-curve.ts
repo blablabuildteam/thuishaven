@@ -57,3 +57,50 @@ export function buildSalesCurveSeries(
   }
   return series;
 }
+
+export function sumSalesDays(points: SalesDayPoint[]): number {
+  return points.reduce((sum, point) => sum + Math.max(0, Number(point.sold) || 0), 0);
+}
+
+function daySpan(points: SalesDayPoint[]): number {
+  if (points.length === 0) return 0;
+  const days = points.map((point) => point.day.slice(0, 10)).sort();
+  const first = Date.parse(`${days[0]}T12:00:00.000Z`);
+  const last = Date.parse(`${days[days.length - 1]}T12:00:00.000Z`);
+  if (!Number.isFinite(first) || !Number.isFinite(last)) return 0;
+  return Math.max(0, Math.round((last - first) / 86_400_000));
+}
+
+/**
+ * Prefer the Weeztix order histogram (first sale → event).
+ * Snapshot deltas only cover days after inventory snapshots started — never
+ * plot those as the full curve when they explain little of sold.
+ */
+export function preferCompleteSalesCurve(input: {
+  sold: number;
+  orderDays: SalesDayPoint[];
+  snapshotDays: SalesDayPoint[];
+}): { points: SalesDayPoint[]; source: "orders" | "snapshots" } {
+  const orderSum = sumSalesDays(input.orderDays);
+  const snapshotSum = sumSalesDays(input.snapshotDays);
+  const sold = Math.max(0, input.sold);
+  const orderSpan = daySpan(input.orderDays);
+  const snapshotSpan = daySpan(input.snapshotDays);
+  const snapshotIsStub = sold > 0 && snapshotSum < sold * 0.25;
+  const ordersLookLikeOnsale =
+    input.orderDays.length >= 2 &&
+    (orderSum >= sold * 0.3 ||
+      orderSpan >= 14 ||
+      (orderSum >= snapshotSum && orderSpan > snapshotSpan + 2));
+
+  if (ordersLookLikeOnsale) {
+    return { points: input.orderDays, source: "orders" };
+  }
+  if (snapshotIsStub) {
+    if (input.orderDays.length > 0 && orderSum >= snapshotSum) {
+      return { points: input.orderDays, source: "orders" };
+    }
+    return { points: [], source: "snapshots" };
+  }
+  return { points: input.snapshotDays, source: "snapshots" };
+}
