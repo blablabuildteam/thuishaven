@@ -34,8 +34,9 @@ export function ForgotPasswordForm() {
         </div>
 
         <p className="mb-6 text-sm text-text-muted">
-          Vul je werk-e-mailadres in. Als het bij ons bekend is, sturen we een
-          resetlink.
+          Vul je werk-e-mailadres in. Als je account al een wachtwoord heeft,
+          sturen we een resetlink (1 uur geldig). Nog geen wachtwoord? Vraag een
+          admin om een uitnodiging.
         </p>
 
         {message ? (

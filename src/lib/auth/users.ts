@@ -382,6 +382,7 @@ async function sendInviteForUser(
     to: user.email,
     name: user.name,
     rawToken,
+    existingAccount: Boolean(user.emailVerifiedAt),
   });
   if (!mail.ok) return { ok: false, error: mail.error };
 
@@ -401,9 +402,6 @@ export async function resendInvite(
 ): Promise<{ ok: true; user: AppUserRecord } | { ok: false; error: string }> {
   const user = await findUserById(userId);
   if (!user) return { ok: false, error: "Gebruiker niet gevonden" };
-  if (user.emailVerifiedAt && user.active) {
-    return { ok: false, error: "Account is al actief" };
-  }
   return sendInviteForUser(user);
 }
 

@@ -92,7 +92,10 @@ export function AdminUsersPanel() {
         setError(data.error ?? "Opnieuw versturen mislukt");
         return;
       }
-      setSuccess(`Uitnodiging opnieuw verstuurd naar ${user.email}`);
+      const verb = user.inviteSentAt ? "Opnieuw verstuurd" : "Verstuurd";
+      setSuccess(
+        `${verb} naar ${user.email}. Zij stellen zelf een wachtwoord in via de mail.`,
+      );
       await load();
     });
   }
@@ -124,7 +127,7 @@ export function AdminUsersPanel() {
       <SectionHeader
         eyebrow="Admin"
         title="Gebruikers"
-        description="Nodig medewerkers uit per e-mail. Zij stellen zelf een wachtwoord in via de uitnodigingslink."
+        description="Nodig medewerkers uit per e-mail. Zij stellen zelf een wachtwoord in via de link. Daarna loggen ze in, en kunnen ze via ‘Wachtwoord vergeten?’ hun wachtwoord resetten."
       />
 
       {error && (
@@ -226,16 +229,16 @@ export function AdminUsersPanel() {
                   </td>
                   <td className="py-3 text-right">
                     <div className="flex justify-end gap-2">
-                      {u.status === "pending" && (
-                        <button
-                          type="button"
-                          disabled={pending}
-                          onClick={() => resendInvite(u)}
-                          className="border border-border px-2 py-1 font-display text-xs tracking-[0.1em] hover:border-accent disabled:opacity-50"
-                        >
-                          Opnieuw uitnodigen
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => resendInvite(u)}
+                        className="border border-border px-2 py-1 font-display text-xs tracking-[0.1em] hover:border-accent disabled:opacity-50"
+                      >
+                        {u.inviteSentAt
+                          ? "Opnieuw uitnodigen"
+                          : "Uitnodigen"}
+                      </button>
                       {u.status !== "pending" && (
                         <button
                           type="button"

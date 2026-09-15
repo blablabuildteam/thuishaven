@@ -12,6 +12,7 @@ export function ResetPasswordForm() {
 
   useEffect(() => {
     if (!token) {
+      setError("Ongeldige of ontbrekende resetlink.");
       setLoading(false);
       return;
     }
@@ -41,6 +42,9 @@ export function ResetPasswordForm() {
         description=""
         token=""
         submitLabel=""
+        errorMessage={error}
+        recoveryHref="/forgot-password"
+        recoveryLabel="Nieuwe resetlink aanvragen"
         onSubmit={async () => ({ error })}
       />
     );
@@ -49,9 +53,11 @@ export function ResetPasswordForm() {
   return (
     <PasswordSetupForm
       title="Nieuw wachtwoord"
-      description="Kies een nieuw wachtwoord voor je account."
+      description="Kies een nieuw wachtwoord. Daarna log je in met dit wachtwoord."
       token={token}
       submitLabel="Wachtwoord opslaan"
+      successHref="/login?from=reset"
+      successMessage="Je nieuwe wachtwoord is opgeslagen. Je kunt nu inloggen."
       onSubmit={async (password) => {
         const res = await fetch("/api/auth/reset/accept", {
           method: "POST",

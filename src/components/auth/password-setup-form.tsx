@@ -12,6 +12,9 @@ type Props = {
   onSubmit: (password: string) => Promise<{ error?: string }>;
   successHref?: string;
   successMessage?: string;
+  errorMessage?: string;
+  recoveryHref?: string;
+  recoveryLabel?: string;
 };
 
 export function PasswordSetupForm({
@@ -21,7 +24,10 @@ export function PasswordSetupForm({
   submitLabel,
   onSubmit,
   successHref = "/login",
-  successMessage = "Je kunt nu inloggen.",
+  successMessage = "Je wachtwoord is ingesteld. Je kunt nu inloggen.",
+  errorMessage,
+  recoveryHref,
+  recoveryLabel,
 }: Props) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -29,10 +35,25 @@ export function PasswordSetupForm({
   const [done, setDone] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  if (!token) {
+  if (errorMessage || !token) {
     return (
       <AuthShell title={title}>
-        <p className="text-sm text-danger">Ongeldige of ontbrekende link.</p>
+        <p className="text-sm text-danger">
+          {errorMessage ?? "Ongeldige of ontbrekende link."}
+        </p>
+        <div className="mt-4 flex flex-wrap gap-3 text-sm">
+          <Link href="/login" className="text-text-muted underline hover:text-text">
+            Naar inloggen
+          </Link>
+          {recoveryHref && recoveryLabel && (
+            <Link
+              href={recoveryHref}
+              className="text-text-muted underline hover:text-text"
+            >
+              {recoveryLabel}
+            </Link>
+          )}
+        </div>
       </AuthShell>
     );
   }

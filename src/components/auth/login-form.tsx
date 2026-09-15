@@ -14,6 +14,13 @@ export function LoginForm() {
     requested === "/" || requested === "/dashboard"
       ? "/dashboard/inzichten"
       : requested;
+  const from = searchParams.get("from");
+  const notice =
+    from === "invite"
+      ? "Wachtwoord ingesteld. Log in met je e-mail en nieuwe wachtwoord."
+      : from === "reset"
+        ? "Wachtwoord gewijzigd. Log in met je nieuwe wachtwoord."
+        : null;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
@@ -63,9 +70,16 @@ export function LoginForm() {
         </div>
 
         <p className="mb-6 text-sm text-text-muted">
-          Log in met je Thuishaven- of blablabuild-account. Nog geen toegang?
-          Vraag een admin om een uitnodiging per e-mail.
+          Log in met je werk-e-mail. Nog geen wachtwoord? Vraag een admin om een
+          uitnodiging. Daarna kun je hier inloggen, of via ‘Wachtwoord
+          vergeten?’ een nieuw wachtwoord aanvragen.
         </p>
+
+        {notice && (
+          <p className="mb-4 border border-success/40 bg-success/10 px-3 py-2 text-sm text-success">
+            {notice}
+          </p>
+        )}
 
         <form onSubmit={onSubmit} className="space-y-4">
           <label className="block">

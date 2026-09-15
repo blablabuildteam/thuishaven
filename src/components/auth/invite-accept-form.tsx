@@ -13,6 +13,7 @@ export function InviteAcceptForm() {
 
   useEffect(() => {
     if (!token) {
+      setError("Ongeldige of ontbrekende uitnodigingslink.");
       setLoading(false);
       return;
     }
@@ -44,6 +45,7 @@ export function InviteAcceptForm() {
         description=""
         token=""
         submitLabel=""
+        errorMessage={error}
         onSubmit={async () => ({ error })}
       />
     );
@@ -51,14 +53,16 @@ export function InviteAcceptForm() {
 
   return (
     <PasswordSetupForm
-      title="Account activeren"
+      title="Wachtwoord instellen"
       description={
         meta
-          ? `Welkom ${meta.name}. Stel een wachtwoord in voor ${meta.email}.`
-          : "Stel je wachtwoord in om Thuishaven Tools te gebruiken."
+          ? `Hoi ${meta.name}. Kies een wachtwoord voor ${meta.email}, daarna kun je inloggen.`
+          : "Kies een wachtwoord om in te loggen op Thuishaven Tools."
       }
       token={token}
-      submitLabel="Account activeren"
+      submitLabel="Wachtwoord opslaan"
+      successHref="/login?from=invite"
+      successMessage="Je wachtwoord is ingesteld. Je kunt nu inloggen. Later vergeten? Gebruik ‘Wachtwoord vergeten?’ op de inlogpagina."
       onSubmit={async (password) => {
         const res = await fetch("/api/auth/invite/accept", {
           method: "POST",
@@ -66,7 +70,7 @@ export function InviteAcceptForm() {
           body: JSON.stringify({ token, password }),
         });
         const data = await res.json();
-        if (!res.ok) return { error: data.error ?? "Activeren mislukt" };
+        if (!res.ok) return { error: data.error ?? "Opslaan mislukt" };
         return {};
       }}
     />
