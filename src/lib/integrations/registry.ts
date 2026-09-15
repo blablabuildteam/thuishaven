@@ -201,6 +201,28 @@ export const INTEGRATIONS: IntegrationDef[] = [
     priority: "high",
   },
   {
+    id: "meta_ads",
+    name: "Meta Ads",
+    tool: "dashboard",
+    description:
+      "Paid campaign/ad performance (spend, impressions, clicks) → marketing_ads. Zelfde Meta-token als Instagram, extra scope ads_read.",
+    envKeys: ["META_ACCESS_TOKEN"],
+    optionalEnvKeys: [
+      "META_AD_ACCOUNT_ID",
+      "META_APP_ID",
+      "META_APP_SECRET",
+      "META_GRAPH_API_VERSION",
+    ],
+    askFromClient: [
+      "ads_read op system user thuishaven-dashboard",
+      "Advertentieaccount toegewezen aan die system user",
+    ],
+    verifyHint: "GET /me/adaccounts · ads_read + assigned ad account",
+    docsUrl:
+      "https://developers.facebook.com/docs/marketing-api/insights",
+    priority: "high",
+  },
+  {
     id: "tiktok",
     name: "TikTok",
     tool: "dashboard",
@@ -217,6 +239,27 @@ export const INTEGRATIONS: IntegrationDef[] = [
       "GET /v2/user/info · access token 24u, refresh via TIKTOK_REFRESH_TOKEN",
     docsUrl: "https://developers.tiktok.com/doc/tiktok-api-v2-get-user-info",
     priority: "medium",
+  },
+  {
+    id: "tiktok_ads",
+    name: "TikTok Ads",
+    tool: "dashboard",
+    description:
+      "Paid campaign/ad performance via TikTok Marketing API → marketing_ads. Apart van de Login Kit-token voor organic.",
+    envKeys: ["TIKTOK_ADS_ACCESS_TOKEN"],
+    optionalEnvKeys: [
+      "TIKTOK_ADVERTISER_ID",
+      "TIKTOK_ADS_APP_ID",
+      "TIKTOK_ADS_APP_SECRET",
+    ],
+    askFromClient: [
+      "Marketing API access token (TikTok Ads Manager, niet Login Kit)",
+      "Advertiser ID van het Thuishaven ads-account",
+    ],
+    verifyHint:
+      "GET /oauth2/advertiser/get · TIKTOK_ADS_ACCESS_TOKEN + advertiser",
+    docsUrl: "https://business-api.tiktok.com/portal/docs?id=1738455508553729",
+    priority: "high",
   },
   {
     id: "youtube",

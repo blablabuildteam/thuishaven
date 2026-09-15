@@ -36,7 +36,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { formatPoolUsage } from "@/lib/integrations/weeztix/channels";
-import { cn, formatNumber, formatPercent } from "@/lib/utils";
+import { cn, formatEuroFromCents, formatNumber, formatPercent } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SocialChannelIcon } from "@/components/ui/social-channel-icon";
 import type {
@@ -45,6 +45,7 @@ import type {
   EventInsightMail,
   EventInsightSocial,
   EventInsightSocialVariant,
+  EventInsightPaidAd,
   CompetingEvent,
 } from "@/lib/insights/event-insights";
 import {
@@ -374,7 +375,13 @@ function InsightDeepDive({
           )}
 
           <p className="mt-3 text-[10px] text-text-dim">
-            Paid ads volgen later (Start Moving).
+            {(event.paid?.spendCents ?? 0) > 0
+              ? `Paid Meta · ${formatEuroFromCents(event.paid?.spendCents ?? 0)} · ${event.paid?.ads ?? 0} ads${
+                  event.paid?.roas != null
+                    ? ` · ticket-ROAS ${event.paid.roas.toFixed(1)}×`
+                    : ""
+                }`
+              : "Nog geen paid ads gekoppeld."}
           </p>
         </div>
       )}
@@ -396,7 +403,9 @@ function InsightDeepDive({
             ))}
           </ul>
           <p className="mt-2 text-[10px] text-text-dim">
-            Paid ads volgen later (Start Moving).
+            {(event.paid?.spendCents ?? 0) > 0
+              ? `Paid Meta · ${formatEuroFromCents(event.paid?.spendCents ?? 0)}`
+              : "Nog geen paid ads gekoppeld."}
           </p>
         </div>
       )}
@@ -1580,30 +1589,10 @@ function EventDetail({ event }: { event: EventInsight }) {
             />
 
             <SectionDivider label="Marketing · paid" />
-            <div className="border border-dashed border-border px-3 py-2.5 text-xs text-text-dim">
-              <p className="flex items-center gap-1.5 font-medium text-text-muted">
-                <BadgeEuro className="size-3.5" strokeWidth={1.5} />
-                Paid ads · shell
-              </p>
-              <p className="mt-1 leading-relaxed">
-                Ad spend, paid posts en ROAS per event volgen zodra Start Moving
-                / Looker gekoppeld is.
-              </p>
-              <div className="mt-2 grid grid-cols-3 gap-2">
-                <div>
-                  <p className="text-[10px] text-text-dim">Spend</p>
-                  <p className="font-mono">—</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-text-dim">Paid posts</p>
-                  <p className="font-mono">—</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-text-dim">ROAS</p>
-                  <p className="font-mono">—</p>
-                </div>
-              </div>
-            </div>
+            <PaidMarketingBlock
+              paid={event.paid}
+              ads={event.paidAds}
+            />
 
             <SectionDivider label="Line-up" />
             <LineupBlock artists={event.artists} />
@@ -1619,6 +1608,89 @@ function EventDetail({ event }: { event: EventInsight }) {
           </Link>
         </div>
       </div>
+    </div>
+  );
+}
+
+function PaidMarketingBlock({
+  paid,
+  ads,
+}: {
+  paid: EventInsight["paid"] | undefined;
+  ads: EventInsightPaidAd[] | undefined;
+}) {
+  const summary = paid ?? {
+    spendCents: 0,
+    ads: 0,
+    impressions: 0,
+    clicks: 0,
+    roas: null,
+  };
+  const rows = (ads ?? []).slice(0, 6);
+
+  if (summary.ads === 0) {
+    return (
+      <div className="border border-dashed border-border px-3 py-2.5 text-xs text-text-dim">
+        <p className="flex items-center gap-1.5 font-medium text-text-muted">
+          <BadgeEuro className="size-3.5" strokeWidth={1.5} />
+          Geen paid ads gekoppeld
+        </p>
+        <p className="mt-1 leading-relaxed">
+          Paid ads verschijnen hier zodra Meta- of TikTok-campagnes aan deze
+          editie gekoppeld zijn.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border border-dashed border-border px-3 py-2.5 text-xs">
+      <div className="grid grid-cols-3 gap-2">
+        <div>
+          <p className="text-[10px] text-text-dim">Spend</p>
+          <p className="font-mono text-text">
+            {formatEuroFromCents(summary.spendCents)}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] text-text-dim">Paid ads</p>
+          <p className="font-mono text-text">{formatNumber(summary.ads)}</p>
+        </div>
+        <div>
+          <p className="text-[10px] text-text-dim">Ticket-ROAS</p>
+          <p className="font-mono text-text">
+            {summary.roas != null ? `${summary.roas.toFixed(1)}×` : "—"}
+          </p>
+        </div>
+      </div>
+      <div className="mt-2 space-y-1">
+        {rows.map((ad) => (
+          <div
+            key={ad.adId}
+            className="flex items-center justify-between gap-2 py-0.5"
+          >
+            <span className="flex min-w-0 items-center gap-1.5 truncate text-text-muted">
+              <SocialChannelIcon
+                channel={ad.platform === "tiktok" ? "tiktok" : "instagram"}
+                size={14}
+                alt=""
+              />
+              <span className="truncate">
+                {ad.adName || ad.campaignName || "Ad"}
+              </span>
+            </span>
+            <span className="shrink-0 font-mono text-text-muted">
+              {formatEuroFromCents(ad.spendCents)}
+            </span>
+          </div>
+        ))}
+      </div>
+      {summary.impressions > 0 && (
+        <p className="mt-2 text-[10px] text-text-dim">
+          {formatNumber(summary.impressions)} impr. ·{" "}
+          {formatNumber(summary.clicks)} clicks
+        </p>
+      )}
     </div>
   );
 }

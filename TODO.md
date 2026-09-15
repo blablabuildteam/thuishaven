@@ -3,6 +3,8 @@
 ## Access
 
 - [ ] Connect with Start Moving for Paid ads data
+- [x] Native Meta Ads API (spend / impr. / clicks) — needs ads_read on system user
+- [x] Native TikTok Ads API — needs Marketing API token (not Login Kit)
 - [ ] Contact Appic for an API/developers token for Appic Game data
 - [ ] Invite once the tool is done: Quinty (quinty@thuishaven.nl), Bas (bas@thuishaven.nl), Kasper (Kasper@thuishaven.nl), Tim (Tim@thuishaven.nl), Bas A (Basamro@thuishaven.nl), Roxy (roxy@thuishaven.nl)
 
@@ -17,7 +19,7 @@
 
 ## Marketing
 
-- [ ] Pull total ad spend per event
+- [ ] Pull total ad spend per event (Meta + TikTok wired; waiting on tokens)
 - [ ] Sync Instagram after Meta token install
 - [x] Narrow down which social posts count toward an event’s sales (exclude aftermovies / posts after the event; same-day = eventdag only)
 - [x] Organic impact score per event (low/medium/high from bereik + engagement + ticketlift)

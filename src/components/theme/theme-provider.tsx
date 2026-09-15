@@ -26,19 +26,32 @@ function applyTheme(theme: Theme) {
   else root.classList.remove("dark");
 }
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("light");
+function persistTheme(theme: Theme) {
+  localStorage.setItem(THEME_STORAGE_KEY, theme);
+  document.cookie = `${THEME_STORAGE_KEY}=${theme}; path=/; max-age=31536000; samesite=lax`;
+}
+
+export function ThemeProvider({
+  children,
+  initialTheme = "light",
+}: {
+  children: React.ReactNode;
+  initialTheme?: Theme;
+}) {
+  const [theme, setThemeState] = useState<Theme>(initialTheme);
 
   useEffect(() => {
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    const initial: Theme = stored === "dark" ? "dark" : "light";
+    const initial: Theme =
+      stored === "dark" || stored === "light" ? stored : initialTheme;
+    persistTheme(initial);
     setThemeState(initial);
     applyTheme(initial);
-  }, []);
+  }, [initialTheme]);
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);
-    localStorage.setItem(THEME_STORAGE_KEY, next);
+    persistTheme(next);
     applyTheme(next);
   }, []);
 

@@ -43,7 +43,7 @@ export type PostEditionLink = {
   reasons: string[];
 };
 
-type EditionIndex = {
+export type EditionIndex = {
   id: string;
   name: string;
   startsAt: Date;
@@ -129,7 +129,7 @@ function offerWindow(offer: string | undefined, text: string): { before: number;
   return { before: 90, after: 14 };
 }
 
-function scorePostAgainstEditions(input: {
+export function scorePostAgainstEditions(input: {
   text: string;
   publishedAt: Date | null;
   artists: string[];

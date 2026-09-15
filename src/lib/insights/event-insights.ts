@@ -4,6 +4,7 @@ import { getDb, hasDatabase } from "@/lib/db/client";
 import {
   editions,
   emailCampaignMetrics,
+  marketingAds,
   marketingPosts,
   ticketInventory,
   ticketInventoryDaily,
@@ -299,6 +300,27 @@ export type EventInsightDemographics = {
   ageAvg: number | null;
 };
 
+export type EventInsightPaidAd = {
+  adId: string;
+  platform: string;
+  campaignName: string | null;
+  adName: string | null;
+  spendCents: number;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  permalink: string | null;
+};
+
+export type EventInsightPaid = {
+  spendCents: number;
+  ads: number;
+  impressions: number;
+  clicks: number;
+  /** Ticketomzet / ad spend. Null when spend or revenue is missing. */
+  roas: number | null;
+};
+
 export type EventInsight = {
   editionId: string;
   name: string;
@@ -354,6 +376,8 @@ export type EventInsight = {
 
   socialPosts: EventInsightSocial[];
   emailCampaigns: EventInsightMail[];
+  paidAds: EventInsightPaidAd[];
+  paid: EventInsightPaid;
   referrers: Array<{ channel: string; orders: number }>;
   competingFestivals: CompetingEvent[];
   /** Overall same-day competition pressure (from listed competitors). */
@@ -436,6 +460,7 @@ export async function loadEventInsightsFresh(options?: {
       capacity: ticketInventory.capacity,
       available: ticketInventory.available,
       avgPriceEur: ticketInventory.avgPriceEur,
+      revenueCents: ticketInventory.revenueCents,
       soldOutDaysBefore: ticketInventory.soldOutDaysBefore,
       scanned: ticketInventory.scanned,
     })
@@ -462,7 +487,7 @@ export async function loadEventInsightsFresh(options?: {
   const minDay = filtered[filtered.length - 1]!.startsAt;
   const maxDay = filtered[0]!.startsAt;
 
-  const [weatherRows, camps, festivals, dailyRows, posts, refs, appicRows, raInvRows, vriendenRows, raRows, demoRows] =
+  const [weatherRows, camps, festivals, dailyRows, posts, refs, appicRows, raInvRows, vriendenRows, raRows, demoRows, ads] =
     await Promise.all([
       safeQuery(
         "weather",
@@ -627,6 +652,16 @@ export async function loadEventInsightsFresh(options?: {
             ),
         [],
       ),
+      safeQuery(
+        "marketingAds",
+        () =>
+          db
+            .select()
+            .from(marketingAds)
+            .where(inArray(marketingAds.editionId, editionIds))
+            .orderBy(desc(marketingAds.spendCents)),
+        [],
+      ),
     ]);
 
     const weatherByDay = new Map(
@@ -657,6 +692,14 @@ export async function loadEventInsightsFresh(options?: {
       const list = postsByEdition.get(p.editionId) ?? [];
       list.push(p);
       postsByEdition.set(p.editionId, list);
+    }
+
+    const adsByEdition = new Map<string, (typeof ads)>();
+    for (const ad of ads) {
+      if (!ad.editionId) continue;
+      const list = adsByEdition.get(ad.editionId) ?? [];
+      list.push(ad);
+      adsByEdition.set(ad.editionId, list);
     }
 
     const snapshotRows = dailyRows.map((r) => ({
@@ -966,6 +1009,31 @@ export async function loadEventInsightsFresh(options?: {
           return (b.publishedAt ?? "").localeCompare(a.publishedAt ?? "");
         });
 
+      const edAds = adsByEdition.get(e.id) ?? [];
+      const paidAds: EventInsightPaidAd[] = edAds.map((ad) => ({
+        adId: ad.id,
+        platform: ad.platform,
+        campaignName: ad.campaignName,
+        adName: ad.adName,
+        spendCents: ad.spendCents ?? 0,
+        impressions: ad.impressions ?? 0,
+        reach: ad.reach ?? 0,
+        clicks: ad.clicks ?? 0,
+        permalink: ad.permalink,
+      }));
+      const spendCents = paidAds.reduce((s, a) => s + a.spendCents, 0);
+      const ticketRevenueCents = e.revenueCents ?? 0;
+      const paid: EventInsightPaid = {
+        spendCents,
+        ads: paidAds.length,
+        impressions: paidAds.reduce((s, a) => s + a.impressions, 0),
+        clicks: paidAds.reduce((s, a) => s + a.clicks, 0),
+        roas:
+          spendCents > 0 && ticketRevenueCents > 0
+            ? ticketRevenueCents / spendCents
+            : null,
+      };
+
       const linked = campsByEdition.get(e.id) ?? [];
       const emailCampaigns: EventInsightMail[] = linked.map((c) => {
         const sent = c.sent ?? 0;
@@ -1091,6 +1159,8 @@ export async function loadEventInsightsFresh(options?: {
         demographics,
         socialPosts,
         emailCampaigns,
+        paidAds,
+        paid,
         referrers,
         competingFestivals: competing,
         competitionLevel: summarizeCompetition(competing).level,
@@ -1247,7 +1317,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v23"],
+  ["event-insights-upcoming-v24"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1263,7 +1333,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v23"],
+  ["event-insights-past-v24"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],

@@ -779,6 +779,61 @@ async function verifyInstagram(): Promise<VerifyResult> {
   }
 }
 
+async function verifyMetaAds(): Promise<VerifyResult> {
+  const name = "Meta Ads";
+  if (!process.env.META_ACCESS_TOKEN?.trim()) {
+    return base("meta_ads", name, "missing", "META_ACCESS_TOKEN ontbreekt");
+  }
+
+  const { resolveMetaAdAccount } = await import(
+    "@/lib/integrations/meta/ads"
+  );
+  const account = await resolveMetaAdAccount();
+  if (!account.ok) {
+    return base("meta_ads", name, "error", account.error.slice(0, 280));
+  }
+
+  const spent =
+    account.account.amountSpent > 0
+      ? ` · ${account.account.amountSpent.toLocaleString("nl-NL")} spend (lifetime)`
+      : "";
+  return base(
+    "meta_ads",
+    name,
+    "verified",
+    `${account.account.name}${spent}`,
+    {
+      accountId: account.account.accountId,
+      currency: account.account.currency,
+    },
+  );
+}
+
+async function verifyTikTokAds(): Promise<VerifyResult> {
+  const name = "TikTok Ads";
+  if (!process.env.TIKTOK_ADS_ACCESS_TOKEN?.trim()) {
+    return base(
+      "tiktok_ads",
+      name,
+      "missing",
+      "TIKTOK_ADS_ACCESS_TOKEN ontbreekt — Login Kit-token telt niet",
+    );
+  }
+
+  const { resolveTikTokAdvertiser } = await import(
+    "@/lib/integrations/tiktok/ads"
+  );
+  const account = await resolveTikTokAdvertiser();
+  if (!account.ok) {
+    return base("tiktok_ads", name, "error", account.error.slice(0, 280));
+  }
+
+  return base("tiktok_ads", name, "verified", account.account.name, {
+    advertiserId: account.account.advertiserId,
+    currency: account.account.currency,
+  });
+}
+
 async function verifyAuth(): Promise<VerifyResult> {
   const name = "Medewerker-login";
 
@@ -964,8 +1019,12 @@ export async function verifyIntegration(id: string): Promise<VerifyResult> {
       return verifyYouTube();
     case "instagram":
       return verifyInstagram();
+    case "meta_ads":
+      return verifyMetaAds();
     case "tiktok":
       return verifyTikTok();
+    case "tiktok_ads":
+      return verifyTikTokAds();
     case "alert_notify":
       return verifyAlertNotify();
     default: {
@@ -1007,11 +1066,11 @@ export async function probeConfiguredIntegrations(): Promise<VerifyResult[]> {
       (row.status !== "manual" &&
         row.status !== "on_hold" &&
         row.status !== "missing" &&
-        ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "kvk", "apollo", "hunter", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "tiktok", "alert_notify"].includes(
+        ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "kvk", "apollo", "hunter", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "meta_ads", "tiktok", "tiktok_ads", "alert_notify"].includes(
           row.id,
         )),
   );
-  const always = ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "apollo", "hunter", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "tiktok", "alert_notify"];
+  const always = ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "apollo", "hunter", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "meta_ads", "tiktok", "tiktok_ads", "alert_notify"];
   const ids = new Set([
     ...toProbe.map((r) => r.id),
     ...always.filter((id) => {

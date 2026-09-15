@@ -601,6 +601,49 @@ export const emailCampaignMetrics = pgTable("email_campaign_metrics", {
   syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const marketingAdPlatformEnum = pgEnum("marketing_ad_platform", [
+  "meta",
+  "tiktok",
+  "youtube",
+]);
+
+/** Paid ads (Meta / later TikTok + YouTube) — sibling of marketing_posts. */
+export const marketingAds = pgTable(
+  "marketing_ads",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    editionId: uuid("edition_id").references(() => editions.id),
+    platform: marketingAdPlatformEnum("platform").notNull(),
+    adAccountId: text("ad_account_id").notNull(),
+    campaignId: text("campaign_id"),
+    campaignName: text("campaign_name"),
+    adsetId: text("adset_id"),
+    adsetName: text("adset_name"),
+    adId: text("ad_id").notNull(),
+    adName: text("ad_name"),
+    status: text("status"),
+    permalink: text("permalink"),
+    thumbnailUrl: text("thumbnail_url"),
+    currency: text("currency").notNull().default("EUR"),
+    spendCents: integer("spend_cents").notNull().default(0),
+    impressions: integer("impressions").notNull().default(0),
+    reach: integer("reach").notNull().default(0),
+    clicks: integer("clicks").notNull().default(0),
+    /** Ad object created_time — used to score against editions. */
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    dateStart: date("date_start"),
+    dateStop: date("date_stop"),
+    syncedAt: timestamp("synced_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("marketing_ads_platform_ad").on(t.platform, t.adId),
+    index("marketing_ads_edition").on(t.editionId),
+    index("marketing_ads_campaign").on(t.platform, t.campaignId),
+  ],
+);
+
 export const alertTypeEnum = pgEnum("alert_type", [
   "ticketswap_after_soldout",
   "weeztix_soldout_ra_open",
@@ -642,6 +685,47 @@ export const alerts = pgTable("alerts", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   resolvedAt: timestamp("resolved_at", { withTimezone: true }),
 });
+
+/** DJ-fee bandbreedtes, gelijk aan het Google Sheets-overzicht. */
+export const djFeeRangeEnum = pgEnum("dj_fee_range", [
+  "0_600",
+  "600_1000",
+  "1000_2500",
+  "2500_5000",
+  "5000_10000",
+  "10000_plus",
+]);
+
+/**
+ * Handmatige DJ-fees per editie. RA / eventnaam pre-fillt de rijen;
+ * verwijderde RA-DJs blijven soft-deleted zodat sync ze niet terugzet.
+ */
+export const djFeeArtists = pgTable(
+  "dj_fee_artists",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    editionId: uuid("edition_id")
+      .notNull()
+      .references(() => editions.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    nameKey: text("name_key").notNull(),
+    feeRange: djFeeRangeEnum("fee_range"),
+    isTenHour: boolean("is_ten_hour").notNull().default(false),
+    source: text("source").notNull().default("resident_advisor"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("dj_fee_artists_edition_name").on(t.editionId, t.nameKey),
+    index("dj_fee_artists_edition").on(t.editionId),
+  ],
+);
 
 export const syncJobs = pgTable("sync_jobs", {
   id: uuid("id").defaultRandom().primaryKey(),

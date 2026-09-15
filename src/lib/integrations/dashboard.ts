@@ -93,6 +93,32 @@ export async function syncTikTok(): Promise<SyncResult> {
   };
 }
 
+export async function syncMetaAds(): Promise<SyncResult> {
+  const { syncMetaAdsReadOnly } = await import(
+    "@/lib/integrations/meta/ads-sync"
+  );
+  const result = await syncMetaAdsReadOnly();
+  return {
+    source: "meta_ads",
+    ok: result.ok,
+    records: result.upserted || result.fetched,
+    error: result.error,
+  };
+}
+
+export async function syncTikTokAds(): Promise<SyncResult> {
+  const { syncTikTokAdsReadOnly } = await import(
+    "@/lib/integrations/tiktok/ads-sync"
+  );
+  const result = await syncTikTokAdsReadOnly();
+  return {
+    source: "tiktok_ads",
+    ok: result.ok,
+    records: result.upserted || result.fetched,
+    error: result.error,
+  };
+}
+
 export async function syncYouTube(): Promise<SyncResult> {
   const { syncYouTubeReadOnly } = await import(
     "@/lib/integrations/youtube/sync"

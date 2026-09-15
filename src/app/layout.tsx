@@ -4,6 +4,7 @@ import {
   Raleway,
   IBM_Plex_Mono,
 } from "next/font/google";
+import { cookies } from "next/headers";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { AuthSessionProvider } from "@/components/auth/session-provider";
 import "./globals.css";
@@ -36,29 +37,19 @@ export const metadata: Metadata = {
     "Marketing- & Kaartverkoop Dashboard en Bedrijfsevent Outreach voor Thuishaven.",
 };
 
-const themeInitScript = `
-(function () {
-  try {
-    var t = localStorage.getItem('th-theme');
-    if (t === 'dark') document.documentElement.classList.add('dark');
-    else document.documentElement.classList.remove('dark');
-  } catch (e) {}
-})();
-`;
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const themeCookie = (await cookies()).get("th-theme")?.value;
+  const theme = themeCookie === "dark" ? "dark" : "light";
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="nl"
-      className={`${display.variable} ${sans.variable} ${mono.variable} h-full antialiased`}
+      className={`${display.variable} ${sans.variable} ${mono.variable} h-full antialiased${theme === "dark" ? " dark" : ""}`}
       suppressHydrationWarning
     >
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
-      </head>
       <body className="min-h-full bg-bg font-sans text-text">
         <AuthSessionProvider>
-          <ThemeProvider>{children}</ThemeProvider>
+          <ThemeProvider initialTheme={theme}>{children}</ThemeProvider>
         </AuthSessionProvider>
       </body>
     </html>

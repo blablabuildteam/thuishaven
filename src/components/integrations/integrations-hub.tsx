@@ -386,6 +386,70 @@ export function IntegrationsHub() {
     );
   }
 
+  function runMetaAdsSync() {
+    void runSourceJob(
+      "meta_ads",
+      "Sync ads",
+      async (signal) => {
+        const res = await fetch("/api/integrations/meta-ads/sync", {
+          method: "POST",
+          signal,
+        });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          fetched?: number;
+          upserted?: number;
+          linked?: number;
+          accountName?: string;
+        };
+        if (!res.ok || data.ok === false) {
+          throw new Error(data.error ?? "Meta ads sync mislukt");
+        }
+        const okMessage = `${data.upserted ?? 0}/${data.fetched ?? 0} ads · ${data.linked ?? 0} gekoppeld${
+          data.accountName ? ` · ${data.accountName}` : ""
+        }`;
+        return {
+          okMessage,
+          patch: { status: "verified" as const, message: okMessage },
+        };
+      },
+      3 * 60 * 1000,
+    );
+  }
+
+  function runTikTokAdsSync() {
+    void runSourceJob(
+      "tiktok_ads",
+      "Sync ads",
+      async (signal) => {
+        const res = await fetch("/api/integrations/tiktok-ads/sync", {
+          method: "POST",
+          signal,
+        });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          fetched?: number;
+          upserted?: number;
+          linked?: number;
+          accountName?: string;
+        };
+        if (!res.ok || data.ok === false) {
+          throw new Error(data.error ?? "TikTok ads sync mislukt");
+        }
+        const okMessage = `${data.upserted ?? 0}/${data.fetched ?? 0} ads · ${data.linked ?? 0} gekoppeld${
+          data.accountName ? ` · ${data.accountName}` : ""
+        }`;
+        return {
+          okMessage,
+          patch: { status: "verified" as const, message: okMessage },
+        };
+      },
+      3 * 60 * 1000,
+    );
+  }
+
   function runInstagramAnalyze() {
     void runSourceJob(
       "instagram",
@@ -623,6 +687,8 @@ export function IntegrationsHub() {
                     onTicketswapSync={runTicketswapSync}
                     onInstagramSync={runInstagramSync}
                     onInstagramAnalyze={runInstagramAnalyze}
+                    onMetaAdsSync={runMetaAdsSync}
+                    onTikTokAdsSync={runTikTokAdsSync}
                     onYouTubeSync={runYouTubeSync}
                     onTikTokSync={runTikTokSync}
                     onAlertTest={runAlertTest}
@@ -673,6 +739,8 @@ function IntegrationCard({
   onTicketswapSync,
   onInstagramSync,
   onInstagramAnalyze,
+  onMetaAdsSync,
+  onTikTokAdsSync,
   onYouTubeSync,
   onTikTokSync,
   onAlertTest,
@@ -688,6 +756,8 @@ function IntegrationCard({
   onTicketswapSync: () => void;
   onInstagramSync: () => void;
   onInstagramAnalyze: () => void;
+  onMetaAdsSync: () => void;
+  onTikTokAdsSync: () => void;
   onYouTubeSync: () => void;
   onTikTokSync: () => void;
   onAlertTest: () => void;
@@ -873,6 +943,19 @@ function IntegrationCard({
               </button>
             </>
           )}
+          {row.id === "meta_ads" && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onMetaAdsSync}
+              className="inline-flex items-center gap-1.5 border border-border px-3 py-1.5 text-sm hover:border-text disabled:opacity-50"
+            >
+              {isThisAction("Sync ads") && (
+                <Loader2 className="size-3.5 animate-spin" />
+              )}
+              {actionLabel("Sync ads")}
+            </button>
+          )}
           {row.id === "youtube" && (
             <button
               type="button"
@@ -897,6 +980,19 @@ function IntegrationCard({
                 <Loader2 className="size-3.5 animate-spin" />
               )}
               {actionLabel("Sync videos")}
+            </button>
+          )}
+          {row.id === "tiktok_ads" && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onTikTokAdsSync}
+              className="inline-flex items-center gap-1.5 border border-border px-3 py-1.5 text-sm hover:border-text disabled:opacity-50"
+            >
+              {isThisAction("Sync ads") && (
+                <Loader2 className="size-3.5 animate-spin" />
+              )}
+              {actionLabel("Sync ads")}
             </button>
           )}
           {row.id === "apollo" && (

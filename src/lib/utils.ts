@@ -34,3 +34,13 @@ export function formatCurrency(value: number): string {
     maximumFractionDigits: 0,
   }).format(value);
 }
+
+export function formatEuroFromCents(
+  cents: number,
+  currency = "EUR",
+): string {
+  return new Intl.NumberFormat("nl-NL", {
+    style: "currency",
+    currency,
+  }).format(cents / 100);
+}

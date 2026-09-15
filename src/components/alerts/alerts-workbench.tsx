@@ -221,6 +221,14 @@ export function AlertsWorkbench({
         eyebrow="Zelf instellen"
         title="Alerts"
         description="Maak een alert: ontvangers, Weeztix-drempel, en welke kanalen we checken op restaanbod. Meldingen staan daaronder, nieuwste eerst."
+        action={
+          <Link
+            href="/dashboard/dj-fees"
+            className="border border-border px-3 py-2 text-sm hover:border-text"
+          >
+            DJ-fees
+          </Link>
+        }
       />
 
       {error && (

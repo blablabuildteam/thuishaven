@@ -8,6 +8,7 @@ import {
   BarChart3,
   Bell,
   CalendarDays,
+  Disc3,
   ClipboardList,
   Home,
   Plug,
@@ -27,6 +28,7 @@ import {
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { UserMenu } from "@/components/auth/user-menu";
 import { OutreachOnboardingTour } from "@/components/outreach/onboarding-tour";
+import { DjFeesNavBadge, useDjFeesPendingCount } from "@/components/dashboard/dj-fees-nav-badge";
 import {
   SocialChannelIcon,
   type SocialBrandChannel,
@@ -43,6 +45,8 @@ type NavItem = {
   adminOnly?: boolean;
   /** Spotlight tour target id */
   tourId?: string;
+  /** Extra nav affordance */
+  badge?: "dj-fees-pending";
 };
 
 type NavSection = {
@@ -64,6 +68,7 @@ const dashboardSections: NavSection[] = [
       { href: "/dashboard/inzichten", label: "Inzichten", icon: LineChart },
       { href: "/dashboard/tickets", label: "Tickets", icon: Ticket },
       { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
+      { href: "/dashboard/dj-fees", label: "DJ-fees", icon: Disc3, badge: "dj-fees-pending" },
     ],
   },
   {
@@ -74,6 +79,14 @@ const dashboardSections: NavSection[] = [
       { href: "/dashboard/meta", label: "Meta", brand: "instagram" },
       { href: "/dashboard/tiktok", label: "TikTok", brand: "tiktok" },
       { href: "/dashboard/youtube", label: "YouTube", brand: "youtube" },
+    ],
+  },
+  {
+    id: "marketing-paid",
+    label: "Marketing (paid)",
+    items: [
+      { href: "/dashboard/paid/meta", label: "Meta", brand: "instagram" },
+      { href: "/dashboard/paid/tiktok", label: "TikTok", brand: "tiktok" },
     ],
   },
 ];
@@ -211,9 +224,11 @@ function NavItemIcon({ item, active }: { item: NavItem; active: boolean }) {
 function NavLink({
   item,
   active,
+  badgeCount,
 }: {
   item: NavItem;
   active: boolean;
+  badgeCount?: number | null;
 }) {
   return (
     <Link
@@ -227,7 +242,10 @@ function NavLink({
       )}
     >
       <NavItemIcon item={item} active={active} />
-      <span>{item.label}</span>
+      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+      {item.badge === "dj-fees-pending" ? (
+        <DjFeesNavBadge count={badgeCount ?? null} active={active} />
+      ) : null}
     </Link>
   );
 }
@@ -237,6 +255,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { data } = useSession();
   const isAdmin = data?.user?.role === "admin";
   const isOutreach = pathname.startsWith("/outreach");
+  const djFeesPending = useDjFeesPendingCount(!isOutreach);
   const sections = isOutreach
     ? filterSections(outreachSections, isAdmin)
     : dashboardSections;
@@ -295,6 +314,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       key={item.href}
                       item={item}
                       active={isNavActive(pathname, item.href)}
+                      badgeCount={
+                        item.badge === "dj-fees-pending" ? djFeesPending : null
+                      }
                     />
                   ))}
                 </nav>
@@ -371,13 +393,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 href={item.href}
                 data-tour={item.tourId}
                 className={cn(
-                  "shrink-0 px-3 py-1.5 text-sm transition-colors",
+                  "inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-sm transition-colors",
                   active
                     ? "bg-accent text-accent-contrast"
                     : "text-text-muted hover:text-text",
                 )}
               >
                 {item.label}
+                {item.badge === "dj-fees-pending" ? (
+                  <DjFeesNavBadge count={djFeesPending} active={active} />
+                ) : null}
               </Link>
             );
           })}

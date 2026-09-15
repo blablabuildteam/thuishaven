@@ -45,6 +45,11 @@ const nextConfig: NextConfig = {
         destination: "/dashboard/mails",
         permanent: true,
       },
+      {
+        source: "/dashboard/paid",
+        destination: "/dashboard/paid/meta",
+        permanent: true,
+      },
     ];
   },
 };
