@@ -25,13 +25,13 @@ export const ALERT_EMAIL_HARD_DOMAINS = [
 export const DEFAULT_INTERNAL_ALERT_RECIPIENTS = [
   "team@blablabuild.com",
   "annelene@thuishaven.nl",
-  "quincy@thuishaven.nl",
+  "quinty@thuishaven.nl",
 ] as const;
 
 /** CC op Appic- en RA-takedownmails — Thuishaven ziet mee wat partners krijgen. */
 export const PARTNER_TAKEDOWN_CC_RECIPIENTS = [
   "annelene@thuishaven.nl",
-  "quincy@thuishaven.nl",
+  "quinty@thuishaven.nl",
 ] as const;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;

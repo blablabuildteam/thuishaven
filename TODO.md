@@ -6,7 +6,7 @@
 - [x] Native Meta Ads API (spend / impr. / clicks) — needs ads_read on system user
 - [x] Native TikTok Ads API — needs Marketing API token (not Login Kit)
 - [ ] Contact Appic for an API/developers token for Appic Game data
-- [ ] Invite once the tool is done: Quinty (quinty@thuishaven.nl), Bas (bas@thuishaven.nl), Kasper (Kasper@thuishaven.nl), Tim (Tim@thuishaven.nl), Bas A (Basamro@thuishaven.nl), Roxy (roxy@thuishaven.nl)
+- [x] Invite once the tool is done: Quinty (quinty@thuishaven.nl), Bas (bas@thuishaven.nl), Kasper (Kasper@thuishaven.nl), Tim (Tim@thuishaven.nl), Bas A (Basamro@thuishaven.nl), Roxy (roxy@thuishaven.nl)
 
 ## Tickets
 

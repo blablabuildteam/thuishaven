@@ -12,6 +12,16 @@ export const authConfig = {
   },
   providers: [],
   callbacks: {
+    session({ session, token }) {
+      if (session.user) {
+        session.user.id = (token.sub as string) ?? "";
+        session.user.role =
+          (token.role as "admin" | "member" | undefined) ?? "member";
+      }
+      session.sessionId =
+        (token.jti as string) || (token.sub as string) || "";
+      return session;
+    },
     authorized({ auth, request }) {
       const path = request.nextUrl.pathname;
       const isPublic =
@@ -29,7 +39,20 @@ export const authConfig = {
         path === "/apple-icon.png";
 
       if (isPublic) return true;
-      return !!auth?.user;
+      if (!auth?.user) return false;
+
+      const needsAdmin =
+        path === "/koppelingen" ||
+        path.startsWith("/koppelingen/") ||
+        path.startsWith("/dashboard/logs") ||
+        path.startsWith("/admin");
+      if (needsAdmin && auth.user.role !== "admin") {
+        return Response.redirect(
+          new URL("/dashboard/inzichten", request.nextUrl),
+        );
+      }
+
+      return true;
     },
   },
 } satisfies NextAuthConfig;

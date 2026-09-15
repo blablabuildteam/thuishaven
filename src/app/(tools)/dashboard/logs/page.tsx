@@ -1,8 +1,6 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
-import { auth } from "@/auth";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { MetricCard } from "@/components/ui/metric-card";
@@ -25,10 +23,6 @@ export default async function IntegrationLogsPage({
 }: {
   searchParams: Promise<{ level?: string; source?: string }>;
 }) {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
-  if (session.user.role !== "admin") redirect("/dashboard/inzichten");
-
   const sp = await searchParams;
   const level = isLevel(sp.level) ? sp.level : undefined;
   const source = sp.source?.trim() || undefined;
