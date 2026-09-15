@@ -1,5 +1,25 @@
 export type SecondaryChannel = "resident_advisor" | "ticketswap" | "appic";
 
+export type AlertRuleKind =
+  | "soldout_mismatch"
+  | "sales_threshold"
+  | "weather";
+
+export type DashboardAlertType =
+  | "ticketswap_after_soldout"
+  | "weeztix_soldout_ra_open"
+  | "custom"
+  | "sales_threshold"
+  | "weather";
+
+export const DASHBOARD_ALERT_TYPES: DashboardAlertType[] = [
+  "ticketswap_after_soldout",
+  "weeztix_soldout_ra_open",
+  "custom",
+  "sales_threshold",
+  "weather",
+];
+
 /** Platforms we ask to take tickets down after Weeztix sold-out. */
 export type TakedownChannel = "resident_advisor" | "appic";
 

@@ -7,7 +7,7 @@ import {
   type WeatherDayRow,
 } from "@/lib/weather/open-meteo";
 import { scoreFestivalWeather } from "@/lib/weather/festival-score";
-import { amsterdamDay } from "@/lib/time/amsterdam";
+import { amsterdamDay, shiftIsoDay } from "@/lib/time/amsterdam";
 
 export function weatherLocationMatch() {
   return or(
@@ -224,6 +224,30 @@ export async function syncWeatherForEditionDays(options?: {
       error: e instanceof Error ? e.message : "Weather sync mislukt",
     };
   }
+}
+
+/**
+ * Force-refresh Open-Meteo forecast for upcoming event days (today → ~16d).
+ * Unlike ensureEditionWeather this overwrites existing rows so alerts see
+ * the latest forecast, not a stale snapshot from first sync.
+ */
+export async function refreshUpcomingEditionForecast(options?: {
+  forecastDays?: number;
+}): Promise<{ days: number; upserted: number }> {
+  const forecastDays = options?.forecastDays ?? 16;
+  const today = amsterdamDay(new Date()) || new Date().toISOString().slice(0, 10);
+  const horizon = shiftIsoDay(today, forecastDays);
+  const days = (await listEditionEventDays()).filter(
+    (d) => d >= today && d <= horizon,
+  );
+  if (!days.length) return { days: 0, upserted: 0 };
+
+  const result = await syncWeatherRange({
+    startDate: days[0]!,
+    endDate: days[days.length - 1]!,
+    onlyDays: new Set(days),
+  });
+  return { days: days.length, upserted: result.upserted };
 }
 
 /**

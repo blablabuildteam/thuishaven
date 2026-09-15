@@ -91,6 +91,12 @@ export function weatherKindLabel(kind: WeatherKind): string {
   return KIND_LABEL[kind];
 }
 
+export {
+  ALERT_WEATHER_KINDS,
+  isAlertWeatherKind,
+  type AlertWeatherKind,
+} from "@/lib/weather/alert-kinds";
+
 export function classifyEventWeather(
   input: FestivalWeatherInput,
 ): ClassifiedWeather {

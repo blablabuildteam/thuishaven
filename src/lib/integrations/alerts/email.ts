@@ -9,7 +9,7 @@ const BORDER = "#d2cdc2";
 
 export type AlertEmailItem = {
   channel: string;
-  kind: "overbooking" | "revenue_leak";
+  kind: "overbooking" | "revenue_leak" | "sales" | "weather";
   title: string;
   message: string;
 };
@@ -40,11 +40,17 @@ function alertsUrl(): string {
 }
 
 function kindLabel(kind: AlertEmailItem["kind"]): string {
-  return kind === "overbooking" ? "Overboeking" : "Omzetlek";
+  if (kind === "overbooking") return "Overboeking";
+  if (kind === "revenue_leak") return "Omzetlek";
+  if (kind === "sales") return "Verkoop";
+  return "Weer";
 }
 
 function kindColor(kind: AlertEmailItem["kind"]): string {
-  return kind === "overbooking" ? DANGER : "#c9a227";
+  if (kind === "overbooking") return DANGER;
+  if (kind === "weather") return "#3d6b8a";
+  if (kind === "sales") return "#2f6b3a";
+  return "#c9a227";
 }
 
 export function renderAlertEmail(input: {
@@ -239,6 +245,33 @@ export function renderMismatchAlertEmail(items: AlertEmailItem[]) {
       "Weeztix is uitverkocht, maar een secundair kanaal verkoopt nog. RA = overboekingsrisico. TicketSwap / Appic Game = omzetlek.",
     items,
     ctaLabel: "Bekijk in dashboard",
+  });
+}
+
+export function renderTypedAlertEmail(input: {
+  category: "sales_threshold" | "weather";
+  items: AlertEmailItem[];
+}) {
+  const n = input.items.length;
+  if (input.category === "weather") {
+    return renderAlertEmail({
+      eyebrow: "Weer op de eventdag",
+      title: n === 1 ? "Slecht weer verwacht" : `${n} weeralerts`,
+      intro:
+        "De forecast voor de eventdag valt in een weersoort waarop je een alert hebt gezet. Check het dashboard; als het weer meevalt sluit de melding vanzelf.",
+      items: input.items,
+      ctaLabel: "Bekijk in dashboard",
+      footer: "Thuishaven Tools · weeralerts op eventdag-forecast (Open-Meteo).",
+    });
+  }
+  return renderAlertEmail({
+    eyebrow: "Verkoopdrempel",
+    title: n === 1 ? "Verkoopdrempel bereikt" : `${n} verkoopalerts`,
+    intro:
+      "Weeztix heeft het aantal tickets bereikt dat je als drempel hebt ingesteld, of het event is uitverkocht.",
+    items: input.items,
+    ctaLabel: "Bekijk in dashboard",
+    footer: "Thuishaven Tools · verkoopdrempel-alerts. Bron: Weeztix.",
   });
 }
 

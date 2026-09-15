@@ -1,25 +1,28 @@
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { alerts } from "@/lib/db/schema";
 import {
   channelToAlertType,
+  evaluateAlertRules,
   findPlatformTakedowns,
   groupPlatformTakedowns,
   loadEditionAlertSnapshots,
-  matchesForRules,
+  loadWeatherAlertSnapshots,
+  type EvaluatedAlertMatch,
   type GroupedPlatformTakedown,
-  type RuleMatch,
 } from "@/lib/integrations/alerts/evaluate";
 import {
-  ensureDefaultAlertRule,
   listEnabledAlertRules,
 } from "@/lib/integrations/alerts/rules";
 import type {
+  DashboardAlertType,
   SecondaryChannel,
   SecondarySoldOutConflict,
   StoredAlert,
   TakedownChannel,
 } from "@/lib/integrations/alerts/types";
+import { DASHBOARD_ALERT_TYPES } from "@/lib/integrations/alerts/types";
+import { refreshUpcomingEditionForecast } from "@/lib/weather/store";
 
 export type {
   SecondaryChannel,
@@ -28,9 +31,6 @@ export type {
   TakedownChannel,
 };
 export type { GroupedPlatformTakedown };
-
-const TS_ALERT = "ticketswap_after_soldout" as const;
-const RA_ALERT = "weeztix_soldout_ra_open" as const;
 
 export type TicketswapSoldOutAlert = {
   editionId: string;
@@ -54,15 +54,31 @@ export async function listOpenDashboardAlerts(): Promise<{
   appic: AppicSoldOutAlert[];
   conflicts: SecondarySoldOutConflict[];
 }> {
-  await ensureDefaultAlertRule().catch(() => null);
   const [snaps, rules] = await Promise.all([
     loadEditionAlertSnapshots().catch(() => []),
     listEnabledAlertRules().catch(() => []),
   ]);
-  const matches = mergeAlertMatches(snaps, rules);
-  const conflicts = matches.map(
-    ({ ruleId: _ruleId, weeztixSold: _sold, ...conflict }) => conflict,
+  const matches = mergeAlertMatches(snaps, [], rules).filter(
+    (m): m is EvaluatedAlertMatch & { channel: SecondaryChannel } =>
+      m.channel != null,
   );
+  const conflicts: SecondarySoldOutConflict[] = matches.map((m) => ({
+    editionId: m.editionId,
+    editionName: m.editionName,
+    startsAt: m.startsAt,
+    channel: m.channel,
+    channelLabel:
+      m.channel === "resident_advisor"
+        ? "Resident Advisor"
+        : m.channel === "ticketswap"
+          ? "TicketSwap"
+          : "Appic Game",
+    kind: m.channel === "resident_advisor" ? "overbooking" : "revenue_leak",
+    title: m.title,
+    message: m.message,
+    availableCount: null,
+    url: null,
+  }));
   conflicts.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
 
   return {
@@ -108,13 +124,7 @@ export async function listStoredDashboardAlerts(): Promise<StoredAlert[]> {
       resolvedAt: alerts.resolvedAt,
     })
     .from(alerts)
-    .where(
-      or(
-        eq(alerts.type, TS_ALERT),
-        eq(alerts.type, RA_ALERT),
-        eq(alerts.type, "custom"),
-      ),
-    )
+    .where(inArray(alerts.type, DASHBOARD_ALERT_TYPES))
     .orderBy(desc(alerts.createdAt))
     .limit(80);
 }
@@ -137,26 +147,45 @@ export async function upcomingPlatformTakedownStatus(): Promise<{
   };
 }
 
-function conflictKey(channel: string, editionId: string): string {
-  return `${channel}:${editionId}`;
+function matchKey(m: EvaluatedAlertMatch): string {
+  return `${m.ruleId}:${m.type}:${m.editionId}`;
+}
+
+function rowKey(row: {
+  ruleId: string | null;
+  type: string;
+  editionId: string | null;
+}): string | null {
+  if (!row.editionId) return null;
+  return `${row.ruleId ?? ""}:${row.type}:${row.editionId}`;
 }
 
 function mergeAlertMatches(
   snaps: Awaited<ReturnType<typeof loadEditionAlertSnapshots>>,
+  weatherSnaps: Awaited<ReturnType<typeof loadWeatherAlertSnapshots>>,
   rules: Awaited<ReturnType<typeof listEnabledAlertRules>>,
-): RuleMatch[] {
-  const ruleMatches = matchesForRules(snaps, rules);
-  const ruleId = rules[0]?.id;
+): EvaluatedAlertMatch[] {
+  const ruleMatches = evaluateAlertRules({ snaps, weatherSnaps, rules });
+  const mismatchRuleId =
+    rules.find((r) => r.kind === "soldout_mismatch")?.id ?? "";
   const platform = findPlatformTakedowns(snaps).map((match) => ({
-    ...match,
-    ruleId: ruleId ?? "",
+    ruleId: mismatchRuleId,
+    editionId: match.editionId,
+    editionName: match.editionName,
+    startsAt: match.startsAt,
+    type: channelToAlertType(match.channel) as DashboardAlertType,
+    title: match.title,
+    message: match.message,
+    channel: match.channel as SecondaryChannel,
+    weeztixSold: match.weeztixSold,
   }));
 
   const seen = new Set<string>();
-  const out: RuleMatch[] = [];
+  const out: EvaluatedAlertMatch[] = [];
   for (const match of [...ruleMatches, ...platform]) {
-    if (!match.ruleId) continue;
-    const key = conflictKey(match.channel, match.editionId);
+    const key = match.channel
+      ? `${match.channel}:${match.editionId}`
+      : matchKey(match);
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(match);
@@ -164,49 +193,29 @@ function mergeAlertMatches(
   return out;
 }
 
-function matchKey(m: RuleMatch): string {
-  return `${m.ruleId}:${m.channel}:${m.editionId}`;
-}
-
-async function upsertRuleMatches(matches: RuleMatch[]): Promise<number> {
+async function upsertRuleMatches(matches: EvaluatedAlertMatch[]): Promise<number> {
   if (!hasDatabase()) return 0;
   const db = getDb();
   const wanted = new Set(matches.map(matchKey));
+  const wantedOrphans = new Set(
+    matches.map((m) => `:${m.type}:${m.editionId}`),
+  );
 
   const open = await db
     .select()
     .from(alerts)
     .where(
-      and(
-        eq(alerts.isActive, true),
-        or(
-          eq(alerts.type, TS_ALERT),
-          eq(alerts.type, RA_ALERT),
-          eq(alerts.type, "custom"),
-        ),
-      ),
+      and(eq(alerts.isActive, true), inArray(alerts.type, DASHBOARD_ALERT_TYPES)),
     );
 
-  const channelOf = (type: string): SecondaryChannel =>
-    type === RA_ALERT
-      ? "resident_advisor"
-      : type === TS_ALERT
-        ? "ticketswap"
-        : "appic";
-
   for (const row of open) {
-    const key =
-      row.ruleId && row.editionId
-        ? `${row.ruleId}:${channelOf(row.type)}:${row.editionId}`
-        : null;
-    const orphanStillWanted =
-      !row.ruleId &&
-      row.editionId &&
-      matches.some(
-        (m) =>
-          m.editionId === row.editionId && m.channel === channelOf(row.type),
-      );
-    if ((key && wanted.has(key)) || orphanStillWanted) continue;
+    const key = rowKey(row);
+    const stillWanted =
+      (key && wanted.has(key)) ||
+      (row.editionId != null &&
+        wantedOrphans.has(`:${row.type}:${row.editionId}`) &&
+        !row.ruleId);
+    if (stillWanted) continue;
     await db
       .update(alerts)
       .set({ isActive: false, resolvedAt: new Date() })
@@ -215,11 +224,9 @@ async function upsertRuleMatches(matches: RuleMatch[]): Promise<number> {
 
   const openKeys = new Set(
     open
-      .filter((row) => row.ruleId && row.editionId && row.isActive)
-      .map(
-        (row) =>
-          `${row.ruleId}:${channelOf(row.type)}:${row.editionId}`,
-      ),
+      .filter((row) => row.isActive && row.editionId)
+      .map((row) => rowKey(row))
+      .filter((key): key is string => Boolean(key)),
   );
 
   for (const match of matches) {
@@ -229,13 +236,13 @@ async function upsertRuleMatches(matches: RuleMatch[]): Promise<number> {
         row.isActive &&
         !row.ruleId &&
         row.editionId === match.editionId &&
-        channelOf(row.type) === match.channel,
+        row.type === match.type,
     );
     if (orphan) {
       await db
         .update(alerts)
         .set({
-          ruleId: match.ruleId,
+          ruleId: match.ruleId || null,
           title: match.title,
           message: match.message,
         })
@@ -243,8 +250,8 @@ async function upsertRuleMatches(matches: RuleMatch[]): Promise<number> {
       continue;
     }
     await db.insert(alerts).values({
-      type: channelToAlertType(match.channel),
-      ruleId: match.ruleId,
+      type: match.type,
+      ruleId: match.ruleId || null,
       isActive: true,
       editionId: match.editionId,
       title: match.title,
@@ -257,13 +264,21 @@ async function upsertRuleMatches(matches: RuleMatch[]): Promise<number> {
 
 export async function refreshDashboardAlerts(_options?: {
   ticketswapLive?: boolean;
-}): Promise<{ ra: number; ticketswap: number; appic: number; notified: number }> {
-  await ensureDefaultAlertRule().catch(() => null);
-  const [snaps, rules] = await Promise.all([
+}): Promise<{
+  ra: number;
+  ticketswap: number;
+  appic: number;
+  sales: number;
+  weather: number;
+  notified: number;
+}> {
+  await refreshUpcomingEditionForecast().catch(() => null);
+  const [snaps, weatherSnaps, rules] = await Promise.all([
     loadEditionAlertSnapshots().catch(() => []),
+    loadWeatherAlertSnapshots().catch(() => []),
     listEnabledAlertRules().catch(() => []),
   ]);
-  const matches = mergeAlertMatches(snaps, rules);
+  const matches = mergeAlertMatches(snaps, weatherSnaps, rules);
   await upsertRuleMatches(matches).catch(() => 0);
 
   const { notifyUnsentDashboardAlerts } = await import(
@@ -279,6 +294,8 @@ export async function refreshDashboardAlerts(_options?: {
     ra: matches.filter((m) => m.channel === "resident_advisor").length,
     ticketswap: matches.filter((m) => m.channel === "ticketswap").length,
     appic: matches.filter((m) => m.channel === "appic").length,
+    sales: matches.filter((m) => m.type === "sales_threshold").length,
+    weather: matches.filter((m) => m.type === "weather").length,
     notified: notify.sent,
   };
 }

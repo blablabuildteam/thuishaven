@@ -1,22 +1,31 @@
 import { desc, eq } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
-import { alertRules } from "@/lib/db/schema";
+import { alertRules, alerts } from "@/lib/db/schema";
 import {
   defaultInternalAlertRecipients,
   gateAlertRecipients,
   parseRecipientInput,
 } from "@/lib/integrations/alerts/recipients";
+import type { AlertRuleKind } from "@/lib/integrations/alerts/types";
 import { DEFAULT_WEEZTIX_SOLD_THRESHOLD } from "@/lib/integrations/weeztix/sold-out";
+import {
+  ALERT_WEATHER_KINDS,
+  isAlertWeatherKind,
+  type AlertWeatherKind,
+} from "@/lib/weather/alert-kinds";
 
 export type AlertRule = {
   id: string;
   name: string;
+  kind: AlertRuleKind;
   enabled: boolean;
   recipients: string[];
+  editionId: string | null;
   soldThreshold: number | null;
   checkRa: boolean;
   checkTicketswap: boolean;
   checkAppic: boolean;
+  weatherKinds: AlertWeatherKind[];
   createdByEmail: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -24,24 +33,48 @@ export type AlertRule = {
 
 export type AlertRuleInput = {
   name: string;
+  kind?: AlertRuleKind;
   enabled?: boolean;
   recipients: string[] | string;
+  editionId?: string | null;
   soldThreshold?: number | null;
   checkRa?: boolean;
   checkTicketswap?: boolean;
   checkAppic?: boolean;
+  weatherKinds?: string[];
 };
+
+const RULE_KINDS: AlertRuleKind[] = [
+  "soldout_mismatch",
+  "sales_threshold",
+  "weather",
+];
+
+function parseKind(raw: unknown): AlertRuleKind {
+  if (typeof raw === "string" && RULE_KINDS.includes(raw as AlertRuleKind)) {
+    return raw as AlertRuleKind;
+  }
+  return "soldout_mismatch";
+}
+
+function parseWeatherKinds(raw: unknown): AlertWeatherKind[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((k): k is AlertWeatherKind => typeof k === "string" && isAlertWeatherKind(k));
+}
 
 function toRule(row: typeof alertRules.$inferSelect): AlertRule {
   return {
     id: row.id,
     name: row.name,
+    kind: parseKind(row.kind),
     enabled: row.enabled,
     recipients: Array.isArray(row.recipients) ? row.recipients : [],
+    editionId: row.editionId ?? null,
     soldThreshold: row.soldThreshold,
     checkRa: row.checkRa,
     checkTicketswap: row.checkTicketswap,
     checkAppic: row.checkAppic,
+    weatherKinds: parseWeatherKinds(row.weatherKinds),
     createdByEmail: row.createdByEmail,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -54,8 +87,17 @@ export function validateAlertRuleInput(input: AlertRuleInput):
   const name = input.name.trim();
   if (!name) return { ok: false, error: "Naam is verplicht" };
 
+  const kind = parseKind(input.kind);
   const gated = gateAlertRecipients(parseRecipientInput(input.recipients));
   if (!gated.ok) return { ok: false, error: gated.error };
+
+  const editionId =
+    input.editionId == null || input.editionId === ""
+      ? null
+      : input.editionId;
+  if (editionId != null && !/^[0-9a-f-]{36}$/i.test(editionId)) {
+    return { ok: false, error: "Ongeldige editie" };
+  }
 
   const threshold =
     input.soldThreshold == null || Number.isNaN(input.soldThreshold)
@@ -68,20 +110,34 @@ export function validateAlertRuleInput(input: AlertRuleInput):
   const checkRa = input.checkRa !== false;
   const checkTicketswap = input.checkTicketswap !== false;
   const checkAppic = input.checkAppic !== false;
-  if (!checkRa && !checkTicketswap && !checkAppic) {
+  const weatherKinds = parseWeatherKinds(input.weatherKinds);
+
+  if (kind === "soldout_mismatch" && !checkRa && !checkTicketswap && !checkAppic) {
     return { ok: false, error: "Kies minstens één kanaal om te checken" };
+  }
+  if (kind === "sales_threshold" && threshold == null) {
+    return { ok: false, error: "Verkoopdrempel is verplicht" };
+  }
+  if (kind === "weather" && weatherKinds.length === 0) {
+    return { ok: false, error: "Kies minstens één weersoort" };
   }
 
   return {
     ok: true,
     value: {
       name,
+      kind,
       enabled: input.enabled !== false,
       recipients: gated.to,
-      soldThreshold: threshold,
-      checkRa,
-      checkTicketswap,
-      checkAppic,
+      editionId,
+      soldThreshold: kind === "weather" ? null : threshold,
+      checkRa: kind === "soldout_mismatch" ? checkRa : true,
+      checkTicketswap: kind === "soldout_mismatch" ? checkTicketswap : true,
+      checkAppic: kind === "soldout_mismatch" ? checkAppic : false,
+      weatherKinds:
+        kind === "weather"
+          ? weatherKinds
+          : [...ALERT_WEATHER_KINDS],
     },
   };
 }
@@ -137,8 +193,11 @@ export async function updateAlertRule(
   if (!existing) return null;
   const parsed = validateAlertRuleInput({
     name: input.name ?? existing.name,
+    kind: input.kind ?? existing.kind,
     enabled: input.enabled ?? existing.enabled,
     recipients: input.recipients ?? existing.recipients,
+    editionId:
+      input.editionId === undefined ? existing.editionId : input.editionId,
     soldThreshold:
       input.soldThreshold === undefined
         ? existing.soldThreshold
@@ -146,6 +205,7 @@ export async function updateAlertRule(
     checkRa: input.checkRa ?? existing.checkRa,
     checkTicketswap: input.checkTicketswap ?? existing.checkTicketswap,
     checkAppic: input.checkAppic ?? existing.checkAppic,
+    weatherKinds: input.weatherKinds ?? existing.weatherKinds,
   });
   if (!parsed.ok) throw new Error(parsed.error);
   const db = getDb();
@@ -160,6 +220,10 @@ export async function updateAlertRule(
 export async function deleteAlertRule(id: string): Promise<boolean> {
   if (!hasDatabase()) return false;
   const db = getDb();
+  await db
+    .update(alerts)
+    .set({ isActive: false, resolvedAt: new Date() })
+    .where(eq(alerts.ruleId, id));
   const deleted = await db
     .delete(alertRules)
     .where(eq(alertRules.id, id))
@@ -167,30 +231,21 @@ export async function deleteAlertRule(id: string): Promise<boolean> {
   return deleted.length > 0;
 }
 
-/** Eerste bezoek: één regel uit env, zodat bestaande mail-setup niet verdwijnt. */
+/**
+ * Seed één mismatch-regel als de tabel leeg is.
+ * Niet aanroepen na delete/GET — anders komt de default meteen terug.
+ */
 export async function ensureDefaultAlertRule(): Promise<AlertRule | null> {
   if (!hasDatabase()) return null;
   const existing = await listAlertRules();
-  if (existing.length > 0) {
-    const rule = existing[0];
-    const merged = [
-      ...new Set([
-        ...rule.recipients,
-        ...defaultInternalAlertRecipients(),
-      ]),
-    ];
-    if (merged.length > rule.recipients.length) {
-      const updated = await updateAlertRule(rule.id, { recipients: merged });
-      return updated ?? rule;
-    }
-    return rule;
-  }
+  if (existing.length > 0) return existing[0] ?? null;
 
   const gated = gateAlertRecipients(defaultInternalAlertRecipients());
   if (!gated.ok) return null;
 
   return createAlertRule({
     name: "Sold-out mismatch",
+    kind: "soldout_mismatch",
     enabled: true,
     recipients: gated.to,
     soldThreshold: DEFAULT_WEEZTIX_SOLD_THRESHOLD,

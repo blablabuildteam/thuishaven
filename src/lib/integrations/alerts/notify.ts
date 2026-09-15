@@ -1,4 +1,4 @@
-import { and, eq, isNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { alerts, editions } from "@/lib/db/schema";
 import {
@@ -9,6 +9,7 @@ import {
   renderMismatchAlertEmail,
   renderPartnerTakedownEmail,
   renderTestAlertEmail,
+  renderTypedAlertEmail,
   type AlertEmailItem,
 } from "@/lib/integrations/alerts/email";
 import {
@@ -23,10 +24,13 @@ import {
   resolveAlertRecipients,
   resolvePartnerTakedownRecipients,
 } from "@/lib/integrations/alerts/recipients";
-import type { TakedownChannel } from "@/lib/integrations/alerts/types";
+import { DASHBOARD_ALERT_TYPES } from "@/lib/integrations/alerts/types";
+import type {
+  AlertRuleKind,
+  TakedownChannel,
+} from "@/lib/integrations/alerts/types";
 import { getAlertRule } from "@/lib/integrations/alerts/rules";
 
-const TS_ALERT = "ticketswap_after_soldout" as const;
 const RA_ALERT = "weeztix_soldout_ra_open" as const;
 
 function toEmailItem(alert: {
@@ -34,6 +38,22 @@ function toEmailItem(alert: {
   title: string;
   message: string;
 }): AlertEmailItem {
+  if (alert.type === "sales_threshold") {
+    return {
+      channel: "Weeztix",
+      kind: "sales",
+      title: alert.title,
+      message: alert.message,
+    };
+  }
+  if (alert.type === "weather") {
+    return {
+      channel: "Weer",
+      kind: "weather",
+      title: alert.title,
+      message: alert.message,
+    };
+  }
   if (alert.type === RA_ALERT) {
     return {
       channel: "Resident Advisor",
@@ -56,6 +76,14 @@ function toEmailItem(alert: {
     title: alert.title,
     message: alert.message,
   };
+}
+
+function alertMailCategory(
+  type: string,
+): "mismatch" | "sales_threshold" | "weather" {
+  if (type === "sales_threshold") return "sales_threshold";
+  if (type === "weather") return "weather";
+  return "mismatch";
 }
 
 function isPartnerTakedownType(type: string): boolean {
@@ -150,11 +178,7 @@ export async function notifyUnsentDashboardAlerts(): Promise<{
       and(
         eq(alerts.isActive, true),
         isNull(alerts.notifiedAt),
-        or(
-          eq(alerts.type, TS_ALERT),
-          eq(alerts.type, RA_ALERT),
-          eq(alerts.type, "custom"),
-        ),
+        inArray(alerts.type, DASHBOARD_ALERT_TYPES),
       ),
     );
 
@@ -202,7 +226,7 @@ export async function notifyUnsentDashboardAlerts(): Promise<{
       const rule = await getAlertRule(row.ruleId);
       recipients = rule?.recipients;
     }
-    const key = (recipients ?? []).join(",") || "__env__";
+    const key = `${(recipients ?? []).join(",") || "__env__"}::${alertMailCategory(row.type)}`;
     recipientLists.set(key, recipients);
     const group = byRecipients.get(key) ?? [];
     group.push(row);
@@ -217,11 +241,22 @@ export async function notifyUnsentDashboardAlerts(): Promise<{
       continue;
     }
 
+    const category = alertMailCategory(group[0].type);
     const subject =
       group.length === 1
         ? `[Thuishaven] Alert: ${group[0].title}`
-        : `[Thuishaven] ${group.length} sold-out alerts`;
-    const { html, text } = renderMismatchAlertEmail(group.map(toEmailItem));
+        : category === "weather"
+          ? `[Thuishaven] ${group.length} weeralerts`
+          : category === "sales_threshold"
+            ? `[Thuishaven] ${group.length} verkoopalerts`
+            : `[Thuishaven] ${group.length} sold-out alerts`;
+    const { html, text } =
+      category === "mismatch"
+        ? renderMismatchAlertEmail(group.map(toEmailItem))
+        : renderTypedAlertEmail({
+            category,
+            items: group.map(toEmailItem),
+          });
     const result = await sendGatedAlertMail({
       subject,
       html,
@@ -284,9 +319,45 @@ export async function sendPartnerTakedownTestEmails(): Promise<
   };
 }
 
-export async function sendAlertTestEmail(recipients?: string[]): Promise<
-  { ok: true; to: string[] } | { ok: false; error: string }
-> {
+export async function sendAlertTestEmail(
+  recipients?: string[],
+  kind: AlertRuleKind = "soldout_mismatch",
+): Promise<{ ok: true; to: string[] } | { ok: false; error: string }> {
+  if (kind === "weather" || kind === "sales_threshold") {
+    const { html, text } = renderTypedAlertEmail({
+      category: kind,
+      items:
+        kind === "weather"
+          ? [
+              {
+                channel: "Weer",
+                kind: "weather",
+                title: "Voorbeeld: Regenachtig op zaterdag",
+                message:
+                  "Dit is geen echte forecast. Zo ziet een weeralert eruit als het eventdag-weer slecht is.",
+              },
+            ]
+          : [
+              {
+                channel: "Weeztix",
+                kind: "sales",
+                title: "Voorbeeld: verkoopdrempel bereikt",
+                message:
+                  "Dit is geen echte verkoop. Zo ziet een drempelalert eruit als Weeztix het ingestelde aantal tickets haalt.",
+              },
+            ],
+    });
+    return sendGatedAlertMail({
+      subject:
+        kind === "weather"
+          ? "[Thuishaven] Test: weeralert"
+          : "[Thuishaven] Test: verkoopdrempel",
+      html,
+      text,
+      recipients,
+    });
+  }
+
   const { html, text } = renderTestAlertEmail();
   const internal = await sendGatedAlertMail({
     subject: "[Thuishaven] Test: sold-out alert mail",

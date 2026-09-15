@@ -31,12 +31,15 @@ export async function POST(request: Request) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => ({})));
   const ruleId = parsed.success ? parsed.data.ruleId : undefined;
   let recipients: string[] | undefined;
+  let kind: "soldout_mismatch" | "sales_threshold" | "weather" =
+    "soldout_mismatch";
   if (ruleId) {
     const rule = await getAlertRule(ruleId);
     if (!rule) {
       return NextResponse.json({ error: "Alert niet gevonden" }, { status: 404 });
     }
     recipients = rule.recipients;
+    kind = rule.kind;
   }
 
   const gate = resolveAlertRecipients(recipients);
@@ -44,7 +47,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: gate.error }, { status: 400 });
   }
 
-  const result = await sendAlertTestEmail(recipients);
+  const result = await sendAlertTestEmail(recipients, kind);
   if (!result.ok) {
     return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
   }

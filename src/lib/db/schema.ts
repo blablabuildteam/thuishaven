@@ -649,19 +649,34 @@ export const alertTypeEnum = pgEnum("alert_type", [
   "weeztix_soldout_ra_open",
   "sync_failure",
   "custom",
+  "sales_threshold",
+  "weather",
 ]);
 
-/** Handmatig ingestelde sold-out / drempel-alerts. */
+export const alertRuleKindEnum = pgEnum("alert_rule_kind", [
+  "soldout_mismatch",
+  "sales_threshold",
+  "weather",
+]);
+
+/** Handmatig ingestelde alerts (mismatch, verkoopdrempel, weer). */
 export const alertRules = pgTable("alert_rules", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
+  kind: alertRuleKindEnum("kind").notNull().default("soldout_mismatch"),
   enabled: boolean("enabled").notNull().default(true),
   recipients: jsonb("recipients").$type<string[]>().notNull().default([]),
-  /** Weeztix sold-drempel. Null = alleen bij officiële sold-out. */
+  /** Null = alle komende edities. */
+  editionId: uuid("edition_id").references(() => editions.id, {
+    onDelete: "set null",
+  }),
+  /** Weeztix sold-drempel. Null = alleen bij officiële sold-out (mismatch). */
   soldThreshold: integer("sold_threshold"),
   checkRa: boolean("check_ra").notNull().default(true),
   checkTicketswap: boolean("check_ticketswap").notNull().default(true),
   checkAppic: boolean("check_appic").notNull().default(false),
+  /** Weersoorten die een alert triggeren (heat, wet, …). */
+  weatherKinds: jsonb("weather_kinds").$type<string[]>().notNull().default([]),
   createdByEmail: text("created_by_email"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()

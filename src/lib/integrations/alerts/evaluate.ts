@@ -9,12 +9,20 @@ import {
 } from "@/lib/db/schema";
 import type { AlertRule } from "@/lib/integrations/alerts/rules";
 import type {
+  DashboardAlertType,
   SecondaryChannel,
   SecondarySoldOutConflict,
   TakedownChannel,
 } from "@/lib/integrations/alerts/types";
 import { ticketswapVenueUrl } from "@/lib/integrations/ticketswap/client";
 import { DEFAULT_WEEZTIX_SOLD_THRESHOLD } from "@/lib/integrations/weeztix/sold-out";
+import { amsterdamDay } from "@/lib/time/amsterdam";
+import {
+  classifyEventWeather,
+  weatherKindLabel,
+  type ClassifiedWeather,
+} from "@/lib/weather/classify";
+import { listWeatherDays } from "@/lib/weather/store";
 
 const weeztixInv = alias(ticketInventory, "eval_weeztix_inv");
 const appicInv = alias(ticketInventory, "eval_appic_inv");
@@ -57,8 +65,42 @@ export type GroupedPlatformTakedown = {
   }>;
 };
 
+export type UpcomingAlertEdition = {
+  id: string;
+  name: string;
+  startsAt: Date;
+};
+
+export type WeatherAlertSnapshot = {
+  editionId: string;
+  editionName: string;
+  startsAt: Date;
+  eventDay: string;
+  weather: ClassifiedWeather | null;
+};
+
+export type EvaluatedAlertMatch = {
+  ruleId: string;
+  editionId: string;
+  editionName: string;
+  startsAt: Date;
+  type: DashboardAlertType;
+  title: string;
+  message: string;
+  channel: SecondaryChannel | null;
+  weeztixSold: number | null;
+};
+
 function since(): Date {
   return new Date(Date.now() - 12 * 60 * 60 * 1000);
+}
+
+function isTemplateEdition(name: string): boolean {
+  return /template/i.test(name);
+}
+
+export function editionInScope(rule: AlertRule, editionId: string): boolean {
+  return rule.editionId == null || rule.editionId === editionId;
 }
 
 export function ruleTriggerMet(
@@ -139,7 +181,59 @@ export async function loadEditionAlertSnapshots(): Promise<
         row.appicAvailable ?? prev?.appicAvailable ?? null,
     });
   }
-  return [...byEdition.values()];
+  return [...byEdition.values()].filter((snap) => !isTemplateEdition(snap.editionName));
+}
+
+export async function listUpcomingAlertEditions(): Promise<UpcomingAlertEdition[]> {
+  if (!hasDatabase()) return [];
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: editions.id,
+      name: editions.name,
+      startsAt: editions.startsAt,
+    })
+    .from(editions)
+    .where(gte(editions.startsAt, since()))
+    .orderBy(editions.startsAt);
+  return rows.filter((row) => !isTemplateEdition(row.name));
+}
+
+export async function loadWeatherAlertSnapshots(): Promise<
+  WeatherAlertSnapshot[]
+> {
+  const upcoming = await listUpcomingAlertEditions();
+  if (upcoming.length === 0) return [];
+
+  const days = upcoming.map((row) => amsterdamDay(row.startsAt)).filter(Boolean);
+  const weatherRows = days.length
+    ? await listWeatherDays({
+        startDate: days.reduce((a, b) => (a < b ? a : b)),
+        endDate: days.reduce((a, b) => (a > b ? a : b)),
+      })
+    : [];
+  const byDay = new Map(weatherRows.map((row) => [row.day, row]));
+
+  return upcoming.map((row) => {
+    const eventDay = amsterdamDay(row.startsAt);
+    const w = byDay.get(eventDay);
+    return {
+      editionId: row.id,
+      editionName: row.name,
+      startsAt: row.startsAt,
+      eventDay,
+      weather: w
+        ? classifyEventWeather({
+            day: eventDay,
+            tempMinC: w.tempMinC,
+            tempMaxC: w.tempMaxC,
+            precipMm: w.precipMm,
+            windMaxMps: w.windMaxMps,
+            weatherCode: w.weatherCode,
+          })
+        : null,
+    };
+  });
 }
 
 function triggerLabel(snap: EditionAlertSnapshot, rule: AlertRule): string {
@@ -233,14 +327,15 @@ export function groupPlatformTakedowns(
   );
 }
 
-export function matchesForRule(
+function mismatchMatches(
   snaps: EditionAlertSnapshot[],
   rule: AlertRule,
 ): RuleMatch[] {
-  if (!rule.enabled) return [];
+  if (!rule.enabled || rule.kind !== "soldout_mismatch") return [];
   const out: RuleMatch[] = [];
 
   for (const snap of snaps) {
+    if (!editionInScope(rule, snap.editionId)) continue;
     if (!ruleTriggerMet(snap, rule)) continue;
 
     const why = triggerLabel(snap, rule);
@@ -303,11 +398,117 @@ export function matchesForRule(
   return out;
 }
 
+export function matchesForRule(
+  snaps: EditionAlertSnapshot[],
+  rule: AlertRule,
+): RuleMatch[] {
+  return mismatchMatches(snaps, rule);
+}
+
 export function matchesForRules(
   snaps: EditionAlertSnapshot[],
   rules: AlertRule[],
 ): RuleMatch[] {
-  return rules.flatMap((rule) => matchesForRule(snaps, rule));
+  return rules.flatMap((rule) => mismatchMatches(snaps, rule));
+}
+
+function salesThresholdMatches(
+  snaps: EditionAlertSnapshot[],
+  rule: AlertRule,
+): EvaluatedAlertMatch[] {
+  if (!rule.enabled || rule.kind !== "sales_threshold") return [];
+  const threshold = rule.soldThreshold;
+  if (threshold == null) return [];
+  const out: EvaluatedAlertMatch[] = [];
+
+  for (const snap of snaps) {
+    if (!editionInScope(rule, snap.editionId)) continue;
+    const hit = snap.weeztixSold >= threshold || snap.weeztixSoldOut;
+    if (!hit) continue;
+    const why =
+      snap.weeztixSoldOut && snap.weeztixSold < threshold
+        ? `Weeztix is uitverkocht (${snap.weeztixSold} tickets)`
+        : `Weeztix heeft ${snap.weeztixSold.toLocaleString("nl-NL")} tickets verkocht (drempel ${threshold.toLocaleString("nl-NL")})`;
+    out.push({
+      ruleId: rule.id,
+      editionId: snap.editionId,
+      editionName: snap.editionName,
+      startsAt: snap.startsAt,
+      type: "sales_threshold",
+      title: `${snap.editionName} heeft de verkoopdrempel bereikt`,
+      message: why,
+      channel: null,
+      weeztixSold: snap.weeztixSold,
+    });
+  }
+
+  out.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  return out;
+}
+
+function weatherMatches(
+  snaps: WeatherAlertSnapshot[],
+  rule: AlertRule,
+): EvaluatedAlertMatch[] {
+  if (!rule.enabled || rule.kind !== "weather") return [];
+  const wanted = new Set<string>(rule.weatherKinds);
+  if (wanted.size === 0) return [];
+  const out: EvaluatedAlertMatch[] = [];
+
+  for (const snap of snaps) {
+    if (!editionInScope(rule, snap.editionId)) continue;
+    const weather = snap.weather;
+    if (!weather || !wanted.has(weather.kind)) continue;
+    out.push({
+      ruleId: rule.id,
+      editionId: snap.editionId,
+      editionName: snap.editionName,
+      startsAt: snap.startsAt,
+      type: "weather",
+      title: `${snap.editionName}: ${weather.label} op de eventdag`,
+      message: `Forecast voor de eventdag: ${weather.summary}. Alert staat aan bij ${rule.weatherKinds.map(weatherKindLabel).join(", ").toLowerCase()}.`,
+      channel: null,
+      weeztixSold: null,
+    });
+  }
+
+  out.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  return out;
+}
+
+function mismatchToStored(match: RuleMatch): EvaluatedAlertMatch {
+  return {
+    ruleId: match.ruleId,
+    editionId: match.editionId,
+    editionName: match.editionName,
+    startsAt: match.startsAt,
+    type: channelToAlertType(match.channel),
+    title: match.title,
+    message: match.message,
+    channel: match.channel,
+    weeztixSold: match.weeztixSold,
+  };
+}
+
+export function evaluateAlertRules(input: {
+  snaps: EditionAlertSnapshot[];
+  weatherSnaps: WeatherAlertSnapshot[];
+  rules: AlertRule[];
+}): EvaluatedAlertMatch[] {
+  const out: EvaluatedAlertMatch[] = [];
+  for (const rule of input.rules) {
+    if (!rule.enabled) continue;
+    if (rule.kind === "sales_threshold") {
+      out.push(...salesThresholdMatches(input.snaps, rule));
+      continue;
+    }
+    if (rule.kind === "weather") {
+      out.push(...weatherMatches(input.weatherSnaps, rule));
+      continue;
+    }
+    out.push(...mismatchMatches(input.snaps, rule).map(mismatchToStored));
+  }
+  return out;
 }
 
 export function channelToAlertType(

@@ -4,7 +4,6 @@ import { auth } from "@/auth";
 import {
   createAlertRule,
   deleteAlertRule,
-  ensureDefaultAlertRule,
   listAlertRules,
   updateAlertRule,
 } from "@/lib/integrations/alerts/rules";
@@ -25,19 +24,23 @@ async function requireUser() {
 export async function GET() {
   const gate = await requireUser();
   if ("error" in gate && gate.error) return gate.error;
-  await ensureDefaultAlertRule().catch(() => null);
   const rules = await listAlertRules();
   return NextResponse.json({ rules });
 }
 
 const bodySchema = z.object({
   name: z.string().min(1),
+  kind: z
+    .enum(["soldout_mismatch", "sales_threshold", "weather"])
+    .optional(),
   enabled: z.boolean().optional(),
   recipients: z.union([z.string(), z.array(z.string())]),
+  editionId: z.string().uuid().nullable().optional(),
   soldThreshold: z.number().int().positive().nullable().optional(),
   checkRa: z.boolean().optional(),
   checkTicketswap: z.boolean().optional(),
   checkAppic: z.boolean().optional(),
+  weatherKinds: z.array(z.string()).optional(),
 });
 
 export async function POST(request: Request) {
@@ -108,6 +111,5 @@ export async function DELETE(request: Request) {
   if (!ok) {
     return NextResponse.json({ error: "Alert niet gevonden" }, { status: 404 });
   }
-  await refreshDashboardAlerts().catch(() => null);
   return NextResponse.json({ ok: true });
 }
