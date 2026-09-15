@@ -942,6 +942,8 @@ function TicketMetricsVisual({
   salesTrackedFrom,
   salesCurveSource,
   eventDay,
+  socialPosts,
+  emailCampaigns,
 }: {
   sold: number;
   capacity: number | null;
@@ -956,6 +958,8 @@ function TicketMetricsVisual({
   salesTrackedFrom: string | null;
   salesCurveSource: "orders" | "snapshots" | null;
   eventDay: string;
+  socialPosts: EventInsightSocial[];
+  emailCampaigns: EventInsightMail[];
 }) {
   const { available } = ticketComposition(sold, capacity, scanned);
 
@@ -1091,6 +1095,8 @@ function TicketMetricsVisual({
           sinceDay={
             salesCurveSource === "snapshots" ? salesTrackedFrom : null
           }
+          posts={socialPosts}
+          mails={emailCampaigns}
         />
       ) : salesTrackedFrom && salesCurveSource !== "orders" ? (
         <p className="mt-3 border-t border-border pt-3 text-[10px] text-text-dim">
@@ -1413,6 +1419,8 @@ function EventDetail({ event }: { event: EventInsight }) {
           salesTrackedFrom={tickets.salesTrackedFrom ?? null}
           salesCurveSource={tickets.salesCurveSource ?? null}
           eventDay={event.day}
+          socialPosts={socialPosts}
+          emailCampaigns={emailCampaigns}
         />
 
         <div className="grid gap-x-6 gap-y-1 lg:grid-cols-2">

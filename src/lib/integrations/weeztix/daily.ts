@@ -191,7 +191,10 @@ async function fetchWeeztixOrderDayCurve(input: {
   companyId: string;
   start: Date;
   end: Date;
-}): Promise<Array<{ day: string; sold: number; revenueCents: number }>> {
+}): Promise<{
+  points: Array<{ day: string; sold: number; revenueCents: number }>;
+  error?: string;
+}> {
   const res = await weeztixPost({
     path: `/statistics/orders/${input.companyId}`,
     companyGuid: input.companyId,
@@ -204,8 +207,12 @@ async function fetchWeeztixOrderDayCurve(input: {
       events: [input.eventGuid],
     },
   });
-  if (!res.ok) return [];
-  return dailySalesFromOrderAggregations(input.eventGuid, res.data);
+  if (!res.ok) {
+    return { points: [], error: res.error ?? "orders histogram mislukt" };
+  }
+  return {
+    points: dailySalesFromOrderAggregations(input.eventGuid, res.data),
+  };
 }
 
 async function upsertDailySalesCurve(input: {
@@ -326,6 +333,8 @@ export async function syncWeeztixDailySales(options?: {
   startsFrom?: Date;
   startsTo?: Date;
   concurrency?: number;
+  /** Alleen order-histogram, geen referrers/demo/sale-day. */
+  curvesOnly?: boolean;
 }): Promise<{
   ok: boolean;
   attempted: number;
@@ -352,9 +361,10 @@ export async function syncWeeztixDailySales(options?: {
   }
 
   const db = getDb();
-  const limit = options?.limit ?? 80;
-  const daysBack = options?.daysBack ?? 400;
+  const limit = options?.limit ?? 150;
+  const daysBack = options?.daysBack ?? 900;
   const concurrency = Math.max(1, options?.concurrency ?? 3);
+  const curvesOnly = options?.curvesOnly === true;
   const from =
     options?.startsFrom ??
     (() => {
@@ -411,79 +421,88 @@ export async function syncWeeztixDailySales(options?: {
   async function one(row: (typeof rows)[number]) {
     const guid = row.guid;
     if (!guid) return;
-    const stats = await getWeeztixEventStatistics(guid);
-    if (!stats.ok) {
-      failed += 1;
-      if (errors.length < 12) errors.push(`${guid.slice(0, 8)}: ${stats.error}`);
-      return;
-    }
-    const saleDay = saleDayFromStatistics(stats.data);
-    await upsertSaleDay({
-      editionId: row.id,
-      sold: saleDay.sold,
-      revenueCents: saleDay.revenueCents,
-    });
 
-    const companyId = await companyIdFor(guid);
-    if (companyId) {
-      const curveEnd = new Date(
-        Math.min(
-          Date.now() + 2 * 86_400_000,
-          row.startsAt.getTime() + 2 * 86_400_000,
-        ),
-      );
-      const curveStart = new Date(
-        row.startsAt.getTime() - MAX_LOOKBACK_DAYS * 86_400_000,
-      );
-      const curve = await fetchWeeztixOrderDayCurve({
-        eventGuid: guid,
-        companyId,
-        start: curveStart,
-        end: curveEnd,
-      });
-      if (curve.length > 0) {
-        daysUpserted += await upsertDailySalesCurve({
-          editionId: row.id,
-          points: curve,
-        });
-        editionsWithCurve += 1;
+    if (!curvesOnly) {
+      const stats = await getWeeztixEventStatistics(guid);
+      if (!stats.ok) {
+        failed += 1;
+        if (errors.length < 12) errors.push(`${guid.slice(0, 8)}: ${stats.error}`);
+        return;
       }
-    }
+      const saleDay = saleDayFromStatistics(stats.data);
+      await upsertSaleDay({
+        editionId: row.id,
+        sold: saleDay.sold,
+        revenueCents: saleDay.revenueCents,
+      });
 
-    const refs = referrersFromStatistics(stats.data);
-    for (const r of refs) {
-      await db
-        .insert(ticketSaleReferrers)
-        .values({
-          editionId: row.id,
-          platform: "weeztix",
-          referrer: r.referrer.slice(0, 500),
-          channel: r.channel,
-          orderCount: r.orderCount,
-          syncedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: [
-            ticketSaleReferrers.editionId,
-            ticketSaleReferrers.platform,
-            ticketSaleReferrers.referrer,
-          ],
-          set: {
+      const refs = referrersFromStatistics(stats.data);
+      for (const r of refs) {
+        await db
+          .insert(ticketSaleReferrers)
+          .values({
+            editionId: row.id,
+            platform: "weeztix",
+            referrer: r.referrer.slice(0, 500),
             channel: r.channel,
             orderCount: r.orderCount,
             syncedAt: new Date(),
-          },
-        });
-      referrersUpserted += 1;
-      if (r.channel === "brevo") brevoOrders += r.orderCount;
+          })
+          .onConflictDoUpdate({
+            target: [
+              ticketSaleReferrers.editionId,
+              ticketSaleReferrers.platform,
+              ticketSaleReferrers.referrer,
+            ],
+            set: {
+              channel: r.channel,
+              orderCount: r.orderCount,
+              syncedAt: new Date(),
+            },
+          });
+        referrersUpserted += 1;
+        if (r.channel === "brevo") brevoOrders += r.orderCount;
+      }
+
+      const demoOk = await upsertWeeztixDemographics({
+        editionId: row.id,
+        eventStart: row.startsAt,
+        statistics: stats.data,
+      });
+      if (demoOk) demographicsUpserted += 1;
     }
 
-    const demoOk = await upsertWeeztixDemographics({
-      editionId: row.id,
-      eventStart: row.startsAt,
-      statistics: stats.data,
+    const companyId = await companyIdFor(guid);
+    if (!companyId) {
+      if (errors.length < 16) errors.push(`${row.name}: geen company id`);
+      return;
+    }
+    const curveEnd = new Date(
+      Math.min(
+        Date.now() + 2 * 86_400_000,
+        row.startsAt.getTime() + 2 * 86_400_000,
+      ),
+    );
+    const curveStart = new Date(
+      row.startsAt.getTime() - MAX_LOOKBACK_DAYS * 86_400_000,
+    );
+    const curve = await fetchWeeztixOrderDayCurve({
+      eventGuid: guid,
+      companyId,
+      start: curveStart,
+      end: curveEnd,
     });
-    if (demoOk) demographicsUpserted += 1;
+    if (curve.points.length > 0) {
+      daysUpserted += await upsertDailySalesCurve({
+        editionId: row.id,
+        points: curve.points,
+      });
+      editionsWithCurve += 1;
+    } else if (errors.length < 16) {
+      errors.push(
+        `${row.name}: ${curve.error ?? "geen order-histogram"}`,
+      );
+    }
   }
 
   for (let i = 0; i < rows.length; i += concurrency) {
@@ -694,29 +713,6 @@ async function persistSalesFromInventorySnapshots(
   ).filter((row) => row.day === today && row.sold > 0);
 
   for (const row of deltas) {
-    await db
-      .insert(ticketSalesDaily)
-      .values({
-        editionId: row.editionId,
-        platform: "weeztix",
-        day: row.day,
-        sold: row.sold,
-        revenueCents: row.revenueCents,
-        syncedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: [
-          ticketSalesDaily.editionId,
-          ticketSalesDaily.platform,
-          ticketSalesDaily.day,
-        ],
-        set: {
-          sold: row.sold,
-          revenueCents: row.revenueCents,
-          syncedAt: new Date(),
-        },
-      });
-
     await db
       .insert(ticketSalesOnDay)
       .values({

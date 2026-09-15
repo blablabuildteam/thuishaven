@@ -47,8 +47,8 @@ export async function POST(req: Request) {
 
   if (mode === "dailySales") {
     const result = await syncWeeztixDailySales({
-      limit: body.limit ?? 80,
-      daysBack: body.daysBack ?? 400,
+      limit: body.limit ?? 150,
+      daysBack: body.daysBack ?? 900,
     });
     if (result.ok) {
       const { invalidateEventInsightsCache } = await import(

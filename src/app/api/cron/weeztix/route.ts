@@ -48,7 +48,7 @@ export async function GET(request: Request) {
   }));
   const runDaily = force || hour === 8;
   const daily = runDaily
-    ? await syncWeeztixDailySales({ limit: 80, daysBack: 400 }).catch((e) => ({
+    ? await syncWeeztixDailySales({ limit: 150, daysBack: 900 }).catch((e) => ({
         ok: false as const,
         attempted: 0,
         editionsWithCurve: 0,
