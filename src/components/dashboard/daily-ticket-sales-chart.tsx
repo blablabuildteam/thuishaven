@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -76,6 +76,30 @@ type ChartRow = {
   [editionId: string]: string | number | DailyTicketSalesDay["breakdown"];
 };
 
+function clampNodeToViewport(node: HTMLElement) {
+  node.style.transform = "";
+  const rect = node.getBoundingClientRect();
+  const pad = 16;
+  let dx = 0;
+  let dy = 0;
+  if (rect.right > window.innerWidth - pad) {
+    dx = window.innerWidth - pad - rect.right;
+  }
+  if (rect.left + dx < pad) {
+    dx += pad - (rect.left + dx);
+  }
+  if (rect.bottom > window.innerHeight - pad) {
+    dy = window.innerHeight - pad - rect.bottom;
+  }
+  if (rect.top + dy < pad) {
+    dy += pad - (rect.top + dy);
+  }
+  const next = dx || dy ? `translate(${dx}px, ${dy}px)` : "";
+  if (node.style.transform !== next) {
+    node.style.transform = next;
+  }
+}
+
 function DailySalesTooltip({
   active,
   payload,
@@ -87,8 +111,38 @@ function DailySalesTooltip({
   events: DailyTicketSalesEvent[];
   colors: { tooltipBg: string; tooltipFg: string; primary: string };
 }) {
-  if (!active || !payload?.length) return null;
-  const point = payload[0]?.payload;
+  const ref = useRef<HTMLDivElement>(null);
+  const point = active && payload?.length ? payload[0]?.payload : undefined;
+
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (!point || !node) return;
+    let cancelled = false;
+    const run = () => {
+      if (!cancelled) clampNodeToViewport(node);
+    };
+    run();
+
+    const wrapper = node.parentElement;
+    const mutation = new MutationObserver(run);
+    if (wrapper) {
+      mutation.observe(wrapper, {
+        attributes: true,
+        attributeFilter: ["style", "class"],
+      });
+    }
+    const frame = requestAnimationFrame(() => {
+      run();
+      requestAnimationFrame(run);
+    });
+
+    return () => {
+      cancelled = true;
+      mutation.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, [point?.day]);
+
   if (!point) return null;
 
   const eventById = new Map(events.map((event) => [event.id, event]));
@@ -114,6 +168,7 @@ function DailySalesTooltip({
 
   return (
     <div
+      ref={ref}
       className="max-h-80 max-w-[min(34rem,calc(100vw-2rem))] overflow-y-auto border px-3 py-2 text-xs shadow-sm"
       style={{
         background: colors.tooltipBg,
@@ -222,8 +277,8 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
         {formatNumber(data.windowTotal)} tickets verkocht in de laatste{" "}
         {data.windowDays} dagen. Hover een dag voor de verdeling per event.
       </p>
-      <div className="relative h-72 w-full border border-border bg-surface">
-        <div className="absolute inset-0 p-3">
+      <div className="relative h-72 w-full overflow-visible border border-border bg-surface">
+        <div className="absolute inset-0 overflow-visible p-3">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={chartData}
@@ -255,8 +310,9 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
                 content={
                   <DailySalesTooltip events={data.events} colors={colors} />
                 }
-                allowEscapeViewBox={{ x: true, y: true }}
-                wrapperStyle={{ zIndex: 20 }}
+                allowEscapeViewBox={{ x: false, y: false }}
+                isAnimationActive={false}
+                wrapperStyle={{ zIndex: 20, pointerEvents: "none" }}
               />
               {data.events.map((event) => (
                 <Bar

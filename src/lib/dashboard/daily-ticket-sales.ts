@@ -14,19 +14,20 @@ import { amsterdamDay, formatDayShort, shiftIsoDay } from "@/lib/time/amsterdam"
 
 export const DAILY_TICKET_SALES_WINDOW = 14;
 
+/** High-contrast qualitative palette; adjacent hues stay far apart in the stack. */
 const EVENT_COLORS = [
-  "#1d4e89",
-  "#4a90c4",
-  "#2a9d8f",
-  "#c9a227",
-  "#e07a3d",
-  "#c44b3c",
-  "#6d597a",
-  "#355070",
-  "#b56576",
-  "#3d7a5f",
-  "#5b8fa8",
-  "#8a6d3b",
+  "#2563eb",
+  "#f97316",
+  "#16a34a",
+  "#db2777",
+  "#eab308",
+  "#0891b2",
+  "#7c3aed",
+  "#dc2626",
+  "#65a30d",
+  "#c026d3",
+  "#0f766e",
+  "#b45309",
 ] as const;
 
 export type DailyTicketSalesEvent = {
@@ -61,12 +62,8 @@ export type DailyTicketSales = {
   days: DailyTicketSalesDay[];
 };
 
-function colorForEdition(id: string): string {
-  let hash = 0;
-  for (let i = 0; i < id.length; i += 1) {
-    hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
-  }
-  return EVENT_COLORS[hash % EVENT_COLORS.length];
+function colorForIndex(index: number): string {
+  return EVENT_COLORS[index % EVENT_COLORS.length];
 }
 
 function emptySeries(endDay: string, windowDays: number): DailyTicketSales {
@@ -154,12 +151,15 @@ export function buildDailyTicketSales(input: {
       id,
       name: meta.name,
       startsAt: meta.startsAt.toISOString(),
-      color: colorForEdition(id),
     }))
     .sort(
       (a, b) =>
         new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
-    );
+    )
+    .map((event, index) => ({
+      ...event,
+      color: colorForIndex(index),
+    }));
 
   const days: DailyTicketSalesDay[] = [];
   let cursor = startDay;
