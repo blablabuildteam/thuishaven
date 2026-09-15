@@ -41,7 +41,7 @@ export function DjFeeRangeSelect({
   }, [open]);
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative w-full">
       <button
         type="button"
         disabled={disabled}
@@ -50,7 +50,7 @@ export function DjFeeRangeSelect({
         aria-controls={listId}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "min-w-[9.5rem] border px-2.5 py-1 text-left text-sm tabular-nums",
+          "w-full whitespace-nowrap border px-2.5 py-1 text-left text-sm tabular-nums",
           selected
             ? selected.className
             : "border-border bg-bg text-text-dim hover:border-text",

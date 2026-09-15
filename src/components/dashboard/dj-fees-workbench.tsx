@@ -24,6 +24,10 @@ import { displayEditionName } from "@/lib/editions/lineup";
 import { formatTicketSheetDate } from "@/lib/time/amsterdam";
 import { cn } from "@/lib/utils";
 
+/** Fixed control columns — pinned to the card's right edge so they align across events. */
+const DJ_FEE_CONTROLS_W = "w-[26.25rem]"; // 12 + 9.5 + 4.75 rem
+const DJ_FEE_ROW = "flex w-full min-w-[42rem] items-center";
+
 function spendFor(artists: DjFeeArtistView[]): DjFeeSpend {
   const spend = emptyDjFeeSpend();
   for (const artist of artists) addDjFeeRangeToSpend(spend, artist.feeRange);
@@ -77,7 +81,7 @@ function TenHourToggle({
       disabled={disabled}
       onClick={onToggle}
       className={cn(
-        "inline-flex items-center gap-2 text-xs",
+        "inline-flex w-full items-center gap-2 text-xs whitespace-nowrap",
         disabled && "opacity-60",
       )}
     >
@@ -509,11 +513,6 @@ function EventCard({
               {eventMissingCount(event)} open
             </span>
           )}
-          {event.isTenHourEvent && (
-            <span className="bg-fuchsia-300 px-2 py-0.5 text-[11px] font-medium tracking-wide text-black uppercase dark:bg-fuchsia-400">
-              10HRS
-            </span>
-          )}
           <span className="text-sm tabular-nums text-text-muted">
             {formatDjFeeSpend(event.spend)}
           </span>
@@ -521,56 +520,71 @@ function EventCard({
       </header>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="text-[11px] tracking-wider text-text-dim uppercase">
-            <tr>
-              <th className="px-4 py-2 font-medium">DJ</th>
-              <th className="px-4 py-2 font-medium">Prijs</th>
-              <th className="px-4 py-2 font-medium">10HRS</th>
-              <th className="px-4 py-2 text-right font-medium">
-                <span className="sr-only">Acties</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {event.artists.length === 0 && (
-              <tr>
-                <td
-                  colSpan={4}
-                  className="px-4 py-3 text-sm text-text-muted"
-                >
-                  Nog geen DJs op dit event.
-                </td>
-              </tr>
+        <div className="w-full min-w-[42rem]">
+          <div
+            className={cn(
+              DJ_FEE_ROW,
+              "text-[11px] tracking-wider text-text-dim uppercase",
             )}
-            {event.artists.map((artist) => {
-              const hint = sourceLabel(artist.source);
-              const busy = busyId === artist.id;
-              return (
-                <tr key={artist.id} className="border-t border-border/70">
-                  <td className="px-4 py-2.5">
-                    <span className="font-medium">{artist.name}</span>
+          >
+            <div className="min-w-0 flex-1 px-4 py-2 font-medium">DJ</div>
+            <div
+              className={cn(
+                "flex shrink-0 items-center",
+                DJ_FEE_CONTROLS_W,
+              )}
+            >
+              <div className="w-[12rem] px-4 py-2 font-medium">Prijs</div>
+              <div className="w-[9.5rem] px-4 py-2 font-medium">10HRS</div>
+              <div className="w-[4.75rem] px-4 py-2">
+                <span className="sr-only">Acties</span>
+              </div>
+            </div>
+          </div>
+          {event.artists.length === 0 && (
+            <p className="border-t border-border/70 px-4 py-3 text-sm text-text-muted">
+              Nog geen DJs op dit event.
+            </p>
+          )}
+          {event.artists.map((artist) => {
+            const hint = sourceLabel(artist.source);
+            const busy = busyId === artist.id;
+            return (
+              <div
+                key={artist.id}
+                className={cn(DJ_FEE_ROW, "border-t border-border/70 text-sm")}
+              >
+                <div className="min-w-0 flex-1 px-4 py-2.5">
+                  <div className="flex min-w-0 items-baseline gap-2">
+                    <span className="truncate font-medium">{artist.name}</span>
                     {hint && (
-                      <span className="ml-2 text-[10px] tracking-wide text-text-dim uppercase">
+                      <span className="shrink-0 text-[10px] tracking-wide text-text-dim uppercase">
                         {hint}
                       </span>
                     )}
-                  </td>
-                  <td className="px-4 py-2.5">
+                  </div>
+                </div>
+                <div
+                  className={cn(
+                    "flex shrink-0 items-center",
+                    DJ_FEE_CONTROLS_W,
+                  )}
+                >
+                  <div className="w-[12rem] px-4 py-2.5">
                     <DjFeeRangeSelect
                       value={artist.feeRange}
                       disabled={busy}
                       onChange={(feeRange) => onFeeChange(artist, feeRange)}
                     />
-                  </td>
-                  <td className="px-4 py-2.5">
+                  </div>
+                  <div className="w-[9.5rem] px-4 py-2.5">
                     <TenHourToggle
                       value={artist.isTenHour}
                       disabled={busy}
                       onToggle={() => onTenHourToggle(artist)}
                     />
-                  </td>
-                  <td className="px-4 py-2.5 text-right">
+                  </div>
+                  <div className="w-[4.75rem] px-4 py-2.5 text-right">
                     <button
                       type="button"
                       disabled={busy}
@@ -581,12 +595,12 @@ function EventCard({
                       <Trash2 className="size-3.5" />
                       Weg
                     </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <form
