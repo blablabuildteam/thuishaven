@@ -404,3 +404,26 @@ export function LoadedSection({
     <div className={cn("animate-fade-up", className)}>{children}</div>
   );
 }
+
+/** Generic route-level skeleton for dashboard pages without their own loading.tsx. */
+export function DashboardRouteSkeleton({
+  label = "Laden…",
+}: {
+  label?: string;
+}) {
+  return (
+    <div aria-busy="true" aria-label={label}>
+      <div className="mb-8">
+        <Skeleton className="mb-1 h-2.5 w-20" />
+        <Skeleton className="h-9 w-48 sm:h-10" />
+        <Skeleton className="mt-3 h-3 w-full max-w-xl" />
+      </div>
+      <div className="space-y-3">
+        {Array.from({ length: 6 }, (_, i) => (
+          <Skeleton key={i} className="h-14 w-full" />
+        ))}
+      </div>
+      <span className="sr-only">{label}</span>
+    </div>
+  );
+}

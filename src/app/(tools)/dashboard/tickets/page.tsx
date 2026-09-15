@@ -9,11 +9,13 @@ import {
 } from "@/components/dashboard/tickets-channels-table";
 import { SectionHeader } from "@/components/ui/section-header";
 import { loadDailyTicketSales } from "@/lib/dashboard/daily-ticket-sales";
+import { DASHBOARD_TTL_MS, rememberTtl } from "@/lib/cache/ttl";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { editions, externalTicketEvents, ticketInventory } from "@/lib/db/schema";
 import { normalizeWeeztixInventory } from "@/lib/integrations/weeztix/inventory";
 import { amsterdamDay, formatEventClockRange } from "@/lib/time/amsterdam";
 import { desc, isNotNull, and, eq, inArray } from "drizzle-orm";
+import { cache } from "react";
 
 export const metadata = { title: "Tickets" };
 export const dynamic = "force-dynamic";
@@ -35,6 +37,66 @@ function poolCell(row: PoolInventory | undefined): TicketPoolCell {
   };
 }
 
+const loadTicketsSheetRows = cache(async () => {
+  const db = getDb();
+  return rememberTtl("tickets:sheet", DASHBOARD_TTL_MS, () =>
+    Promise.all([
+      db
+        .select({
+          id: editions.id,
+          name: editions.name,
+          startsAt: editions.startsAt,
+          endsAt: editions.endsAt,
+          expectedAttendees: editions.expectedAttendees,
+          sold: ticketInventory.sold,
+          scanned: ticketInventory.scanned,
+          capacity: ticketInventory.capacity,
+          available: ticketInventory.available,
+        })
+        .from(editions)
+        .leftJoin(
+          ticketInventory,
+          and(
+            eq(ticketInventory.editionId, editions.id),
+            eq(ticketInventory.platform, "weeztix"),
+          ),
+        )
+        .where(isNotNull(editions.weeztixEventId))
+        .orderBy(desc(editions.startsAt)),
+      db
+        .select({
+          editionId: ticketInventory.editionId,
+          platform: ticketInventory.platform,
+          sold: ticketInventory.sold,
+          scanned: ticketInventory.scanned,
+          capacity: ticketInventory.capacity,
+        })
+        .from(ticketInventory)
+        .where(
+          inArray(ticketInventory.platform, [
+            "resident_advisor",
+            "appic",
+            "vrienden",
+            "internal",
+          ]),
+        ),
+      db
+        .select({
+          id: externalTicketEvents.id,
+          name: externalTicketEvents.name,
+          startsAt: externalTicketEvents.startsAt,
+          expectedAttendees: externalTicketEvents.expectedAttendees,
+          startTime: externalTicketEvents.startTime,
+          endTime: externalTicketEvents.endTime,
+          scanned: externalTicketEvents.scanned,
+        })
+        .from(externalTicketEvents)
+        .orderBy(desc(externalTicketEvents.startsAt)),
+      loadDailyTicketSales(),
+    ]),
+  );
+});
+
 /**
  * Ticketsheet: verkoop per kanaal, totaal + scans, komend vs afgelopen.
  */
@@ -51,61 +113,8 @@ export default async function TicketsPage() {
     );
   }
 
-  const db = getDb();
-  const [editionRows, extraInv, externalRows, dailySales] = await Promise.all([
-    db
-      .select({
-        id: editions.id,
-        name: editions.name,
-        startsAt: editions.startsAt,
-        endsAt: editions.endsAt,
-        expectedAttendees: editions.expectedAttendees,
-        sold: ticketInventory.sold,
-        scanned: ticketInventory.scanned,
-        capacity: ticketInventory.capacity,
-        available: ticketInventory.available,
-      })
-      .from(editions)
-      .leftJoin(
-        ticketInventory,
-        and(
-          eq(ticketInventory.editionId, editions.id),
-          eq(ticketInventory.platform, "weeztix"),
-        ),
-      )
-      .where(isNotNull(editions.weeztixEventId))
-      .orderBy(desc(editions.startsAt)),
-    db
-      .select({
-        editionId: ticketInventory.editionId,
-        platform: ticketInventory.platform,
-        sold: ticketInventory.sold,
-        scanned: ticketInventory.scanned,
-        capacity: ticketInventory.capacity,
-      })
-      .from(ticketInventory)
-      .where(
-        inArray(ticketInventory.platform, [
-          "resident_advisor",
-          "appic",
-          "vrienden",
-          "internal",
-        ]),
-      ),
-    db
-      .select({
-        id: externalTicketEvents.id,
-        name: externalTicketEvents.name,
-        startsAt: externalTicketEvents.startsAt,
-        expectedAttendees: externalTicketEvents.expectedAttendees,
-        startTime: externalTicketEvents.startTime,
-        endTime: externalTicketEvents.endTime,
-        scanned: externalTicketEvents.scanned,
-      })
-      .from(externalTicketEvents)
-      .orderBy(desc(externalTicketEvents.startsAt)),
-    loadDailyTicketSales(),
-  ]);
+  const [editionRows, extraInv, externalRows, dailySales] =
+    await loadTicketsSheetRows();
 
   const extraByEdition = new Map<
     string,

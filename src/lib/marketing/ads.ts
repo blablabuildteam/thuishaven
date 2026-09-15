@@ -1,5 +1,6 @@
 import { desc, eq } from "drizzle-orm";
 import { cache } from "react";
+import { DASHBOARD_TTL_MS, rememberTtl } from "@/lib/cache/ttl";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { editions, marketingAds } from "@/lib/db/schema";
 import type {
@@ -42,11 +43,23 @@ export const loadMarketingAdsBundle = cache(
     platform?: "meta" | "tiktok" | "youtube";
     limit?: number;
   }): Promise<MarketingAdsBundle> => {
+    const platform = options?.platform ?? "meta";
+    const limit = Math.min(Math.max(options?.limit ?? 400, 1), 500);
+    return rememberTtl(
+      `marketing-ads:${platform}:${limit}`,
+      DASHBOARD_TTL_MS,
+      () => loadMarketingAdsBundleFresh(platform, limit),
+    );
+  },
+);
+
+async function loadMarketingAdsBundleFresh(
+  platform: "meta" | "tiktok" | "youtube",
+  limit: number,
+): Promise<MarketingAdsBundle> {
     if (!hasDatabase()) return emptyBundle();
     try {
       const db = getDb();
-      const platform = options?.platform ?? "meta";
-      const limit = Math.min(Math.max(options?.limit ?? 400, 1), 500);
 
       const rows = await db
         .select({
@@ -136,5 +149,4 @@ export const loadMarketingAdsBundle = cache(
     } catch {
       return emptyBundle();
     }
-  },
-);
+}

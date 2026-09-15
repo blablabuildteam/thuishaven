@@ -8,6 +8,14 @@ const nextConfig: NextConfig = {
   turbopack: {
     root,
   },
+  experimental: {
+    // Default dynamic staleTime is 0, so leaving a page and coming back
+    // always re-fetches RSC. Keep recently visited dashboard views for 60s.
+    staleTimes: {
+      dynamic: 60,
+      static: 180,
+    },
+  },
   async redirects() {
     return [
       {

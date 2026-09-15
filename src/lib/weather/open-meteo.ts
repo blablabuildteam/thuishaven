@@ -61,7 +61,7 @@ export async function fetchOpenMeteoRange(options: {
       });
       const res = await fetch(
         `https://archive-api.open-meteo.com/v1/archive?${params}`,
-        { cache: "no-store" },
+        { next: { revalidate: 86_400 } },
       );
       if (res.ok) {
         return parseDaily((await res.json()) as OpenMeteoDaily);
@@ -80,7 +80,7 @@ export async function fetchOpenMeteoRange(options: {
     });
     const fres = await fetch(
       `https://api.open-meteo.com/v1/forecast?${forecast}`,
-      { cache: "no-store" },
+      { next: { revalidate: 1_800 } },
     );
     if (!fres.ok) {
       // Laatste poging: archive voor het verleden-deel
@@ -96,7 +96,7 @@ export async function fetchOpenMeteoRange(options: {
       });
       const res = await fetch(
         `https://archive-api.open-meteo.com/v1/archive?${params}`,
-        { cache: "no-store" },
+        { next: { revalidate: 86_400 } },
       );
       if (!res.ok) {
         throw new Error(`Open-Meteo HTTP ${fres.status}/${res.status}`);
@@ -252,7 +252,7 @@ export async function fetchOpenMeteoHourlyRange(options: {
     const hourlyVars = "temperature_2m,precipitation,weather_code";
 
     async function fromUrl(url: string): Promise<WeatherHourRow[] | null> {
-      const res = await fetch(url, { cache: "no-store" });
+      const res = await fetch(url, { next: { revalidate: 3_600 } });
       if (!res.ok) return null;
       return parseHourly((await res.json()) as OpenMeteoHourly);
     }
@@ -383,12 +383,27 @@ export async function fetchOpenMeteoHourlyForDays(
     }
   }
 
-  for (const run of runs) {
-    try {
-      const rows = await fetchOpenMeteoHourlyRange({
-        startDate: run.start,
-        endDate: run.end,
-      });
+  const CONCURRENCY = 4;
+  for (let i = 0; i < runs.length; i += CONCURRENCY) {
+    const batch = runs.slice(i, i + CONCURRENCY);
+    const fetched = await Promise.all(
+      batch.map(async (run) => {
+        try {
+          const rows = await fetchOpenMeteoHourlyRange({
+            startDate: run.start,
+            endDate: run.end,
+          });
+          return { run, rows };
+        } catch (err) {
+          console.error(
+            `[weather] hourly fetch failed ${run.start}–${run.end}`,
+            err,
+          );
+          return { run, rows: [] as WeatherHourRow[] };
+        }
+      }),
+    );
+    for (const { run, rows } of fetched) {
       const want = new Set(run.days);
       for (const row of rows) {
         if (!want.has(row.day)) continue;
@@ -396,11 +411,6 @@ export async function fetchOpenMeteoHourlyForDays(
         list.push(row);
         out.set(row.day, list);
       }
-    } catch (err) {
-      console.error(
-        `[weather] hourly fetch failed ${run.start}–${run.end}`,
-        err,
-      );
     }
   }
 

@@ -1,5 +1,6 @@
 import { and, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import { cache } from "react";
+import { DASHBOARD_TTL_MS, rememberTtl } from "@/lib/cache/ttl";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { editions, marketingPosts } from "@/lib/db/schema";
 import {
@@ -160,6 +161,16 @@ export const loadMarketingPostsBundle = cache(
     range?: SocialRange;
     since?: Date | string | null;
   }): Promise<MarketingPostsBundle> => {
+    const key = [
+      "marketing-posts",
+      options?.limit ?? "",
+      options?.channel ?? "",
+      options?.withLift ? "1" : "0",
+      options?.range ?? "",
+      options?.since == null ? "" : String(options.since),
+    ].join(":");
+
+    return rememberTtl(key, DASHBOARD_TTL_MS, async () => {
     const page = await loadMarketingPostsPage({
       limit: options?.limit,
       channel: options?.channel,
@@ -197,6 +208,7 @@ export const loadMarketingPostsBundle = cache(
       hasMore: page.hasMore,
       nextCursor: page.nextCursor,
     };
+    });
   },
 );
 

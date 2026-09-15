@@ -1,5 +1,6 @@
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { cache } from "react";
+import { DASHBOARD_TTL_MS, rememberTtl } from "@/lib/cache/ttl";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { emailCampaignMetrics, marketingPosts, ticketSalesDaily } from "@/lib/db/schema";
 import { amsterdamDay } from "@/lib/time/amsterdam";
@@ -29,6 +30,17 @@ export const loadMarketingTimeline = cache(
     if (!hasDatabase()) return { days: [], markers: [] };
 
     const windowDays = Math.min(Math.max(options?.days ?? 60, 14), 180);
+    return rememberTtl(
+      `marketing-timeline:${windowDays}`,
+      DASHBOARD_TTL_MS,
+      () => loadMarketingTimelineFresh(windowDays),
+    );
+  },
+);
+
+async function loadMarketingTimelineFresh(
+  windowDays: number,
+): Promise<MarketingTimeline> {
     const end = new Date();
     const start = new Date(end);
     start.setUTCDate(start.getUTCDate() - windowDays);
@@ -126,8 +138,7 @@ export const loadMarketingTimeline = cache(
       days,
       markers: markers.slice(0, 80),
     };
-  },
-);
+}
 
 export type ChannelImpact = {
   channel: string;

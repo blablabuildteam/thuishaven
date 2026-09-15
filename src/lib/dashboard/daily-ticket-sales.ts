@@ -1,5 +1,6 @@
 import { and, eq, gte, lte } from "drizzle-orm";
 import { cache } from "react";
+import { DASHBOARD_TTL_MS, rememberTtl } from "@/lib/cache/ttl";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import {
   editions,
@@ -213,6 +214,18 @@ export const loadDailyTicketSales = cache(
     const endDay = amsterdamDay(new Date());
     if (!hasDatabase()) return emptySeries(endDay, windowDays);
 
+    return rememberTtl(
+      `tickets:daily:${windowDays}:${endDay}`,
+      DASHBOARD_TTL_MS,
+      () => loadDailyTicketSalesFresh(endDay, windowDays),
+    );
+  },
+);
+
+async function loadDailyTicketSalesFresh(
+  endDay: string,
+  windowDays: number,
+): Promise<DailyTicketSales> {
     const db = getDb();
     const startDay = shiftIsoDay(endDay, -(windowDays - 1));
     const prevDay = shiftIsoDay(startDay, -1);
@@ -314,5 +327,4 @@ export const loadDailyTicketSales = cache(
         ...deltaRows,
       ],
     });
-  },
-);
+}

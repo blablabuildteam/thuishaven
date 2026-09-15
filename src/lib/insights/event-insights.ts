@@ -1,5 +1,7 @@
-import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { cache } from "react";
 import { unstable_cache, revalidateTag } from "next/cache";
+import { DASHBOARD_TTL_MS, clearTtl, rememberTtl } from "@/lib/cache/ttl";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import {
   editions,
@@ -8,6 +10,7 @@ import {
   marketingPosts,
   ticketInventory,
   ticketInventoryDaily,
+  ticketSales,
   ticketSalesDaily,
   ticketSaleReferrers,
   ticketDemographics,
@@ -569,7 +572,19 @@ export async function loadEventInsightsFresh(options?: {
       ),
       safeQuery(
         "externalEvents",
-        () => db.select().from(externalEvents),
+        () =>
+          db
+            .select()
+            .from(externalEvents)
+            .where(
+              and(
+                lte(externalEvents.startsAt, maxDay),
+                or(
+                  isNull(externalEvents.endsAt),
+                  gte(externalEvents.endsAt, minDay),
+                ),
+              ),
+            ),
         [],
       ),
       safeQuery(
@@ -760,10 +775,13 @@ export async function loadEventInsightsFresh(options?: {
       ...new Set(filtered.map((e) => amsterdamDay(e.startsAt))),
     ];
     let hourlyByDay = new Map<string, WeatherHourRow[]>();
-    try {
-      hourlyByDay = await fetchOpenMeteoHourlyForDays(eventDays);
-    } catch (err) {
-      console.error("[loadEventInsights] hourly weather", err);
+    // Past events skip live Open-Meteo (historical hourly is not persisted).
+    if (!options?.skipWeather) {
+      try {
+        hourlyByDay = await fetchOpenMeteoHourlyForDays(eventDays);
+      } catch (err) {
+        console.error("[loadEventInsights] hourly weather", err);
+      }
     }
 
     const campsByEdition = new Map<string, typeof camps>();
@@ -1384,7 +1402,19 @@ export async function loadEventInsightsFresh(options?: {
         e.status === "past" &&
         e.socialPosts.some((p) => p.salesImpactRole === "promo"),
     );
-    await Promise.all(
+    const hasHourlyTickets =
+      pastWithPosts.length > 0 &&
+      (await safeQuery(
+        "ticketSalesExists",
+        () =>
+          db
+            .select({ id: ticketSales.id })
+            .from(ticketSales)
+            .limit(1)
+            .then((rows) => rows.length > 0),
+        false,
+      ));
+    if (hasHourlyTickets) await Promise.all(
       pastWithPosts.map(async (event) => {
         try {
           const { matches } = await detectPostSpikes(
@@ -1471,7 +1501,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v29"],
+  ["event-insights-upcoming-v30"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1487,7 +1517,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v29"],
+  ["event-insights-past-v30"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],
@@ -1498,32 +1528,40 @@ const loadPastEventInsightsCached = unstable_cache(
  * Cross-request cached Insights payload.
  * - Upcoming: ~5 min
  * - Past: ~24 h
- * Weeztix list ensure runs outside the cache (non-blocking when DB has events).
+ * Weeztix list ensure runs outside the Next data cache (non-blocking when DB has events).
+ * Process-local TTL covers same-instance navigations (dev + warm Fluid instances).
  */
-export async function loadEventInsights(options?: {
+export const loadEventInsights = cache(async (options?: {
   limit?: number;
-}): Promise<EventInsight[]> {
+}): Promise<EventInsight[]> => {
   if (!hasDatabase()) return [];
 
   const limit = options?.limit ?? 120;
   const asOfDay = amsterdamDay(new Date());
 
-  // Outside cache: recover empty DB / schedule list refresh
-  await ensureWeeztixEvents();
-  await ensureRaCompetition();
+  return rememberTtl(
+    `event-insights:${limit}:${asOfDay}`,
+    DASHBOARD_TTL_MS,
+    async () => {
+      // Outside Next data cache: recover empty DB / schedule list refresh
+      await ensureWeeztixEvents();
+      await ensureRaCompetition();
 
-  const [upcoming, past] = await Promise.all([
-    loadUpcomingEventInsightsCached(limit, asOfDay),
-    loadPastEventInsightsCached(limit, asOfDay),
-  ]);
+      const [upcoming, past] = await Promise.all([
+        loadUpcomingEventInsightsCached(limit, asOfDay),
+        loadPastEventInsightsCached(limit, asOfDay),
+      ]);
 
-  const merged = [...upcoming, ...past];
-  applyDjFeeInvestment(merged);
-  applyAnomalies(merged);
-  return merged;
-}
+      const merged = [...upcoming, ...past];
+      applyDjFeeInvestment(merged);
+      applyAnomalies(merged);
+      return merged;
+    },
+  );
+});
 
 /** Bust Insights data cache after a Weeztix (or related) sync. */
 export async function invalidateEventInsightsCache(): Promise<void> {
+  clearTtl();
   revalidateTag("event-insights", "max");
 }

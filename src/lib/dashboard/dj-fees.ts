@@ -15,6 +15,7 @@ import {
   type DjFeeRangeId,
   type DjFeeSpend,
 } from "@/lib/dashboard/dj-fee-ranges";
+import { DASHBOARD_TTL_MS, rememberTtl } from "@/lib/cache/ttl";
 import { getDb } from "@/lib/db/client";
 import { djFeeArtists, editions, raListings, ticketInventory } from "@/lib/db/schema";
 import {
@@ -150,6 +151,10 @@ function plannedArtistInserts(
 }
 
 export async function loadDjFeeBoard(): Promise<DjFeeEventView[]> {
+  return rememberTtl("dj-fee-board", DASHBOARD_TTL_MS, loadDjFeeBoardFresh);
+}
+
+async function loadDjFeeBoardFresh(): Promise<DjFeeEventView[]> {
   const db = getDb();
 
   const [editionRows, listingRows, artistRows] = await Promise.all([

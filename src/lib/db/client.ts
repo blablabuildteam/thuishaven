@@ -22,7 +22,11 @@ export function getDb(): Db {
   }
 
   if (!globalForDb.thuishavenDb) {
-    globalForDb.thuishavenSql = postgres(url, { prepare: false, max: 1 });
+    globalForDb.thuishavenSql = postgres(url, {
+      prepare: false,
+      // Insights/tickets fire many queries in parallel; 1 connection serializes them.
+      max: process.env.NODE_ENV === "development" ? 8 : 4,
+    });
     globalForDb.thuishavenDb = drizzle(globalForDb.thuishavenSql, { schema });
   }
   return globalForDb.thuishavenDb;
