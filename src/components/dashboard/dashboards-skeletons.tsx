@@ -351,6 +351,43 @@ export function ConflictsSkeleton() {
   );
 }
 
+export function DailyTicketSalesSkeleton() {
+  return (
+    <section
+      className="mb-10 animate-fade-up"
+      role="status"
+      aria-busy="true"
+      aria-label="Dagelijkse verkoop laden"
+    >
+      <div className="mb-5 flex items-end justify-between gap-4 border-b border-border pb-3">
+        <div className="min-w-0">
+          <Skeleton className="mb-1 h-2.5 w-16" />
+          <Skeleton className="h-8 w-40 sm:h-9" />
+          <Skeleton className="mt-1 h-2.5 w-64" />
+        </div>
+        <div className="shrink-0 text-right">
+          <Skeleton className="h-8 w-16" />
+          <Skeleton className="mt-1 h-2.5 w-20" />
+        </div>
+      </div>
+      <div className="relative h-72 w-full overflow-hidden border border-border bg-surface">
+        <div className="absolute inset-0 p-3">
+          <div className="flex h-full items-end justify-around gap-2">
+            {Array.from({ length: 14 }, (_, i) => (
+              <Skeleton
+                key={i}
+                className="w-4"
+                style={{ height: `${20 + Math.random() * 60}%` }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+      <span className="sr-only">Laden…</span>
+    </section>
+  );
+}
+
 /** Full-page layout preview for route-level `loading.tsx`. */
 export function DashboardsPageSkeleton() {
   return (

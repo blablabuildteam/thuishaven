@@ -69,6 +69,7 @@ export async function PATCH(
   }
   if (updates.startTime !== undefined) patch.startTime = updates.startTime;
   if (updates.endTime !== undefined) patch.endTime = updates.endTime;
+  if (updates.sold !== undefined) patch.sold = updates.sold;
   if (updates.scanned !== undefined) patch.scanned = updates.scanned;
 
   const updated = await db
@@ -82,6 +83,7 @@ export async function PATCH(
       expectedAttendees: externalTicketEvents.expectedAttendees,
       startTime: externalTicketEvents.startTime,
       endTime: externalTicketEvents.endTime,
+      sold: externalTicketEvents.sold,
       scanned: externalTicketEvents.scanned,
     });
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { DeurverkoopCell } from "@/components/dashboard/deurverkoop-cell";
 import { ExpectedCell } from "@/components/dashboard/expected-cell";
+import { ExternalEventCell } from "@/components/dashboard/external-event-cell";
 import { displayEditionName } from "@/lib/editions/lineup";
 import { formatTicketSheetDate } from "@/lib/time/amsterdam";
 import { cn, formatNumber } from "@/lib/utils";
@@ -34,6 +35,8 @@ export type TicketChannelRow = {
   /** Handmatig extern event — alleen Totaal gevuld. */
   isExternal?: boolean;
   externalAttendees?: number | null;
+  /** Handmatig ingevulde sold voor externe events. */
+  externalSold?: number | null;
 };
 
 function channelIssued(value: number | TicketPoolCell | null): number | null {
@@ -44,7 +47,8 @@ function channelIssued(value: number | TicketPoolCell | null): number | null {
 
 export function totalTicketsSold(row: TicketChannelRow): number | null {
   if (row.isExternal) {
-    return row.externalAttendees ?? null;
+    // Use externalSold if available, otherwise fall back to externalAttendees (expected)
+    return row.externalSold ?? row.externalAttendees ?? null;
   }
   const parts = [
     row.weeztix,
@@ -59,7 +63,7 @@ export function totalTicketsSold(row: TicketChannelRow): number | null {
 }
 
 const CHANNELS = [
-  { key: "weeztix", label: "Weeztix", pending: false, pool: false },
+  { key: "weeztix", label: "Sold", pending: false, pool: false },
   { key: "deurverkoop", label: "Deurverkoop", pending: false, pool: false },
   { key: "ra", label: "RA", pending: false, pool: true },
   { key: "appic", label: "Appic Game", pending: false, pool: true },
@@ -187,12 +191,16 @@ function TicketsTable({
   showExpected = false,
   onDeurverkoopChange,
   onExpectedChange,
+  onExternalSoldChange,
+  onExternalScannedChange,
 }: {
   rows: TicketChannelRow[];
   showDeurverkoop?: boolean;
   showExpected?: boolean;
   onDeurverkoopChange?: (editionId: string, value: number | null) => void;
   onExpectedChange?: (editionId: string, value: number | null) => void;
+  onExternalSoldChange?: (eventId: string, value: number | null) => void;
+  onExternalScannedChange?: (eventId: string, value: number | null) => void;
 }) {
   const months = groupByMonth(rows);
   const columns = visibleChannels(showDeurverkoop);
@@ -252,6 +260,8 @@ function TicketsTable({
               showExpected={showExpected}
               onDeurverkoopChange={onDeurverkoopChange}
               onExpectedChange={onExpectedChange}
+              onExternalSoldChange={onExternalSoldChange}
+              onExternalScannedChange={onExternalScannedChange}
             />
           ))}
         </tbody>
@@ -298,6 +308,8 @@ function MonthBlock({
   showExpected,
   onDeurverkoopChange,
   onExpectedChange,
+  onExternalSoldChange,
+  onExternalScannedChange,
 }: {
   month: { key: string; label: string; rows: TicketChannelRow[] };
   colCount: number;
@@ -305,6 +317,8 @@ function MonthBlock({
   showExpected: boolean;
   onDeurverkoopChange?: (editionId: string, value: number | null) => void;
   onExpectedChange?: (editionId: string, value: number | null) => void;
+  onExternalSoldChange?: (eventId: string, value: number | null) => void;
+  onExternalScannedChange?: (eventId: string, value: number | null) => void;
 }) {
   return (
     <>
@@ -379,9 +393,19 @@ function MonthBlock({
                   col.pool && "whitespace-nowrap",
                 )}
               >
-                {col.key === "deurverkoop" &&
-                !row.isExternal &&
-                onDeurverkoopChange ? (
+                {col.key === "weeztix" &&
+                row.isExternal &&
+                onExternalSoldChange ? (
+                  <ExternalEventCell
+                    eventId={row.id}
+                    eventName={row.name}
+                    field="sold"
+                    value={row.externalSold ?? null}
+                    onSaved={(next) => onExternalSoldChange(row.id, next)}
+                  />
+                ) : col.key === "deurverkoop" &&
+                  !row.isExternal &&
+                  onDeurverkoopChange ? (
                   <DeurverkoopCell
                     editionId={row.id}
                     editionName={displayEditionName(row.name)}
@@ -397,7 +421,17 @@ function MonthBlock({
               <ChannelCell value={total} />
             </td>
             <td className="px-4 py-3 text-right font-mono">
-              <ChannelCell value={row.scanned} />
+              {row.isExternal && onExternalScannedChange ? (
+                <ExternalEventCell
+                  eventId={row.id}
+                  eventName={row.name}
+                  field="scanned"
+                  value={row.scanned}
+                  onSaved={(next) => onExternalScannedChange(row.id, next)}
+                />
+              ) : (
+                <ChannelCell value={row.scanned} />
+              )}
             </td>
           </tr>
         );
@@ -452,6 +486,12 @@ export function TicketsChannelsList({
   const [expectedOverrides, setExpectedOverrides] = useState<
     Record<string, number | null>
   >({});
+  const [externalSoldOverrides, setExternalSoldOverrides] = useState<
+    Record<string, number | null>
+  >({});
+  const [externalScannedOverrides, setExternalScannedOverrides] = useState<
+    Record<string, number | null>
+  >({});
 
   const applyOverrides = (rows: TicketChannelRow[]): TicketChannelRow[] =>
     rows.map((row) => {
@@ -464,6 +504,12 @@ export function TicketsChannelsList({
         next.expected = expected;
         if (row.isExternal) next.externalAttendees = expected;
       }
+      if (row.isExternal && row.id in externalSoldOverrides) {
+        next.externalSold = externalSoldOverrides[row.id] ?? null;
+      }
+      if (row.isExternal && row.id in externalScannedOverrides) {
+        next.scanned = externalScannedOverrides[row.id] ?? null;
+      }
       return next;
     });
 
@@ -473,6 +519,14 @@ export function TicketsChannelsList({
 
   const onExpectedChange = (editionId: string, value: number | null) => {
     setExpectedOverrides((prev) => ({ ...prev, [editionId]: value }));
+  };
+
+  const onExternalSoldChange = (eventId: string, value: number | null) => {
+    setExternalSoldOverrides((prev) => ({ ...prev, [eventId]: value }));
+  };
+
+  const onExternalScannedChange = (eventId: string, value: number | null) => {
+    setExternalScannedOverrides((prev) => ({ ...prev, [eventId]: value }));
   };
 
   const upcomingRows = applyOverrides(upcoming);
@@ -503,6 +557,8 @@ export function TicketsChannelsList({
             showExpected
             onDeurverkoopChange={onDeurverkoopChange}
             onExpectedChange={onExpectedChange}
+            onExternalSoldChange={onExternalSoldChange}
+            onExternalScannedChange={onExternalScannedChange}
           />
         </section>
       )}
@@ -521,6 +577,8 @@ export function TicketsChannelsList({
           <TicketsTable
             rows={pastRows}
             onDeurverkoopChange={onDeurverkoopChange}
+            onExternalSoldChange={onExternalSoldChange}
+            onExternalScannedChange={onExternalScannedChange}
           />
         </section>
       )}

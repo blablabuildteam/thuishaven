@@ -45,6 +45,8 @@ type NavItem = {
   adminOnly?: boolean;
   /** Visible but not clickable until the feature is ready */
   disabled?: boolean;
+  /** Clickable but grayed until an integration is live */
+  pending?: boolean;
   /** Spotlight tour target id */
   tourId?: string;
   /** Extra nav affordance */
@@ -97,6 +99,18 @@ const dashboardSections: NavSection[] = [
         label: "TikTok",
         brand: "tiktok",
         disabled: true,
+      },
+      {
+        href: "/dashboard/paid/google",
+        label: "Google Ads",
+        brand: "google_ads",
+        pending: true,
+      },
+      {
+        href: "/dashboard/paid/youtube",
+        label: "YouTube",
+        brand: "youtube",
+        pending: true,
       },
     ],
   },
@@ -212,6 +226,7 @@ function filterSections(sections: NavSection[], isAdmin: boolean) {
 }
 
 function NavItemIcon({ item, active }: { item: NavItem; active: boolean }) {
+  const muted = item.disabled || item.pending;
   if (item.brand) {
     return (
       <SocialChannelIcon
@@ -219,7 +234,7 @@ function NavItemIcon({ item, active }: { item: NavItem; active: boolean }) {
         size={16}
         className={cn(
           "transition-[filter]",
-          item.disabled
+          muted
             ? "opacity-40 grayscale"
             : cn(
                 "opacity-90",
@@ -272,11 +287,14 @@ function NavLink({
     <Link
       href={item.href}
       data-tour={item.tourId}
+      title={item.pending ? "Nog niet gekoppeld" : undefined}
       className={cn(
         "flex items-center gap-2.5 px-2.5 py-2 text-sm transition-colors",
-        active
-          ? "bg-accent text-accent-contrast"
-          : "text-text-muted hover:bg-surface hover:text-text",
+        item.pending
+          ? "text-text-dim opacity-60 hover:bg-surface hover:opacity-80"
+          : active
+            ? "bg-accent text-accent-contrast"
+            : "text-text-muted hover:bg-surface hover:text-text",
       )}
     >
       {content}
@@ -347,7 +365,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <NavLink
                       key={item.href}
                       item={item}
-                      active={!item.disabled && isNavActive(pathname, item.href)}
+                      active={
+                        !item.disabled &&
+                        !item.pending &&
+                        isNavActive(pathname, item.href)
+                      }
                       badgeCount={
                         item.badge === "dj-fees-pending" ? djFeesPending : null
                       }
@@ -420,7 +442,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <nav className="flex gap-1 overflow-x-auto border-b border-border px-3 py-2 lg:hidden">
           {[...sections.flatMap((s) => s.items), ...systemNav].map((item) => {
-            const active = !item.disabled && isNavActive(pathname, item.href);
+            const active =
+              !item.disabled &&
+              !item.pending &&
+              isNavActive(pathname, item.href);
             if (item.disabled) {
               return (
                 <span
@@ -438,11 +463,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 data-tour={item.tourId}
+                title={item.pending ? "Nog niet gekoppeld" : undefined}
                 className={cn(
                   "inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-sm transition-colors",
-                  active
-                    ? "bg-accent text-accent-contrast"
-                    : "text-text-muted hover:text-text",
+                  item.pending
+                    ? "text-text-dim opacity-60"
+                    : active
+                      ? "bg-accent text-accent-contrast"
+                      : "text-text-muted hover:text-text",
                 )}
               >
                 {item.label}

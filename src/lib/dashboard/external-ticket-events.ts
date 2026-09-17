@@ -53,6 +53,12 @@ export const updateExternalTicketEventSchema = z.object({
     .optional(),
   startTime: clockTimeValue.optional(),
   endTime: clockTimeValue.optional(),
+  sold: z
+    .union([
+      z.coerce.number().int("Moet een heel getal zijn").min(0, "Minimaal 0"),
+      z.null(),
+    ])
+    .optional(),
   scanned: z
     .union([
       z.coerce.number().int("Moet een heel getal zijn").min(0, "Minimaal 0"),

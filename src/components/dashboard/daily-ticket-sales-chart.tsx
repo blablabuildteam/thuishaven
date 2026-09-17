@@ -68,6 +68,49 @@ function useChartColors() {
   return colors;
 }
 
+type DailyBarShapeProps = {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  fill?: string;
+  index?: number;
+  background?: { x?: number; y?: number; width?: number; height?: number };
+};
+
+function DailySalesBarShape(props: DailyBarShapeProps) {
+  const x = Number(props.x) || 0;
+  const y = Number(props.y) || 0;
+  const width = Number(props.width) || 0;
+  const height = Number(props.height) || 0;
+  if (width <= 0 || height <= 0) return null;
+
+  const index = props.index ?? 0;
+  const baseline =
+    props.background &&
+    typeof props.background.y === "number" &&
+    typeof props.background.height === "number"
+      ? props.background.y + props.background.height
+      : y + height;
+
+  return (
+    <g transform={`translate(${x} ${baseline})`}>
+      <g
+        className="daily-sales-bar"
+        style={{ animationDelay: `${index * 12}ms` }}
+      >
+        <rect
+          x={0}
+          y={y - baseline}
+          width={width}
+          height={height}
+          fill={props.fill}
+        />
+      </g>
+    </g>
+  );
+}
+
 type ChartRow = {
   day: string;
   label: string;
@@ -152,18 +195,15 @@ function DailySalesTooltip({
       if (!event) return null;
       const paidSold =
         row.paidSold + row.freeSold > 0 ? row.paidSold : row.sold;
-      const freeSold = row.paidSold + row.freeSold > 0 ? row.freeSold : 0;
-      return { ...event, ...row, paidSold, freeSold };
+      return { ...event, ...row, paidSold };
     })
     .filter(
       (
         row,
       ): row is DailyTicketSalesEvent &
-        DailyTicketSalesBreakdown & { paidSold: number; freeSold: number } =>
-        row != null,
+        DailyTicketSalesBreakdown & { paidSold: number } => row != null,
     );
   const totalPaid = rows.reduce((sum, row) => sum + row.paidSold, 0);
-  const totalFree = rows.reduce((sum, row) => sum + row.freeSold, 0);
   const totalRevenue = rows.reduce((sum, row) => sum + row.revenueCents, 0);
 
   return (
@@ -185,7 +225,6 @@ function DailySalesTooltip({
             <tr className="text-[10px] tracking-[0.08em] text-text-dim uppercase">
               <th className="pb-1.5 pr-3 font-medium text-left">Event</th>
               <th className="pb-1.5 pl-2 font-medium text-right">Betaald</th>
-              <th className="pb-1.5 pl-2 font-medium text-right">Gratis</th>
               <th className="pb-1.5 pl-2 font-medium text-right">Omzet</th>
             </tr>
           </thead>
@@ -212,9 +251,6 @@ function DailySalesTooltip({
                 <td className="py-1 pl-2 text-right align-top font-mono tabular-nums">
                   {formatNumber(row.paidSold)}
                 </td>
-                <td className="py-1 pl-2 text-right align-top font-mono tabular-nums">
-                  {formatNumber(row.freeSold)}
-                </td>
                 <td className="py-1 pl-2 text-right align-top font-mono tabular-nums whitespace-nowrap">
                   {formatEuroCents(row.revenueCents)}
                 </td>
@@ -226,9 +262,6 @@ function DailySalesTooltip({
               <td className="pt-1.5 pr-3 font-medium">Totaal</td>
               <td className="pt-1.5 pl-2 text-right font-mono font-medium tabular-nums">
                 {formatNumber(totalPaid)}
-              </td>
-              <td className="pt-1.5 pl-2 text-right font-mono font-medium tabular-nums">
-                {formatNumber(totalFree)}
               </td>
               <td className="pt-1.5 pl-2 text-right font-mono font-medium tabular-nums whitespace-nowrap">
                 {formatEuroCents(totalRevenue)}
@@ -275,7 +308,7 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
         {formatNumber(data.windowTotal)} tickets verkocht in de laatste{" "}
         {data.windowDays} dagen. Hover een dag voor de verdeling per event.
       </p>
-      <div className="relative h-72 w-full overflow-visible border border-border bg-surface">
+      <div className="daily-sales-chart relative h-72 w-full overflow-visible border border-border bg-surface">
         <div className="absolute inset-0 overflow-visible p-3">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
@@ -312,7 +345,7 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
                 isAnimationActive={false}
                 wrapperStyle={{ zIndex: 20, pointerEvents: "none" }}
               />
-              {data.events.map((event) => (
+              {data.events.map((event, i) => (
                 <Bar
                   key={event.id}
                   dataKey={event.id}
@@ -321,6 +354,8 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
                   name={displayEditionName(event.name)}
                   maxBarSize={22}
                   isAnimationActive={false}
+                  background={i === 0 ? { fill: "transparent" } : undefined}
+                  shape={DailySalesBarShape}
                 />
               ))}
             </BarChart>

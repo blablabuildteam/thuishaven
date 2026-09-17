@@ -1558,19 +1558,16 @@ function EventDetail({ event }: { event: EventInsight }) {
                           : "Leeftijd"
                       }
                       icon={Cake}
-                      rows={[...demographics.age]
-                        .filter((r) => r.key !== "onbekend")
-                        .sort((a, b) => b.count - a.count)}
+                      rows={demographics.age}
                       limit={6}
+                      isAge
                     />
                   )}
                   <DemoMini
                     title="Stad"
                     icon={MapPin}
-                    rows={[...demographics.city]
-                      .filter((c) => c.key !== "onbekend")
-                      .sort((a, b) => b.count - a.count)
-                      .slice(0, 4)}
+                    rows={demographics.city}
+                    limit={4}
                   />
                 </div>
                 {demographics.coveragePct != null && (
@@ -2728,36 +2725,146 @@ function LineupBlock({
   );
 }
 
+/** Convert individual age buckets to 3-year range buckets (18-20, 21-23, etc.) */
+function groupAgesIntoRanges(ageBuckets: DemographicBucket[]): DemographicBucket[] {
+  const rangeMap = new Map<string, number>();
+
+  for (const bucket of ageBuckets) {
+    if (bucket.key === "onbekend") continue;
+    const age = Number(bucket.key);
+    if (!Number.isFinite(age) || age < 0) continue;
+
+    const rangeStart = age < 18 ? 0 : 18 + Math.floor((age - 18) / 3) * 3;
+    const rangeEnd = age < 18 ? 17 : rangeStart + 2;
+    const rangeKey = age < 18 ? "<18" : `${rangeStart}-${rangeEnd}`;
+
+    rangeMap.set(rangeKey, (rangeMap.get(rangeKey) ?? 0) + bucket.count);
+  }
+
+  return [...rangeMap.entries()]
+    .map(([key, count]) => ({ key, count }))
+    .sort((a, b) => {
+      if (a.key === "<18") return -1;
+      if (b.key === "<18") return 1;
+      const aStart = Number(a.key.split("-")[0]);
+      const bStart = Number(b.key.split("-")[0]);
+      return aStart - bStart;
+    });
+}
+
+const DEMO_BAR_FILLS = [
+  "bg-accent",
+  "bg-info",
+  "bg-text",
+  "bg-text-muted",
+  "bg-success",
+  "bg-warn",
+] as const;
+
+function withOtherBucket(
+  rows: DemographicBucket[],
+  limit: number,
+): DemographicBucket[] {
+  if (rows.length <= limit) return rows;
+  const top = rows.slice(0, limit);
+  const rest = rows.slice(limit).reduce((sum, row) => sum + row.count, 0);
+  if (rest <= 0) return top;
+  return [...top, { key: "overig", count: rest }];
+}
+
 function DemoMini({
   title,
   icon: Icon,
   rows,
   limit = 3,
+  isAge = false,
 }: {
   title: string;
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   rows: DemographicBucket[];
   limit?: number;
+  /** If true, group individual ages into 3-year ranges */
+  isAge?: boolean;
 }) {
   const known = rows.filter((r) => r.key !== "onbekend");
-  const total = known.reduce((s, r) => s + r.count, 0);
+  const prepared = isAge
+    ? groupAgesIntoRanges(known)
+    : [...known].sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+  const total = prepared.reduce((s, r) => s + r.count, 0);
   if (!total) return null;
-  const top = known.slice(0, limit);
+  const display = withOtherBucket(prepared, limit);
+
   return (
     <div>
-      <p className="mb-1 flex items-center gap-1 text-[10px] text-text-dim">
+      <p className="mb-1.5 flex items-center gap-1 text-[10px] text-text-dim">
         <Icon className="size-3" strokeWidth={1.5} />
         {title}
       </p>
-      <ul className="space-y-0.5 text-xs">
-        {top.map((r) => (
-          <li key={r.key} className="flex justify-between">
-            <span className="truncate capitalize">{r.key}</span>
-            <span className="font-mono text-text-muted">
-              {formatPercent((r.count / total) * 100, 0)}
-            </span>
-          </li>
-        ))}
+      <div
+        className="mb-2 flex h-1.5 w-full overflow-hidden bg-border"
+        role="img"
+        aria-label={`${title} verdeling`}
+      >
+        {display.map((r, i) => {
+          const pct = (r.count / total) * 100;
+          if (pct < 0.4) return null;
+          return (
+            <div
+              key={r.key}
+              className={cn(
+                "h-full",
+                r.key === "overig"
+                  ? "bg-text-dim/35"
+                  : DEMO_BAR_FILLS[i % DEMO_BAR_FILLS.length],
+              )}
+              style={{ width: `${pct}%` }}
+              title={`${r.key}: ${formatPercent(pct, 0)}`}
+            />
+          );
+        })}
+      </div>
+      <ul className="space-y-1.5 text-xs">
+        {display.map((r, i) => {
+          const pct = (r.count / total) * 100;
+          const isOther = r.key === "overig";
+          return (
+            <li key={r.key}>
+              <div className="mb-0.5 flex items-center justify-between gap-2">
+                <span
+                  className={cn(
+                    "flex min-w-0 items-center gap-1.5 truncate",
+                    isOther ? "text-text-dim" : "capitalize",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "size-1.5 shrink-0",
+                      isOther
+                        ? "bg-text-dim/35"
+                        : DEMO_BAR_FILLS[i % DEMO_BAR_FILLS.length],
+                    )}
+                    aria-hidden
+                  />
+                  <span className="truncate">{isOther ? "Overig" : r.key}</span>
+                </span>
+                <span className="shrink-0 font-mono text-text-muted">
+                  {formatPercent(pct, 0)}
+                </span>
+              </div>
+              <div className="h-1 w-full bg-border">
+                <div
+                  className={cn(
+                    "h-full",
+                    isOther
+                      ? "bg-text-dim/40"
+                      : DEMO_BAR_FILLS[i % DEMO_BAR_FILLS.length],
+                  )}
+                  style={{ width: `${Math.min(100, pct)}%` }}
+                />
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

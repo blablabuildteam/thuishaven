@@ -3,11 +3,13 @@ import { SectionHeader } from "@/components/ui/section-header";
 import {
   ConflictsBanner,
   EventInsightsSection,
+  DailyTicketSalesSection,
 } from "@/components/dashboard/dashboards-sections";
 import { InsightsChatWidget } from "@/components/dashboard/insights-chat-widget";
 import {
   ConflictsSkeleton,
   EventInsightsSkeleton,
+  DailyTicketSalesSkeleton,
 } from "@/components/dashboard/dashboards-skeletons";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +19,10 @@ export default async function InzichtenPage() {
   return (
     <div className="pb-24">
       <SectionHeader eyebrow="Inzichten" title="Event-inzichten" />
+
+      <Suspense fallback={<DailyTicketSalesSkeleton />}>
+        <DailyTicketSalesSection />
+      </Suspense>
 
       <Suspense fallback={<ConflictsSkeleton />}>
         <ConflictsBanner />

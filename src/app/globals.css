@@ -329,6 +329,20 @@ html.dark body::before {
   }
 }
 
+@keyframes daily-bar-pop {
+  from {
+    transform: scale(1, 0);
+  }
+  to {
+    transform: scale(1, 1);
+  }
+}
+
+.daily-sales-bar {
+  transform-origin: 0px 0px;
+  animation: daily-bar-pop 220ms cubic-bezier(0.22, 1.2, 0.36, 1) both;
+}
+
 @keyframes insight-shimmer-pass {
   0% {
     background-position: 120% 0;
@@ -432,6 +446,7 @@ html.dark body::before {
 
   .insight-reveal > *,
   .animate-bar-grow,
+  .daily-sales-bar,
   .insight-loading-pass,
   .insight-modal-backdrop,
   .insight-modal-panel {

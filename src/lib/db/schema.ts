@@ -846,6 +846,8 @@ export const externalTicketEvents = pgTable("external_ticket_events", {
   /** Handmatige start/eindtijd (HH:mm), los van de startsAt-datum. */
   startTime: text("start_time"),
   endTime: text("end_time"),
+  /** Handmatig ingevulde verkochte tickets. */
+  sold: integer("sold"),
   /** Werkelijke check-ins na afloop — handmatig ingevuld. */
   scanned: integer("scanned"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

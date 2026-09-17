@@ -1,90 +1,81 @@
 import Link from "next/link";
+import { DailyTicketSalesChart } from "@/components/dashboard/daily-ticket-sales-chart";
 import { EventInsightsList } from "@/components/dashboard/event-insights-list";
 import { LoadedSection } from "@/components/dashboard/dashboards-skeletons";
+import { loadDailyTicketSales } from "@/lib/dashboard/daily-ticket-sales";
 import {
   loadEventInsights,
   loadEventInsightsFresh,
   invalidateEventInsightsCache,
 } from "@/lib/insights/event-insights";
-import {
-  listUpcomingPlatformTakedowns,
-  upcomingPlatformTakedownStatus,
-} from "@/lib/integrations/alerts";
+import { listUpcomingPlatformTakedowns } from "@/lib/integrations/alerts";
 import { alertEventTitle, formatEventDateShort } from "@/lib/integrations/alerts/event-label";
 import { hasDatabase } from "@/lib/db/client";
 import { cn } from "@/lib/utils";
 
+export async function DailyTicketSalesSection() {
+  if (!hasDatabase()) return null;
+
+  try {
+    const dailySales = await loadDailyTicketSales();
+    return (
+      <LoadedSection>
+        <DailyTicketSalesChart data={dailySales} />
+      </LoadedSection>
+    );
+  } catch (err) {
+    console.error("[DailyTicketSalesSection] load failed", err);
+    return null;
+  }
+}
+
 export async function ConflictsBanner() {
   if (!hasDatabase()) return null;
 
-  const { takedowns, upcomingEditionCount } =
-    await upcomingPlatformTakedownStatus().catch(() => ({
-      takedowns: [],
-      upcomingEditionCount: 0,
-    }));
+  const takedowns = await listUpcomingPlatformTakedowns().catch(() => []);
+  if (takedowns.length === 0) return null;
 
-  if (takedowns.length > 0) {
-    const n = takedowns.length;
-
-    return (
-      <LoadedSection>
-        <div
-          className={cn(
-            "mb-6 border border-warn/50 bg-warn/10 px-3 py-2.5 text-sm",
-          )}
-        >
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="font-medium">
-                {n === 1
-                  ? "1 komend event is uitverkocht, maar nog te koop elders"
-                  : `${n} komende events zijn uitverkocht, maar nog te koop elders`}
-              </p>
-              <p className="mt-0.5 text-xs text-text-muted">
-                3000 tickets verkocht, terwijl Appic of Resident Advisor nog
-                tickets toont
-              </p>
-            </div>
-            <Link
-              href="/dashboard/alerts"
-              className="shrink-0 text-text-muted hover:text-text"
-            >
-              Naar alerts →
-            </Link>
-          </div>
-          <ul className="mt-2 space-y-1 border-t border-warn/20 pt-2">
-            {takedowns.map((event) => (
-              <li key={event.editionId} className="text-xs text-text-muted">
-                <span className="font-medium text-text">
-                  {formatEventDateShort(event.startsAt)} ·{" "}
-                  {alertEventTitle(event.editionName)}
-                </span>
-                <span className="before:content-['_·_']">
-                  {event.channels.map((c) => c.channelLabel).join(" + ")}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </LoadedSection>
-    );
-  }
+  const n = takedowns.length;
 
   return (
     <LoadedSection>
-      <div className="mb-6 border border-border bg-surface px-3 py-2.5 text-sm">
-        <p className="font-medium text-text-muted">
-          {upcomingEditionCount === 0
-            ? "Geen komende events om te checken op sold-out mismatch"
-            : "Geen sold-out mismatch — Appic en Resident Advisor zijn in orde bij komende events"}
-        </p>
-        {upcomingEditionCount > 0 && (
-          <p className="mt-0.5 text-xs text-text-dim">
-            {upcomingEditionCount}{" "}
-            {upcomingEditionCount === 1 ? "komend event" : "komende events"}{" "}
-            gecontroleerd (Weeztix vol, Appic/RA nog open)
-          </p>
+      <div
+        className={cn(
+          "mb-6 border border-warn/50 bg-warn/10 px-3 py-2.5 text-sm",
         )}
+      >
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="font-medium">
+              {n === 1
+                ? "1 komend event is uitverkocht, maar nog te koop elders"
+                : `${n} komende events zijn uitverkocht, maar nog te koop elders`}
+            </p>
+            <p className="mt-0.5 text-xs text-text-muted">
+              3000 tickets verkocht, terwijl Appic of Resident Advisor nog
+              tickets toont
+            </p>
+          </div>
+          <Link
+            href="/dashboard/alerts"
+            className="shrink-0 text-text-muted hover:text-text"
+          >
+            Naar alerts →
+          </Link>
+        </div>
+        <ul className="mt-2 space-y-1 border-t border-warn/20 pt-2">
+          {takedowns.map((event) => (
+            <li key={event.editionId} className="text-xs text-text-muted">
+              <span className="font-medium text-text">
+                {formatEventDateShort(event.startsAt)} ·{" "}
+                {alertEventTitle(event.editionName)}
+              </span>
+              <span className="before:content-['_·_']">
+                {event.channels.map((c) => c.channelLabel).join(" + ")}
+              </span>
+            </li>
+          ))}
+        </ul>
       </div>
     </LoadedSection>
   );

@@ -46,6 +46,7 @@ export default async function ExternalTicketEventPage({
       expectedAttendees: externalTicketEvents.expectedAttendees,
       startTime: externalTicketEvents.startTime,
       endTime: externalTicketEvents.endTime,
+      sold: externalTicketEvents.sold,
       scanned: externalTicketEvents.scanned,
     })
     .from(externalTicketEvents)
@@ -81,6 +82,7 @@ export default async function ExternalTicketEventPage({
           expectedAttendees: event.expectedAttendees,
           startTime: event.startTime,
           endTime: event.endTime,
+          sold: event.sold,
           scanned: event.scanned,
         }}
       />

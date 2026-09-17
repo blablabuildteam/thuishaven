@@ -18,6 +18,7 @@ type ExternalTicketEventFormProps = {
     expectedAttendees: number;
     startTime: string | null;
     endTime: string | null;
+    sold: number | null;
     scanned: number | null;
   };
 };
@@ -29,6 +30,9 @@ export function ExternalTicketEventForm({ event }: ExternalTicketEventFormProps)
   const [startTime, setStartTime] = useState(event.startTime ?? "");
   const [endTime, setEndTime] = useState(event.endTime ?? "");
   const [attendees, setAttendees] = useState(String(event.expectedAttendees));
+  const [sold, setSold] = useState(
+    event.sold == null ? "" : String(event.sold),
+  );
   const [scanned, setScanned] = useState(
     event.scanned == null ? "" : String(event.scanned),
   );
@@ -42,6 +46,8 @@ export function ExternalTicketEventForm({ event }: ExternalTicketEventFormProps)
     setSuccess(false);
     setPending(true);
 
+    const soldValue =
+      sold.trim() === "" ? null : Number.parseInt(sold, 10);
     const scannedValue =
       scanned.trim() === "" ? null : Number.parseInt(scanned, 10);
 
@@ -55,6 +61,7 @@ export function ExternalTicketEventForm({ event }: ExternalTicketEventFormProps)
           startTime,
           endTime,
           expectedAttendees: Number(attendees),
+          sold: soldValue,
           scanned: scannedValue,
         }),
       });
@@ -72,10 +79,13 @@ export function ExternalTicketEventForm({ event }: ExternalTicketEventFormProps)
     }
   }
 
+  const soldNum = sold.trim() === "" ? null : Number.parseInt(sold, 10);
   const scannedNum = scanned.trim() === "" ? null : Number.parseInt(scanned, 10);
   const expectedNum = Number(attendees);
   const scanRate =
-    scannedNum != null && expectedNum > 0 ? (scannedNum / expectedNum) * 100 : null;
+    scannedNum != null && (soldNum ?? expectedNum) > 0
+      ? (scannedNum / (soldNum ?? expectedNum)) * 100
+      : null;
 
   return (
     <form onSubmit={onSubmit} className="max-w-xl space-y-6">
@@ -154,29 +164,46 @@ export function ExternalTicketEventForm({ event }: ExternalTicketEventFormProps)
       </div>
 
       <section className="border border-border bg-surface/40 p-5">
-        <h2 className="font-display text-xl tracking-[0.04em]">Gescand</h2>
+        <h2 className="font-display text-xl tracking-[0.04em]">Verkoop &amp; check-in</h2>
         <p className="mt-1 text-sm text-text-muted">
-          Vul in na afloop van het event — dit komt in de Gescand-kolom op het
-          ticketssheet.
+          Vul deze velden in na afloop van het event — ze komen in de Sold- en
+          Gescand-kolom op het ticketssheet.
         </p>
-        <label className="mt-4 block max-w-xs text-sm">
-          <span className="mb-1.5 block text-[11px] tracking-wide text-text-dim uppercase">
-            Werkelijk gescand
-          </span>
-          <input
-            type="number"
-            min={0}
-            step={1}
-            value={scanned}
-            onChange={(e) => setScanned(e.target.value)}
-            className={inputClassName}
-            placeholder="Nog niet ingevuld"
-          />
-        </label>
+        <div className="mt-4 grid gap-5 sm:grid-cols-2">
+          <label className="block max-w-xs text-sm">
+            <span className="mb-1.5 block text-[11px] tracking-wide text-text-dim uppercase">
+              Verkocht (Sold)
+            </span>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={sold}
+              onChange={(e) => setSold(e.target.value)}
+              className={inputClassName}
+              placeholder="Nog niet ingevuld"
+            />
+          </label>
+          <label className="block max-w-xs text-sm">
+            <span className="mb-1.5 block text-[11px] tracking-wide text-text-dim uppercase">
+              Werkelijk gescand
+            </span>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={scanned}
+              onChange={(e) => setScanned(e.target.value)}
+              className={inputClassName}
+              placeholder="Nog niet ingevuld"
+            />
+          </label>
+        </div>
         {scanRate != null && (
           <p className="mt-3 text-sm text-text-muted">
-            {formatNumber(scannedNum ?? 0)} van {formatNumber(expectedNum)} (
-            {scanRate.toFixed(0)}%)
+            {formatNumber(scannedNum ?? 0)} van{" "}
+            {formatNumber(soldNum ?? expectedNum)} ({scanRate.toFixed(0)}%
+            check-in)
           </p>
         )}
       </section>
