@@ -9,11 +9,9 @@ import Image from "next/image";
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const requested = searchParams.get("callbackUrl") || "/dashboard/inzichten";
+  const requested = searchParams.get("callbackUrl") || "/";
   const callbackUrl =
-    requested === "/" || requested === "/dashboard"
-      ? "/dashboard/inzichten"
-      : requested;
+    requested === "/dashboard" ? "/dashboard/inzichten" : requested;
   const from = searchParams.get("from");
   const notice =
     from === "invite"
