@@ -30,6 +30,7 @@ import {
   Clock,
   X,
   BadgeEuro,
+  Megaphone,
   Heart,
   MessageCircle,
   Eye,
@@ -150,6 +151,8 @@ function insightChipIcon(insight: AnomalyInsight) {
   if (insight.dimension === "social") return Share2;
   if (insight.dimension === "pricing") return Euro;
   if (insight.dimension === "dj_fees") return BadgeEuro;
+  if (insight.dimension === "paid") return Megaphone;
+  if (insight.dimension === "investment") return BadgeEuro;
   if (insight.dimension === "soldout") return TrendingUp;
   if (insight.dimension === "same_day") return Clock;
   return Ticket;
@@ -164,6 +167,8 @@ const INSIGHT_DIMENSION_LABEL: Record<AnomalyInsight["dimension"], string> = {
   email: "Mail",
   pricing: "Prijs",
   dj_fees: "DJ-fees",
+  paid: "Paid ads",
+  investment: "Investering",
   soldout: "Uitverkocht",
   same_day: "Last-minute",
 };
@@ -1645,6 +1650,7 @@ function PaidMarketingBlock({
   paid: EventInsight["paid"] | undefined;
   ads: EventInsightPaidAd[] | undefined;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const summary = paid ?? {
     spendCents: 0,
     ads: 0,
@@ -1652,7 +1658,10 @@ function PaidMarketingBlock({
     clicks: 0,
     roas: null,
   };
-  const rows = (ads ?? []).slice(0, 6);
+  const all = ads ?? [];
+  const PREVIEW = 6;
+  const rows = expanded ? all : all.slice(0, PREVIEW);
+  const hidden = Math.max(0, all.length - PREVIEW);
 
   if (summary.ads === 0) {
     return (
@@ -1711,6 +1720,17 @@ function PaidMarketingBlock({
           </div>
         ))}
       </div>
+      {hidden > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-2 text-[11px] underline underline-offset-2 hover:text-text"
+        >
+          {expanded
+            ? "Toon top 6"
+            : `Toon alle ${formatNumber(all.length)} ads`}
+        </button>
+      )}
       {summary.impressions > 0 && (
         <p className="mt-2 text-[10px] text-text-dim">
           {formatNumber(summary.impressions)} impr. ·{" "}

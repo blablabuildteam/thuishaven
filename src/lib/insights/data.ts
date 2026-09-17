@@ -135,6 +135,22 @@ export type InsightsSnapshot = {
       investmentLevel: 1 | 2 | 3 | 4 | 5 | null;
     }>;
   };
+  paidAds?: {
+    ads: number;
+    linked: number;
+    spendCents: number;
+    events: number;
+    rows: Array<{
+      name: string;
+      day: string;
+      status: "upcoming" | "past";
+      spendCents: number;
+      ads: number;
+      sold: number;
+      fillPct: number | null;
+      roas: number | null;
+    }>;
+  };
   notes: string[];
 };
 
@@ -437,6 +453,16 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
     notes.push("DJ-fees snapshot kon niet geladen worden.");
   }
 
+  let paidAdsBlock: InsightsSnapshot["paidAds"];
+  try {
+    const { loadPaidAdsInsightsSummary } = await import(
+      "@/lib/marketing/ads"
+    );
+    paidAdsBlock = await loadPaidAdsInsightsSummary();
+  } catch {
+    notes.push("Paid ads snapshot kon niet geladen worden.");
+  }
+
   return {
     generatedAt: new Date().toISOString(),
     brevo: {
@@ -461,6 +487,7 @@ export async function getInsightsSnapshot(): Promise<InsightsSnapshot> {
     editions: editionsBlock,
     creatives: creativesBlock,
     djFees: djFeesBlock,
+    paidAds: paidAdsBlock,
     notes,
   };
 }
@@ -606,6 +633,22 @@ export function snapshotToPromptContext(snap: InsightsSnapshot): string {
     for (const row of snap.djFees.rows) {
       lines.push(
         `- ${row.day} ${displayEditionName(row.name)} | ${row.status} | investment=${row.investmentLevel != null ? `${row.investmentLevel}/5` : "n/a"} | spend=${row.spendLabel} | DJs ${row.priced} met range / ${row.missing} open | sold=${row.sold} | fill=${row.fillPct != null ? `${Math.round(row.fillPct)}%` : "n/a"}`,
+      );
+    }
+  }
+
+  if (snap.paidAds) {
+    const spendEur = Math.round(snap.paidAds.spendCents / 100);
+    lines.push(
+      "",
+      "=== Paid ads (Meta/TikTok/YouTube, gekoppeld aan edities) ===",
+      `Ads in DB: ${snap.paidAds.ads} · gekoppeld: ${snap.paidAds.linked} · events: ${snap.paidAds.events} · spend ≈ €${spendEur.toLocaleString("nl-NL")}`,
+      "ROAS = ticketomzet / ad spend (niet winst; DJ-fees zitten daar niet in).",
+      "Per event (hoogste spend eerst):",
+    );
+    for (const row of snap.paidAds.rows) {
+      lines.push(
+        `- ${row.day} ${displayEditionName(row.name)} | ${row.status} | spend=€${Math.round(row.spendCents / 100).toLocaleString("nl-NL")} | ads=${row.ads} | sold=${row.sold} | fill=${row.fillPct != null ? `${Math.round(row.fillPct)}%` : "n/a"} | ROAS=${row.roas != null ? `${row.roas.toFixed(1)}×` : "n/a"}`,
       );
     }
   }

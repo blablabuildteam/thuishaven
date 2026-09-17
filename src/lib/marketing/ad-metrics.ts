@@ -22,6 +22,8 @@ export type MarketingAdRow = {
   dateStart: string | null;
   dateStop: string | null;
   syncedAt: string | null;
+  /** Amsterdam YYYY-MM-DD of the linked edition, if any. */
+  editionStartsAt: string | null;
 };
 
 export type MarketingAdsCampaignGroup = {
@@ -32,6 +34,8 @@ export type MarketingAdsCampaignGroup = {
   impressions: number;
   reach: number;
   clicks: number;
+  /** Linked event day (YYYY-MM-DD), used to sort campaigns chronologically. */
+  startsAt: string | null;
   rows: MarketingAdRow[];
 };
 

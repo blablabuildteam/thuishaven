@@ -422,6 +422,10 @@ export type EventInsight = {
   organicImpactScore: number;
   /** 1–5 vs other events with priced DJ-fees. Null without ranges. */
   djFeeInvestmentLevel: DjFeeInvestmentLevel | null;
+  /** 1–5 vs other events with linked ad spend. */
+  paidInvestmentLevel: DjFeeInvestmentLevel | null;
+  /** 1–5 vs other events on DJ-fee midpoint + ad spend. */
+  investmentLevel: DjFeeInvestmentLevel | null;
 };
 
 function asDjFeeRange(value: string | null): DjFeeRangeId | null {
@@ -1320,6 +1324,8 @@ export async function loadEventInsightsFresh(options?: {
         organicImpactLevel: null,
         organicImpactScore: 0,
         djFeeInvestmentLevel: null,
+        paidInvestmentLevel: null,
+        investmentLevel: null,
       };
 
       const organic0 = summarizeOrganicImpact(socialPosts);
@@ -1450,7 +1456,7 @@ export async function loadEventInsightsFresh(options?: {
   // Upcoming/past are cached separately — annotate after merge so cohorts
   // include the full set. Mode "all" (recovery path) annotates here.
   if (mode === "all") {
-    applyDjFeeInvestment(insights);
+    applyInvestmentRanks(insights);
     applyAnomalies(insights);
   }
   if (mode === "upcoming") {
@@ -1460,6 +1466,40 @@ export async function loadEventInsightsFresh(options?: {
     return insights.filter((e) => e.status === "past");
   }
   return insights;
+}
+
+function combinedInvestmentEuros(event: EventInsight): number | null {
+  const fee = event.djFees
+    ? djFeeSpendMidpoint(event.djFees.spend)
+    : null;
+  const paidEur = event.paid.spendCents > 0 ? event.paid.spendCents / 100 : 0;
+  if (fee == null && paidEur <= 0) return null;
+  return (fee ?? 0) + paidEur;
+}
+
+function applyInvestmentRanks(events: EventInsight[]): void {
+  applyDjFeeInvestment(events);
+  const paidRank = rankDjFeeInvestment(
+    events
+      .map((event) =>
+        event.paid.spendCents > 0 ? event.paid.spendCents / 100 : null,
+      )
+      .filter((eur): eur is number => eur != null),
+  );
+  const combinedRank = rankDjFeeInvestment(
+    events
+      .map((event) => combinedInvestmentEuros(event))
+      .filter((eur): eur is number => eur != null),
+  );
+  for (const event of events) {
+    const paidEur =
+      event.paid.spendCents > 0 ? event.paid.spendCents / 100 : null;
+    event.paidInvestmentLevel =
+      paidRank && paidEur != null ? paidRank(paidEur) : null;
+    const combined = combinedInvestmentEuros(event);
+    event.investmentLevel =
+      combinedRank && combined != null ? combinedRank(combined) : null;
+  }
 }
 
 function applyDjFeeInvestment(events: EventInsight[]): void {
@@ -1501,7 +1541,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v30"],
+  ["event-insights-upcoming-v31"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1517,7 +1557,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v30"],
+  ["event-insights-past-v31"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],
@@ -1553,7 +1593,7 @@ export const loadEventInsights = cache(async (options?: {
       ]);
 
       const merged = [...upcoming, ...past];
-      applyDjFeeInvestment(merged);
+      applyInvestmentRanks(merged);
       applyAnomalies(merged);
       return merged;
     },

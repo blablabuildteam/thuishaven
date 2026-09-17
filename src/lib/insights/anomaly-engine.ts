@@ -7,8 +7,8 @@
  * Deterministic and free. An LLM summarizer can wrap `detectAnomalies()`
  * later if templated copy feels too rigid (same cache cycle).
  *
- * Future dimensions (data not wired yet):
- * - paid media: ROAS / spend vs fill
+ * Investment (DJ-fees + paid ads) is compared to fill / ticket-ROAS
+ * so chips explain whether spend paid off in ticket sales.
  */
 
 import type { EditionFormat } from "@/lib/editions/lineup";
@@ -42,7 +42,9 @@ export type AnomalyDimension =
   | "pricing"
   | "soldout"
   | "same_day"
-  | "dj_fees";
+  | "dj_fees"
+  | "paid"
+  | "investment";
 
 export type AnomalyFact = {
   label: string;
@@ -97,8 +99,18 @@ export type AnomalyEventInput = {
   competitionLevel: CompetitionLevel | null;
   organicImpactLevel: OrganicImpactLevel | null;
   djFeeInvestmentLevel?: 1 | 2 | 3 | 4 | 5 | null;
+  paidInvestmentLevel?: 1 | 2 | 3 | 4 | 5 | null;
+  /** Combined DJ-fee midpoint + ad spend vs other events. */
+  investmentLevel?: 1 | 2 | 3 | 4 | 5 | null;
   djFees?: {
     spend: DjFeeSpend;
+  } | null;
+  paid?: {
+    spendCents: number;
+    ads: number;
+    impressions: number;
+    clicks: number;
+    roas: number | null;
   } | null;
 };
 
@@ -129,6 +141,8 @@ export type AnomalyBaselines = {
   fillByCompetition: Record<CompetitionLevel, number | null>;
   fillByOrganic: Record<OrganicImpactLevel, number | null>;
   fillByDjFee: Record<ImpactLevel, number | null>;
+  fillByPaid: Record<ImpactLevel, number | null>;
+  fillByInvestment: Record<ImpactLevel, number | null>;
   fillWithMail: number | null;
   fillWithoutMail: number | null;
   fillByWeatherOutdoor: Record<WeatherBand, number | null>;
@@ -348,6 +362,43 @@ function fmtCount(n: number): string {
   return n.toLocaleString("nl-NL");
 }
 
+function paidSpendCents(e: AnomalyEventInput): number {
+  return e.paid?.spendCents ?? 0;
+}
+
+function paidSpendLabel(e: AnomalyEventInput): string | null {
+  const cents = paidSpendCents(e);
+  if (cents <= 0) return null;
+  return fmtEur(cents / 100);
+}
+
+function djFeeLabel(e: AnomalyEventInput): string | null {
+  const spend = e.djFees?.spend;
+  if (!spend || spend.priced < 1) return null;
+  return formatDjFeeSpend(spend);
+}
+
+function peerFill(
+  buckets: Record<ImpactLevel, number | null>,
+  levels: ImpactLevel[],
+): number | null {
+  return mean(levels.flatMap((l) => {
+    const v = buckets[l];
+    return v == null ? [] : [v];
+  }));
+}
+
+/** Prefer high-spend peers; fall back to all events if that bucket is too small. */
+function fillToBeat(
+  peer: number | null,
+  typical: number | null,
+  fill: number,
+): number | null {
+  if (peer != null && peer >= fill + 12) return peer;
+  if (typical != null && typical >= fill + 12) return typical;
+  return null;
+}
+
 function facts(
   ...rows: Array<[string, string | number | null | undefined]>
 ): AnomalyFact[] {
@@ -410,6 +461,12 @@ export function computeBaselines(
   const fillByDjFee = Object.fromEntries(
     IMPACT_LEVELS.map((level) => [level, null]),
   ) as Record<ImpactLevel, number | null>;
+  const fillByPaid = Object.fromEntries(
+    IMPACT_LEVELS.map((level) => [level, null]),
+  ) as Record<ImpactLevel, number | null>;
+  const fillByInvestment = Object.fromEntries(
+    IMPACT_LEVELS.map((level) => [level, null]),
+  ) as Record<ImpactLevel, number | null>;
   const fillByWeatherOutdoor: Record<WeatherBand, number | null> = {
     ideal: null,
     ok: null,
@@ -423,6 +480,12 @@ export function computeBaselines(
     IMPACT_LEVELS.map((level) => [level, [] as number[]]),
   ) as Record<OrganicImpactLevel, number[]>;
   const djFeeBuckets = Object.fromEntries(
+    IMPACT_LEVELS.map((level) => [level, [] as number[]]),
+  ) as Record<ImpactLevel, number[]>;
+  const paidBuckets = Object.fromEntries(
+    IMPACT_LEVELS.map((level) => [level, [] as number[]]),
+  ) as Record<ImpactLevel, number[]>;
+  const investmentBuckets = Object.fromEntries(
     IMPACT_LEVELS.map((level) => [level, [] as number[]]),
   ) as Record<ImpactLevel, number[]>;
   const weatherBuckets: Record<WeatherBand, number[]> = {
@@ -440,6 +503,8 @@ export function computeBaselines(
       if (e.competitionLevel) competeBuckets[e.competitionLevel].push(fill);
       if (e.organicImpactLevel) organicBuckets[e.organicImpactLevel].push(fill);
       if (e.djFeeInvestmentLevel) djFeeBuckets[e.djFeeInvestmentLevel].push(fill);
+      if (e.paidInvestmentLevel) paidBuckets[e.paidInvestmentLevel].push(fill);
+      if (e.investmentLevel) investmentBuckets[e.investmentLevel].push(fill);
       if (hasMail(e)) withMail.push(fill);
       else withoutMail.push(fill);
       if (e.isOutdoor && e.weather) {
@@ -467,6 +532,8 @@ export function computeBaselines(
     fillByCompetition[level] = mean(competeBuckets[level]);
     fillByOrganic[level] = mean(organicBuckets[level]);
     fillByDjFee[level] = mean(djFeeBuckets[level]);
+    fillByPaid[level] = mean(paidBuckets[level]);
+    fillByInvestment[level] = mean(investmentBuckets[level]);
   }
   for (const band of ["ideal", "ok", "poor"] as const) {
     fillByWeatherOutdoor[band] = mean(weatherBuckets[band]);
@@ -493,6 +560,8 @@ export function computeBaselines(
     fillByCompetition,
     fillByOrganic,
     fillByDjFee,
+    fillByPaid,
+    fillByInvestment,
     fillWithMail: mean(withMail),
     fillWithoutMail: mean(withoutMail),
     fillByWeatherOutdoor,
@@ -556,6 +625,12 @@ function detectFill(
       ["Vergelijkbare " + label, fmtPct(cohort.fill.median)],
       ["Verkocht", fmtCount(e.tickets.sold)],
       ["Capaciteit", e.tickets.capacity != null ? fmtCount(e.tickets.capacity) : null],
+      ["DJ-fees", djFeeLabel(e)],
+      ["Ad spend", paidSpendLabel(e)],
+      [
+        "Ticket-ROAS",
+        e.paid?.roas != null ? `${e.paid.roas.toFixed(1)}×` : null,
+      ],
     ),
   };
 }
@@ -1033,18 +1108,8 @@ function detectDjFees(
   const level = e.djFeeInvestmentLevel ?? null;
   const spendLabel = formatDjFeeSpend(spend);
   const soldOut = isSoldOut(e);
-  const highFill = mean(
-    ([4, 5] as ImpactLevel[]).flatMap((l) => {
-      const v = baselines.fillByDjFee[l];
-      return v == null ? [] : [v];
-    }),
-  );
-  const lowFill = mean(
-    ([1, 2] as ImpactLevel[]).flatMap((l) => {
-      const v = baselines.fillByDjFee[l];
-      return v == null ? [] : [v];
-    }),
-  );
+  const highFill = peerFill(baselines.fillByDjFee, [4, 5]);
+  const lowFill = peerFill(baselines.fillByDjFee, [1, 2]);
 
   if (level != null && isHighImpact(level)) {
     const investLabel =
@@ -1059,6 +1124,7 @@ function detectDjFees(
         facts: facts(
           ["Investering", `${level}/5`],
           ["DJ-fees", spendLabel],
+          ["Ad spend", paidSpendLabel(e)],
           ["Bezetting", fmtPct(fill)],
         ),
       };
@@ -1075,6 +1141,7 @@ function detectDjFees(
           ["Dit event", fmtPct(fill)],
           ["Events met hoge DJ-fees", fmtPct(highFill)],
           ["DJ-fees", spendLabel],
+          ["Ad spend", paidSpendLabel(e)],
         ),
       };
     }
@@ -1090,6 +1157,7 @@ function detectDjFees(
       facts: facts(
         ["Investering", `${level}/5`],
         ["DJ-fees", spendLabel],
+        ["Ad spend", paidSpendLabel(e)],
         ["Bezetting", fmtPct(fill)],
         ["Events met lage DJ-fees", lowFill != null ? fmtPct(lowFill) : null],
       ),
@@ -1115,6 +1183,204 @@ function detectDjFees(
         ["DJ-fees dit event", spendLabel],
         ["Vergelijkbare " + cohort.label, fmtEur(cohort.fee.median)],
         ["Bezetting", fmtPct(fill)],
+      ),
+    };
+  }
+
+  return null;
+}
+
+function detectPaid(
+  e: AnomalyEventInput,
+  baselines: AnomalyBaselines,
+): AnomalyInsight | null {
+  if (e.status !== "past") return null;
+  const fill = e.tickets.fillPct;
+  if (fill == null || e.tickets.sold <= 0) return null;
+  const spend = paidSpendCents(e);
+  const ads = e.paid?.ads ?? 0;
+  if (spend < 5000 || ads < 1) return null;
+  const level = e.paidInvestmentLevel ?? null;
+  const spendLabel = fmtEur(spend / 100);
+  const roas = e.paid?.roas ?? null;
+  const soldOut = isSoldOut(e);
+  const highFill = peerFill(baselines.fillByPaid, [4, 5]);
+  const lowFill = peerFill(baselines.fillByPaid, [1, 2]);
+  const roasLabel = roas != null ? `${roas.toFixed(1)}×` : null;
+
+  if (level != null && isHighImpact(level)) {
+    const investLabel =
+      level === 5 ? "Zeer hoge ad spend" : "Hoge ad spend";
+    if (soldOut || fill >= 92) {
+      return {
+        text:
+          roas != null && roas >= 2
+            ? `${investLabel} — ticket-ROAS ${roas.toFixed(1)}×`
+            : `${investLabel} — toch vol`,
+        tone: "positive",
+        dimension: "paid",
+        significance: 0.5,
+        detail: `${investLabel.toLowerCase()} t.o.v. andere events (${spendLabel} · ${ads} ads). Dit event was ${fmtPct(fill)} vol${roasLabel ? ` · ticketomzet / ad spend = ${roasLabel}` : ""}. ROAS is ticketomzet tegenover ad spend, geen winst.`,
+        facts: facts(
+          ["Ad-investering", `${level}/5`],
+          ["Ad spend", spendLabel],
+          ["Ads", String(ads)],
+          ["Ticket-ROAS", roasLabel],
+          ["DJ-fees", djFeeLabel(e)],
+          ["Bezetting", fmtPct(fill)],
+        ),
+      };
+    }
+    const paidPeer = fillToBeat(
+      highFill,
+      baselines.all.fill?.median ?? null,
+      fill,
+    );
+    if (paidPeer != null) {
+      return {
+        text: `${investLabel}, maar de verkoop bleef achter`,
+        tone: "caution",
+        dimension: "paid",
+        significance: sigFromPp(paidPeer - fill, 22),
+        detail: `${investLabel.toLowerCase()} t.o.v. andere events (${spendLabel}). Dit event was ${fmtPct(fill)} vol; vergelijkbare events zitten meestal rond ${fmtPct(paidPeer)} vol${roasLabel ? ` · ticket-ROAS ${roasLabel}` : ""}.`,
+        facts: facts(
+          ["Ad-investering", `${level}/5`],
+          ["Dit event", fmtPct(fill)],
+          ["Vergelijkbare events", fmtPct(paidPeer)],
+          ["Ad spend", spendLabel],
+          ["Ticket-ROAS", roasLabel],
+          ["DJ-fees", djFeeLabel(e)],
+        ),
+      };
+    }
+  }
+
+  if (level != null && isLowImpact(level) && (soldOut || fill >= 92)) {
+    return {
+      text: "Weinig ad spend — toch vol",
+      tone: "positive",
+      dimension: "paid",
+      significance: 0.46,
+      detail: `Lage ad spend t.o.v. andere events (${spendLabel}). Dit event was ${fmtPct(fill)} vol${lowFill != null ? `; events met lage ad spend zitten meestal rond ${fmtPct(lowFill)} vol` : ""}${roasLabel ? ` · ticket-ROAS ${roasLabel}` : ""}.`,
+      facts: facts(
+        ["Ad-investering", `${level}/5`],
+        ["Ad spend", spendLabel],
+        ["Bezetting", fmtPct(fill)],
+        ["Ticket-ROAS", roasLabel],
+        ["Events met lage ad spend", lowFill != null ? fmtPct(lowFill) : null],
+      ),
+    };
+  }
+
+  if (roas != null && roas < 1 && spend >= 20000) {
+    return {
+      text: `Ad spend hoger dan ticketomzet (ROAS ${roas.toFixed(1)}×)`,
+      tone: "caution",
+      dimension: "paid",
+      significance: Math.min(1, 0.4 + (1 - roas) * 0.35),
+      detail: `Er ging ${spendLabel} naar ads, meer dan de ticketomzet (ROAS ${roas.toFixed(1)}×). Dit event was ${fmtPct(fill)} vol. ROAS is ticketomzet / ad spend — DJ-fees zitten daar niet in.`,
+      facts: facts(
+        ["Ad spend", spendLabel],
+        ["Ticket-ROAS", roasLabel],
+        ["Bezetting", fmtPct(fill)],
+        ["DJ-fees", djFeeLabel(e)],
+      ),
+    };
+  }
+
+  if (roas != null && roas >= 4 && spend >= 10000 && (soldOut || fill >= 80)) {
+    return {
+      text: `Sterke ticket-ROAS (${roas.toFixed(1)}×)`,
+      tone: "positive",
+      dimension: "paid",
+      significance: Math.min(1, 0.42 + Math.min(0.3, (roas - 4) / 10)),
+      detail: `${spendLabel} ad spend leverde ongeveer ${roas.toFixed(1)}× aan ticketomzet op. Dit event was ${fmtPct(fill)} vol. Dat is een verhouding, geen bewezen causaliteit.`,
+      facts: facts(
+        ["Ad spend", spendLabel],
+        ["Ticket-ROAS", roasLabel],
+        ["Bezetting", fmtPct(fill)],
+        ["DJ-fees", djFeeLabel(e)],
+      ),
+    };
+  }
+
+  return null;
+}
+
+function detectInvestment(
+  e: AnomalyEventInput,
+  baselines: AnomalyBaselines,
+): AnomalyInsight | null {
+  if (e.status !== "past") return null;
+  const feeMid = e.djFees?.spend ? djFeeSpendMidpoint(e.djFees.spend) : null;
+  const paidEur = paidSpendCents(e) / 100;
+  if (feeMid == null || paidEur < 50) return null;
+  const fill = e.tickets.fillPct;
+  if (fill == null || e.tickets.sold <= 0) return null;
+  const level = e.investmentLevel ?? null;
+  if (level == null) return null;
+  const combined = feeMid + paidEur;
+  const spendLabel = `${djFeeLabel(e) ?? "—"} DJ · ${fmtEur(paidEur)} ads`;
+  const soldOut = isSoldOut(e);
+  const highFill = peerFill(baselines.fillByInvestment, [4, 5]);
+  const lowFill = peerFill(baselines.fillByInvestment, [1, 2]);
+
+  if (isHighImpact(level)) {
+    const investLabel =
+      level === 5 ? "Zeer hoge totale investering" : "Hoge totale investering";
+    if (soldOut || fill >= 92) {
+      return {
+        text: `${investLabel} — toch vol`,
+        tone: "positive",
+        dimension: "investment",
+        significance: 0.54,
+        detail: `${investLabel.toLowerCase()} t.o.v. andere events (DJ-fees + ads ≈ ${fmtEur(combined)}). Dit event was ${fmtPct(fill)} vol — de inkoop en media werden dus gedragen. DJ-fees zijn bandbreedtes.`,
+        facts: facts(
+          ["Totale investering", `${level}/5`],
+          ["DJ-fees + ads", fmtEur(combined)],
+          ["DJ-fees", djFeeLabel(e)],
+          ["Ad spend", fmtEur(paidEur)],
+          ["Ticket-ROAS", e.paid?.roas != null ? `${e.paid.roas.toFixed(1)}×` : null],
+          ["Bezetting", fmtPct(fill)],
+        ),
+      };
+    }
+    const investPeer = fillToBeat(
+      highFill,
+      baselines.all.fill?.median ?? null,
+      fill,
+    );
+    if (investPeer != null) {
+      return {
+        text: `${investLabel}, maar de verkoop bleef achter`,
+        tone: "caution",
+        dimension: "investment",
+        significance: sigFromPp(investPeer - fill, 20),
+        detail: `${investLabel.toLowerCase()} t.o.v. andere events (${spendLabel}, midden ≈ ${fmtEur(combined)}). Dit event was ${fmtPct(fill)} vol; vergelijkbare events zitten meestal rond ${fmtPct(investPeer)} vol.`,
+        facts: facts(
+          ["Totale investering", `${level}/5`],
+          ["Dit event", fmtPct(fill)],
+          ["Vergelijkbare events", fmtPct(investPeer)],
+          ["DJ-fees", djFeeLabel(e)],
+          ["Ad spend", fmtEur(paidEur)],
+        ),
+      };
+    }
+  }
+
+  if (isLowImpact(level) && (soldOut || fill >= 92)) {
+    return {
+      text: "Lage DJ-fees én ad spend — toch vol",
+      tone: "positive",
+      dimension: "investment",
+      significance: 0.48,
+      detail: `Lage totale investering t.o.v. andere events (${spendLabel}). Dit event was ${fmtPct(fill)} vol${lowFill != null ? `; events met een lage investering zitten meestal rond ${fmtPct(lowFill)} vol` : ""}.`,
+      facts: facts(
+        ["Totale investering", `${level}/5`],
+        ["DJ-fees", djFeeLabel(e)],
+        ["Ad spend", fmtEur(paidEur)],
+        ["Bezetting", fmtPct(fill)],
+        ["Events met lage investering", lowFill != null ? fmtPct(lowFill) : null],
       ),
     };
   }
@@ -1255,6 +1521,8 @@ const DETECTORS: Array<
   detectEmail,
   detectPricing,
   detectDjFees,
+  detectPaid,
+  detectInvestment,
   detectSoldout,
   detectSameDay,
 ];

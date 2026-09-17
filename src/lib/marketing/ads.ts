@@ -1,8 +1,9 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { cache } from "react";
 import { DASHBOARD_TTL_MS, rememberTtl } from "@/lib/cache/ttl";
 import { getDb, hasDatabase } from "@/lib/db/client";
-import { editions, marketingAds } from "@/lib/db/schema";
+import { editions, marketingAds, ticketInventory } from "@/lib/db/schema";
+import { amsterdamDay } from "@/lib/time/amsterdam";
 import type {
   MarketingAdRow,
   MarketingAdsBundle,
@@ -38,13 +39,50 @@ function emptyBundle(): MarketingAdsBundle {
   };
 }
 
+function campaignStartsAt(rows: MarketingAdRow[]): string | null {
+  const byEdition = new Map<string, { spend: number; startsAt: string }>();
+  for (const row of rows) {
+    if (!row.editionId || !row.editionStartsAt) continue;
+    const cur = byEdition.get(row.editionId);
+    if (cur) cur.spend += row.spendCents;
+    else {
+      byEdition.set(row.editionId, {
+        spend: row.spendCents,
+        startsAt: row.editionStartsAt,
+      });
+    }
+  }
+  const best = [...byEdition.values()].sort((a, b) => b.spend - a.spend)[0];
+  if (best) return best.startsAt;
+  const fallback = rows
+    .map((row) => row.dateStart || row.publishedAt?.slice(0, 10) || null)
+    .filter((day): day is string => Boolean(day))
+    .sort();
+  return fallback[0] ?? null;
+}
+
+/** Newest event first; unlinked / undated campaigns last. */
+function compareCampaignsChronologically(
+  a: MarketingAdsCampaignGroup,
+  b: MarketingAdsCampaignGroup,
+): number {
+  if (a.startsAt && b.startsAt) {
+    const byDay = b.startsAt.localeCompare(a.startsAt);
+    if (byDay !== 0) return byDay;
+    return b.spendCents - a.spendCents;
+  }
+  if (a.startsAt) return -1;
+  if (b.startsAt) return 1;
+  return b.spendCents - a.spendCents;
+}
+
 export const loadMarketingAdsBundle = cache(
   async (options?: {
     platform?: "meta" | "tiktok" | "youtube";
     limit?: number;
   }): Promise<MarketingAdsBundle> => {
     const platform = options?.platform ?? "meta";
-    const limit = Math.min(Math.max(options?.limit ?? 400, 1), 500);
+    const limit = Math.min(Math.max(options?.limit ?? 5000, 1), 5000);
     return rememberTtl(
       `marketing-ads:${platform}:${limit}`,
       DASHBOARD_TTL_MS,
@@ -65,6 +103,7 @@ async function loadMarketingAdsBundleFresh(
         .select({
           ad: marketingAds,
           editionName: editions.name,
+          editionStartsAt: editions.startsAt,
         })
         .from(marketingAds)
         .leftJoin(editions, eq(marketingAds.editionId, editions.id))
@@ -72,7 +111,7 @@ async function loadMarketingAdsBundleFresh(
         .orderBy(desc(marketingAds.spendCents))
         .limit(limit);
 
-      const ads: MarketingAdRow[] = rows.map(({ ad, editionName }) => ({
+      const ads: MarketingAdRow[] = rows.map(({ ad, editionName, editionStartsAt }) => ({
         id: ad.id,
         editionId: ad.editionId,
         editionName: editionName ?? null,
@@ -94,6 +133,9 @@ async function loadMarketingAdsBundleFresh(
         dateStart: ad.dateStart ?? null,
         dateStop: ad.dateStop ?? null,
         syncedAt: ad.syncedAt?.toISOString() ?? null,
+        editionStartsAt: editionStartsAt
+          ? amsterdamDay(editionStartsAt)
+          : null,
       }));
 
       const byCampaign = new Map<string, MarketingAdsCampaignGroup>();
@@ -109,6 +151,7 @@ async function loadMarketingAdsBundleFresh(
             impressions: ad.impressions,
             reach: ad.reach,
             clicks: ad.clicks,
+            startsAt: campaignStartsAt([ad]),
             rows: [ad],
           });
           continue;
@@ -119,11 +162,14 @@ async function loadMarketingAdsBundleFresh(
         existing.reach += ad.reach;
         existing.clicks += ad.clicks;
         existing.rows.push(ad);
+        existing.startsAt = campaignStartsAt(existing.rows);
       }
 
-      const campaigns = [...byCampaign.values()].sort(
-        (a, b) => b.spendCents - a.spendCents,
-      );
+      for (const campaign of byCampaign.values()) {
+        campaign.rows.sort((a, b) => b.spendCents - a.spendCents);
+      }
+
+      const campaigns = [...byCampaign.values()].sort(compareCampaignsChronologically);
       const lastSyncedAt =
         ads
           .map((a) => a.syncedAt)
@@ -149,4 +195,95 @@ async function loadMarketingAdsBundleFresh(
     } catch {
       return emptyBundle();
     }
+}
+
+export type PaidAdsInsightsRow = {
+  name: string;
+  day: string;
+  status: "upcoming" | "past";
+  spendCents: number;
+  ads: number;
+  sold: number;
+  fillPct: number | null;
+  roas: number | null;
+};
+
+export type PaidAdsInsightsSummary = {
+  ads: number;
+  linked: number;
+  spendCents: number;
+  events: number;
+  rows: PaidAdsInsightsRow[];
+};
+
+/** Compact per-event paid spend for the insights chat snapshot. */
+export async function loadPaidAdsInsightsSummary(): Promise<PaidAdsInsightsSummary> {
+  const db = getDb();
+  const today = amsterdamDay(new Date());
+  const grouped = await db
+    .select({
+      editionId: marketingAds.editionId,
+      name: editions.name,
+      startsAt: editions.startsAt,
+      ads: sql<number>`count(*)::int`,
+      spendCents: sql<number>`coalesce(sum(${marketingAds.spendCents}), 0)::int`,
+      sold: ticketInventory.sold,
+      capacity: ticketInventory.capacity,
+      revenueCents: ticketInventory.revenueCents,
+    })
+    .from(marketingAds)
+    .innerJoin(editions, eq(editions.id, marketingAds.editionId))
+    .leftJoin(
+      ticketInventory,
+      and(
+        eq(ticketInventory.editionId, editions.id),
+        eq(ticketInventory.platform, "weeztix"),
+      ),
+    )
+    .where(isNotNull(marketingAds.editionId))
+    .groupBy(
+      marketingAds.editionId,
+      editions.name,
+      editions.startsAt,
+      ticketInventory.sold,
+      ticketInventory.capacity,
+      ticketInventory.revenueCents,
+    )
+    .orderBy(sql`coalesce(sum(${marketingAds.spendCents}), 0) desc`);
+
+  const totals = await db
+    .select({
+      ads: sql<number>`count(*)::int`,
+      linked: sql<number>`count(*) filter (where ${marketingAds.editionId} is not null)::int`,
+      spendCents: sql<number>`coalesce(sum(${marketingAds.spendCents}), 0)::int`,
+    })
+    .from(marketingAds);
+
+  const rows: PaidAdsInsightsRow[] = grouped.slice(0, 24).map((row) => {
+    const day = row.startsAt ? amsterdamDay(row.startsAt) : "";
+    const sold = row.sold ?? 0;
+    const capacity = row.capacity;
+    const spendCents = Number(row.spendCents) || 0;
+    const revenueCents = row.revenueCents ?? 0;
+    return {
+      name: row.name,
+      day,
+      status: day && day >= today ? "upcoming" : "past",
+      spendCents,
+      ads: Number(row.ads) || 0,
+      sold,
+      fillPct:
+        capacity != null && capacity > 0 ? (sold / capacity) * 100 : null,
+      roas:
+        spendCents > 0 && revenueCents > 0 ? revenueCents / spendCents : null,
+    };
+  });
+
+  return {
+    ads: Number(totals[0]?.ads) || 0,
+    linked: Number(totals[0]?.linked) || 0,
+    spendCents: Number(totals[0]?.spendCents) || 0,
+    events: grouped.length,
+    rows,
+  };
 }
