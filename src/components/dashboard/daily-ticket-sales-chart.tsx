@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { BarShapeProps } from "recharts";
 import {
   Bar,
   BarChart,
@@ -68,30 +69,21 @@ function useChartColors() {
   return colors;
 }
 
-type DailyBarShapeProps = {
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-  fill?: string;
-  index?: number;
-  background?: { x?: number; y?: number; width?: number; height?: number };
-};
-
-function DailySalesBarShape(props: DailyBarShapeProps) {
+function DailySalesBarShape(props: BarShapeProps) {
   const x = Number(props.x) || 0;
   const y = Number(props.y) || 0;
   const width = Number(props.width) || 0;
   const height = Number(props.height) || 0;
   if (width <= 0 || height <= 0) return null;
 
-  const index = props.index ?? 0;
+  const index = props.index ?? props.originalDataIndex ?? 0;
   const baseline =
-    props.background &&
-    typeof props.background.y === "number" &&
-    typeof props.background.height === "number"
-      ? props.background.y + props.background.height
-      : y + height;
+    typeof props.stackedBarStart === "number"
+      ? props.stackedBarStart
+      : props.background &&
+          typeof props.background.y === "number"
+        ? props.background.y + props.background.height
+        : y + height;
 
   return (
     <g transform={`translate(${x} ${baseline})`}>
@@ -345,7 +337,7 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
                 isAnimationActive={false}
                 wrapperStyle={{ zIndex: 20, pointerEvents: "none" }}
               />
-              {data.events.map((event, i) => (
+              {data.events.map((event) => (
                 <Bar
                   key={event.id}
                   dataKey={event.id}
@@ -354,7 +346,6 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
                   name={displayEditionName(event.name)}
                   maxBarSize={22}
                   isAnimationActive={false}
-                  background={i === 0 ? { fill: "transparent" } : undefined}
                   shape={DailySalesBarShape}
                 />
               ))}

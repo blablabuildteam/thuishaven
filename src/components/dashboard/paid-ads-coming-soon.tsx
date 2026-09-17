@@ -12,9 +12,9 @@ const PLACEHOLDER_STATS = [
 
 const PLACEHOLDER_ROWS = [
   { ad: "Campagne", event: "Event", muted: true },
-  { ad: "Ad 1", event: "—" },
-  { ad: "Ad 2", event: "—" },
-  { ad: "Ad 3", event: "—" },
+  { ad: "Ad 1", event: "—", muted: false },
+  { ad: "Ad 2", event: "—", muted: false },
+  { ad: "Ad 3", event: "—", muted: false },
 ] as const;
 
 export function PaidAdsComingSoon({

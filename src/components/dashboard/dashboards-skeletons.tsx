@@ -373,12 +373,23 @@ export function DailyTicketSalesSkeleton() {
       <div className="relative h-72 w-full overflow-hidden border border-border bg-surface">
         <div className="absolute inset-0 p-3">
           <div className="flex h-full items-end justify-around gap-2">
-            {Array.from({ length: 14 }, (_, i) => (
-              <Skeleton
-                key={i}
-                className="w-4"
-                style={{ height: `${20 + Math.random() * 60}%` }}
-              />
+            {[
+              "h-[32%]",
+              "h-[58%]",
+              "h-[24%]",
+              "h-[71%]",
+              "h-[45%]",
+              "h-[63%]",
+              "h-[38%]",
+              "h-[80%]",
+              "h-[29%]",
+              "h-[52%]",
+              "h-[67%]",
+              "h-[41%]",
+              "h-[76%]",
+              "h-[34%]",
+            ].map((h, i) => (
+              <Skeleton key={i} className={cn("w-4", h)} />
             ))}
           </div>
         </div>
