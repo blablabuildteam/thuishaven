@@ -78,7 +78,7 @@ export function LogReplyForm({ mails }: Props) {
     return (
       <p className="text-sm text-text-muted">
         Nog geen verzonden mails om een reply aan te koppelen. Stuur eerst een
-        test vanaf E-mails.
+        test vanaf Mailen.
       </p>
     );
   }

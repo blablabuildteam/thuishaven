@@ -23,28 +23,28 @@ type TourStep = {
 const STEPS: TourStep[] = [
   {
     target: "nav-lijst",
-    title: "Lijst bijwerken",
-    body: "Hier haal je zelf nieuwe bedrijven op en zoek je e-mailadressen. Drie stappen op die pagina.",
+    title: "1 · Lijst bijwerken",
+    body: "Bedrijven ophalen en e-mails aanvullen. Daarna door naar Bedrijven.",
   },
   {
     target: "nav-bedrijven",
-    title: "Bedrijven",
-    body: "Hier staat je lijst. Labels: Jubileum, Cold mail, Onvolledig, Past niet, of Niet mailen.",
+    title: "2 · Bedrijven",
+    body: "Je werklijst. Labels: Jubileum, Seizoen, Algemeen, Onvolledig, Past niet, Niet mailen.",
   },
   {
     target: "crm-mailen",
-    title: "Mailen vanaf de lijst",
-    body: "Op de bedrijvenpagina kun je met één knop naar Mailen.",
+    title: "Door naar Mailen",
+    body: "Vanaf Bedrijven ga je met één knop naar Mailen.",
     go: "/outreach/crm",
   },
   {
     target: "nav-mailen",
-    title: "Mailen",
-    body: "Hier maak je gepersonaliseerde mails en verstuur je ze.",
+    title: "3 · Mailen",
+    body: "Draft maken en testen naar team@. Live versturen staat uit.",
   },
   {
     target: "nav-resultaten",
-    title: "Resultaten",
+    title: "4 · Resultaten",
     body: "Opens, replies en leads komen hier terug.",
   },
   {

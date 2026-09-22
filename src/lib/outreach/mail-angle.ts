@@ -216,7 +216,7 @@ export function mailAngleFor(input: {
     return {
       id: "algemeen",
       label: "Algemeen feest",
-      detail: "Cold mail — of kies seizoen / funding / recordjaar",
+      detail: "Algemene cold mail — of kies seizoen / funding / recordjaar",
       rank: 20,
       also: ALSO_WITHOUT_JUBILEE.filter((a) => a !== "algemeen"),
     };

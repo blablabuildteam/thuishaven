@@ -77,7 +77,7 @@ export function AddProspectsForm() {
   return (
     <form onSubmit={onSubmit} className="mb-8 border border-border bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-display text-2xl tracking-[0.06em]">Lijst vullen</h2>
+        <h2 className="font-display text-2xl tracking-[0.06em]">Lijst bijwerken</h2>
         <div className="flex gap-2">
           <button
             type="button"

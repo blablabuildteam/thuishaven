@@ -4,7 +4,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { OutreachEmailWorkbench } from "@/components/outreach/email-workbench";
 import { listOutreachEmails, listProspects } from "@/lib/outreach/data";
 
-export const metadata = { title: "E-mails" };
+export const metadata = { title: "Mailen" };
 export const dynamic = "force-dynamic";
 
 export default async function EmailsPage() {
@@ -18,7 +18,7 @@ export default async function EmailsPage() {
       <SectionHeader
         eyebrow="Outbound"
         title="Mailen"
-        description="Kies bedrijf + invalshoek, genereer een draft, stuur een test naar team@."
+        description="Stap 3: kies bedrijf + invalshoek, genereer draft, stuur test naar team@."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={source === "db" ? "success" : "neutral"}>

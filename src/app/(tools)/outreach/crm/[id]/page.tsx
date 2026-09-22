@@ -59,7 +59,7 @@ export default async function CrmDossierPage({
             ? "Partner"
             : dossier.existingCustomer
               ? "Niet mailen"
-              : "CRM"
+              : "Bedrijven"
         }
         title={dossier.companyName}
         description={
@@ -365,7 +365,7 @@ export default async function CrmDossierPage({
                   href="/outreach/lijst-bijwerken"
                   className="text-accent underline"
                 >
-                  Lijst bijwerken → stap 3
+                  Lijst bijwerken
                 </Link>
                 .
               </p>

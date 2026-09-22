@@ -113,7 +113,9 @@ function MdwCell({ row }: { row: CrmRow }) {
     );
   }
   if (parts.length === 0) {
-    parts.push("Nog geen betrouwbaar aantal — vul aan via Lijst bijwerken of handmatig op het dossier");
+    parts.push(
+      "Nog geen betrouwbaar aantal — vul aan via Lijst bijwerken of handmatig op het dossier",
+    );
   } else {
     parts.push(
       display != null
@@ -436,7 +438,7 @@ export function CrmCompaniesTable({ rows }: Props) {
                       </div>
                     ) : (
                       <span className="text-xs text-text-dim">
-                        Nog geen contact — stap 3 Lijst bijwerken
+                        Nog geen contact — via Lijst bijwerken
                       </span>
                     )}
                   </td>

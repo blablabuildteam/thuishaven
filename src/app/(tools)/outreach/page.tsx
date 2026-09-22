@@ -3,7 +3,6 @@ import { format, parseISO } from "date-fns";
 import { nl } from "date-fns/locale";
 import { auth } from "@/auth";
 import { SectionHeader } from "@/components/ui/section-header";
-import { MetricCard } from "@/components/ui/metric-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { getOutreachOverview } from "@/lib/outreach/data";
 import {
@@ -15,30 +14,6 @@ import { formatNumber, formatPercent } from "@/lib/utils";
 
 export const metadata = { title: "Outreach" };
 export const dynamic = "force-dynamic";
-
-const STEPS = [
-  {
-    n: "1",
-    title: "Lijst bijwerken",
-    body: "Haal nieuwe bedrijven op en vul e-mailadressen aan.",
-    href: "/outreach/lijst-bijwerken",
-    cta: "Lijst bijwerken",
-  },
-  {
-    n: "2",
-    title: "Bedrijven bekijken",
-    body: "Labels: Jubileum, Cold mail, Onvolledig, Past niet, of Niet mailen.",
-    href: "/outreach/crm",
-    cta: "Naar bedrijven",
-  },
-  {
-    n: "3",
-    title: "Mailen & volgen",
-    body: "Maak mails, verstuur, en zie opens en replies onder Resultaten.",
-    href: "/outreach/emails",
-    cta: "Naar mailen",
-  },
-] as const;
 
 function slotLine(dateIso: string, label?: string) {
   let dateBit = dateIso;
@@ -67,149 +42,132 @@ export default async function OutreachPage() {
       <SectionHeader
         eyebrow="Bedrijfsevent Outreach"
         title="Overzicht"
-        description="Lijst bijwerken → bedrijven kiezen → mailen → resultaten. Agenda is optioneel."
+        description="Stand van zaken. Flow: Lijst bijwerken → Bedrijven → Mailen → Resultaten."
         action={
           <div className="flex flex-wrap gap-2">
-            {isAdmin ? (
-              <StatusBadge tone={sendBlock ? "danger" : "success"}>
-                {sendBlock ? "Live send uit" : "Live send aan"}
-              </StatusBadge>
+            {isAdmin && sendBlock ? (
+              <StatusBadge tone="info">Testmodus</StatusBadge>
             ) : null}
-            <StatusBadge tone={overview.source === "db" ? "success" : "neutral"}>
-              {formatNumber(overview.prospectCount)} bedrijven
-            </StatusBadge>
+            <Link
+              href="/outreach/uitleg"
+              className="text-sm text-text-muted underline-offset-4 hover:underline"
+            >
+              Hoe het werkt
+            </Link>
           </div>
         }
       />
 
-      {sendBlock && isAdmin ? (
-        <div className="mb-8 border border-border bg-surface px-4 py-3 text-sm text-text-muted">
-          <p className="font-medium text-text">Testmodus</p>
-          <p className="mt-1">{sendBlock}</p>
-        </div>
-      ) : null}
-
-      <section className="mb-10">
-        <h2 className="mb-3 font-display text-xl tracking-[0.06em] text-text">
-          Zo werkt het
-        </h2>
-        <ol className="grid gap-3 md:grid-cols-3">
-          {STEPS.map((step) => (
-            <li
-              key={step.n}
-              className="flex flex-col border border-border bg-surface p-4"
-            >
-              <p className="font-display text-sm tracking-[0.16em] text-text-dim">
-                Stap {step.n}
-              </p>
-              <h3 className="mt-2 text-sm font-medium text-text">{step.title}</h3>
-              <p className="mt-2 flex-1 text-sm leading-relaxed text-text-muted">
-                {step.body}
-              </p>
-              <Link
-                href={step.href}
-                className="mt-4 inline-flex w-fit bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast"
-              >
-                {step.cta} →
-              </Link>
-            </li>
-          ))}
-        </ol>
-        <p className="mt-3 text-sm text-text-dim">
-          Agenda bijwerken is optioneel — alleen als je open dagen in een mail
-          wilt delen.
+      <div className="mb-6 flex flex-wrap items-baseline gap-x-6 gap-y-2 border-b border-border pb-4 text-sm">
+        <p>
+          <span className="text-text-dim">Bedrijven</span>{" "}
+          <strong className="font-display text-lg text-text">
+            {formatNumber(overview.kpis.prospectsTotal)}
+          </strong>
         </p>
-      </section>
-
-      <div className="stagger mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <MetricCard
-          label="Bedrijven"
-          value={formatNumber(overview.kpis.prospectsTotal)}
-        />
-        <MetricCard
-          label="Verzonden"
-          value={formatNumber(overview.kpis.sent)}
-          accent
-        />
-        <MetricCard label="Geopend" value={formatPercent(openRate)} />
-        <MetricCard
-          label="Replies"
-          value={formatNumber(overview.kpis.replied)}
-        />
-        <MetricCard label="Leads" value={formatNumber(overview.kpis.leads)} />
+        <p>
+          <span className="text-text-dim">Verzonden</span>{" "}
+          <strong className="text-text">{formatNumber(overview.kpis.sent)}</strong>
+        </p>
+        <p>
+          <span className="text-text-dim">Open</span>{" "}
+          <strong className="text-text">{formatPercent(openRate)}</strong>
+        </p>
+        <p>
+          <span className="text-text-dim">Replies</span>{" "}
+          <strong className="text-text">
+            {formatNumber(overview.kpis.replied)}
+          </strong>
+        </p>
+        <p>
+          <span className="text-text-dim">Leads</span>{" "}
+          <strong className="text-text">{formatNumber(overview.kpis.leads)}</strong>
+        </p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="border border-border bg-surface p-4">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="font-display text-2xl tracking-[0.06em]">Agenda</h2>
-            <Link
-              href="/outreach/beschikbaarheid"
-              className="text-xs text-accent hover:underline"
-            >
-              Beheren →
-            </Link>
-          </div>
-          <p className="mb-4 text-sm text-text-muted">
-            Optioneel · {openSlots.length} open dagen om in mails te delen
-          </p>
-          <ul className="mb-4 space-y-1.5">
-            {openSlots.slice(0, 6).map((slot) => (
-              <li
-                key={slot.id}
-                className="flex items-center gap-2 text-sm text-text-muted"
-              >
-                <span className="size-1.5 shrink-0 rounded-full bg-accent" />
-                {slotLine(slot.date, slot.label)}
-              </li>
-            ))}
-            {openSlots.length === 0 ? (
-              <li className="text-sm text-text-muted">
-                Nog geen open dagen — vul de agenda.
-              </li>
-            ) : null}
-          </ul>
-          <a
-            href={liveUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="break-all font-mono text-xs text-accent underline-offset-2 hover:underline"
-          >
-            {liveUrl}
-          </a>
-        </section>
+      <nav className="mb-10 flex flex-wrap gap-2">
+        <Link
+          href="/outreach/lijst-bijwerken"
+          className="bg-accent px-4 py-2.5 font-display text-sm tracking-[0.1em] text-accent-contrast"
+        >
+          Lijst bijwerken
+        </Link>
+        <Link
+          href="/outreach/crm"
+          className="border border-border px-4 py-2.5 font-display text-sm tracking-[0.1em] hover:border-accent"
+        >
+          Bedrijven
+        </Link>
+        <Link
+          href="/outreach/emails"
+          className="border border-border px-4 py-2.5 font-display text-sm tracking-[0.1em] hover:border-accent"
+        >
+          Mailen
+        </Link>
+        <Link
+          href="/outreach/analytics"
+          className="border border-border px-4 py-2.5 font-display text-sm tracking-[0.1em] hover:border-accent"
+        >
+          Resultaten
+        </Link>
+      </nav>
 
-        <section className="border border-border bg-surface p-4">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="font-display text-2xl tracking-[0.06em]">
+      <div className="grid gap-10 lg:grid-cols-2">
+        <section>
+          <div className="mb-3 flex items-baseline justify-between gap-2">
+            <h2 className="font-display text-lg tracking-[0.06em]">
               Warme leads
             </h2>
             <Link
               href="/outreach/analytics"
-              className="text-xs text-accent hover:underline"
+              className="text-xs text-text-dim hover:text-accent"
             >
               Resultaten →
             </Link>
           </div>
           {overview.leads.length === 0 ? (
-            <p className="text-sm text-text-muted">
-              Nog geen warme leads. Positieve replies verschijnen hier.
-            </p>
+            <p className="text-sm text-text-muted">Nog geen warme leads.</p>
           ) : (
-            <ul className="space-y-3">
-              {overview.leads.map((lead) => (
-                <li
-                  key={lead.id}
-                  className="border-b border-border pb-3 last:border-0 last:pb-0"
-                >
+            <ul className="divide-y divide-border border-y border-border">
+              {overview.leads.slice(0, 5).map((lead) => (
+                <li key={lead.id} className="py-3">
                   <p className="text-sm text-text">{lead.companyName}</p>
-                  <p className="mt-1 text-xs leading-relaxed text-text-muted">
-                    {lead.summary}
-                  </p>
+                  <p className="mt-0.5 text-xs text-text-muted">{lead.summary}</p>
                 </li>
               ))}
             </ul>
           )}
+        </section>
+
+        <section>
+          <div className="mb-3 flex items-baseline justify-between gap-2">
+            <h2 className="font-display text-lg tracking-[0.06em]">
+              Agenda · {openSlots.length} open
+            </h2>
+            <Link
+              href="/outreach/beschikbaarheid"
+              className="text-xs text-text-dim hover:text-accent"
+            >
+              Beheren →
+            </Link>
+          </div>
+          {openSlots.length === 0 ? (
+            <p className="text-sm text-text-muted">Nog geen open dagen.</p>
+          ) : (
+            <ul className="space-y-1.5 text-sm text-text-muted">
+              {openSlots.slice(0, 5).map((slot) => (
+                <li key={slot.id}>{slotLine(slot.date, slot.label)}</li>
+              ))}
+            </ul>
+          )}
+          <a
+            href={liveUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 inline-block break-all font-mono text-xs text-accent underline-offset-2 hover:underline"
+          >
+            {liveUrl}
+          </a>
         </section>
       </div>
     </div>

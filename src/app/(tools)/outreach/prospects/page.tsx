@@ -19,7 +19,7 @@ import { hasHunterConfig } from "@/lib/integrations/hunter/client";
 import { nextApolloDiscoverPage } from "@/lib/outreach/apollo-page";
 import { formatNumber } from "@/lib/utils";
 
-export const metadata = { title: "Lijst vullen" };
+export const metadata = { title: "Lijst bijwerken (technisch)" };
 export const dynamic = "force-dynamic";
 
 const toneFor = (status: ProspectStatus) => {
@@ -186,8 +186,8 @@ export default async function ProspectsPage() {
     <div>
       <SectionHeader
         eyebrow="Beheer"
-        title="Lijst vullen"
-        description="Admin: bedrijven ophalen en verrijken. Reijner/Yoram werken vooral via Bedrijven → Mailen."
+        title="Lijst bijwerken (technisch)"
+        description="Admin-detail. Reijner/Yoram: Lijst bijwerken → Bedrijven → Mailen."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={apolloReady ? "success" : "danger"}>

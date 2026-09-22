@@ -31,21 +31,21 @@ const FLOW = [
     title: "Bedrijven",
     href: "/outreach/crm",
     verb: "Kiezen & filteren",
-    body: "CRM met invalshoeken. Open een dossier voor contacten, notities en geschiedenis.",
+    body: "Je werklijst met invalshoeken. Open een dossier voor contacten, notities en geschiedenis.",
   },
   {
     n: "03",
     title: "Mailen",
     href: "/outreach/emails",
     verb: "Schrijven & testen",
-    body: "Bedrijf + invalshoek → draft in Reijner-toon → test naar team@. Live prospects blijven dicht.",
+    body: "Bedrijf + invalshoek → draft in Reijner-toon → test naar team@. Live versturen blijft dicht.",
   },
   {
     n: "04",
     title: "Resultaten",
     href: "/outreach/analytics",
     verb: "Meten & opvolgen",
-    body: "Opens via Brevo. Replies log je handmatig (evenement@) → KPIs, follow-up, warme leads.",
+    body: "Opens via Brevo. Replies log je voorlopig handmatig (evenement@) → KPIs, follow-up, warme leads.",
   },
   {
     n: "05",
@@ -121,26 +121,25 @@ export default function OutreachUitlegPage() {
           Bedrijfsevent outreach · demo
         </p>
         <h1 className="mt-3 max-w-3xl font-display text-4xl leading-[1.05] tracking-[0.02em] text-text sm:text-5xl lg:text-6xl">
-          Hoe we B2B-bedrijven
-          <span className="text-text-muted"> vinden, mailen en volgen</span>
+          Lijst bijwerken → Bedrijven → Mailen → Resultaten
         </h1>
         <p className="mt-5 max-w-2xl text-base leading-relaxed text-text-muted sm:text-lg">
-          Mid-size bedrijven rond Amsterdam → natuurlijke invalshoek → korte
-          mail als Reijner → opens meten. Vandaag veilig via testsends naar{" "}
-          <code className="text-sm text-text">{testTo}</code>.
+          Mid-size bedrijven rond Amsterdam ophalen, een natuurlijke invalshoek
+          kiezen, kort mailen als Reijner, opens meten — eerst veilig via
+          testsends naar <code className="text-sm text-text">{testTo}</code>.
         </p>
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <Link
             href="/outreach/lijst-bijwerken"
             className="bg-accent px-5 py-3 font-display text-sm tracking-[0.12em] text-accent-contrast"
           >
-            Start bij de lijst →
+            Start: Lijst bijwerken →
           </Link>
           <Link
             href="/outreach/crm"
             className="border border-border px-5 py-3 font-display text-sm tracking-[0.12em] hover:border-accent"
           >
-            Naar bedrijven
+            Naar Bedrijven
           </Link>
           <StatusBadge tone={readyCount >= 4 ? "success" : "info"}>
             {readyCount}/{CONNECTIONS.length} koppelingen

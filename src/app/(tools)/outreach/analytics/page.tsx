@@ -46,13 +46,13 @@ export default async function OutreachAnalyticsPage() {
       <SectionHeader
         eyebrow="Performance"
         title="Resultaten"
-        description="Opens via Brevo · replies log je handmatig (evenement@)."
+        description="Stap 4: opens via Brevo · replies log je voorlopig handmatig (evenement@)."
         action={
           <Link
             href="/outreach/emails"
             className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
           >
-            Mailen →
+            ← Mailen
           </Link>
         }
       />

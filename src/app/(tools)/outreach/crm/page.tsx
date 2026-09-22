@@ -42,7 +42,7 @@ export default async function OutreachCrmPage() {
       <SectionHeader
         eyebrow="Lijst"
         title="Bedrijven"
-        description="Filter op invalshoek, open een dossier, of ga naar Mailen."
+        description="Stap 2: filter en open dossiers. Klaar om te mailen? → Mailen."
         action={
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge tone={source === "db" ? "success" : "neutral"}>
@@ -52,14 +52,14 @@ export default async function OutreachCrmPage() {
               href="/outreach/lijst-bijwerken"
               className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
             >
-              Lijst bijwerken
+              ← Lijst bijwerken
             </Link>
             <Link
               href="/outreach/emails"
               data-tour="crm-mailen"
               className="bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast"
             >
-              Mailen →
+              Volgende: Mailen →
             </Link>
           </div>
         }

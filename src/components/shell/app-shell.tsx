@@ -162,7 +162,7 @@ const outreachSections: NavSection[] = [
     items: [
       {
         href: "/outreach/prospects",
-        label: "Lijst (technisch)",
+        label: "Lijst (admin)",
         icon: Users,
         adminOnly: true,
       },

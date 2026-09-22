@@ -38,9 +38,9 @@ export default async function LijstBijwerkenPage() {
   return (
     <div>
       <SectionHeader
-        eyebrow="Leads binnenhalen"
+        eyebrow="Stap 1"
         title="Lijst bijwerken"
-        description="Haal bedrijven op en vul KvK, contacten en e-mails aan. Daarna naar Bedrijven."
+        description="Bedrijven ophalen en aanvullen. Flow: Lijst bijwerken → Bedrijven → Mailen → Resultaten."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={apolloReady ? "success" : "danger"}>
@@ -50,7 +50,7 @@ export default async function LijstBijwerkenPage() {
               href="/outreach/crm"
               className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
             >
-              Bedrijven →
+              Volgende: Bedrijven →
             </Link>
           </div>
         }

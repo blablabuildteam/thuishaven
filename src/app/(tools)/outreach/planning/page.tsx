@@ -26,7 +26,7 @@ export default async function OutreachPlanningPage() {
               href="/outreach/emails"
               className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
             >
-              E-mails →
+              Mailen →
             </Link>
           </div>
         }
