@@ -4,11 +4,14 @@
  * Compares each event against cohort baselines (format × day-type × season)
  * and emits Dutch explanatory sentences — not raw metric restatements.
  *
+ * The primary chip is a combined story: ticket sales against weather,
+ * same-day competition, organic posts, paid purchases, and DJ-fees.
+ * It only fires on a divergence (outcome vs conditions, ads vs posts,
+ * or sales pace vs the usual curve). Single-topic chips stay for signals
+ * the story does not already cover.
+ *
  * Deterministic and free. An LLM summarizer can wrap `detectAnomalies()`
  * later if templated copy feels too rigid (same cache cycle).
- *
- * Investment (DJ-fees + paid ads) is compared to fill / ticket-ROAS
- * so chips explain whether spend paid off in ticket sales.
  */
 
 import type { EditionFormat } from "@/lib/editions/lineup";
@@ -44,7 +47,8 @@ export type AnomalyDimension =
   | "same_day"
   | "dj_fees"
   | "paid"
-  | "investment";
+  | "investment"
+  | "story";
 
 export type AnomalyFact = {
   label: string;
@@ -61,6 +65,8 @@ export type AnomalyInsight = {
   facts?: AnomalyFact[];
   /** Present on weather insights so the chip can match heat / rain / wind. */
   weatherKind?: WeatherKind;
+  /** Story already explains sell-out timing or last-minute share. */
+  coversTiming?: boolean;
 };
 
 export type AnomalyEventInput = {
@@ -80,6 +86,8 @@ export type AnomalyEventInput = {
     soldOutDaysBefore: number | null;
     scanned: number;
     scanRatePct: number | null;
+    /** Daily sold counts. Missing days are zero. Used for pace vs peers. */
+    salesByDay?: Array<{ day: string; sold: number }>;
   };
   weather: {
     kind: WeatherKind;
@@ -111,7 +119,17 @@ export type AnomalyEventInput = {
     impressions: number;
     clicks: number;
     roas: number | null;
+    /** Platform-reported purchases (Meta pixel / TikTok complete payment). */
+    purchases?: number;
   } | null;
+  /** 1–5 purchase volume vs other events. Optional; story uses the raw count. */
+  paidSalesLevel?: ImpactLevel | null;
+  paidAds?: Array<{
+    dateStart: string | null;
+    publishedAt: string | null;
+    spendCents: number;
+    purchases: number;
+  }>;
 };
 
 type WeatherBand = "ideal" | "ok" | "poor";
@@ -133,6 +151,16 @@ type CohortStats = {
   fee: MetricStats | null;
   sameDayShare: MetricStats | null;
   soldOutDays: MetricStats | null;
+  /** Share of final tickets already sold 21 days before the event. */
+  pace21: MetricStats | null;
+  /** Share of final tickets already sold 7 days before the event. */
+  pace7: MetricStats | null;
+  /** Ticket revenue / ad spend, only events with linked spend. */
+  roas: MetricStats | null;
+  /** Tickets in the week after a linked mail. Events with a campaign, including quiet ones. */
+  mailOrders: MetricStats | null;
+  /** Tickets around promo posts. Events with those posts, including no lift. */
+  postLift: MetricStats | null;
 };
 
 export type AnomalyBaselines = {
@@ -221,6 +249,29 @@ function yearOf(day: string): number {
   return Number(day.slice(0, 4));
 }
 
+function shiftIso(day: string, delta: number): string {
+  const d = new Date(`${day.slice(0, 10)}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Percent of eventual tickets sold by `daysBefore` the event. Null if the curve starts later. */
+function paceShare(e: AnomalyEventInput, daysBefore: number): number | null {
+  const series = e.tickets.salesByDay;
+  if (!series?.length || e.tickets.sold <= 0 || e.status !== "past") return null;
+  const cutoff = shiftIso(e.day, -daysBefore);
+  let first: string | null = null;
+  let cum = 0;
+  for (const point of series) {
+    const day = point.day.slice(0, 10);
+    if (!day) continue;
+    if (!first || day < first) first = day;
+    if (day <= cutoff) cum += point.sold;
+  }
+  if (!first || first > cutoff) return null;
+  return Math.min(100, (cum / e.tickets.sold) * 100);
+}
+
 function sameDayShare(e: AnomalyEventInput): number | null {
   const sold = e.tickets.sold;
   const same = e.tickets.sameDaySold;
@@ -288,6 +339,11 @@ function emptyCohort(label: string): CohortStats {
     fee: null,
     sameDayShare: null,
     soldOutDays: null,
+    pace21: null,
+    pace7: null,
+    roas: null,
+    mailOrders: null,
+    postLift: null,
   };
 }
 
@@ -301,6 +357,11 @@ function buildCohortStats(
   const fee: number[] = [];
   const sameDay: number[] = [];
   const soldOutDays: number[] = [];
+  const pace21: number[] = [];
+  const pace7: number[] = [];
+  const roas: number[] = [];
+  const mailOrders: number[] = [];
+  const postLift: number[] = [];
 
   for (const e of events) {
     if (e.status !== "past") continue;
@@ -322,6 +383,19 @@ function buildCohortStats(
     if (isSoldOut(e) && e.tickets.soldOutDaysBefore != null) {
       soldOutDays.push(e.tickets.soldOutDaysBefore);
     }
+    const p21 = paceShare(e, 21);
+    const p7 = paceShare(e, 7);
+    if (p21 != null) pace21.push(p21);
+    if (p7 != null) pace7.push(p7);
+    if (e.paid?.roas != null && e.paid.roas > 0 && paidSpendCents(e) >= 5000) {
+      roas.push(e.paid.roas);
+    }
+    if (hasMail(e)) {
+      mailOrders.push(
+        e.emailCampaigns.reduce((sum, mail) => sum + (mail.ordersAfter ?? 0), 0),
+      );
+    }
+    if (promoPosts(e).length > 0) postLift.push(organicLiftSold(e));
   }
 
   return {
@@ -332,6 +406,11 @@ function buildCohortStats(
     fee: metricStats(fee),
     sameDayShare: metricStats(sameDay),
     soldOutDays: metricStats(soldOutDays),
+    pace21: metricStats(pace21),
+    pace7: metricStats(pace7),
+    roas: metricStats(roas),
+    mailOrders: metricStats(mailOrders),
+    postLift: metricStats(postLift),
   };
 }
 
@@ -354,8 +433,17 @@ function fmtPct(n: number): string {
   return `${Math.round(n)}%`;
 }
 
+function weatherCause(kind: WeatherKind): string {
+  if (kind === "wet") return "de regen";
+  if (kind === "cold_wet") return "kou en regen";
+  if (kind === "cold") return "de kou";
+  if (kind === "heat") return "de hitte";
+  if (kind === "windy") return "de wind";
+  return "het weer";
+}
+
 function fmtEur(n: number): string {
-  return `€${Math.round(n)}`;
+  return `€${Math.round(n).toLocaleString("nl-NL")}`;
 }
 
 function fmtCount(n: number): string {
@@ -364,6 +452,19 @@ function fmtCount(n: number): string {
 
 function paidSpendCents(e: AnomalyEventInput): number {
   return e.paid?.spendCents ?? 0;
+}
+
+function fmtRoas(n: number): string {
+  return `${n.toFixed(1)}×`;
+}
+
+function roasPeer(
+  e: AnomalyEventInput,
+  baselines: AnomalyBaselines,
+): { label: string; median: number } | null {
+  const cohort = resolveCohort(e, baselines, "roas");
+  if (!cohort?.roas || cohort.roas.n < MIN_COHORT) return null;
+  return { label: cohort.label, median: cohort.roas.median };
 }
 
 function paidSpendLabel(e: AnomalyEventInput): string | null {
@@ -600,29 +701,33 @@ function detectFill(
         ? "caution"
         : "neutral";
 
+  const usual = fmtPct(cohort.fill.median);
   const text = soldOut
     ? above && Math.abs(delta) >= 6
-      ? `Uitverkocht — voller dan vergelijkbare ${label}`
-      : `Uitverkocht — vergelijkbaar met andere ${label}`
+      ? `Uitverkocht (${fmtPct(fill)}) — meer dan vergelijkbare ${label} (meestal ${usual})`
+      : `Uitverkocht (${fmtPct(fill)}) — in lijn met vergelijkbare ${label} (meestal ${usual})`
     : above
-      ? `Voller dan vergelijkbare ${label}`
-      : `Minder vol dan vergelijkbare ${label}`;
+      ? `${fmtPct(fill)} verkocht — meer dan vergelijkbare ${label} (meestal ${usual})`
+      : `${fmtPct(fill)} verkocht — minder dan vergelijkbare ${label} (meestal ${usual})`;
 
   return {
     text,
     tone,
     dimension: "fill",
     significance: soldOut ? Math.min(1, significance + 0.1) : significance,
-    detail: soldOut
-      ? above && Math.abs(delta) >= 6
-        ? `Uitverkocht op ${fmtPct(fill)}. Vergelijkbare ${label} raken meestal rond ${fmtPct(cohort.fill.median)} vol — dit event deed het dus duidelijk beter.`
-        : `Uitverkocht op ${fmtPct(fill)}. Dat ligt in lijn met vergelijkbare ${label} (meestal ${fmtPct(cohort.fill.median)} vol).`
-      : above
-        ? `Dit event was ${fmtPct(fill)} vol. Vergelijkbare ${label} zitten meestal rond ${fmtPct(cohort.fill.median)} vol.`
-        : `Dit event was ${fmtPct(fill)} vol. Vergelijkbare ${label} zitten meestal rond ${fmtPct(cohort.fill.median)} vol.`,
+    detail: [
+      soldOut
+        ? above && Math.abs(delta) >= 6
+          ? `${fmtPct(fill)} van de kaarten verkocht, uitverkocht. Vergelijkbare ${label} verkopen meestal ${usual}.`
+          : `${fmtPct(fill)} van de kaarten verkocht, uitverkocht. Dat ligt in lijn met vergelijkbare ${label} (meestal ${usual}).`
+        : `${fmtPct(fill)} van de kaarten verkocht. Vergelijkbare ${label} verkopen meestal ${usual}.`,
+      salesContextWhy(e),
+    ]
+      .filter(Boolean)
+      .join(" "),
     facts: facts(
-      ["Dit event", fmtPct(fill)],
-      ["Vergelijkbare " + label, fmtPct(cohort.fill.median)],
+      ["Verkocht", `${fmtPct(fill)} van de capaciteit`],
+      ["Vergelijkbare " + label, usual],
       ["Verkocht", fmtCount(e.tickets.sold)],
       ["Capaciteit", e.tickets.capacity != null ? fmtCount(e.tickets.capacity) : null],
       ["DJ-fees", djFeeLabel(e)],
@@ -751,7 +856,7 @@ function detectCompetition(
 
     if (beat) {
       return {
-        text: `${competeLabel} (${festBit}) maar ${soldOut ? "uitverkocht" : fmtPct(fill)}`,
+        text: `${competeLabel} (${festBit}) maar ${soldOut ? "uitverkocht" : `${fmtPct(fill)} verkocht`}`,
         tone: "positive",
         dimension: "competition",
         significance: Math.min(1, 0.62 + (soldOut ? 0.15 : 0)),
@@ -759,8 +864,8 @@ function detectCompetition(
           ? `Uitverkocht (${fmtPct(fill)}) terwijl er ${festBit} naast speelde. Op zulke drukke avonden raken events meestal rond ${fmtPct(expected)} vol.`
           : `Dit event was ${fmtPct(fill)} vol terwijl er ${festBit} naast speelde. Op zulke drukke avonden zitten events meestal rond ${fmtPct(expected)} vol.`,
         facts: facts(
-          ["Dit event", fmtPct(fill)],
-          ["Drukke avonden", fmtPct(expected)],
+          ["Verkocht", `${fmtPct(fill)} van de capaciteit`],
+          ["Drukke avonden", `${fmtPct(expected)} vol`],
           ["Festivals dezelfde dag", nFest > 0 ? String(nFest) : "0"],
           ["Parties / feestdagen", String(e.competingFestivals.length - nFest)],
         ),
@@ -814,23 +919,25 @@ function detectScan(
   const significance = sigFromPp(delta, 18);
   if (significance < SIGNIFICANCE_FLOOR) return null;
 
-  const weatherHint =
+  const cause =
     e.isOutdoor && e.weather && isPoorWeather(e.weather.kind) && delta < 0
-      ? ` — mogelijk door ${e.weather.label.toLowerCase()}`
-      : "";
+      ? weatherCause(e.weather.kind)
+      : null;
+  const compared = `${fmtPct(scan)} gescand, meestal ${fmtPct(cohort.scan.median)}`;
 
   return {
     text:
       delta < 0
-        ? `Minder bezoekers binnen dan gebruikelijk${weatherHint}`
-        : "Meer bezoekers binnen dan gebruikelijk",
+        ? `Minder bezoekers binnen (${compared})${cause ? ` — mogelijk door ${cause}` : ""}`
+        : `Meer bezoekers binnen dan gebruikelijk (${compared})`,
     tone: delta < 0 ? (scan < 55 ? "caution" : "neutral") : "positive",
     dimension: "scan",
+    weatherKind: cause && e.weather ? e.weather.kind : undefined,
     significance,
     detail:
       delta < 0
         ? `${fmtPct(scan)} van de verkochte kaarten is gescand (${fmtCount(e.tickets.scanned)} van ${fmtCount(e.tickets.sold)}). Bij vergelijkbare ${cohort.label} is dat meestal ${fmtPct(cohort.scan.median)}.${
-            weatherHint ? ` Het weer (${e.weather?.label.toLowerCase()}) kan no-shows verklaren.` : ""
+            cause ? ` ${cause.charAt(0).toUpperCase()}${cause.slice(1)} kan verklaren dat er minder binnenkwam.` : ""
           }`
         : `${fmtPct(scan)} van de verkochte kaarten is gescand (${fmtCount(e.tickets.scanned)} van ${fmtCount(e.tickets.sold)}). Bij vergelijkbare ${cohort.label} is dat meestal ${fmtPct(cohort.scan.median)}.`,
     facts: facts(
@@ -867,23 +974,34 @@ function detectSocial(
     const organicLabel =
       level === 5 ? "Sterke social push" : "Duidelijke social push";
     if (lift >= 40) {
+      const liftPeer = resolveCohort(e, baselines, "postLift");
+      const usualLift = liftPeer?.postLift;
+      const above =
+        usualLift != null &&
+        usualLift.n >= MIN_COHORT &&
+        lift >= usualLift.median * 1.5 &&
+        lift >= usualLift.median + 30;
+      if (above && usualLift && liftPeer) {
+      const usual = fmtCount(Math.round(usualLift.median));
       return {
-        text: `${organicLabel} — rond die posts +${fmtCount(lift)} tickets`,
+        text: `${organicLabel} — +${fmtCount(lift)} tickets rond posts, meestal +${usual}`,
         tone: "positive",
         dimension: "social",
-        significance: Math.min(1, 0.5 + Math.min(0.4, lift / 400)),
-        detail: `${posts.length} posts vóór of op de eventdag bereikten ${fmtCount(reach)} mensen. In de dagen rond die posts gingen er ${fmtCount(lift)} extra tickets weg — dat is een samenhang, geen harde toewijzing.`,
+        significance: Math.min(1, 0.5 + Math.min(0.4, (lift - usualLift.median) / 400)),
+        detail: `${posts.length} posts vóór of op de eventdag bereikten ${fmtCount(reach)} mensen. In de dagen rond die posts gingen er ${fmtCount(lift)} extra tickets weg. Bij vergelijkbare ${liftPeer.label} met posts is dat meestal +${usual}. Dat is een samenhang, geen harde toewijzing.`,
         facts: facts(
           ["Promo / eventdag-posts", String(posts.length)],
           ["Bereik", fmtCount(reach)],
           ["Tickets rond die posts", "+" + fmtCount(lift)],
+          ["Meestal rond posts", "+" + usual],
           ["Bezetting", fill != null ? fmtPct(fill) : null],
         ),
       };
+      }
     }
     if (fill != null && highFill != null && fill <= highFill - 12 && e.status === "past") {
       return {
-        text: `${organicLabel}, maar de verkoop bleef achter`,
+        text: `${organicLabel}, maar ${fmtPct(fill)} verkocht (vergelijkbare push meestal ${fmtPct(highFill)})`,
         tone: "caution",
         dimension: "social",
         significance: sigFromPp(highFill - fill, 22),
@@ -893,20 +1011,6 @@ function detectSocial(
           ["Events met sterke social", fmtPct(highFill)],
           ["Promo-posts", String(posts.length)],
           ["Bereik", fmtCount(reach)],
-        ),
-      };
-    }
-    if (posts.length >= 2) {
-      return {
-        text: `${organicLabel} — ${posts.length} posts vóór het event`,
-        tone: "positive",
-        dimension: "social",
-        significance: 0.4,
-        detail: `${posts.length} posts vóór het event bereikten ${fmtCount(reach)} mensen. In de dagen rond die posts is geen duidelijke extra verkoop te zien.`,
-        facts: facts(
-          ["Promo-posts", String(posts.length)],
-          ["Bereik", fmtCount(reach)],
-          ["Bezetting", fill != null ? fmtPct(fill) : null],
         ),
       };
     }
@@ -973,17 +1077,33 @@ function detectEmail(
     };
   }
 
+  const mailPeer = resolveCohort(e, baselines, "mailOrders");
+  const usualOrders = mailPeer?.mailOrders;
+  const usualOrdersLabel =
+    usualOrders && usualOrders.n >= MIN_COHORT
+      ? fmtCount(Math.round(usualOrders.median))
+      : null;
+
   if (orders >= 25 && (isSoldOut(e) || (fill != null && fill >= 80))) {
+    if (usualOrdersLabel == null || usualOrders == null || mailPeer == null) return null;
+    const high =
+      orders >= usualOrders.median * 1.5 && orders >= usualOrders.median + 50;
+    if (!high) return null;
+    const mailWord = e.emailCampaigns.length === 1 ? "mail" : "mails";
     return {
-      text: `${e.emailCampaigns.length} mail · ~${fmtCount(orders)} orders erna`,
+      text: `${e.emailCampaigns.length} ${mailWord} · ~${fmtCount(orders)} orders erna, meestal ~${usualOrdersLabel}`,
       tone: "positive",
       dimension: "email",
-      significance: Math.min(1, 0.42 + Math.min(0.35, orders / 200)),
-      detail: `${e.emailCampaigns.length === 1 ? "Na de mail" : "Na de mails"} gingen er ongeveer ${fmtCount(orders)} tickets weg in de week erna${fill != null ? ` (event ${fmtPct(fill)} vol)` : ""}. Dat is een samenhang, geen harde toewijzing.`,
+      significance: Math.min(
+        1,
+        0.5 + Math.min(0.35, (orders - usualOrders.median) / 800),
+      ),
+      detail: `${e.emailCampaigns.length === 1 ? "Na de mail" : "Na de mails"} gingen er ongeveer ${fmtCount(orders)} tickets weg in de week erna${fill != null ? ` (${fmtPct(fill)} verkocht)` : ""}. Bij vergelijkbare ${mailPeer.label} met een mail is dat meestal ongeveer ${usualOrdersLabel}. Dat is een samenhang, geen harde toewijzing.`,
       facts: facts(
         ["Campagnes", String(e.emailCampaigns.length)],
         ["Tickets in de week erna", "~" + fmtCount(orders)],
-        ["Bezetting", fill != null ? fmtPct(fill) : null],
+        ["Meestal na een mail", "~" + usualOrdersLabel],
+        ["Verkocht", fill != null ? fmtPct(fill) : null],
       ),
     };
   }
@@ -996,15 +1116,18 @@ function detectEmail(
     fill <= withMail - 10
   ) {
     return {
-      text: "Mail gekoppeld, nauwelijks orders erna",
+      text: usualOrdersLabel
+        ? `Mail gekoppeld, ~${fmtCount(orders)} orders erna — meestal ~${usualOrdersLabel}`
+        : "Mail gekoppeld, nauwelijks orders erna",
       tone: "neutral",
       dimension: "email",
       significance: sigFromPp(withMail - fill, 24),
-      detail: `Er ${e.emailCampaigns.length === 1 ? "is een mailcampagne" : `zijn ${e.emailCampaigns.length} mailcampagnes`} gekoppeld, maar in de week erna gingen er maar ongeveer ${fmtCount(orders)} tickets weg. Dit event was ${fmtPct(fill)} vol; events mét mail zitten meestal rond ${fmtPct(withMail)} vol.`,
+      detail: `Er ${e.emailCampaigns.length === 1 ? "is een mailcampagne" : `zijn ${e.emailCampaigns.length} mailcampagnes`} gekoppeld, maar in de week erna gingen er maar ongeveer ${fmtCount(orders)} tickets weg${usualOrdersLabel ? `. Bij vergelijkbare ${mailPeer?.label ?? "events"} met een mail is dat meestal ongeveer ${usualOrdersLabel}` : ""}. ${fmtPct(fill)} verkocht; events mét mail zitten meestal rond ${fmtPct(withMail)}.`,
       facts: facts(
         ["Campagnes", String(e.emailCampaigns.length)],
         ["Tickets in de week erna", "~" + fmtCount(orders)],
-        ["Dit event", fmtPct(fill)],
+        ["Meestal na een mail", usualOrdersLabel ? "~" + usualOrdersLabel : null],
+        ["Verkocht", fmtPct(fill)],
         ["Events mét mail", fmtPct(withMail)],
       ),
     };
@@ -1190,6 +1313,121 @@ function detectDjFees(
   return null;
 }
 
+/** Why a ticket-ROAS stands out: what the ads reported, and what else was going on. */
+function paidRoasWhy(e: AnomalyEventInput, fill: number): string {
+  const purchases = e.paid?.purchases ?? 0;
+  const sold = e.tickets.sold;
+  const share =
+    sold > 0 && purchases > 0 ? Math.min(100, (purchases / sold) * 100) : 0;
+  const lift = organicLiftSold(e);
+  const posts = promoPosts(e).length;
+  const lines: string[] = [];
+
+  if (purchases > 0 && share >= 18) {
+    lines.push(
+      `De ads telden ${fmtCount(purchases)} aankopen, ongeveer ${fmtPct(share)} van de verkochte kaarten.`,
+    );
+  } else {
+    lines.push(
+      `De ads telden ${purchases > 0 ? `maar ${fmtCount(purchases)} aankopen` : "geen aankopen"}${sold > 0 ? ` op ${fmtCount(sold)} verkochte kaarten` : ""}. De ROAS deelt de hele ticketomzet door de spend, niet alleen de aankopen die de platforms aan de ads geven.`,
+    );
+  }
+
+  if (lift >= 20 && posts > 0) {
+    lines.push(
+      `Rond ${posts === 1 ? "de promo-post" : `${posts} promo-posts`} gingen er +${fmtCount(lift)} tickets weg.`,
+    );
+  }
+
+  const soldOut = isSoldOut(e) || fill >= 98;
+  const days = e.tickets.soldOutDaysBefore;
+  if (soldOut && days != null && days >= 2) {
+    lines.push(`De kaarten waren ${days} dagen vóór de eventdag al op.`);
+  } else if (soldOut) {
+    lines.push("Het event raakte uitverkocht, dus de ticketomzet in die deling is hoog.");
+  }
+
+  const around: string[] = [];
+  if (e.isOutdoor && e.weather && isPoorWeather(e.weather.kind)) {
+    around.push(weatherCause(e.weather.kind));
+  } else if (e.isOutdoor && e.weather?.kind === "ideal") {
+    around.push("mooi weer");
+  }
+  if (e.competitionLevel != null && isHighImpact(e.competitionLevel)) {
+    const festivals = e.competingFestivals.filter((c) => c.kind === "festival").length;
+    around.push(
+      festivals > 0
+        ? `${festivals} festival${festivals === 1 ? "" : "s"} dezelfde dag`
+        : "een drukke stad",
+    );
+  } else if (e.competitionLevel != null && isLowImpact(e.competitionLevel)) {
+    around.push("weinig concurrentie");
+  }
+  if (e.djFeeInvestmentLevel != null && isHighImpact(e.djFeeInvestmentLevel)) {
+    around.push("hoge DJ-fees");
+  } else if (e.djFeeInvestmentLevel != null && isLowImpact(e.djFeeInvestmentLevel)) {
+    around.push("lage DJ-fees");
+  }
+  if (around.length > 0) lines.push(`Daarnaast: ${listNl(around)}.`);
+
+  return lines.join(" ");
+}
+
+/** Other signals worth naming next to a sales gap. Null unless at least two are notable. */
+function salesContextWhy(e: AnomalyEventInput): string | null {
+  const bits: string[] = [];
+  const spend = paidSpendCents(e);
+  const purchases = e.paid?.purchases ?? 0;
+  const lift = organicLiftSold(e);
+  const posts = promoPosts(e).length;
+  if (spend >= 15000) {
+    bits.push(
+      purchases > 0
+        ? `${fmtEur(spend / 100)} ad spend (${fmtCount(purchases)} platform-aankopen)`
+        : `${fmtEur(spend / 100)} ad spend, geen platform-aankopen`,
+    );
+  }
+  if (lift >= 20 && posts > 0) bits.push(`+${fmtCount(lift)} tickets rond de posts`);
+  if (e.isOutdoor && e.weather && isPoorWeather(e.weather.kind)) {
+    bits.push(weatherCause(e.weather.kind));
+  } else if (e.isOutdoor && e.weather?.kind === "ideal") {
+    bits.push("mooi weer");
+  }
+  if (e.competitionLevel != null && isHighImpact(e.competitionLevel)) {
+    const festivals = e.competingFestivals.filter((c) => c.kind === "festival").length;
+    bits.push(
+      festivals > 0
+        ? `${festivals} festival${festivals === 1 ? "" : "s"} dezelfde dag`
+        : "een drukke stad",
+    );
+  } else if (e.competitionLevel != null && isLowImpact(e.competitionLevel)) {
+    bits.push("weinig concurrentie");
+  }
+  if (e.djFeeInvestmentLevel != null && isHighImpact(e.djFeeInvestmentLevel)) {
+    bits.push("hoge DJ-fees");
+  } else if (e.djFeeInvestmentLevel != null && isLowImpact(e.djFeeInvestmentLevel)) {
+    bits.push("lage DJ-fees");
+  }
+  if (bits.length < 2) return null;
+  return `Meespelend: ${listNl(bits)}.`;
+}
+
+function paidRoasChipHint(e: AnomalyEventInput, fill: number): string {
+  const purchases = e.paid?.purchases ?? 0;
+  const sold = e.tickets.sold;
+  const share = sold > 0 && purchases > 0 ? (purchases / sold) * 100 : 0;
+  const lift = organicLiftSold(e);
+  const days = e.tickets.soldOutDaysBefore;
+  if (purchases === 0 || share < 15) {
+    return `, met ${fmtCount(purchases)} platform-aankopen`;
+  }
+  if (days != null && days >= 2 && (isSoldOut(e) || fill >= 98)) {
+    return ` — kaarten ${days}d eerder op`;
+  }
+  if (lift >= 25) return ` — social +${fmtCount(lift)}`;
+  return "";
+}
+
 function detectPaid(
   e: AnomalyEventInput,
   baselines: AnomalyBaselines,
@@ -1206,7 +1444,9 @@ function detectPaid(
   const soldOut = isSoldOut(e);
   const highFill = peerFill(baselines.fillByPaid, [4, 5]);
   const lowFill = peerFill(baselines.fillByPaid, [1, 2]);
-  const roasLabel = roas != null ? `${roas.toFixed(1)}×` : null;
+  const roasLabel = roas != null ? fmtRoas(roas) : null;
+  const peer = roasPeer(e, baselines);
+  const roasAvgLabel = peer ? fmtRoas(peer.median) : null;
 
   if (level != null && isHighImpact(level)) {
     const investLabel =
@@ -1214,20 +1454,25 @@ function detectPaid(
     if (soldOut || fill >= 92) {
       return {
         text:
-          roas != null && roas >= 2
-            ? `${investLabel} — ticket-ROAS ${roas.toFixed(1)}×`
-            : `${investLabel} — toch vol`,
+          roas != null && roas >= 2 && peer
+            ? `${investLabel} — ROAS ${fmtRoas(roas)} tegen ${fmtRoas(peer.median)} gemiddeld${paidRoasChipHint(e, fill)}`
+            : roas != null && roas >= 2
+              ? `${investLabel} — ticket-ROAS ${fmtRoas(roas)}${paidRoasChipHint(e, fill)}`
+              : `${investLabel} — toch vol`,
         tone: "positive",
         dimension: "paid",
         significance: 0.5,
-        detail: `${investLabel.toLowerCase()} t.o.v. andere events (${spendLabel} · ${ads} ads). Dit event was ${fmtPct(fill)} vol${roasLabel ? ` · ticketomzet / ad spend = ${roasLabel}` : ""}. ROAS is ticketomzet tegenover ad spend, geen winst.`,
+        detail: `${investLabel.toLowerCase()} t.o.v. andere events (${spendLabel} · ${ads} ads). ${fmtPct(fill)} van de kaarten verkocht${roasLabel ? `. Ticketomzet / ad spend = ${roasLabel}` : ""}${peer ? `, vergelijkbare ${peer.label} met ads meestal ${fmtRoas(peer.median)}` : ""}. ${roas != null ? paidRoasWhy(e, fill) : ""}`,
         facts: facts(
           ["Ad-investering", `${level}/5`],
           ["Ad spend", spendLabel],
           ["Ads", String(ads)],
           ["Ticket-ROAS", roasLabel],
+          ["Gemiddeld " + (peer?.label ?? "events"), roasAvgLabel],
+          ["Platform-aankopen", fmtCount(e.paid?.purchases ?? 0)],
+          ["Tickets rond posts", organicLiftSold(e) > 0 ? `+${fmtCount(organicLiftSold(e))}` : null],
           ["DJ-fees", djFeeLabel(e)],
-          ["Bezetting", fmtPct(fill)],
+          ["Verkocht", `${fmtPct(fill)} van de capaciteit`],
         ),
       };
     }
@@ -1249,6 +1494,7 @@ function detectPaid(
           ["Vergelijkbare events", fmtPct(paidPeer)],
           ["Ad spend", spendLabel],
           ["Ticket-ROAS", roasLabel],
+          ["Gemiddeld " + (peer?.label ?? "events"), roasAvgLabel],
           ["DJ-fees", djFeeLabel(e)],
         ),
       };
@@ -1267,38 +1513,56 @@ function detectPaid(
         ["Ad spend", spendLabel],
         ["Bezetting", fmtPct(fill)],
         ["Ticket-ROAS", roasLabel],
+        ["Gemiddeld " + (peer?.label ?? "events"), roasAvgLabel],
         ["Events met lage ad spend", lowFill != null ? fmtPct(lowFill) : null],
       ),
     };
   }
 
   if (roas != null && roas < 1 && spend >= 20000) {
+    const avgBit = peer
+      ? ` Vergelijkbare ${peer.label} met ads zitten meestal rond ${fmtRoas(peer.median)}.`
+      : "";
     return {
-      text: `Ad spend hoger dan ticketomzet (ROAS ${roas.toFixed(1)}×)`,
+      text: peer
+        ? `Ad spend hoger dan ticketomzet — ROAS ${fmtRoas(roas)} tegen ${fmtRoas(peer.median)} gemiddeld`
+        : `Ad spend hoger dan ticketomzet (ROAS ${fmtRoas(roas)})`,
       tone: "caution",
       dimension: "paid",
       significance: Math.min(1, 0.4 + (1 - roas) * 0.35),
-      detail: `Er ging ${spendLabel} naar ads, meer dan de ticketomzet (ROAS ${roas.toFixed(1)}×). Dit event was ${fmtPct(fill)} vol. ROAS is ticketomzet / ad spend — DJ-fees zitten daar niet in.`,
+      detail: `Er ging ${spendLabel} naar ads, meer dan de ticketomzet (ROAS ${fmtRoas(roas)}). ${fmtPct(fill)} van de kaarten verkocht.${avgBit} ${paidRoasWhy(e, fill)}`,
       facts: facts(
         ["Ad spend", spendLabel],
-        ["Ticket-ROAS", roasLabel],
-        ["Bezetting", fmtPct(fill)],
+        ["Ticket-ROAS dit event", roasLabel],
+        ["Gemiddeld " + (peer?.label ?? "events"), roasAvgLabel],
+        ["Verkocht", `${fmtPct(fill)} van de capaciteit`],
         ["DJ-fees", djFeeLabel(e)],
       ),
     };
   }
 
   if (roas != null && roas >= 4 && spend >= 10000 && (soldOut || fill >= 80)) {
+    if (!peer || roas < peer.median * 1.8) return null;
+    const purchases = e.paid?.purchases ?? 0;
+    const purchaseShare =
+      e.tickets.sold > 0 ? (purchases / e.tickets.sold) * 100 : 0;
+    const adsDidntCarry = purchases === 0 || purchaseShare < 15;
+    const text = adsDidntCarry
+      ? `${spendLabel} ad spend, ${fmtCount(purchases)} platform-aankopen — ROAS ${fmtRoas(roas)} tegen ${fmtRoas(peer.median)} gemiddeld`
+      : `${spendLabel} ad spend, ${fmtPct(fill)} verkocht — ROAS ${fmtRoas(roas)} tegen ${fmtRoas(peer.median)} gemiddeld`;
     return {
-      text: `Sterke ticket-ROAS (${roas.toFixed(1)}×)`,
+      text,
       tone: "positive",
       dimension: "paid",
-      significance: Math.min(1, 0.42 + Math.min(0.3, (roas - 4) / 10)),
-      detail: `${spendLabel} ad spend leverde ongeveer ${roas.toFixed(1)}× aan ticketomzet op. Dit event was ${fmtPct(fill)} vol. Dat is een verhouding, geen bewezen causaliteit.`,
+      significance: Math.min(1, 0.5 + Math.min(0.25, (roas / peer.median - 1) / 8)),
+      detail: `Ticketomzet gedeeld door ad spend is ${fmtRoas(roas)}. Vergelijkbare ${peer.label} met ads zitten meestal rond ${fmtRoas(peer.median)}. ${paidRoasWhy(e, fill)}`,
       facts: facts(
+        ["Ticket-ROAS dit event", fmtRoas(roas)],
+        ["Gemiddeld " + peer.label, fmtRoas(peer.median)],
         ["Ad spend", spendLabel],
-        ["Ticket-ROAS", roasLabel],
-        ["Bezetting", fmtPct(fill)],
+        ["Platform-aankopen", fmtCount(purchases)],
+        ["Tickets rond posts", organicLiftSold(e) > 0 ? `+${fmtCount(organicLiftSold(e))}` : null],
+        ["Verkocht", `${fmtPct(fill)} van de capaciteit`],
         ["DJ-fees", djFeeLabel(e)],
       ),
     };
@@ -1320,7 +1584,7 @@ function detectInvestment(
   const level = e.investmentLevel ?? null;
   if (level == null) return null;
   const combined = feeMid + paidEur;
-  const spendLabel = `${djFeeLabel(e) ?? "—"} DJ · ${fmtEur(paidEur)} ads`;
+  const spendLabel = `${djFeeLabel(e) ?? "—"} DJ · ${fmtEur(paidEur)} ad spend`;
   const soldOut = isSoldOut(e);
   const highFill = peerFill(baselines.fillByInvestment, [4, 5]);
   const lowFill = peerFill(baselines.fillByInvestment, [1, 2]);
@@ -1400,14 +1664,14 @@ function detectSoldout(
     // Similar events often sell out, this one didn't — only if most peers did.
     if (cohort.soldOutDays.median < 1) return null;
     return {
-      text: `Niet uitverkocht — vergelijkbare events waren eerder vol`,
+      text: `Niet uitverkocht — vergelijkbare events waren de kaarten eerder kwijt`,
       tone: "caution",
       dimension: "soldout",
       significance: 0.42,
-      detail: `Dit event was ${fmtPct(e.tickets.fillPct)} vol en niet uitverkocht. Vergelijkbare ${cohort.label} die wél uitverkochten, waren gemiddeld ${Math.round(cohort.soldOutDays.median)} dagen vóór start al vol.`,
+      detail: `Dit event verkocht ${fmtPct(e.tickets.fillPct)} van de kaarten en raakte niet uitverkocht. Bij vergelijkbare ${cohort.label} die wél uitverkochten, waren de kaarten gemiddeld ${Math.round(cohort.soldOutDays.median)} dagen vóór de eventdag al op.`,
       facts: facts(
-        ["Bezetting", fmtPct(e.tickets.fillPct)],
-        ["Vergelijkbaar uitverkocht", `${Math.round(cohort.soldOutDays.median)}d vóór`],
+        ["Kaarten verkocht", fmtPct(e.tickets.fillPct)],
+        ["Vergelijkbaar uitverkocht", `${Math.round(cohort.soldOutDays.median)}d vóór de eventdag`],
       ),
     };
   }
@@ -1429,8 +1693,8 @@ function detectSoldout(
       significance: 0.92,
       detail:
         second != null
-          ? `Dit event was het snelst uitverkocht in ${year}: ${days} dagen vóór start vol. De nummer twee was ${second} dagen van tevoren vol.`
-          : `Dit event was het snelst uitverkocht in ${year}: ${days} dagen vóór start vol.`,
+          ? `Dit event was het snelst uitverkocht in ${year}: ${days} dagen vóór de eventdag waren de kaarten op. De nummer twee was ${second} dagen van tevoren uitverkocht.`
+          : `Dit event was het snelst uitverkocht in ${year}: ${days} dagen vóór de eventdag waren de kaarten op.`,
       facts: facts(
         ["Uitverkocht", `${days}d vóór`],
         ["Nummer twee", second != null ? `${second}d vóór` : null],
@@ -1466,8 +1730,8 @@ function detectSoldout(
     significance: Math.min(1, 0.35 + Math.abs(delta) / 20),
     detail:
       delta > 0
-        ? `Uitverkocht ${days} dagen vóór start. Uitverkochte ${cohort.label} zijn meestal ${Math.round(cohort.soldOutDays.median)} dagen van tevoren vol.`
-        : `Uitverkocht ${days} dagen vóór start — later dan gebruikelijk. Uitverkochte ${cohort.label} zijn meestal ${Math.round(cohort.soldOutDays.median)} dagen van tevoren vol.`,
+        ? `De kaarten waren ${days} dagen vóór de eventdag op. Uitverkochte ${cohort.label} zijn meestal ${Math.round(cohort.soldOutDays.median)} dagen van tevoren uitverkocht.`
+        : `De kaarten waren ${days} dagen vóór de eventdag op — later dan gebruikelijk. Uitverkochte ${cohort.label} zijn meestal ${Math.round(cohort.soldOutDays.median)} dagen van tevoren uitverkocht.`,
     facts: facts(
       ["Dit event", `${days}d vóór`],
       ["Vergelijkbare " + cohort.label, `${Math.round(cohort.soldOutDays.median)}d vóór`],
@@ -1527,24 +1791,538 @@ const DETECTORS: Array<
   detectSameDay,
 ];
 
+/** Topics the combined story already explains, so they don't get a second chip. */
+const STORY_COVERS = new Set<AnomalyDimension>([
+  "fill",
+  "weather",
+  "competition",
+  "social",
+  "dj_fees",
+  "paid",
+  "investment",
+]);
+
+function listNl(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  if (items.length === 2) return `${items[0]} en ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")} en ${items[items.length - 1]}`;
+}
+
+function organicLiftSold(e: AnomalyEventInput): number {
+  return promoPosts(e).reduce((sum, post) => sum + (post.ticketLiftSold ?? 0), 0);
+}
+
+function paidNearEvent(e: AnomalyEventInput): boolean {
+  const windowStart = shiftIso(e.day, -14);
+  const ads = e.paidAds ?? [];
+  if (ads.length > 0) {
+    return ads.some((ad) => {
+      const day = (ad.dateStart ?? ad.publishedAt ?? "").slice(0, 10);
+      return Boolean(day) && day >= windowStart && day <= e.day && ad.spendCents > 0;
+    });
+  }
+  return paidSpendCents(e) >= 15000;
+}
+
+type StoryRead = {
+  sold: number;
+  fill: number;
+  fillDelta: number;
+  soldOut: boolean;
+  cohortLabel: string;
+  cohortFill: number;
+  weatherPhrase: string | null;
+  weatherAdverse: boolean;
+  weatherFavorable: boolean;
+  competitionPhrase: string | null;
+  competitionAdverse: boolean;
+  competitionFavorable: boolean;
+  organicPosts: number;
+  organicLift: number;
+  organicStrong: boolean;
+  paidSpendEur: number;
+  paidPurchases: number;
+  purchaseShare: number | null;
+  paidSpendHigh: boolean;
+  paidWeak: boolean;
+  paidCarried: boolean;
+  paidNear: boolean;
+  djHigh: boolean;
+  djLow: boolean;
+  djLabel: string | null;
+  pace7: number | null;
+  pace7Peer: number | null;
+  festivalNames: string[];
+};
+
+function weatherStoryBit(e: AnomalyEventInput): {
+  phrase: string;
+  adverse: boolean;
+  favorable: boolean;
+} | null {
+  if (!e.isOutdoor || !e.weather || e.weather.kind === "ok") return null;
+  if (e.weather.kind === "ideal") {
+    return { phrase: "mooi weer", adverse: false, favorable: true };
+  }
+  const phrase =
+    e.weather.kind === "heat"
+      ? "hitte"
+      : e.weather.kind === "wet"
+        ? "regen"
+        : e.weather.kind === "cold_wet"
+          ? "koud en nat weer"
+          : e.weather.kind === "cold"
+            ? "kou"
+            : e.weather.kind === "windy"
+              ? "harde wind"
+              : e.weather.label.toLowerCase();
+  return { phrase, adverse: true, favorable: false };
+}
+
+function competitionStoryBit(e: AnomalyEventInput): {
+  phrase: string;
+  adverse: boolean;
+  favorable: boolean;
+} | null {
+  if (e.competitionLevel == null) return null;
+  const festivals = e.competingFestivals.filter((c) => c.kind === "festival");
+  if (isHighImpact(e.competitionLevel)) {
+    const phrase =
+      festivals.length > 0
+        ? `${festivals.length} festival${festivals.length === 1 ? "" : "s"} dezelfde dag`
+        : "een drukke stad";
+    return { phrase, adverse: true, favorable: false };
+  }
+  if (isLowImpact(e.competitionLevel)) {
+    return { phrase: "weinig concurrentie", adverse: false, favorable: true };
+  }
+  return null;
+}
+
+function readStory(
+  e: AnomalyEventInput,
+  baselines: AnomalyBaselines,
+): StoryRead | null {
+  if (e.status !== "past") return null;
+  const fill = e.tickets.fillPct;
+  if (fill == null || e.tickets.sold <= 0) return null;
+  const cohort = resolveCohort(e, baselines, "fill");
+  if (!cohort?.fill) return null;
+
+  const weather = weatherStoryBit(e);
+  const competition = competitionStoryBit(e);
+  const posts = promoPosts(e);
+  const lift = organicLiftSold(e);
+  const level = e.organicImpactLevel;
+  const organicStrong = (level != null && isHighImpact(level)) || lift >= 40;
+  const spendEur = paidSpendCents(e) / 100;
+  const purchases = e.paid?.purchases ?? 0;
+  const purchaseShare =
+    e.tickets.sold > 0 && purchases > 0
+      ? Math.min(100, (purchases / e.tickets.sold) * 100)
+      : null;
+  const paidLevel = e.paidInvestmentLevel ?? null;
+  const paidSpendHigh =
+    (paidLevel != null && isHighImpact(paidLevel)) || spendEur >= 400;
+  const paidWeak =
+    spendEur >= 200 &&
+    (purchaseShare == null || purchaseShare < 12) &&
+    purchases < 30 &&
+    lift >= 25 &&
+    lift > Math.max(purchases, 1) * 1.5;
+  const paidCarried =
+    purchases >= 30 &&
+    purchaseShare != null &&
+    purchaseShare >= 20 &&
+    lift < purchases * 0.55;
+  const paceCohort = resolveCohort(e, baselines, "pace7");
+
+  return {
+    sold: e.tickets.sold,
+    fill,
+    fillDelta: fill - cohort.fill.median,
+    soldOut: isSoldOut(e),
+    cohortLabel: cohort.label,
+    cohortFill: cohort.fill.median,
+    weatherPhrase: weather?.phrase ?? null,
+    weatherAdverse: weather?.adverse ?? false,
+    weatherFavorable: weather?.favorable ?? false,
+    competitionPhrase: competition?.phrase ?? null,
+    competitionAdverse: competition?.adverse ?? false,
+    competitionFavorable: competition?.favorable ?? false,
+    organicPosts: posts.length,
+    organicLift: lift,
+    organicStrong,
+    paidSpendEur: spendEur,
+    paidPurchases: purchases,
+    purchaseShare,
+    paidSpendHigh,
+    paidWeak,
+    paidCarried,
+    paidNear: paidNearEvent(e),
+    djHigh: e.djFeeInvestmentLevel != null && isHighImpact(e.djFeeInvestmentLevel),
+    djLow: e.djFeeInvestmentLevel != null && isLowImpact(e.djFeeInvestmentLevel),
+    djLabel: djFeeLabel(e),
+    pace7: paceShare(e, 7),
+    pace7Peer: paceCohort?.pace7?.median ?? null,
+    festivalNames: e.competingFestivals
+      .filter((c) => c.kind === "festival")
+      .slice(0, 3)
+      .map((c) => c.name),
+  };
+}
+
+function storyFacts(e: AnomalyEventInput, ctx: StoryRead): AnomalyFact[] {
+  return facts(
+    ["Dit event", fmtPct(ctx.fill)],
+    ["Vergelijkbare " + ctx.cohortLabel, fmtPct(ctx.cohortFill)],
+    ["Weer", e.isOutdoor ? e.weather?.label ?? null : null],
+    ["Concurrentie", ctx.competitionPhrase],
+    ["Festivals", ctx.festivalNames.length ? ctx.festivalNames.join(", ") : null],
+    ["Promo-posts", ctx.organicPosts > 0 ? String(ctx.organicPosts) : "0"],
+    [
+      "Tickets rond posts",
+      ctx.organicLift > 0 ? `+${fmtCount(ctx.organicLift)}` : null,
+    ],
+    ["Ad spend", ctx.paidSpendEur >= 50 ? fmtEur(ctx.paidSpendEur) : "geen"],
+    [
+      "Ad-aankopen",
+      ctx.paidPurchases > 0
+        ? fmtCount(ctx.paidPurchases)
+        : ctx.paidSpendEur >= 50
+          ? "0"
+          : null,
+    ],
+    [
+      "Aandeel via ads",
+      ctx.purchaseShare != null ? fmtPct(ctx.purchaseShare) : null,
+    ],
+    ["DJ-fees", ctx.djLabel],
+    ["Verkocht 7d vóór", ctx.pace7 != null ? fmtPct(ctx.pace7) : null],
+    [
+      "Vergelijkbaar 7d vóór",
+      ctx.pace7Peer != null ? fmtPct(ctx.pace7Peer) : null,
+    ],
+  );
+}
+
+function conditionsSentence(ctx: StoryRead): string | null {
+  const bits = [ctx.weatherPhrase, ctx.competitionPhrase].filter(
+    (bit): bit is string => Boolean(bit),
+  );
+  if (bits.length === 0) return null;
+  return `Omstandigheden: ${listNl(bits)}.`;
+}
+
+function marketingSentence(ctx: StoryRead): string {
+  const bits: string[] = [];
+  if (ctx.paidSpendEur >= 50) {
+    const purchases =
+      ctx.paidPurchases > 0
+        ? `${fmtCount(ctx.paidPurchases)} aankopen`
+        : "geen platform-aankopen";
+    bits.push(`${fmtEur(ctx.paidSpendEur)} ad spend (${purchases})`);
+  } else {
+    bits.push("nauwelijks ad spend");
+  }
+  if (ctx.organicPosts > 0) {
+    const postLabel =
+      ctx.organicPosts === 1 ? "1 promo-post" : `${ctx.organicPosts} promo-posts`;
+    const lift =
+      ctx.organicLift > 0
+        ? ` (+${fmtCount(ctx.organicLift)} tickets eromheen)`
+        : "";
+    bits.push(`${postLabel}${lift}`);
+  } else {
+    bits.push("geen promo-posts vooraf");
+  }
+  if (ctx.djLabel) bits.push(`DJ-fees ${ctx.djLabel}`);
+  return `Marketing en lineup: ${listNl(bits)}.`;
+}
+
+function paceSentence(ctx: StoryRead): string | null {
+  if (ctx.pace7 == null || ctx.pace7Peer == null) return null;
+  const delta = ctx.pace7 - ctx.pace7Peer;
+  if (Math.abs(delta) < 15) return null;
+  if (delta <= -15 && ctx.fillDelta >= -6) {
+    return `Een week van tevoren was ${fmtPct(ctx.pace7)} van de kaarten weg. Bij vergelijkbare ${ctx.cohortLabel} is dat meestal ${fmtPct(ctx.pace7Peer)}. De eindstand haalde dat in.`;
+  }
+  if (delta <= -15) {
+    return `Een week van tevoren was pas ${fmtPct(ctx.pace7)} van de kaarten weg (vergelijkbare ${ctx.cohortLabel}: ${fmtPct(ctx.pace7Peer)}), en de eindstand bleef achter.`;
+  }
+  if (ctx.fillDelta <= -8) {
+    return `Een week van tevoren lag de verkoop voor (${fmtPct(ctx.pace7)} vs ${fmtPct(ctx.pace7Peer)}), daarna vlakte die af.`;
+  }
+  return `Een week van tevoren lag de verkoop voor op vergelijkbare ${ctx.cohortLabel} (${fmtPct(ctx.pace7)} vs ${fmtPct(ctx.pace7Peer)}).`;
+}
+
+function contextCount(flags: boolean[]): number {
+  return flags.filter(Boolean).length;
+}
+
+type StoryDraft = {
+  text: string;
+  tone: AnomalyInsight["tone"];
+  significance: number;
+  kind: "outcome" | "levers" | "pace";
+};
+
+function resilienceDraft(ctx: StoryRead): StoryDraft | null {
+  const pressure = [
+    ctx.weatherAdverse ? ctx.weatherPhrase : null,
+    ctx.competitionAdverse ? ctx.competitionPhrase : null,
+  ].filter((bit): bit is string => Boolean(bit));
+  const adverse = [ctx.weatherAdverse, ctx.competitionAdverse];
+  const contrast = [
+    ctx.paidCarried,
+    ctx.organicStrong && ctx.organicLift >= 25,
+    ctx.djLow && ctx.paidSpendEur < 200,
+    ctx.djHigh,
+    ctx.paidWeak,
+  ];
+  const heldUp =
+    ctx.soldOut || ctx.fill >= Math.min(96, Math.max(80, ctx.cohortFill - 3));
+  if (!heldUp || contextCount([...adverse, ...contrast]) < 2) return null;
+  if (!adverse.some(Boolean)) return null;
+
+  const despite = listNl(pressure);
+  const lead = ctx.soldOut
+    ? `Uitverkocht ondanks ${despite}`
+    : `${fmtPct(ctx.fill)} vol ondanks ${despite}`;
+  let tail: string | null = null;
+  if (ctx.paidCarried) {
+    tail = `${fmtCount(ctx.paidPurchases)} aankopen via ads`;
+  } else if (ctx.organicStrong && ctx.organicLift >= 25) {
+    tail = `social +${fmtCount(ctx.organicLift)} tickets`;
+  } else if (ctx.paidWeak) {
+    tail = "social wel, ads nauwelijks";
+  } else if (ctx.djLow && ctx.paidSpendEur < 200) {
+    tail = ctx.paidSpendEur < 80 ? "lage DJ-fees en weinig ads" : "lage DJ-fees";
+  } else if (ctx.djHigh) {
+    tail = "hoge DJ-fees";
+  }
+
+  return {
+    text: tail ? `${lead} — ${tail}` : lead,
+    tone: "positive",
+    significance: Math.min(0.96, 0.7 + 0.05 * contextCount([...adverse, ...contrast])),
+    kind: "outcome",
+  };
+}
+
+function shortfallDraft(ctx: StoryRead): StoryDraft | null {
+  if (ctx.soldOut || ctx.fillDelta > -12) return null;
+  if (ctx.paidWeak) {
+    const favorableNow = [
+      ctx.weatherFavorable ? ctx.weatherPhrase : null,
+      ctx.competitionFavorable ? ctx.competitionPhrase : null,
+    ].filter((bit): bit is string => Boolean(bit));
+    const nice = favorableNow.length ? ` bij ${listNl(favorableNow)}` : "";
+    const fees = ctx.djHigh ? "Hoge DJ-fees en " : "";
+    return {
+      text: `${fees}${fmtEur(ctx.paidSpendEur)} ad spend, ${fmtCount(ctx.paidPurchases)} aankopen — maar ${fmtPct(ctx.fill)} verkocht${nice}`,
+      tone: "caution",
+      significance: Math.min(0.95, 0.78 + sigFromPp(ctx.fillDelta, 28) * 0.15),
+      kind: "outcome",
+    };
+  }
+  const favorable = [
+    ctx.weatherFavorable ? ctx.weatherPhrase : null,
+    ctx.competitionFavorable ? ctx.competitionPhrase : null,
+  ].filter((bit): bit is string => Boolean(bit));
+  const pressure = ctx.weatherAdverse || ctx.competitionAdverse;
+  const investment = [
+    ctx.djHigh,
+    ctx.paidSpendHigh || ctx.paidWeak,
+    ctx.organicStrong && ctx.organicLift >= 25,
+  ];
+  const favorableCount = favorable.length;
+  const invested = contextCount(investment);
+  if (pressure && ctx.fillDelta > -20) return null;
+  if (favorableCount + invested < 2 && !(pressure && invested >= 1 && ctx.fillDelta <= -20)) {
+    return null;
+  }
+
+  const nice = favorable.length ? ` bij ${listNl(favorable)}` : "";
+  const weak = `maar ${fmtPct(ctx.fill)} verkocht`;
+  let text: string;
+  if (ctx.djHigh && ctx.paidSpendHigh) {
+    text = `Hoge DJ-fees én ${fmtEur(ctx.paidSpendEur)} ad spend, ${weak}${nice}`;
+  } else if (ctx.djHigh) {
+    text = `Hoge DJ-fees, ${weak}${nice}`;
+  } else if (ctx.organicStrong && ctx.paidSpendHigh) {
+    text = `Sterke social en ${fmtEur(ctx.paidSpendEur)} ad spend, ${weak}${nice}`;
+  } else if (ctx.organicStrong) {
+    text = `Sterke social (+${fmtCount(ctx.organicLift)}), ${weak}${nice}`;
+  } else if (ctx.paidSpendHigh && favorable.length >= 1) {
+    text = `${fmtEur(ctx.paidSpendEur)} ad spend, ${weak}${nice}`;
+  } else if (favorable.length >= 2) {
+    text = `${weak} bij ${listNl(favorable)}`;
+  } else {
+    return null;
+  }
+
+  return {
+    text,
+    tone: "caution",
+    significance: Math.min(0.95, 0.74 + sigFromPp(ctx.fillDelta, 28) * 0.2),
+    kind: "outcome",
+  };
+}
+
+function leverDraft(ctx: StoryRead): StoryDraft | null {
+  if (ctx.fillDelta <= -12) return null;
+  if (ctx.paidWeak) {
+    return {
+      text: `Tickets liepen via social (+${fmtCount(ctx.organicLift)}), niet via ads (${fmtCount(ctx.paidPurchases)} aankopen bij ${fmtEur(ctx.paidSpendEur)})`,
+      tone: "neutral",
+      significance: 0.68,
+      kind: "levers",
+    };
+  }
+  if (ctx.paidCarried && (ctx.organicPosts === 0 || ctx.organicLift < 15)) {
+    const share =
+      ctx.purchaseShare != null ? ` (${fmtPct(ctx.purchaseShare)})` : "";
+    const late =
+      ctx.pace7 != null &&
+      ctx.pace7Peer != null &&
+      ctx.pace7 <= ctx.pace7Peer - 18
+        ? ", en de kaarten kwamen laat op gang"
+        : "";
+    return {
+      text: `${fmtCount(ctx.paidPurchases)} van ${fmtCount(ctx.sold)} tickets via ads${share} — posts droegen weinig bij${late}`,
+      tone: "positive",
+      significance: 0.66,
+      kind: "levers",
+    };
+  }
+  return null;
+}
+
+function paceDraft(ctx: StoryRead): StoryDraft | null {
+  if (ctx.pace7 == null || ctx.pace7Peer == null) return null;
+  const delta = ctx.pace7 - ctx.pace7Peer;
+  if (Math.abs(delta) < 18) return null;
+  const attached =
+    ctx.paidNear ||
+    ctx.organicLift >= 20 ||
+    ctx.weatherAdverse ||
+    ctx.weatherFavorable ||
+    ctx.competitionAdverse ||
+    ctx.competitionFavorable;
+  if (!attached) return null;
+
+  if (delta <= -18 && ctx.fillDelta >= -6) {
+    const via =
+      ctx.paidNear && ctx.paidPurchases >= 15
+        ? ` — daarna ${fmtCount(ctx.paidPurchases)} aankopen via ads`
+        : ctx.organicLift >= 20
+          ? ` — daarna social +${fmtCount(ctx.organicLift)}`
+          : ", daarna ingelopen";
+    return {
+      text: `Een week van tevoren achter (${fmtPct(ctx.pace7)} vs ${fmtPct(ctx.pace7Peer)})${via}`,
+      tone: "neutral",
+      significance: Math.min(0.84, 0.6 + sigFromPp(delta, 36) * 0.25),
+      kind: "pace",
+    };
+  }
+  if (delta >= 18 && ctx.fillDelta <= -8) {
+    return {
+      text: `Sterke start (${fmtPct(ctx.pace7)} vs ${fmtPct(ctx.pace7Peer)} een week van tevoren), daarna vlak op ${fmtPct(ctx.fill)}`,
+      tone: "caution",
+      significance: Math.min(0.84, 0.62 + sigFromPp(delta, 36) * 0.2),
+      kind: "pace",
+    };
+  }
+  if (delta <= -18 && ctx.fillDelta <= -8) {
+    const why = ctx.weatherAdverse && ctx.weatherPhrase
+      ? ` bij ${ctx.weatherPhrase}`
+      : ctx.competitionAdverse && ctx.competitionPhrase
+        ? ` bij ${ctx.competitionPhrase}`
+        : "";
+    return {
+      text: `Verkoop liep de hele aanloop achter (${fmtPct(ctx.pace7)} vs ${fmtPct(ctx.pace7Peer)} een week van tevoren)${why}`,
+      tone: "caution",
+      significance: 0.6,
+      kind: "pace",
+    };
+  }
+  return null;
+}
+
+function detectStory(
+  e: AnomalyEventInput,
+  baselines: AnomalyBaselines,
+): AnomalyInsight | null {
+  const ctx = readStory(e, baselines);
+  if (!ctx) return null;
+
+  const outcome = [resilienceDraft(ctx), shortfallDraft(ctx)]
+    .filter((draft): draft is StoryDraft => draft != null)
+    .sort((a, b) => b.significance - a.significance)[0];
+  const best = outcome ?? leverDraft(ctx) ?? paceDraft(ctx);
+  if (!best) return null;
+
+  const pace = paceSentence(ctx);
+  const mentionsSource =
+    best.kind === "levers" ||
+    ctx.paidCarried ||
+    ctx.paidWeak ||
+    ctx.organicLift >= 25;
+  const detail = [
+    `Dit event was ${fmtPct(ctx.fill)} vol. Vergelijkbare ${ctx.cohortLabel} zitten meestal rond ${fmtPct(ctx.cohortFill)} vol.`,
+    conditionsSentence(ctx),
+    marketingSentence(ctx),
+    best.kind === "pace" ? null : pace,
+    mentionsSource
+      ? "Dat is een samenhang tussen verkoop, posts en ads, geen harde toewijzing."
+      : null,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join(" ");
+
+  return {
+    text: best.text,
+    tone: best.tone,
+    dimension: "story",
+    significance: best.significance,
+    detail,
+    facts: storyFacts(e, ctx),
+    coversTiming: best.kind === "pace" || pace != null,
+  };
+}
+
 /**
- * Ranked anomaly insights for one event. Caps at 5, drops weak signals.
- * At most one insight per dimension.
+ * Ranked anomaly insights for one event.
+ * A combined story leads when sales diverge from the other signals.
+ * Chips that repeat that story are dropped. Otherwise up to 5 single-topic chips.
  */
 export function detectAnomalies(
   event: AnomalyEventInput,
   baselines: AnomalyBaselines,
 ): AnomalyInsight[] {
-  const found: AnomalyInsight[] = [];
+  const story = detectStory(event, baselines);
+  const rest: AnomalyInsight[] = [];
   for (const detect of DETECTORS) {
     const hit = detect(event, baselines);
-    if (hit && hit.significance >= SIGNIFICANCE_FLOOR) {
-      found.push(hit);
+    if (!hit || hit.significance < SIGNIFICANCE_FLOOR) continue;
+    if (story) {
+      if (STORY_COVERS.has(hit.dimension)) continue;
+      if (hit.dimension === "soldout" && (story.coversTiming || hit.significance < 0.85)) {
+        continue;
+      }
+      if (hit.dimension === "same_day" && (story.coversTiming || hit.significance < 0.7)) {
+        continue;
+      }
     }
+    rest.push(hit);
   }
 
-  found.sort((a, b) => b.significance - a.significance);
-  return found.slice(0, MAX_INSIGHTS);
+  rest.sort((a, b) => b.significance - a.significance);
+  if (story && story.significance >= SIGNIFICANCE_FLOOR) {
+    return [story, ...rest].slice(0, 3);
+  }
+  return rest.slice(0, MAX_INSIGHTS);
 }
 
 /** Apply baselines + detection across a list (mutates `insights` via callback). */

@@ -28,6 +28,8 @@ import {
   Euro,
   TrendingUp,
   Clock,
+  Disc3,
+  Layers,
   X,
   BadgeEuro,
   Megaphone,
@@ -181,7 +183,7 @@ function weatherIcon(kind: WeatherKind) {
 }
 
 function insightChipIcon(insight: AnomalyInsight) {
-  if (insight.dimension === "weather") {
+  if (insight.dimension === "weather" || insight.weatherKind) {
     return weatherIcon(insight.weatherKind ?? "ok");
   }
   if (insight.dimension === "fill") return Ticket;
@@ -189,11 +191,12 @@ function insightChipIcon(insight: AnomalyInsight) {
   if (insight.dimension === "scan") return ScanLine;
   if (insight.dimension === "social") return Share2;
   if (insight.dimension === "pricing") return Euro;
-  if (insight.dimension === "dj_fees") return BadgeEuro;
+  if (insight.dimension === "dj_fees") return Disc3;
   if (insight.dimension === "paid") return Megaphone;
   if (insight.dimension === "investment") return BadgeEuro;
   if (insight.dimension === "soldout") return TrendingUp;
   if (insight.dimension === "same_day") return Clock;
+  if (insight.dimension === "story") return Layers;
   return Ticket;
 }
 
@@ -210,6 +213,7 @@ const INSIGHT_DIMENSION_LABEL: Record<AnomalyInsight["dimension"], string> = {
   investment: "Investering",
   soldout: "Uitverkocht",
   same_day: "Last-minute",
+  story: "Samenhang",
 };
 
 const GEMINI_SRC = "/social-icons/Google_Gemini_icon_2025.svg.webp";
@@ -290,6 +294,24 @@ function InsightDeepDive({
   if (insight.dimension === "competition") {
     const names = event.competingFestivals.slice(0, 5).map((c) => c.name);
     if (names.length) extras.push(`Zelfde dag: ${names.join(", ")}`);
+  }
+  if (insight.dimension === "story") {
+    if (event.isOutdoor && event.weather) {
+      const bits = [
+        event.weather.sky,
+        event.weather.tempMinC != null && event.weather.tempMaxC != null
+          ? `${Math.round(event.weather.tempMinC)}–${Math.round(event.weather.tempMaxC)}°`
+          : null,
+        event.weather.precipMm != null && event.weather.precipMm > 0
+          ? `${Math.round(event.weather.precipMm)} mm regen`
+          : null,
+      ].filter(Boolean);
+      if (bits.length) extras.push(bits.join(" · "));
+    }
+    const names = event.competingFestivals.slice(0, 5).map((c) => c.name);
+    if (names.length) extras.push(`Zelfde dag: ${names.join(", ")}`);
+    const paidLine = paidSummaryLine(event);
+    if (!paidLine.startsWith("Nog geen")) extras.push(paidLine);
   }
   if (insight.dimension === "fill" && event.tickets.lastWeekSold != null) {
     extras.push(
