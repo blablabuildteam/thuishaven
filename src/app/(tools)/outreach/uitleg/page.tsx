@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { hasApolloConfig } from "@/lib/integrations/apollo/client";
 import { hasKvkConfig } from "@/lib/integrations/kvk";
@@ -14,237 +13,301 @@ import {
   outreachTestSendBlockReason,
 } from "@/lib/outreach/send-policy";
 import { MAIL_CAMPAIGN_ANGLES } from "@/lib/outreach/mail-angle";
+import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Hoe het werkt" };
 export const dynamic = "force-dynamic";
 
-function Conn({
-  ok,
-  label,
-  detail,
-}: {
-  ok: boolean;
-  label: string;
-  detail: string;
-}) {
-  return (
-    <li className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border py-3 last:border-0">
-      <div className="min-w-0">
-        <p className="text-sm font-medium text-text">{label}</p>
-        <p className="text-sm text-text-muted">{detail}</p>
-      </div>
-      <StatusBadge tone={ok ? "success" : "danger"}>
-        {ok ? "Gekoppeld" : "Ontbreekt"}
-      </StatusBadge>
-    </li>
-  );
-}
-
 const FLOW = [
   {
-    n: "1",
+    n: "01",
     title: "Lijst bijwerken",
     href: "/outreach/lijst-bijwerken",
-    body: "Apollo haalt mid-size bedrijven in de AMS-ring (~50 km). Daarna vullen we automatisch aan: medewerkers (Apollo), oprichtingsdatum/jubileum (KvK), contactpersonen (Apollo), e-mail (Hunter of website).",
+    verb: "Ophalen & aanvullen",
+    body: "Apollo haalt mid-size bedrijven in de AMS-ring. Daarna automatisch: mdw → KvK (jubileum) → contacten → e-mail.",
   },
   {
-    n: "2",
+    n: "02",
     title: "Bedrijven",
     href: "/outreach/crm",
-    body: "Gefilterde CRM-lijst met invalshoeken (jubileum, seizoen, funding, recordjaar, algemeen). Open een dossier voor contacten, notities en geschiedenis.",
+    verb: "Kiezen & filteren",
+    body: "CRM met invalshoeken. Open een dossier voor contacten, notities en geschiedenis.",
   },
   {
-    n: "3",
+    n: "03",
     title: "Mailen",
     href: "/outreach/emails",
-    body: "Kies bedrijf + invalshoek, genereer een draft in Reijner-toon, stuur een test naar team@. Live naar prospects staat bewust dicht.",
+    verb: "Schrijven & testen",
+    body: "Bedrijf + invalshoek → draft in Reijner-toon → test naar team@. Live prospects blijven dicht.",
   },
   {
-    n: "4",
+    n: "04",
     title: "Resultaten",
     href: "/outreach/analytics",
-    body: "Opens/clicks komen via Brevo-webhook. Replies log je handmatig (ze landen in evenement@) — dan tellen ze mee en kunnen warme leads ontstaan.",
+    verb: "Meten & opvolgen",
+    body: "Opens via Brevo. Replies log je handmatig (evenement@) → KPIs, follow-up, warme leads.",
   },
   {
-    n: "5",
-    title: "Agenda (optioneel)",
+    n: "05",
+    title: "Agenda",
     href: "/outreach/beschikbaarheid",
-    body: "Selecteer dagen, kies status (open / in optie / bezet…), pas toe. Open dagen verschijnen op de publieke link in mails.",
+    verb: "Optioneel",
+    body: "Selecteer dagen, kies status, pas toe. Open slots komen in de mail-link.",
+  },
+] as const;
+
+const CONNECTIONS = [
+  {
+    key: "apollo",
+    label: "Apollo",
+    role: "Zoeken · mdw · decision makers",
+  },
+  {
+    key: "kvk",
+    label: "KvK",
+    role: "Oprichtingsdatum · jubileum · vestiging",
+  },
+  {
+    key: "hunter",
+    label: "Hunter",
+    role: "E-mail bij contact (anders website)",
+  },
+  {
+    key: "brevo",
+    label: "Brevo",
+    role: "Versturen + tracking",
+  },
+  {
+    key: "webhook",
+    label: "Webhook",
+    role: "Opens / clicks → Resultaten",
+  },
+  {
+    key: "ai",
+    label: "AI",
+    role: "Optioneel — templates werken ook",
   },
 ] as const;
 
 export default function OutreachUitlegPage() {
-  const apollo = hasApolloConfig();
-  const kvk = hasKvkConfig();
-  const hunter = hasHunterConfig();
-  const brevo = Boolean(getOutreachBrevoKey() || getBrevoKey());
-  const webhook = Boolean(process.env.OUTREACH_BREVO_WEBHOOK_SECRET?.trim());
-  const ai = Boolean(
-    process.env.GEMINI_API_KEY?.trim() ||
-      process.env.OPENAI_API_KEY?.trim() ||
-      process.env.ANTHROPIC_API_KEY?.trim(),
-  );
+  const status = {
+    apollo: hasApolloConfig(),
+    kvk: hasKvkConfig(),
+    hunter: hasHunterConfig(),
+    brevo: Boolean(getOutreachBrevoKey() || getBrevoKey()),
+    webhook: Boolean(process.env.OUTREACH_BREVO_WEBHOOK_SECRET?.trim()),
+    ai: Boolean(
+      process.env.GEMINI_API_KEY?.trim() ||
+        process.env.OPENAI_API_KEY?.trim() ||
+        process.env.ANTHROPIC_API_KEY?.trim(),
+    ),
+  };
   const liveBlock = outreachLiveSendBlockReason();
   const testBlock = outreachTestSendBlockReason();
   const sender = getOutreachSender();
   const replyTo = getOutreachReplyTo();
   const testTo = getOutreachTestRecipient();
+  const readyCount = Object.values(status).filter(Boolean).length;
 
   return (
-    <div>
-      <SectionHeader
-        eyebrow="Demo / uitleg"
-        title="Hoe het werkt"
-        description="Eén pagina om de B2B-outreach door te nemen: flow, invalshoeken en koppelingen."
-        action={
+    <div className="pb-16">
+      {/* Hero */}
+      <header className="relative mb-14 overflow-hidden border-b border-border pb-12">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-16 -top-24 size-72 rounded-full bg-accent/10 blur-3xl dark:bg-accent/5"
+        />
+        <p className="text-xs font-medium tracking-[0.18em] text-text-dim uppercase">
+          Bedrijfsevent outreach · demo
+        </p>
+        <h1 className="mt-3 max-w-3xl font-display text-4xl leading-[1.05] tracking-[0.02em] text-text sm:text-5xl lg:text-6xl">
+          Hoe we B2B-bedrijven
+          <span className="text-text-muted"> vinden, mailen en volgen</span>
+        </h1>
+        <p className="mt-5 max-w-2xl text-base leading-relaxed text-text-muted sm:text-lg">
+          Mid-size bedrijven rond Amsterdam → natuurlijke invalshoek → korte
+          mail als Reijner → opens meten. Vandaag veilig via testsends naar{" "}
+          <code className="text-sm text-text">{testTo}</code>.
+        </p>
+        <div className="mt-8 flex flex-wrap items-center gap-3">
           <Link
             href="/outreach/lijst-bijwerken"
-            className="bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast"
+            className="bg-accent px-5 py-3 font-display text-sm tracking-[0.12em] text-accent-contrast"
           >
-            Start bij lijst →
+            Start bij de lijst →
           </Link>
-        }
-      />
+          <Link
+            href="/outreach/crm"
+            className="border border-border px-5 py-3 font-display text-sm tracking-[0.12em] hover:border-accent"
+          >
+            Naar bedrijven
+          </Link>
+          <StatusBadge tone={readyCount >= 4 ? "success" : "info"}>
+            {readyCount}/{CONNECTIONS.length} koppelingen
+          </StatusBadge>
+        </div>
+      </header>
 
-      <section className="mb-10">
-        <h2 className="font-display text-lg tracking-[0.06em]">In één zin</h2>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-muted">
-          We vinden mid-size bedrijven rond Amsterdam, vullen KvK + contact +
-          e-mail aan, kiezen een natuurlijke invalshoek (jubileum, seizoensfeest,
-          deal, recordjaar), schrijven een korte mail als Reijner, en meten opens
-          — eerst veilig via testsends naar team@.
-        </p>
-      </section>
+      {/* Flow */}
+      <section className="mb-16">
+        <div className="mb-6 flex items-end justify-between gap-4">
+          <div>
+            <p className="text-xs tracking-[0.16em] text-text-dim uppercase">
+              Route
+            </p>
+            <h2 className="mt-1 font-display text-2xl tracking-[0.04em] sm:text-3xl">
+              Vijf stappen
+            </h2>
+          </div>
+          <p className="hidden max-w-xs text-right text-xs text-text-dim sm:block">
+            Klik een stap om die pagina te openen tijdens de demo.
+          </p>
+        </div>
 
-      <section className="mb-10 border-t border-border pt-8">
-        <h2 className="font-display text-lg tracking-[0.06em]">De flow</h2>
-        <ol className="mt-4 space-y-5">
-          {FLOW.map((step) => (
-            <li key={step.n} className="flex gap-4">
-              <span className="font-display text-2xl tracking-[0.06em] text-text-dim">
+        <ol className="stagger relative space-y-0">
+          <div
+            aria-hidden
+            className="absolute top-3 bottom-3 left-[1.15rem] w-px bg-border sm:left-[1.4rem]"
+          />
+          {FLOW.map((step, i) => (
+            <li key={step.n} className="relative flex gap-4 py-4 sm:gap-6">
+              <span className="relative z-10 flex size-9 shrink-0 items-center justify-center border border-border bg-bg font-display text-xs tracking-[0.08em] text-text sm:size-11 sm:text-sm">
                 {step.n}
               </span>
-              <div className="min-w-0">
-                <Link
-                  href={step.href}
-                  className="font-medium text-text hover:text-accent"
-                >
-                  {step.title} →
-                </Link>
-                <p className="mt-1 max-w-2xl text-sm text-text-muted">
+              <div className="min-w-0 flex-1 border-b border-border pb-4 sm:pb-5">
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <Link
+                    href={step.href}
+                    className="font-display text-xl tracking-[0.04em] text-text hover:text-accent sm:text-2xl"
+                  >
+                    {step.title}
+                  </Link>
+                  <span className="text-xs tracking-[0.12em] text-text-dim uppercase">
+                    {step.verb}
+                  </span>
+                </div>
+                <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-muted">
                   {step.body}
                 </p>
+                {i < FLOW.length - 1 ? null : (
+                  <p className="mt-2 text-xs text-text-dim">Laatste stap · optioneel</p>
+                )}
               </div>
             </li>
           ))}
         </ol>
       </section>
 
-      <section className="mb-10 border-t border-border pt-8">
-        <h2 className="font-display text-lg tracking-[0.06em]">
-          Invalshoeken voor de mail
-        </h2>
-        <ul className="mt-4 divide-y divide-border border-y border-border">
-          {MAIL_CAMPAIGN_ANGLES.map((a) => (
-            <li key={a.id} className="py-3">
-              <p className="text-sm font-medium text-text">{a.label}</p>
-              <p className="text-sm text-text-muted">{a.detail}</p>
-            </li>
-          ))}
-        </ul>
-        <p className="mt-3 text-xs text-text-dim">
-          Jubileum en seizoen kunnen automatisch. Funding en recordjaar kies je
-          zelf als de invalshoek klopt (geen nieuws-scraper).
-        </p>
-      </section>
+      {/* Angles + safety */}
+      <div className="mb-16 grid gap-10 lg:grid-cols-[1.2fr_0.8fr]">
+        <section>
+          <p className="text-xs tracking-[0.16em] text-text-dim uppercase">
+            Inhoud
+          </p>
+          <h2 className="mt-1 font-display text-2xl tracking-[0.04em] sm:text-3xl">
+            Invalshoeken
+          </h2>
+          <p className="mt-2 max-w-md text-sm text-text-muted">
+            Waarom we mailen — niet “product pitch”, maar een moment.
+          </p>
+          <ul className="mt-6 grid gap-3 sm:grid-cols-2">
+            {MAIL_CAMPAIGN_ANGLES.map((a) => (
+              <li
+                key={a.id}
+                className="border border-border bg-surface/60 px-4 py-4 dark:bg-surface"
+              >
+                <p className="font-display text-lg tracking-[0.06em] text-text">
+                  {a.label}
+                </p>
+                <p className="mt-1.5 text-sm leading-snug text-text-muted">
+                  {a.detail}
+                </p>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-4 text-xs text-text-dim">
+            Auto: jubileum (KvK) · seizoen (kalender). Handmatig: funding ·
+            recordjaar.
+          </p>
+        </section>
 
-      <section className="mb-10 border-t border-border pt-8">
-        <h2 className="font-display text-lg tracking-[0.06em]">
-          Koppelingen (live status)
-        </h2>
-        <ul className="mt-2">
-          <Conn
-            ok={apollo}
-            label="Apollo"
-            detail="Bedrijven zoeken · medewerkers · decision makers"
-          />
-          <Conn
-            ok={kvk}
-            label="KvK"
-            detail="Oprichtingsdatum / jubileum · vestiging · non-mailing"
-          />
-          <Conn
-            ok={hunter}
-            label="Hunter"
-            detail="E-mail bij contactpersoon (fallback: website-scrape)"
-          />
-          <Conn
-            ok={brevo}
-            label="Brevo"
-            detail={`Versturen · from ${sender.email} · reply-to ${replyTo.email}`}
-          />
-          <Conn
-            ok={webhook}
-            label="Brevo webhook"
-            detail="Opens, clicks en bounces → Resultaten"
-          />
-          <Conn
-            ok={ai}
-            label="AI (Gemini / OpenAI)"
-            detail="Optioneel — zonder AI werken vaste templates"
-          />
-        </ul>
-      </section>
+        <section className="border border-border bg-bg-elevated/80 px-5 py-6 dark:bg-surface">
+          <p className="text-xs tracking-[0.16em] text-text-dim uppercase">
+            Veiligheid
+          </p>
+          <h2 className="mt-1 font-display text-2xl tracking-[0.04em]">
+            Versturen
+          </h2>
+          <dl className="mt-5 space-y-4 text-sm">
+            <div>
+              <dt className="text-text-dim">Testsend</dt>
+              <dd className="mt-1 text-text">
+                {testBlock ? (
+                  <span className="text-danger">{testBlock}</span>
+                ) : (
+                  <>Aan → {testTo}</>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-text-dim">Live prospects</dt>
+              <dd className="mt-1 text-text">
+                {liveBlock ?? "Aan"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-text-dim">From / reply</dt>
+              <dd className="mt-1 font-mono text-xs text-text-muted">
+                {sender.email}
+                <br />
+                → {replyTo.email}
+              </dd>
+            </div>
+          </dl>
+          <p className="mt-6 border-t border-border pt-4 text-xs leading-relaxed text-text-dim">
+            Uitsluitingen blokkeren draft & send. Geen bulk auto-send vandaag.
+          </p>
+        </section>
+      </div>
 
-      <section className="mb-10 border-t border-border pt-8">
-        <h2 className="font-display text-lg tracking-[0.06em]">
-          Versturen — veilig voor demo
-        </h2>
-        <ul className="mt-3 space-y-2 text-sm text-text-muted">
-          <li>
-            Testsend:{" "}
-            {testBlock ? (
-              <span className="text-danger">{testBlock}</span>
-            ) : (
-              <span className="text-text">
-                aan → {testTo}
-              </span>
-            )}
-          </li>
-          <li>
-            Live naar prospects:{" "}
-            {liveBlock ? (
-              <span className="text-text">{liveBlock}</span>
-            ) : (
-              <span className="text-accent">aan</span>
-            )}
-          </li>
-          <li>
-            Uitsluitingen (bestaande klanten / no-go’s) blokkeren draft & send.
-          </li>
+      {/* Connections */}
+      <section className="mb-16">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs tracking-[0.16em] text-text-dim uppercase">
+              Stack
+            </p>
+            <h2 className="mt-1 font-display text-2xl tracking-[0.04em] sm:text-3xl">
+              Koppelingen
+            </h2>
+          </div>
+          <p className="text-sm text-text-muted">Live status op deze omgeving</p>
+        </div>
+        <ul className="grid gap-px overflow-hidden border border-border bg-border sm:grid-cols-2 lg:grid-cols-3">
+          {CONNECTIONS.map((c) => {
+            const ok = status[c.key];
+            return (
+              <li
+                key={c.key}
+                className="flex items-start justify-between gap-3 bg-bg px-4 py-4"
+              >
+                <div>
+                  <p className="font-display text-lg tracking-[0.06em] text-text">
+                    {c.label}
+                  </p>
+                  <p className="mt-1 text-sm text-text-muted">{c.role}</p>
+                </div>
+                <span
+                  className={cn(
+                    "mt-1 size-2.5 shrink-0 rounded-full",
+                    ok ? "bg-success" : "bg-danger",
+                  )}
+                  title={ok ? "Gekoppeld" : "Ontbreekt"}
+                />
+              </li>
+            );
+          })}
         </ul>
-      </section>
-
-      <section className="border-t border-border pt-8">
-        <h2 className="font-display text-lg tracking-[0.06em]">
-          Wat we vandaag níet doen
-        </h2>
-        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-text-muted">
-          <li>Geen live mails naar echte prospects (bewust dicht)</li>
-          <li>Geen automatische reply-inbox — handmatig loggen op Resultaten</li>
-          <li>Geen LinkedIn-scrape / Apify — contact via Apollo + Hunter</li>
-          <li>Geen bulk auto-send vanuit de wachtrij</li>
-        </ul>
-        <p className="mt-6 text-sm text-text-muted">
-          Technisch overzicht:{" "}
-          <Link href="/outreach/pipeline" className="text-accent underline">
-            Pipeline
-          </Link>
-          {" · "}
-          <Link href="/outreach/kosten" className="text-accent underline">
-            Kosten
-          </Link>
-        </p>
       </section>
     </div>
   );

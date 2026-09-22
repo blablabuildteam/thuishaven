@@ -10,7 +10,6 @@ import {
   CalendarDays,
   Disc3,
   ClipboardList,
-  Home,
   Plug,
   ScrollText,
   Send,
@@ -409,13 +408,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="space-y-3 border-t border-border px-4 py-4">
           <ThemeToggle className="w-full justify-center" />
           <UserMenu />
-          <Link
-            href="/dashboard/inzichten"
-            className="flex items-center gap-2 text-xs text-text-muted transition-colors hover:text-text"
-          >
-            <Home className="size-3.5" />
-            Inzichten
-          </Link>
         </div>
       </aside>
 

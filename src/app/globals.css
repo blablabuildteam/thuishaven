@@ -36,7 +36,7 @@
 }
 
 .dark {
-  /* Dark — zwart / wit / geel (logo-huisstijl), geen ADE-fire */
+  /* Dark — zwart + soft off-white accent (geen ADE-geel) */
   --bg: #000000;
   --bg-elevated: #0a0a0a;
   --surface: #141414;
@@ -46,13 +46,13 @@
   --text: #ffffff;
   --text-muted: #b0b0b0;
   --text-dim: #6e6e6e;
-  --accent: #fff201;
-  --accent-dim: #d6cb00;
-  --accent-soft: rgba(255, 242, 1, 0.12);
+  --accent: #e8e4db;
+  --accent-dim: #cfc9bb;
+  --accent-soft: rgba(232, 228, 219, 0.14);
   --accent-contrast: #000000;
-  --highlight: #fff201;
-  --warn: #f1c40f;
-  --warn-fg: #f1c40f;
+  --highlight: #e8e4db;
+  --warn: #d4a017;
+  --warn-fg: #e8c96a;
   --danger: #d22624;
   --info: #79cae5;
   --success: #3d9b5f;
@@ -62,7 +62,7 @@
   --chart-tick: #b0b0b0;
   --chart-tooltip-bg: #141414;
   --chart-tooltip-fg: #ffffff;
-  --chart-primary: #fff201;
+  --chart-primary: #e8e4db;
   color-scheme: dark;
 }
 
