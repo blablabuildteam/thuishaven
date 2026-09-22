@@ -73,6 +73,7 @@ import type {
   WeatherHourRow,
 } from "@/lib/weather/open-meteo";
 import { EventSalesCurveChart } from "@/components/dashboard/event-sales-curve-chart";
+import { ImpactLevelBars } from "@/components/dashboard/impact-level-bars";
 import { amsterdamDay, formatDayShort } from "@/lib/time/amsterdam";
 import { displayEditionName, normalizeArtistKey } from "@/lib/editions/lineup";
 import {
@@ -90,7 +91,6 @@ import {
   paidSalesBarFill,
   paidSalesLevelLabel,
   roasBarFill,
-  type ImpactLevel,
 } from "@/lib/insights/impact-scale";
 import type { DemographicBucket } from "@/lib/db/schema";
 import type { TakedownChannel } from "@/lib/integrations/alerts/types";
@@ -137,7 +137,7 @@ function paidSummaryLine(
     : "";
   const purchases = event.paid?.purchases ?? 0;
   const tickets =
-    purchases > 0 ? ` · ${formatNumber(purchases)} ad-aankopen` : "";
+    purchases > 0 ? ` · ${formatNumber(purchases)} ticket sales` : "";
   const roas =
     event.paid?.purchaseRoas != null
       ? ` · ROAS ${event.paid.purchaseRoas.toFixed(1)}×`
@@ -1357,12 +1357,6 @@ function EventRow({
             onClick={toggleOpen}
             className="flex shrink-0 items-center gap-3 pt-1"
           >
-            <PaidEventSignals
-              purchases={event.paid.purchases}
-              salesLevel={event.paidSalesLevel}
-              purchaseRoas={event.paid.purchaseRoas}
-              roasLevel={event.paidRoasLevel}
-            />
             <CompactTicketMetrics
               key={open ? `fill-${revealKey}` : "fill"}
               sold={event.tickets.sold}
@@ -1702,7 +1696,8 @@ function PaidMarketingBlock({
     roas: null,
   };
   const all = [...(ads ?? [])].sort((a, b) => {
-    if (b.purchases !== a.purchases) return b.purchases - a.purchases;
+    const purchaseDelta = (b.purchases ?? 0) - (a.purchases ?? 0);
+    if (purchaseDelta !== 0) return purchaseDelta;
     return b.spendCents - a.spendCents;
   });
   const PREVIEW = 6;
@@ -1734,7 +1729,7 @@ function PaidMarketingBlock({
           </p>
         </div>
         <div>
-          <p className="text-[10px] text-text-dim">Ad-aankopen</p>
+          <p className="text-[10px] text-text-dim">Ticket Sales</p>
           <p className="flex items-center gap-1.5 font-mono text-text">
             {salesLevel != null && (
               <ImpactLevelBars
@@ -1788,8 +1783,8 @@ function PaidMarketingBlock({
               </span>
             </span>
             <span className="shrink-0 font-mono text-text-muted">
-              {ad.purchases > 0
-                ? `${formatNumber(ad.purchases)} · `
+              {(ad.purchases ?? 0) > 0
+                ? `${formatNumber(ad.purchases ?? 0)} · `
                 : ""}
               {formatEuroFromCents(ad.spendCents)}
             </span>
@@ -1811,8 +1806,8 @@ function PaidMarketingBlock({
         {summary.impressions > 0
           ? `${formatNumber(summary.ads)} ads · ${formatNumber(summary.impressions)} impr. · ${formatNumber(summary.clicks)} clicks. `
           : `${formatNumber(summary.ads)} ads. `}
-        Ad-aankopen zijn Meta-pixel purchases en TikTok complete payments,
-        opgeteld. De balkjes zijn 1–5 t.o.v. andere events. ROAS = ad-aankopen
+        Ticket Sales zijn Meta-pixel purchases en TikTok complete payments,
+        opgeteld. De balkjes zijn 1–5 t.o.v. andere events. ROAS = ticket sales
         × gemiddelde ticketprijs / spend. Dezelfde koper kan op beide
         platformen meetellen.
       </p>
@@ -2509,84 +2504,6 @@ function OrganicVariantRow({
     );
   }
   return <li>{inner}</li>;
-}
-
-function PaidEventSignals({
-  purchases,
-  salesLevel,
-  purchaseRoas,
-  roasLevel,
-}: {
-  purchases: number;
-  salesLevel: EventInsight["paidSalesLevel"];
-  purchaseRoas: number | null;
-  roasLevel: EventInsight["paidRoasLevel"];
-}) {
-  if (salesLevel == null && roasLevel == null) return null;
-  return (
-    <span className="flex items-center gap-3">
-      {salesLevel != null && (
-        <span className="flex items-center gap-1.5">
-          <ImpactLevelBars
-            level={salesLevel}
-            fill={paidSalesBarFill(salesLevel)}
-            label={paidSalesLevelLabel(salesLevel)}
-          />
-          <span className="text-right">
-            <span className="block font-mono text-[13px] font-medium leading-none tabular-nums">
-              {formatNumber(purchases)}
-            </span>
-            <span className="mt-1 block text-[10px] tracking-wide text-text-dim uppercase">
-              Ads
-            </span>
-          </span>
-        </span>
-      )}
-      {roasLevel != null && purchaseRoas != null && (
-        <span className="flex items-center gap-1.5">
-          <ImpactLevelBars
-            level={roasLevel}
-            fill={roasBarFill(roasLevel)}
-            label={paidRoasLevelLabel(roasLevel)}
-          />
-          <span className="text-right">
-            <span className="block font-mono text-[13px] font-medium leading-none tabular-nums">
-              {purchaseRoas.toFixed(1)}×
-            </span>
-            <span className="mt-1 block text-[10px] tracking-wide text-text-dim uppercase">
-              ROAS
-            </span>
-          </span>
-        </span>
-      )}
-    </span>
-  );
-}
-
-function ImpactLevelBars({
-  level,
-  fill,
-  label,
-}: {
-  level: ImpactLevel;
-  fill: string;
-  label: string;
-}) {
-  return (
-    <span
-      className="inline-flex h-3 shrink-0 items-end gap-0.5"
-      title={label}
-      aria-label={label}
-      role="img"
-    >
-      {IMPACT_BAR_HEIGHTS.map((h, i) => (
-        <span
-          key={h}
-          className={cn("w-1 rounded-[1px]", h, i < level ? fill : "bg-border")}
-        />
-      ))}
-    </span>
-  );
 }
 
 function OrganicImpactVerdict({

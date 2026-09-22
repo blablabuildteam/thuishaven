@@ -45,7 +45,7 @@ export default async function PaidTikTokPage() {
         title="TikTok ads"
         description={
           hasToken
-            ? "Spend en ad-aankopen (TikTok complete payment) per campagne. Last-click van TikTok, niet alle Weeztix-tickets."
+            ? "Spend en ticket sales (TikTok complete payment) per campagne. Last-click van TikTok, niet alle Weeztix-tickets."
             : "Wacht op TIKTOK_ADS_ACCESS_TOKEN (Marketing API, niet Login Kit)."
         }
       />

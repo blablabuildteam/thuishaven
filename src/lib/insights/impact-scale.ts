@@ -86,11 +86,11 @@ export function roasBarFill(level: ImpactLevel): string {
 }
 
 export function paidSalesLevelLabel(level: ImpactLevel): string {
-  if (level === 5) return "zeer veel ad-aankopen t.o.v. andere events";
-  if (level === 4) return "veel ad-aankopen t.o.v. andere events";
-  if (level === 3) return "gemiddeld aantal ad-aankopen";
-  if (level === 2) return "weinig ad-aankopen t.o.v. andere events";
-  return "zeer weinig ad-aankopen t.o.v. andere events";
+  if (level === 5) return "zeer veel ticket sales t.o.v. andere events";
+  if (level === 4) return "veel ticket sales t.o.v. andere events";
+  if (level === 3) return "gemiddeld aantal ticket sales";
+  if (level === 2) return "weinig ticket sales t.o.v. andere events";
+  return "zeer weinig ticket sales t.o.v. andere events";
 }
 
 export function paidRoasLevelLabel(level: ImpactLevel): string {

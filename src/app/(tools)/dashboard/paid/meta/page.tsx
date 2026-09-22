@@ -45,7 +45,7 @@ export default async function PaidMetaPage() {
         title="Meta ads"
         description={
           hasToken
-            ? "Spend en ad-aankopen (Meta-pixel purchases) per campagne. Last-click van Meta, niet alle Weeztix-tickets."
+            ? "Spend en ticket sales (Meta-pixel purchases) per campagne. Last-click van Meta, niet alle Weeztix-tickets."
             : "Wacht op META_ACCESS_TOKEN. Zodra ads_read op de system user staat, synct deze view."
         }
       />

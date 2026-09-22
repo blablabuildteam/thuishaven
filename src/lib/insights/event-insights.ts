@@ -1624,7 +1624,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v32"],
+  ["event-insights-upcoming-v34"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1640,7 +1640,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v32"],
+  ["event-insights-past-v34"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],
@@ -1663,7 +1663,7 @@ export const loadEventInsights = cache(async (options?: {
   const asOfDay = amsterdamDay(new Date());
 
   return rememberTtl(
-    `event-insights:v33:${limit}:${asOfDay}`,
+    `event-insights:v34:${limit}:${asOfDay}`,
     DASHBOARD_TTL_MS,
     async () => {
       // Outside Next data cache: recover empty DB / schedule list refresh

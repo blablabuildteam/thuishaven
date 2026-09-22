@@ -4,6 +4,10 @@
 
 - [ ] Contact Appic for an API/developers token for Appic Game data
 
+## Revenue
+
+- [ ] Track revenue during the event itself (on-site, not ticket sales)
+
 ## Marketing
 
 ### Paid ads (spend per event)
@@ -15,3 +19,7 @@
 ### Organic
 
 - [ ] Sync Instagram after Meta token install
+
+## UI
+
+- [ ] Mobile optimisations for the UI
