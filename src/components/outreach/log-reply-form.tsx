@@ -86,8 +86,8 @@ export function LogReplyForm({ mails }: Props) {
   return (
     <form onSubmit={onSubmit} className="space-y-3">
       <p className="text-sm text-text-muted">
-        Replies landen in <code className="text-accent">evenement@</code>. Log
-        ze hier zodat Resultaten, follow-up en warme leads kloppen.
+        Komt binnen op <code className="text-accent">evenement@</code> — log
+        hier om KPIs en follow-up bij te werken.
       </p>
 
       <label className="block text-sm">

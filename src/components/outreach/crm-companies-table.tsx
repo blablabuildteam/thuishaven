@@ -287,102 +287,85 @@ export function CrmCompaniesTable({ rows }: Props) {
     });
   }, [rows, q, mail, region, completeness]);
 
-  function chip(
-    active: boolean,
-    onClick: () => void,
-    label: string,
-    count?: number,
-  ) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        className={
-          active
-            ? "bg-accent px-3 py-1.5 font-display text-xs tracking-[0.08em] text-accent-contrast"
-            : "border border-border bg-surface px-3 py-1.5 font-display text-xs tracking-[0.08em] text-text-muted hover:border-accent"
-        }
-      >
-        {label}
-        {count != null ? ` (${count})` : ""}
-      </button>
-    );
-  }
-
   return (
     <div>
-      <div className="mb-4">
-        <label className="block">
-          <span className="font-display text-xs tracking-[0.14em] text-text-dim">
-            Zoek op bedrijfsnaam
+      <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto_auto_auto]">
+        <label className="block min-w-0">
+          <span className="text-[11px] uppercase tracking-wider text-text-dim">
+            Zoeken
           </span>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Typ een bedrijfsnaam…"
+            placeholder="Bedrijfsnaam…"
             autoFocus
-            className="mt-1.5 block w-full border border-border bg-bg px-4 py-3 text-base text-text"
+            className="mt-1.5 block w-full border border-border bg-bg px-3 py-2 text-sm text-text"
           />
+        </label>
+        <label className="block">
+          <span className="text-[11px] uppercase tracking-wider text-text-dim">
+            Invalshoek
+          </span>
+          <select
+            value={mail}
+            onChange={(e) => setMail(e.target.value as MailFilter)}
+            className="mt-1.5 block w-full min-w-[10rem] border border-border bg-bg px-3 py-2 text-sm text-text"
+          >
+            <option value="kans">Klaar om te mailen ({counts.kans})</option>
+            <option value="jubileum">Jubileum ({counts.jubileum})</option>
+            <option value="seizoen">Seizoen ({counts.seizoen})</option>
+            <option value="funding">Deal / funding ({counts.funding})</option>
+            <option value="recordjaar">Recordjaar ({counts.recordjaar})</option>
+            <option value="cold">Algemeen ({counts.cold})</option>
+            <option value="onvolledig">Onvolledig ({counts.onvolledig})</option>
+            <option value="past_niet">Past niet ({counts.past_niet})</option>
+            <option value="all">Alles ({counts.all})</option>
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-[11px] uppercase tracking-wider text-text-dim">
+            Regio
+          </span>
+          <select
+            value={region}
+            onChange={(e) => setRegion(e.target.value as RegionFilter)}
+            className="mt-1.5 block w-full min-w-[9rem] border border-border bg-bg px-3 py-2 text-sm text-text"
+          >
+            <option value="all">Alle regio’s</option>
+            <option value="in">In ~50 km ({counts.in})</option>
+            <option value="out">Buiten ({counts.out})</option>
+            <option value="unknown">Plaats onbekend</option>
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-[11px] uppercase tracking-wider text-text-dim">
+            Compleet
+          </span>
+          <select
+            value={completeness}
+            onChange={(e) =>
+              setCompleteness(e.target.value as CompletenessFilter)
+            }
+            className="mt-1.5 block w-full min-w-[10rem] border border-border bg-bg px-3 py-2 text-sm text-text"
+          >
+            <option value="all">Alles</option>
+            <option value="ready">Compleet genoeg</option>
+            <option value="missing_mdw">Geen mdw ({counts.missing_mdw})</option>
+            <option value="missing_email">
+              Geen e-mail ({counts.missing_email})
+            </option>
+            <option value="missing_contact">Geen contactpersoon</option>
+          </select>
         </label>
       </div>
 
-      <div className="mb-3 space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="w-full text-[11px] uppercase tracking-wider text-text-dim sm:w-auto">
-            Invalshoek
-          </span>
-          {chip(mail === "kans", () => setMail("kans"), "Klaar om te mailen", counts.kans)}
-          {chip(mail === "jubileum", () => setMail("jubileum"), "Jubileum", counts.jubileum)}
-          {chip(mail === "seizoen", () => setMail("seizoen"), "Seizoen", counts.seizoen)}
-          {chip(mail === "funding", () => setMail("funding"), "Deal / funding", counts.funding)}
-          {chip(mail === "recordjaar", () => setMail("recordjaar"), "Recordjaar", counts.recordjaar)}
-          {chip(mail === "cold", () => setMail("cold"), "Algemeen", counts.cold)}
-          {chip(mail === "onvolledig", () => setMail("onvolledig"), "Onvolledig", counts.onvolledig)}
-          {chip(mail === "past_niet", () => setMail("past_niet"), "Past niet", counts.past_niet)}
-          {chip(mail === "all", () => setMail("all"), "Alles", counts.all)}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="w-full text-[11px] uppercase tracking-wider text-text-dim sm:w-auto">
-            Regio
-          </span>
-          {chip(region === "all", () => setRegion("all"), "Alle regio’s")}
-          {chip(region === "in", () => setRegion("in"), "In ~50 km", counts.in)}
-          {chip(region === "out", () => setRegion("out"), "Buiten", counts.out)}
-          {chip(region === "unknown", () => setRegion("unknown"), "Plaats onbekend")}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="w-full text-[11px] uppercase tracking-wider text-text-dim sm:w-auto">
-            Compleet
-          </span>
-          {chip(completeness === "all", () => setCompleteness("all"), "Alles")}
-          {chip(completeness === "ready", () => setCompleteness("ready"), "Compleet genoeg")}
-          {chip(
-            completeness === "missing_mdw",
-            () => setCompleteness("missing_mdw"),
-            "Geen mdw",
-            counts.missing_mdw,
-          )}
-          {chip(
-            completeness === "missing_email",
-            () => setCompleteness("missing_email"),
-            "Geen e-mail",
-            counts.missing_email,
-          )}
-          {chip(
-            completeness === "missing_contact",
-            () => setCompleteness("missing_contact"),
-            "Geen contactpersoon",
-          )}
-        </div>
-      </div>
-
       <p className="mb-3 text-xs text-text-dim">
-        {filtered.length} van {rows.length} · Invalshoeken: jubileum · seizoen ·
-        funding · recordjaar · algemeen · Hover op mdw voor bron
+        {filtered.length} van {rows.length}
+        {mail === "kans" ? " · klaar om te mailen" : ""}
       </p>
 
       {filtered.length === 0 ? (
-        <p className="border border-border bg-surface px-4 py-5 text-sm text-text-muted">
+        <p className="border-y border-border py-6 text-sm text-text-muted">
           Geen bedrijven in dit filter.{" "}
           <Link href="/outreach/lijst-bijwerken" className="text-accent underline">
             Lijst bijwerken
@@ -461,9 +444,6 @@ export function CrmCompaniesTable({ rows }: Props) {
                     <StatusBadge tone={mailAngleTone(angle.id)}>
                       {angle.label}
                     </StatusBadge>
-                    <p className="mt-1 max-w-[220px] text-xs text-text-dim">
-                      {angle.detail}
-                    </p>
                     {angle.also && angle.also.length > 0 ? (
                       <p className="mt-1 text-[10px] text-text-dim">
                         Ook: {angle.also.map(angleLabel).join(" · ")}

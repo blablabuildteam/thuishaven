@@ -23,6 +23,7 @@ import {
   Ban,
   MessageSquare,
   Contact,
+  BookOpen,
   type LucideIcon,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
@@ -128,6 +129,11 @@ const outreachSections: NavSection[] = [
     label: "Werken",
     items: [
       { href: "/outreach", label: "Overzicht", icon: Send, tourId: "nav-overzicht" },
+      {
+        href: "/outreach/uitleg",
+        label: "Hoe het werkt",
+        icon: BookOpen,
+      },
       {
         href: "/outreach/lijst-bijwerken",
         label: "Lijst bijwerken",

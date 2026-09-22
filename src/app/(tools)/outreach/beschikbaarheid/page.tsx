@@ -35,17 +35,17 @@ export default async function BeschikbaarheidPage() {
         }
       />
 
-      <div className="mb-6 border border-border bg-surface px-4 py-3 text-sm text-text-muted">
-        <p className="font-medium text-text">Deelbare link</p>
+      <p className="mb-6 text-sm text-text-muted">
+        Deelbare link:{" "}
         <a
           href={liveUrl}
           target="_blank"
           rel="noreferrer"
-          className="mt-1 block break-all font-mono text-xs text-accent underline-offset-2 hover:underline"
+          className="font-mono text-xs text-accent underline-offset-2 hover:underline"
         >
           {liveUrl}
         </a>
-      </div>
+      </p>
 
       <AvailabilityAdmin initialDays={days} source={source} />
     </div>
