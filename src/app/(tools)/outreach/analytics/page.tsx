@@ -170,7 +170,7 @@ export default async function OutreachAnalyticsPage() {
             vullen.
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="max-w-full overflow-x-auto">
             <table className="w-full min-w-[820px] text-left text-sm">
               <thead className="border-b border-border text-[11px] uppercase tracking-wider text-text-muted">
                 <tr>
@@ -236,7 +236,7 @@ export default async function OutreachAnalyticsPage() {
             .
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="max-w-full overflow-x-auto">
             <table className="w-full min-w-[960px] text-left text-sm">
               <thead className="border-b border-border text-[11px] uppercase tracking-wider text-text-muted">
                 <tr>

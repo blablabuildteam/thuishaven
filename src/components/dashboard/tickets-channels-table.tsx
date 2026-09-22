@@ -208,7 +208,7 @@ function TicketsTable({
   const colCount = leadingCols + columns.length + 2;
 
   return (
-    <div className="overflow-x-auto border border-border">
+    <div className="max-w-full overflow-x-auto border border-border">
       <table className="w-full min-w-[1240px] text-left text-sm">
         <thead className="border-b border-border text-[11px] tracking-wider text-text-dim uppercase">
           <tr>

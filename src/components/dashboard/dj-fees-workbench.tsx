@@ -519,7 +519,7 @@ function EventCard({
         </div>
       </header>
 
-      <div className="overflow-x-auto">
+      <div className="max-w-full overflow-x-auto">
         <div className="w-full min-w-[42rem]">
           <div
             className={cn(

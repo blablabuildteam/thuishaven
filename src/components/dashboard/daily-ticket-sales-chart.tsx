@@ -300,8 +300,8 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
         {formatNumber(data.windowTotal)} tickets verkocht in de laatste{" "}
         {data.windowDays} dagen. Hover een dag voor de verdeling per event.
       </p>
-      <div className="daily-sales-chart relative h-72 w-full overflow-visible border border-border bg-surface">
-        <div className="absolute inset-0 overflow-visible p-3">
+      <div className="daily-sales-chart relative h-64 w-full min-w-0 border border-border bg-surface sm:h-72">
+        <div className="absolute inset-0 p-2 sm:p-3">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={chartData}
@@ -364,8 +364,8 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
 
 function ChartHeading({ data }: { data: DailyTicketSales }) {
   return (
-    <div className="mb-5 flex items-end justify-between gap-4 border-b border-border pb-3">
-      <div className="min-w-0">
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-border pb-3">
+      <div className="min-w-0 flex-1 basis-48">
         <p className="mb-1 text-[11px] font-medium tracking-[0.14em] text-text-dim uppercase">
           Weeztix
         </p>

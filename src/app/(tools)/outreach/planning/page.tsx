@@ -191,7 +191,7 @@ export default async function OutreachPlanningPage() {
         <h2 className="mb-3 font-display text-2xl tracking-[0.06em]">
           Volledige wachtrij
         </h2>
-        <div className="overflow-x-auto border border-border">
+        <div className="max-w-full overflow-x-auto border border-border">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
               <tr>

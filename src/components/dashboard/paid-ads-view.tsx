@@ -29,7 +29,7 @@ export function PaidAdsView({
   const currency = bundle.accountCurrency || "EUR";
 
   return (
-    <div className="overflow-x-auto border border-border">
+    <div className="max-w-full overflow-x-auto border border-border">
       <table className="w-full min-w-[980px] table-fixed text-left text-sm">
         <colgroup>
           <col className="w-[24%]" />

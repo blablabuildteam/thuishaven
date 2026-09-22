@@ -346,13 +346,15 @@ function InsightDeepDive({
   return (
     <>
       {insight.facts && insight.facts.length > 0 && (
-        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2.5 border-t border-border pt-3">
+        <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2.5 border-t border-border pt-3 sm:gap-x-4">
           {insight.facts.map((fact) => (
-            <div key={fact.label}>
+            <div key={fact.label} className="min-w-0">
               <dt className="text-[10px] tracking-wide text-text-dim uppercase">
                 {fact.label}
               </dt>
-              <dd className="mt-0.5 text-sm font-medium tabular-nums">{fact.value}</dd>
+              <dd className="mt-0.5 break-words text-sm font-medium tabular-nums">
+                {fact.value}
+              </dd>
             </div>
           ))}
         </dl>
@@ -503,12 +505,14 @@ function InsightDetailModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="insight-modal-panel relative z-10 w-full max-w-md border border-border bg-surface p-5"
+        className="insight-modal-panel relative z-10 max-h-[min(88dvh,100%)] w-full min-w-0 max-w-md overflow-y-auto overscroll-contain border border-border bg-surface p-5"
       >
         <div className="flex items-start justify-between gap-3">
-          <p className="flex items-center gap-1.5 text-[11px] tracking-[0.14em] text-text-dim uppercase">
+          <p className="flex min-w-0 items-center gap-1.5 text-[11px] tracking-[0.14em] text-text-dim uppercase">
             <GeminiMark size={14} />
-            AI-inzicht · {INSIGHT_DIMENSION_LABEL[insight.dimension]}
+            <span className="min-w-0 break-words">
+              AI-inzicht · {INSIGHT_DIMENSION_LABEL[insight.dimension]}
+            </span>
           </p>
           <button
             type="button"
@@ -519,7 +523,7 @@ function InsightDetailModal({
             <X className="size-4" strokeWidth={1.5} />
           </button>
         </div>
-        <p id={titleId} className="mt-3 text-[15px] font-medium leading-snug">
+        <p id={titleId} className="mt-3 break-words text-[15px] font-medium leading-snug">
           {insight.text}
         </p>
         {body && (
@@ -573,7 +577,7 @@ function InsightChip({
           setOpen(true);
         }}
         className={cn(
-          "group/chip inline-flex max-w-full items-center gap-2 rounded-sm border px-3 py-1.5 text-left text-[13px] font-medium leading-snug tracking-wide transition-shadow hover:shadow-sm",
+          "group/chip inline-flex min-w-0 max-w-full items-center gap-2 rounded-sm border px-3 py-1.5 text-left text-[13px] font-medium leading-snug tracking-wide transition-shadow hover:shadow-sm",
           colors[insight.tone],
         )}
       >
@@ -583,7 +587,7 @@ function InsightChip({
           <Icon className="size-4 shrink-0 opacity-85" strokeWidth={1.75} />
         )}
         <span className="inline-flex min-w-0 items-center">
-          <span className="min-w-0">{insight.text}</span>
+          <span className="min-w-0 break-words">{insight.text}</span>
           <span className="grid grid-cols-[0fr] transition-[grid-template-columns] duration-200 ease-out group-hover/chip:grid-cols-[1fr] group-focus-visible/chip:grid-cols-[1fr] max-md:grid-cols-[1fr]">
             <span className="min-w-0 overflow-hidden">
               <GeminiMark size={16} className="ml-2 size-4" />
@@ -697,7 +701,7 @@ function CompactTicketMetrics({
   }
 
   return (
-    <div className="w-[26rem] shrink-0">
+    <div className="w-full min-w-0">
       <TicketCompositionBar
         sold={sold}
         capacity={capacity}
@@ -935,8 +939,8 @@ function WeatherBlock({
 
 function SectionDivider({ label }: { label: string }) {
   return (
-    <div className="flex items-center gap-3 pt-4 pb-2">
-      <span className="text-[10px] font-medium tracking-[0.14em] text-text-dim uppercase">
+    <div className="flex min-w-0 items-center gap-3 pt-4 pb-2">
+      <span className="min-w-0 text-[10px] font-medium tracking-[0.08em] text-text-dim uppercase sm:tracking-[0.14em]">
         {label}
       </span>
       <div className="h-px flex-1 bg-border" />
@@ -1036,46 +1040,46 @@ function TicketMetricsVisual({
   ].filter(Boolean) as Array<{ label: string; value: string; hint: string }>;
 
   return (
-    <div className="mb-4 border border-border px-3 py-3">
+    <div className="mb-4 min-w-0 border border-border px-3 py-3">
       {/* Main metrics row: Beschikbaar | Verkocht | Gescand */}
-      <div className="grid grid-cols-3 gap-4">
-        <div title="Nog beschikbare tickets (capaciteit − verkocht)">
-          <p className="text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <div className="min-w-0" title="Nog beschikbare tickets (capaciteit − verkocht)">
+          <p className="truncate text-[9px] font-medium tracking-normal text-text-dim uppercase sm:text-[10px] sm:tracking-[0.12em]">
             Beschikbaar
           </p>
-          <p className="mt-1 font-display text-2xl leading-none tracking-tight">
+          <p className="mt-1 font-display text-xl leading-none tracking-tight sm:text-2xl">
             {available != null ? formatNumber(available) : "—"}
           </p>
-          <p className="mt-1 text-[10px] text-text-dim">
+          <p className="mt-1 truncate text-[10px] text-text-dim">
             {capacity != null ? `van ${formatNumber(capacity)}` : "geen capaciteit"}
           </p>
         </div>
 
-        <div title="Weeztix-shop plus gebruikt uit Appic/RA/vrienden-pools" className="text-center">
-          <p className="text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
+        <div title="Weeztix-shop plus gebruikt uit Appic/RA/vrienden-pools" className="min-w-0 text-center">
+          <p className="truncate text-[9px] font-medium tracking-normal text-text-dim uppercase sm:text-[10px] sm:tracking-[0.12em]">
             Verkocht
           </p>
           <p
             className={cn(
-              "mt-1 font-display text-2xl leading-none tracking-tight",
+              "mt-1 font-display text-xl leading-none tracking-tight sm:text-2xl",
               fillTone,
             )}
           >
             {formatNumber(sold)}
           </p>
-          <p className="mt-1 text-[10px] text-text-dim">
+          <p className="mt-1 truncate text-[10px] text-text-dim">
             {fillPct != null ? `${formatPercent(fillPct, 0)} vol` : "totaal"}
           </p>
         </div>
 
-        <div title="Check-ins t.o.v. verkochte tickets" className="text-right">
-          <p className="text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
+        <div title="Check-ins t.o.v. verkochte tickets" className="min-w-0 text-right">
+          <p className="truncate text-[9px] font-medium tracking-normal text-text-dim uppercase sm:text-[10px] sm:tracking-[0.12em]">
             Gescand
           </p>
-          <p className="mt-1 font-display text-2xl leading-none tracking-tight">
+          <p className="mt-1 font-display text-xl leading-none tracking-tight sm:text-2xl">
             {formatNumber(scanned)}
           </p>
-          <p className="mt-1 text-[10px] text-text-dim">
+          <p className="mt-1 truncate text-[10px] text-text-dim">
             {scanRatePct != null
               ? `${formatPercent(scanRatePct, 0)} check-in`
               : sold > 0
@@ -1256,7 +1260,9 @@ function EventRow({
 
   const eventDate = new Date(`${event.day}T12:00:00`);
   const dayNum = eventDate.getDate();
-  const weekdayLabel = eventDate.toLocaleDateString("nl-NL", { weekday: "long" });
+  const weekdayLabel = eventDate
+    .toLocaleDateString("nl-NL", { weekday: "short" })
+    .replace(".", "");
   const monthLabel = eventDate
     .toLocaleDateString("nl-NL", { month: "short" })
     .replace(".", "")
@@ -1276,7 +1282,7 @@ function EventRow({
   return (
     <li
       className={cn(
-        "border",
+        "min-w-0 border",
         isUpcoming
           ? "border-border-strong bg-surface"
           : "border-border/80 bg-bg-elevated",
@@ -1289,13 +1295,13 @@ function EventRow({
           isUpcoming ? "hover:bg-surface-hover/50" : "hover:bg-surface-hover/30",
         )}
       >
-        {/* Main row: date + title + metrics */}
-        <div className="flex w-full items-start gap-4 px-4 py-4">
+        {/* Main row: date + title, ticket bar underneath until the row is wide enough */}
+        <div className="flex w-full min-w-0 flex-col gap-3 px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-start md:gap-4">
           <button
             type="button"
             aria-expanded={open}
             onClick={toggleOpen}
-            className="flex min-w-0 flex-1 items-start gap-4 text-left"
+            className="flex min-w-0 flex-1 items-start gap-3 text-left sm:gap-4"
           >
             <span
               className={cn(
@@ -1329,7 +1335,7 @@ function EventRow({
             </span>
             <span className="min-w-0 flex-1 pt-1">
               <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <span className="text-[15px] font-medium leading-snug" title={event.name}>
+                <span className="break-words text-[15px] font-medium leading-snug" title={event.name}>
                   {displayEditionName(event.name)}
                 </span>
                 {whenLabel && (
@@ -1338,7 +1344,7 @@ function EventRow({
                   </span>
                 )}
                 {artists.length > 0 && (
-                  <span className="text-xs text-text-dim">
+                  <span className="min-w-0 break-words text-xs text-text-dim">
                     {artists.join(" · ")}
                   </span>
                 )}
@@ -1355,7 +1361,7 @@ function EventRow({
             aria-expanded={open}
             aria-label={open ? "Details sluiten" : "Details openen"}
             onClick={toggleOpen}
-            className="flex shrink-0 items-center gap-3 pt-1"
+            className="flex w-full min-w-0 items-center gap-3 md:w-[min(26rem,42%)] md:shrink-0 md:pt-1"
           >
             <CompactTicketMetrics
               key={open ? `fill-${revealKey}` : "fill"}
@@ -1366,7 +1372,7 @@ function EventRow({
             />
             <ChevronDown
               className={cn(
-                "size-4 text-text-dim transition-transform duration-300 ease-out",
+                "size-4 shrink-0 text-text-dim transition-transform duration-300 ease-out",
                 open && "rotate-180",
               )}
               strokeWidth={1.5}
@@ -1440,7 +1446,7 @@ function EventDetail({ event }: { event: EventInsight }) {
   );
 
   return (
-    <div className="relative px-4 py-4">
+    <div className="relative min-w-0 px-3 py-4 sm:px-4">
       <div className="insight-loading-pass absolute inset-0 z-[1]" />
 
       <div className="insight-reveal relative z-0 space-y-1">
@@ -1463,8 +1469,8 @@ function EventDetail({ event }: { event: EventInsight }) {
           paidAds={event.paidAds}
         />
 
-        <div className="grid gap-x-6 gap-y-1 lg:grid-cols-2">
-          <div>
+        <div className="grid min-w-0 gap-x-6 gap-y-1 lg:grid-cols-2">
+          <div className="min-w-0">
             <SectionDivider label="Tickets per bron" />
             <div className="space-y-2.5">
               {tickets.sources.map((s, i) => {
@@ -1579,7 +1585,7 @@ function EventDetail({ event }: { event: EventInsight }) {
             {demographics && (
               <>
                 <SectionDivider label="Demografie" />
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-3">
                   <DemoMini
                     title="Geslacht"
                     icon={Users}
@@ -1633,7 +1639,7 @@ function EventDetail({ event }: { event: EventInsight }) {
             />
           </div>
 
-          <div>
+          <div className="min-w-0">
             <SectionDivider label="Marketing · organic" />
             <OrganicMarketingBlock
               socialPosts={socialPosts}
@@ -1722,15 +1728,15 @@ function PaidMarketingBlock({
   return (
     <div className="border border-dashed border-border px-3 py-2.5 text-xs">
       <div className="grid grid-cols-3 gap-2">
-        <div>
+        <div className="min-w-0">
           <p className="text-[10px] text-text-dim">Spend</p>
-          <p className="font-mono text-text">
+          <p className="break-words font-mono text-text">
             {formatEuroFromCents(summary.spendCents)}
           </p>
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="text-[10px] text-text-dim">Ticket Sales</p>
-          <p className="flex items-center gap-1.5 font-mono text-text">
+          <p className="flex flex-wrap items-center gap-1.5 font-mono text-text">
             {salesLevel != null && (
               <ImpactLevelBars
                 level={salesLevel}
@@ -1749,9 +1755,9 @@ function PaidMarketingBlock({
             </p>
           )}
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="text-[10px] text-text-dim">ROAS</p>
-          <p className="flex items-center gap-1.5 font-mono text-text">
+          <p className="flex flex-wrap items-center gap-1.5 font-mono text-text">
             {roasLevel != null && (
               <ImpactLevelBars
                 level={roasLevel}
@@ -2122,11 +2128,11 @@ function InsightModalSocialPost({
   const lowerBound = contribution.lowerBound;
 
   const content = (
-    <div className="flex items-start gap-2.5">
+    <div className="flex min-w-0 flex-wrap items-start gap-2.5">
       <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center">
         <SocialChannelIcon channel={post.channel} size={18} alt={channelLabel(post.channel)} />
       </div>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 basis-40">
         <div className="flex items-center gap-1.5">
           <span className="min-w-0 truncate text-xs font-medium text-text">
             {post.title?.slice(0, 50) || channelLabel(post.channel)}
@@ -2311,7 +2317,7 @@ function OrganicPostRow({
   return (
     <div className="py-0.5">
       <div className="group -mx-1.5 rounded-sm px-1.5 py-1 transition-colors hover:bg-surface-hover">
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
           <div className="min-w-0 flex-1 space-y-0.5">
             <div className="flex min-w-0 items-center gap-1.5">
               <SocialChannelIcon channel={post.channel} size={14} alt="" />
@@ -2824,7 +2830,7 @@ function LineupBlock({
             return (
               <li
                 key={name}
-                className="flex items-center gap-3 border border-border px-2.5 py-1.5 text-xs"
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 border border-border px-2.5 py-1.5 text-xs"
               >
                 <Music2
                   className="size-3.5 shrink-0 text-text-dim"

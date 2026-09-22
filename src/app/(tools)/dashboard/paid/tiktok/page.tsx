@@ -74,7 +74,7 @@ export default async function PaidTikTokPage() {
         </div>
       ) : (
         <>
-          <section className="mb-10 grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
+          <section className="mb-10 grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 sm:gap-x-8 sm:gap-y-6 lg:grid-cols-6">
             <Stat
               value={formatEuroFromCents(data.totals.spendCents, currency)}
               label="spend"
@@ -115,7 +115,7 @@ export default async function PaidTikTokPage() {
 function Stat({ value, label }: { value: string; label: string }) {
   return (
     <p className="min-w-0">
-      <span className="block font-display text-3xl leading-none tabular-nums">
+      <span className="block break-words font-display text-2xl leading-none tabular-nums sm:text-3xl">
         {value}
       </span>
       <span className="mt-1 block text-[11px] tracking-[0.12em] text-text-dim uppercase">

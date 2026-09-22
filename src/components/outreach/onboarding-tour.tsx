@@ -101,6 +101,22 @@ export function OutreachOnboardingTour() {
     setRect(readRect(current.target));
   }, [open, current]);
 
+  useEffect(() => {
+    if (!open || !current) return;
+    const mobile = window.matchMedia("(max-width: 1023px)").matches;
+    if (!mobile) return;
+    const id = window.setTimeout(() => {
+      window.dispatchEvent(
+        new Event(
+          current.target.startsWith("nav-")
+            ? "thuishaven:open-nav"
+            : "thuishaven:close-nav",
+        ),
+      );
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [open, current, pathname]);
+
   useLayoutEffect(() => {
     if (!open || !current) return;
 
@@ -221,7 +237,6 @@ export function OutreachOnboardingTour() {
 
 function tooltipPosition(rect: Rect | null): CSSProperties {
   const margin = 12;
-  const tipW = 352;
   const tipH = 210;
 
   if (typeof window === "undefined" || !rect) {
@@ -232,13 +247,12 @@ function tooltipPosition(rect: Rect | null): CSSProperties {
     };
   }
 
+  const tipW = Math.min(352, window.innerWidth - margin * 2);
   const spaceBelow = window.innerHeight - (rect.top + rect.height);
   const placeBelow = spaceBelow > tipH + margin || rect.top < tipH + margin;
 
-  const left = Math.min(
-    Math.max(margin, rect.left),
-    window.innerWidth - tipW - margin,
-  );
+  const maxLeft = Math.max(margin, window.innerWidth - tipW - margin);
+  const left = Math.min(Math.max(margin, rect.left), maxLeft);
   let top = placeBelow
     ? rect.top + rect.height + margin
     : Math.max(margin, rect.top - tipH - margin);

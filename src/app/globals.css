@@ -278,7 +278,21 @@ html.dark body::before {
 }
 .collapse-panel > .collapse-inner {
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
+}
+
+@keyframes mobile-nav-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.mobile-nav-panel {
+  animation: mobile-nav-in 180ms ease-out both;
 }
 
 @keyframes insight-reveal {
@@ -449,7 +463,8 @@ html.dark body::before {
   .daily-sales-bar,
   .insight-loading-pass,
   .insight-modal-backdrop,
-  .insight-modal-panel {
+  .insight-modal-panel,
+  .mobile-nav-panel {
     animation: none;
   }
 

@@ -132,7 +132,7 @@ export default async function MailsPage() {
                   </div>
                 </div>
 
-                <div className="mt-3 overflow-x-auto">
+                <div className="mt-3 max-w-full overflow-x-auto">
                   <table className="w-full min-w-[640px] text-left text-sm">
                     <thead className="text-[11px] tracking-wider text-text-dim uppercase">
                       <tr>
@@ -191,7 +191,7 @@ export default async function MailsPage() {
         {campaigns.length === 0 ? (
           <p className="text-sm text-text-muted">Nog geen campagnes.</p>
         ) : (
-          <div className="overflow-x-auto border border-border">
+          <div className="max-w-full overflow-x-auto border border-border">
             <table className="w-full min-w-[640px] text-left text-sm">
               <thead className="border-b border-border text-[11px] tracking-wider text-text-dim uppercase">
                 <tr>

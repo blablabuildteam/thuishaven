@@ -199,7 +199,7 @@ export function AdminUsersPanel() {
         <h2 className="mb-4 font-display text-2xl tracking-[0.06em]">
           Alle accounts
         </h2>
-        <div className="overflow-x-auto">
+        <div className="max-w-full overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="border-b border-border text-[11px] uppercase tracking-wider text-text-muted">
               <tr>

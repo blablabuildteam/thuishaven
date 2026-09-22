@@ -30,25 +30,25 @@ export default async function HubPage() {
         <ThemeToggle />
       </div>
 
-      <div className="relative mx-auto flex min-h-screen max-w-5xl flex-col justify-center px-6 py-16">
+      <div className="relative mx-auto flex min-h-screen max-w-5xl flex-col justify-center px-4 py-16 sm:px-6">
         <header className="animate-fade-up mb-12">
-          <div className="mb-8 flex items-center gap-4">
+          <div className="mb-8 flex min-w-0 items-center gap-3 sm:gap-4">
             <Image
               src="/brand/logo-mark.png"
               alt="Thuishaven"
               width={72}
               height={72}
-              className="object-contain"
+              className="size-14 shrink-0 object-contain sm:size-[4.5rem]"
               priority
             />
-            <div>
+            <div className="min-w-0">
               <p className="font-display text-[11px] tracking-[0.22em] text-text-muted">
                 Tools
               </p>
               <BrandLogo
                 href={undefined}
                 showMark={false}
-                wordmarkClassName="text-5xl sm:text-7xl"
+                wordmarkClassName="text-3xl sm:text-6xl lg:text-7xl"
               />
             </div>
           </div>

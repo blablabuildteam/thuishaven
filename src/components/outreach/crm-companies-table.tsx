@@ -340,7 +340,7 @@ export function CrmCompaniesTable({ rows }: Props) {
           om mdw/e-mail aan te vullen.
         </p>
       ) : (
-        <div className="overflow-x-auto border border-border">
+        <div className="max-w-full overflow-x-auto border border-border">
           <table className="w-full min-w-[1080px] text-left text-sm">
             <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
               <tr>

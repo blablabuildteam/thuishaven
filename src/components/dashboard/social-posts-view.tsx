@@ -229,7 +229,7 @@ export function SocialPostsView({
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xs font-medium tracking-[0.12em] text-text-dim uppercase">
           Posts · {posts.length}
           {hasMore ? "+" : ""}

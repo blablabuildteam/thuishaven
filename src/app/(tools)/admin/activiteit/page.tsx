@@ -44,7 +44,7 @@ export default async function AdminActivityPage() {
           opent, verschijnt dat hier.
         </p>
       ) : (
-        <div className="overflow-x-auto border border-border">
+        <div className="max-w-full overflow-x-auto border border-border">
           <table className="w-full min-w-[880px] text-left text-sm">
             <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
               <tr>

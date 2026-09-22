@@ -54,14 +54,14 @@ export function LoginForm() {
             alt=""
             width={48}
             height={48}
-            className="object-contain"
+            className="size-10 shrink-0 object-contain sm:size-12"
             priority
           />
-          <div>
+          <div className="min-w-0">
             <p className="font-display text-xs tracking-[0.2em] text-text-muted">
               Medewerkers
             </p>
-            <h1 className="font-display text-3xl tracking-[0.04em]">
+            <h1 className="font-display text-2xl tracking-[0.04em] sm:text-3xl">
               Thuishaven Tools
             </h1>
           </div>

@@ -653,8 +653,8 @@ export function ChannelPerformanceCharts({
           {error}
         </p>
       ) : (
-        <div key={range} className="animate-fade-up grid gap-6 lg:grid-cols-2 lg:items-stretch">
-          <div className="flex flex-col">
+        <div key={range} className="animate-fade-up grid min-w-0 gap-6 lg:grid-cols-2 lg:items-stretch">
+          <div className="flex min-w-0 flex-col">
             <h3 className="mb-3 text-xs font-medium tracking-[0.12em] text-text-dim uppercase">
               {impressionsLabel} per dag
             </h3>
@@ -663,7 +663,7 @@ export function ChannelPerformanceCharts({
                 Geen publicatiedata om te plotten.
               </p>
             ) : (
-              <div className="relative min-h-56 w-full flex-1 border border-border bg-surface">
+              <div className="relative min-h-56 w-full min-w-0 flex-1 border border-border bg-surface">
                 <div className="absolute inset-0 p-3">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart
@@ -743,7 +743,7 @@ export function ChannelPerformanceCharts({
             )}
           </div>
 
-          <div className="flex flex-col">
+          <div className="flex min-w-0 flex-col">
             <h3 className="mb-3 text-xs font-medium tracking-[0.12em] text-text-dim uppercase">
               Top posts · {impressionsLabel}
             </h3>

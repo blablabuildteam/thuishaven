@@ -242,7 +242,7 @@ function ActivityLane({
       >
         {label}
       </div>
-      <div className="relative h-6 flex-1" style={{ marginRight: PLOT_RIGHT }}>
+      <div className="relative h-6 min-w-0 flex-1" style={{ marginRight: PLOT_RIGHT }}>
         <div
           className={cn(
             "pointer-events-none absolute inset-x-0 top-1/2 h-px",
@@ -452,7 +452,7 @@ export function EventSalesCurveChart({
 
   return (
     <div className="mt-3 border-t border-border pt-3">
-      <div className="mb-2 flex items-end justify-between gap-3">
+      <div className="mb-2 flex flex-wrap items-end justify-between gap-x-3 gap-y-1">
         <p className="text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
           Verkoopverloop
         </p>
@@ -465,7 +465,7 @@ export function EventSalesCurveChart({
         {formatNumber(total)} tickets van {formatDayNl(first.day)} tot{" "}
         {formatDayNl(last.day)}. Hover een dag voor tickets en marketing.
       </p>
-      <div ref={chartRef} className="h-28 w-full overflow-visible">
+      <div ref={chartRef} className="h-28 w-full min-w-0">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={series}

@@ -125,7 +125,7 @@ export default async function YouTubePage() {
 function Stat({ value, label }: { value: string; label: string }) {
   return (
     <p>
-      <span className="font-display text-3xl">{value}</span>
+      <span className="block break-words font-display text-2xl leading-none sm:text-3xl">{value}</span>
       <span className="mt-1 block text-[11px] tracking-[0.12em] text-text-dim uppercase">
         {label}
       </span>

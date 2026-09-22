@@ -33,10 +33,10 @@ export function PaidAdsComingSoon({
           description={`${channelLabel} volgt zodra de Google Ads-koppeling live is. Deze view vullen we daarna met spend, impressions en clicks.`}
         />
 
-        <section className="mb-10 grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
+        <section className="mb-10 grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 sm:gap-x-8 sm:gap-y-6 lg:grid-cols-6">
           {PLACEHOLDER_STATS.map((stat) => (
             <p key={stat.label} className="min-w-0">
-              <span className="block font-display text-3xl leading-none tabular-nums">
+              <span className="block break-words font-display text-2xl leading-none tabular-nums sm:text-3xl">
                 {stat.value}
               </span>
               <span className="mt-1 block text-[11px] tracking-[0.12em] text-text-dim uppercase">
@@ -46,7 +46,7 @@ export function PaidAdsComingSoon({
           ))}
         </section>
 
-        <div className="overflow-x-auto border border-border">
+        <div className="max-w-full overflow-x-auto border border-border">
           <table className="w-full min-w-[880px] table-fixed text-left text-sm">
             <colgroup>
               <col className="w-[26%]" />

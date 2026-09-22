@@ -60,8 +60,8 @@ export function TicketsChannelsSearch({
   return (
     <>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="relative min-w-[200px] flex-1 max-w-md">
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-4 sm:w-auto">
+          <div className="relative w-full min-w-0 max-w-md sm:w-72">
             <Search
               className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-text-dim"
               aria-hidden
