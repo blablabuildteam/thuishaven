@@ -16,7 +16,6 @@ import {
   applyActivitiesToSeries,
   buildSalesCurveSeries,
   marketingActivitiesByDay,
-  uniqueActivityChannels,
   type SalesCurvePoint,
   type SalesDayPoint,
 } from "@/lib/insights/sales-curve";
@@ -24,6 +23,7 @@ import { formatDayNl, formatDayShort } from "@/lib/time/amsterdam";
 import { formatNumber } from "@/lib/utils";
 import {
   SocialChannelIcon,
+  paidAdBrandChannel,
   socialBrandIconSrc,
 } from "@/components/ui/social-channel-icon";
 
@@ -73,6 +73,13 @@ const EMPTY_POSTS: Array<{
   variants?: Array<{ publishedAt: string | null; title: string | null }>;
 }> = [];
 const EMPTY_MAILS: Array<{ sentAt: string | null; name: string }> = [];
+const EMPTY_ADS: Array<{
+  publishedAt: string | null;
+  dateStart: string | null;
+  platform: string;
+  campaignName: string | null;
+  adName: string | null;
+}> = [];
 const ICON_SIZE = 12;
 const PLOT_RIGHT = 36;
 
@@ -91,35 +98,187 @@ function flyoutPosition(
   };
 }
 
+function ActivityChannelIcon({
+  channel,
+  paid,
+  size,
+  className,
+}: {
+  channel: string;
+  paid?: boolean;
+  size: number;
+  className?: string;
+}) {
+  const resolved = paid ? paidAdBrandChannel(channel) : channel;
+  if (!socialBrandIconSrc(resolved)) return null;
+  return (
+    <SocialChannelIcon
+      channel={resolved}
+      size={size}
+      paid={paid}
+      className={className}
+      alt={paid ? "Paid" : undefined}
+    />
+  );
+}
+
 function ActivityList({
   activities,
 }: {
   activities: SalesCurvePoint["activities"];
 }) {
-  const shown = activities.slice(0, 6);
-  const extra = activities.length - shown.length;
-  if (shown.length === 0) return null;
+  if (activities.length === 0) return null;
+  const organic = activities.filter((a) => a.kind !== "paid");
+  const paid = activities.filter((a) => a.kind === "paid");
+
+  function group(
+    label: string | null,
+    rows: SalesCurvePoint["activities"],
+    max: number,
+  ) {
+    if (rows.length === 0) return null;
+    const shown = rows.slice(0, max);
+    const extra = rows.length - shown.length;
+    return (
+      <>
+        {label && (
+          <li className="pt-1 text-[9px] font-medium tracking-[0.1em] text-text-dim uppercase">
+            {label} ({rows.length})
+          </li>
+        )}
+        {shown.map((activity, index) => (
+          <li
+            key={`${activity.kind}-${index}`}
+            className="flex items-start gap-1.5"
+          >
+            <ActivityChannelIcon
+              channel={activity.kind === "mail" ? "mail" : activity.channel}
+              paid={activity.kind === "paid"}
+              size={11}
+              className="mt-0.5"
+            />
+            <span className="min-w-0 leading-snug text-text line-clamp-2">
+              {activity.title}
+            </span>
+          </li>
+        ))}
+        {extra > 0 && (
+          <li className="text-[10px] text-text-dim">+{extra} meer</li>
+        )}
+      </>
+    );
+  }
+
+  const both = organic.length > 0 && paid.length > 0;
   return (
     <ul className="mt-2 space-y-1 border-t border-border pt-1.5">
-      {shown.map((activity, index) => (
-        <li
-          key={`${activity.kind}-${index}`}
-          className="flex items-start gap-1.5"
-        >
-          <SocialChannelIcon
-            channel={activity.kind === "mail" ? "mail" : activity.channel}
-            size={11}
-            className="mt-0.5"
-          />
-          <span className="min-w-0 leading-snug text-text line-clamp-2">
-            {activity.title}
-          </span>
-        </li>
-      ))}
-      {extra > 0 && (
-        <li className="text-[10px] text-text-dim">+{extra} meer</li>
-      )}
+      {group(both || paid.length > 0 ? "Organic" : null, organic, 4)}
+      {group("Paid", paid, 4)}
     </ul>
+  );
+}
+
+type LaneMark = {
+  row: SalesCurvePoint;
+  index: number;
+  channels: string[];
+  count: number;
+};
+
+function laneMarks(
+  series: SalesCurvePoint[],
+  paid: boolean,
+): LaneMark[] {
+  return series
+    .map((row, index) => {
+      const rows = row.activities.filter((a) =>
+        paid ? a.kind === "paid" : a.kind !== "paid",
+      );
+      const seen = new Set<string>();
+      const channels: string[] = [];
+      for (const activity of rows) {
+        const channel =
+          activity.kind === "mail"
+            ? "mail"
+            : paid
+              ? paidAdBrandChannel(activity.channel)
+              : activity.channel;
+        if (!channel || seen.has(channel) || !socialBrandIconSrc(channel)) {
+          continue;
+        }
+        seen.add(channel);
+        channels.push(channel);
+        if (channels.length >= 2) break;
+      }
+      return { row, index, channels, count: rows.length };
+    })
+    .filter((mark) => mark.count > 0 && mark.channels.length > 0);
+}
+
+function ActivityLane({
+  label,
+  marks,
+  last,
+  paid,
+  onHover,
+  onLeave,
+}: {
+  label: string;
+  marks: LaneMark[];
+  last: number;
+  paid: boolean;
+  onHover: (row: SalesCurvePoint, x: number, y: number) => void;
+  onLeave: () => void;
+}) {
+  if (marks.length === 0) return null;
+  return (
+    <div className="flex items-center gap-0">
+      <div
+        className="w-8 shrink-0 pr-1 text-right text-[8px] font-medium tracking-[0.08em] text-text-dim uppercase"
+        aria-hidden
+      >
+        {label}
+      </div>
+      <div className="relative h-5 flex-1" style={{ marginRight: PLOT_RIGHT }}>
+        {marks.map((mark) => {
+          const left = (mark.index / last) * 100;
+          return (
+            <div
+              key={mark.row.day}
+              className="absolute top-0 -translate-x-1/2"
+              style={{ left: `${left}%` }}
+              onMouseEnter={(event) => {
+                const rect = event.currentTarget.getBoundingClientRect();
+                onHover(mark.row, rect.left + rect.width / 2, rect.top);
+              }}
+              onMouseLeave={onLeave}
+            >
+              <div className="flex items-center justify-center gap-px">
+                {mark.channels.map((channel) => (
+                  <ActivityChannelIcon
+                    key={channel}
+                    channel={channel}
+                    paid={paid}
+                    size={ICON_SIZE}
+                  />
+                ))}
+                {mark.count > mark.channels.length && (
+                  <span
+                    className={
+                      paid
+                        ? "ml-px font-mono text-[8px] leading-none font-semibold text-success"
+                        : "ml-px font-mono text-[8px] leading-none text-text-dim"
+                    }
+                  >
+                    ×{mark.count}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -129,53 +288,34 @@ function MarketingActivityRow({ series }: { series: SalesCurvePoint[] }) {
     x: number;
     y: number;
   } | null>(null);
-  const marks = series
-    .map((row, index) => ({ row, index }))
-    .filter(({ row }) => row.activities.length > 0);
-  if (marks.length === 0) return null;
+  const organicMarks = laneMarks(series, false);
+  const paidMarks = laneMarks(series, true);
+
+  if (organicMarks.length === 0 && paidMarks.length === 0) return null;
   const last = Math.max(series.length - 1, 1);
 
+  const onHover = (row: SalesCurvePoint, x: number, y: number) =>
+    setHover({ row, x, y });
+  const onLeave = () => setHover(null);
+
   return (
-    <div className="mt-1 flex items-center gap-0">
-      <div className="w-8 shrink-0" aria-hidden />
-      <div
-        className="relative h-5 flex-1"
-        style={{ marginRight: PLOT_RIGHT }}
-      >
-        {marks.map(({ row, index }) => {
-          const channels = uniqueActivityChannels(row.activities).filter(
-            (channel) => socialBrandIconSrc(channel),
-          );
-          if (channels.length === 0) return null;
-          const left = (index / last) * 100;
-          return (
-            <div
-              key={row.day}
-              className="absolute top-0 -translate-x-1/2"
-              style={{ left: `${left}%` }}
-              onMouseEnter={(event) => {
-                const rect = event.currentTarget.getBoundingClientRect();
-                setHover({
-                  row,
-                  x: rect.left + rect.width / 2,
-                  y: rect.top,
-                });
-              }}
-              onMouseLeave={() => setHover(null)}
-            >
-              <div className="flex items-center justify-center gap-px">
-                {channels.map((channel) => (
-                  <SocialChannelIcon
-                    key={channel}
-                    channel={channel}
-                    size={ICON_SIZE}
-                  />
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+    <div className="mt-1 space-y-0.5">
+      <ActivityLane
+        label={paidMarks.length > 0 ? "Org" : ""}
+        marks={organicMarks}
+        last={last}
+        paid={false}
+        onHover={onHover}
+        onLeave={onLeave}
+      />
+      <ActivityLane
+        label="Paid"
+        marks={paidMarks}
+        last={last}
+        paid
+        onHover={onHover}
+        onLeave={onLeave}
+      />
       {hover && typeof document !== "undefined"
         ? createPortal(
             <div
@@ -257,6 +397,7 @@ export function EventSalesCurveChart({
   sinceDay,
   posts = EMPTY_POSTS,
   mails = EMPTY_MAILS,
+  ads = EMPTY_ADS,
 }: {
   points: SalesDayPoint[];
   eventDay: string;
@@ -268,13 +409,20 @@ export function EventSalesCurveChart({
     variants?: Array<{ publishedAt: string | null; title: string | null }>;
   }>;
   mails?: Array<{ sentAt: string | null; name: string }>;
+  ads?: Array<{
+    publishedAt: string | null;
+    dateStart: string | null;
+    platform: string;
+    campaignName: string | null;
+    adName: string | null;
+  }>;
 }) {
   const colors = useChartColors();
   const reactId = useId();
   const chartRef = useRef<HTMLDivElement>(null);
   const activityDays = useMemo(
-    () => marketingActivitiesByDay({ posts, mails }),
-    [posts, mails],
+    () => marketingActivitiesByDay({ posts, mails, ads }),
+    [posts, mails, ads],
   );
   const series = useMemo(() => {
     const built = buildSalesCurveSeries(points, eventDay, [

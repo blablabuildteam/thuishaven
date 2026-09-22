@@ -53,29 +53,61 @@ export function socialBrandIconSrc(
   return resolved ? ICON_SRC[resolved] : null;
 }
 
+/** Brand mark for a paid-ad platform row (Meta → Instagram icon). */
+export function paidAdBrandChannel(
+  platform: string | null | undefined,
+): SocialBrandChannel {
+  const resolved = resolveSocialBrandChannel(platform);
+  if (resolved && resolved !== "mail" && resolved !== "brevo" && resolved !== "email") {
+    return resolved;
+  }
+  return "instagram";
+}
+
 /** Brand mark from `/public/social-icons` for IG / TikTok / YouTube / mail. */
 export function SocialChannelIcon({
   channel,
   size = 16,
   className,
   alt,
+  paid = false,
 }: {
   channel: string;
   size?: number;
   className?: string;
   alt?: string;
+  paid?: boolean;
 }) {
   const resolved = resolveSocialBrandChannel(channel);
   if (!resolved) return null;
 
-  return (
+  const icon = (
     <Image
       src={ICON_SRC[resolved]}
       alt={alt ?? ICON_ALT[resolved]}
-      width={size}
-      height={size}
-      className={cn("shrink-0 object-contain", className)}
+      width={paid ? Math.max(8, size - 2) : size}
+      height={paid ? Math.max(8, size - 2) : size}
+      className={cn(
+        "shrink-0 object-contain",
+        paid && "brightness-0 invert",
+        !paid && className,
+      )}
       unoptimized
     />
+  );
+
+  if (!paid) return icon;
+
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center rounded-full bg-success",
+        className,
+      )}
+      style={{ width: size + 4, height: size + 4 }}
+      title={alt ?? `${ICON_ALT[resolved]} paid`}
+    >
+      {icon}
+    </span>
   );
 }

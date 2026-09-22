@@ -182,3 +182,21 @@ export function organicSalesContribution(input: {
   }
   return { mode: "exact", source: "allocated", lift, lowerBound: null };
 }
+
+/**
+ * Sort key for organic activities: headline ticket credit, then the low end
+ * of a range. Exact and spike credits use the lift for both.
+ */
+export function organicTicketSalesRank(
+  contribution: OrganicSalesContribution,
+): { high: number; low: number } {
+  if (
+    contribution.mode === "none" ||
+    contribution.lift == null ||
+    contribution.lift <= 0
+  ) {
+    return { high: 0, low: 0 };
+  }
+  const low = contribution.lowerBound ?? contribution.lift;
+  return { high: contribution.lift, low };
+}

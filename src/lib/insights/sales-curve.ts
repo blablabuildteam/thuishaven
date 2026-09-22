@@ -6,9 +6,14 @@ export type SalesDayPoint = {
 };
 
 export type SalesCurveActivity = {
-  kind: "social" | "mail";
+  kind: "social" | "mail" | "paid";
   channel: string;
   title: string;
+};
+
+export type SalesCurveActivityMark = {
+  channel: string;
+  paid: boolean;
 };
 
 export type SalesCurvePoint = {
@@ -80,6 +85,13 @@ export function marketingActivitiesByDay(input: {
     variants?: Array<{ publishedAt: string | null; title: string | null }>;
   }>;
   mails: Array<{ sentAt: string | null; name: string }>;
+  ads?: Array<{
+    publishedAt: string | null;
+    dateStart: string | null;
+    platform: string;
+    campaignName: string | null;
+    adName: string | null;
+  }>;
 }): Map<string, SalesCurveActivity[]> {
   const byDay = new Map<string, SalesCurveActivity[]>();
 
@@ -111,6 +123,13 @@ export function marketingActivitiesByDay(input: {
     const title = mail.name?.trim() || "Mailing";
     push(day, { kind: "mail", channel: "mail", title });
   }
+  for (const ad of input.ads ?? []) {
+    const raw = ad.publishedAt || ad.dateStart?.slice(0, 10);
+    if (!raw) continue;
+    const day = raw.length === 10 && !raw.includes("T") ? raw : amsterdamDay(raw);
+    const title = ad.adName?.trim() || ad.campaignName?.trim() || "Paid ad";
+    push(day, { kind: "paid", channel: ad.platform, title });
+  }
   return byDay;
 }
 
@@ -128,16 +147,26 @@ export function applyActivitiesToSeries(
 export function uniqueActivityChannels(
   activities: SalesCurveActivity[],
 ): string[] {
+  return uniqueActivityMarks(activities).map((mark) => mark.channel);
+}
+
+/** Organic vs paid of the same channel stay separate (green paid mark). */
+export function uniqueActivityMarks(
+  activities: SalesCurveActivity[],
+): SalesCurveActivityMark[] {
   const seen = new Set<string>();
-  const channels: string[] = [];
+  const marks: SalesCurveActivityMark[] = [];
   for (const activity of activities) {
+    const paid = activity.kind === "paid";
     const channel = activity.kind === "mail" ? "mail" : activity.channel;
-    if (!channel || seen.has(channel)) continue;
-    seen.add(channel);
-    channels.push(channel);
-    if (channels.length >= 3) break;
+    if (!channel) continue;
+    const key = `${paid ? "paid" : "organic"}:${channel}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    marks.push({ channel, paid });
+    if (marks.length >= 4) break;
   }
-  return channels;
+  return marks;
 }
 
 export function sumSalesDays(points: SalesDayPoint[]): number {

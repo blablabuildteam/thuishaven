@@ -9,7 +9,7 @@
 ### Paid ads (spend per event)
 
 - [x] Meta Ads — working in Bronnen; paid view open in sidebar
-- [ ] TikTok Ads — code wired; waiting on Marketing API token (not Login Kit) + advertiser ID
+- [x] TikTok Ads — Marketing API token live; paid view + event insights
 - [ ] YouTube / Google Ads — env + OAuth script ready; sync/integration still to wire and connect
 
 ### Organic

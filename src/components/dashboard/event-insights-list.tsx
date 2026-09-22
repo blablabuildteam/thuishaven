@@ -39,7 +39,7 @@ import {
 import { formatPoolUsage } from "@/lib/integrations/weeztix/channels";
 import { cn, formatEuroFromCents, formatNumber, formatPercent } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SocialChannelIcon } from "@/components/ui/social-channel-icon";
+import { SocialChannelIcon, paidAdBrandChannel } from "@/components/ui/social-channel-icon";
 import type {
   EventInsight,
   AnomalyInsight,
@@ -52,15 +52,14 @@ import type {
 import {
   SALES_IMPACT_ROLE_HINT,
   organicAttributionWeight,
+  organicTicketSalesRank,
   organicSalesContribution,
   type OrganicSalesContribution,
   type SalesImpactRole,
 } from "@/lib/marketing/sales-impact";
 import {
   organicImpactLevelLabel,
-  organicPostWeightLabel,
   type OrganicImpactLevel,
-  type OrganicPostWeight,
 } from "@/lib/marketing/organic-impact";
 import {
   competeSizeLabel,
@@ -105,6 +104,38 @@ const CHANNEL_LABEL: Record<string, string> = {
   tiktok: "TikTok",
   youtube: "YouTube",
 };
+
+const PAID_PLATFORM_LABEL: Record<string, string> = {
+  meta: "Meta",
+  tiktok: "TikTok",
+  youtube: "YouTube",
+};
+
+function paidPlatformsLabel(ads: EventInsightPaidAd[] | undefined): string {
+  const names = [
+    ...new Set(
+      (ads ?? []).map((ad) => PAID_PLATFORM_LABEL[ad.platform] ?? "Ads"),
+    ),
+  ];
+  return names.length > 0 ? names.join(" + ") : "ads";
+}
+
+function paidSummaryLine(
+  event: EventInsight,
+  options?: { withCount?: boolean },
+): string {
+  const spend = event.paid?.spendCents ?? 0;
+  if (spend <= 0) return "Nog geen paid ads gekoppeld.";
+  const platforms = paidPlatformsLabel(event.paidAds);
+  const count = options?.withCount
+    ? ` · ${event.paid?.ads ?? 0} ads`
+    : "";
+  const roas =
+    event.paid?.roas != null
+      ? ` · ticket-ROAS ${event.paid.roas.toFixed(1)}×`
+      : "";
+  return `Paid ${platforms} · ${formatEuroFromCents(spend)}${count}${roas}`;
+}
 
 const ORGANIC_ROLE_ORDER = ["promo", "same_day", "after"] as const;
 
@@ -389,13 +420,7 @@ function InsightDeepDive({
           )}
 
           <p className="mt-3 text-[10px] text-text-dim">
-            {(event.paid?.spendCents ?? 0) > 0
-              ? `Paid Meta · ${formatEuroFromCents(event.paid?.spendCents ?? 0)} · ${event.paid?.ads ?? 0} ads${
-                  event.paid?.roas != null
-                    ? ` · ticket-ROAS ${event.paid.roas.toFixed(1)}×`
-                    : ""
-                }`
-              : "Nog geen paid ads gekoppeld."}
+            {paidSummaryLine(event, { withCount: true })}
           </p>
         </div>
       )}
@@ -417,9 +442,7 @@ function InsightDeepDive({
             ))}
           </ul>
           <p className="mt-2 text-[10px] text-text-dim">
-            {(event.paid?.spendCents ?? 0) > 0
-              ? `Paid Meta · ${formatEuroFromCents(event.paid?.spendCents ?? 0)}`
-              : "Nog geen paid ads gekoppeld."}
+            {paidSummaryLine(event)}
           </p>
         </div>
       )}
@@ -949,6 +972,7 @@ function TicketMetricsVisual({
   eventDay,
   socialPosts,
   emailCampaigns,
+  paidAds,
 }: {
   sold: number;
   capacity: number | null;
@@ -965,6 +989,7 @@ function TicketMetricsVisual({
   eventDay: string;
   socialPosts: EventInsightSocial[];
   emailCampaigns: EventInsightMail[];
+  paidAds: EventInsightPaidAd[];
 }) {
   const { available } = ticketComposition(sold, capacity, scanned);
 
@@ -1102,6 +1127,7 @@ function TicketMetricsVisual({
           }
           posts={socialPosts}
           mails={emailCampaigns}
+          ads={paidAds}
         />
       ) : salesTrackedFrom && salesCurveSource !== "orders" ? (
         <p className="mt-3 border-t border-border pt-3 text-[10px] text-text-dim">
@@ -1426,6 +1452,7 @@ function EventDetail({ event }: { event: EventInsight }) {
           eventDay={event.day}
           socialPosts={socialPosts}
           emailCampaigns={emailCampaigns}
+          paidAds={event.paidAds}
         />
 
         <div className="grid gap-x-6 gap-y-1 lg:grid-cols-2">
@@ -1559,7 +1586,7 @@ function EventDetail({ event }: { event: EventInsight }) {
                       }
                       icon={Cake}
                       rows={demographics.age}
-                      limit={6}
+                      limit={5}
                       isAge
                     />
                   )}
@@ -1567,17 +1594,14 @@ function EventDetail({ event }: { event: EventInsight }) {
                     title="Stad"
                     icon={MapPin}
                     rows={demographics.city}
-                    limit={4}
+                    limit={5}
                   />
                 </div>
                 {demographics.coveragePct != null && (
                   <p className="mt-2 text-[10px] text-text-dim">
-                    {formatPercent(demographics.coveragePct, 0)} ingevuld (
-                    {formatNumber(demographics.answered)}/
-                    {formatNumber(demographics.total)})
-                    {demographics.ageSampleSize > 0
-                      ? ` · leeftijd uit ${formatNumber(demographics.ageSampleSize)} geboortedata`
-                      : ""}
+                    Door {formatNumber(demographics.answered)} van{" "}
+                    {formatNumber(demographics.total)} bezoekers ingevuld (
+                    {formatPercent(demographics.coveragePct, 0)})
                   </p>
                 )}
               </>
@@ -1703,8 +1727,9 @@ function PaidMarketingBlock({
           >
             <span className="flex min-w-0 items-center gap-1.5 truncate text-text-muted">
               <SocialChannelIcon
-                channel={ad.platform === "tiktok" ? "tiktok" : "instagram"}
+                channel={paidAdBrandChannel(ad.platform)}
                 size={14}
+                paid
                 alt=""
               />
               <span className="truncate">
@@ -1738,6 +1763,79 @@ function PaidMarketingBlock({
   );
 }
 
+type OrganicActivity =
+  | {
+      kind: "post";
+      post: EventInsightSocial;
+      high: number;
+      low: number;
+      weight: number;
+      publishedAt: string | null;
+    }
+  | {
+      kind: "mail";
+      mail: EventInsightMail;
+      high: number;
+      low: number;
+      weight: number;
+      publishedAt: string | null;
+    };
+
+function postTicketRank(
+  post: EventInsightSocial,
+  ctx: {
+    concurrentPosts: number;
+    preEventSold?: number;
+    totalWeight?: number;
+  },
+): { high: number; low: number } {
+  return organicTicketSalesRank(
+    organicSalesContribution({
+      ticketLiftSold: post.ticketLiftSold,
+      spikeDetected: post.spikeDetected,
+      spikeEstimatedLift: post.spikeEstimatedLift,
+      concurrentPosts: ctx.concurrentPosts,
+      preEventSold: ctx.preEventSold,
+      postWeight: organicAttributionWeight(post),
+      totalWeight: ctx.totalWeight,
+    }),
+  );
+}
+
+function postActivity(
+  post: EventInsightSocial,
+  rank: { high: number; low: number },
+): OrganicActivity {
+  return {
+    kind: "post",
+    post,
+    high: rank.high,
+    low: rank.low,
+    weight: organicAttributionWeight(post),
+    publishedAt: post.publishedAt,
+  };
+}
+
+function mailActivity(mail: EventInsightMail): OrganicActivity {
+  const tickets = mail.ordersAfter ?? 0;
+  return {
+    kind: "mail",
+    mail,
+    high: tickets,
+    low: tickets,
+    weight: mail.sent,
+    publishedAt: mail.sentAt,
+  };
+}
+
+/** Highest expected ticket sales first; reach, then recency, breaks ties. */
+function byExpectedTickets(a: OrganicActivity, b: OrganicActivity): number {
+  if (b.high !== a.high) return b.high - a.high;
+  if (b.low !== a.low) return b.low - a.low;
+  if (b.weight !== a.weight) return b.weight - a.weight;
+  return (b.publishedAt ?? "").localeCompare(a.publishedAt ?? "");
+}
+
 function OrganicMarketingBlock({
   socialPosts,
   emailCampaigns,
@@ -1753,7 +1851,6 @@ function OrganicMarketingBlock({
   ticketsSold: number;
   sameDaySold: number | null;
 }) {
-  const mails = emailCampaigns.slice(0, 2);
   const byRole: Record<SalesImpactRole, EventInsightSocial[]> = {
     promo: socialPosts.filter((p) => p.salesImpactRole === "promo"),
     same_day: socialPosts.filter((p) => p.salesImpactRole === "same_day"),
@@ -1767,11 +1864,30 @@ function OrganicMarketingBlock({
       (p.ticketLiftSold != null && p.ticketLiftSold > 0) ||
       (p.spikeDetected && p.spikeEstimatedLift != null),
   );
+  const promoCtx = {
+    concurrentPosts: byRole.promo.length,
+    preEventSold,
+    totalWeight: promoTotalWeight,
+  };
+
+  const activitiesByRole: Record<SalesImpactRole, OrganicActivity[]> = {
+    promo: [
+      ...byRole.promo.map((post) =>
+        postActivity(post, postTicketRank(post, promoCtx)),
+      ),
+      ...emailCampaigns.map((mail) => mailActivity(mail)),
+    ].sort(byExpectedTickets),
+    same_day: byRole.same_day
+      .map((post) =>
+        postActivity(post, postTicketRank(post, { concurrentPosts: 1 })),
+      )
+      .sort(byExpectedTickets),
+    after: byRole.after.map((post) => postActivity(post, 0)),
+  };
 
   const blocks = ORGANIC_ROLE_ORDER.flatMap((role) => {
-    const posts = byRole[role];
-    const groupMails = role === "promo" ? mails : [];
-    if (posts.length === 0 && groupMails.length === 0) return [];
+    const activities = activitiesByRole[role];
+    if (activities.length === 0) return [];
     const label =
       role === "same_day" && sameDaySold != null && sameDaySold > 0
         ? `${ORGANIC_GROUP_LABEL[role]} · +${formatNumber(sameDaySold)} tickets`
@@ -1780,8 +1896,7 @@ function OrganicMarketingBlock({
       {
         key: role,
         label,
-        posts,
-        mails: groupMails,
+        activities,
       },
     ];
   });
@@ -1797,7 +1912,7 @@ function OrganicMarketingBlock({
             score={impactScore}
             empty={
               socialPosts.every((p) => p.salesImpactRole === "after") &&
-              mails.length === 0
+              emailCampaigns.length === 0
             }
           />
           <div>
@@ -1810,51 +1925,52 @@ function OrganicMarketingBlock({
                 {block.key === "promo" && byRole.promo.length > 0 && (
                   <p className="mb-1.5 text-[10px] text-text-dim">
                     {promoHasWindowLift
-                      ? `Tickets in ±48u — range bij ${byRole.promo.length} actieve posts.`
+                      ? `Gesorteerd op verwachte tickets. Tickets in ±48u — range bij ${byRole.promo.length} actieve posts.`
                       : preEventSold > 0
-                        ? `Voorverkoop ${formatNumber(preEventSold)} tickets — range = gelijke split vs. naar bereik.`
+                        ? `Gesorteerd op verwachte tickets. Voorverkoop ${formatNumber(preEventSold)} tickets — range = gelijke split vs. naar bereik.`
                         : "Geen meetbare ticketlift rond deze posts."}
                   </p>
                 )}
                 <div className="space-y-1">
-                  {block.posts.map((p) => (
-                    <OrganicPostRow
-                      key={p.postId}
-                      post={p}
-                      concurrentPosts={
-                        block.key === "promo" ? byRole.promo.length : 1
-                      }
-                      preEventSold={
-                        block.key === "promo" ? preEventSold : null
-                      }
-                      postWeight={
-                        block.key === "promo"
-                          ? organicAttributionWeight(p)
-                          : 0
-                      }
-                      totalWeight={
-                        block.key === "promo" ? promoTotalWeight : 0
-                      }
-                    />
-                  ))}
-                  {block.mails.map((m) => (
-                    <div
-                      key={m.campaignId}
-                      className="flex items-center justify-between gap-2 py-1"
-                    >
-                      <span className="flex min-w-0 items-center gap-1.5 truncate">
-                        <SocialChannelIcon channel="mail" size={14} alt="" />
-                        <span className="truncate text-text-muted">
-                          {m.name.slice(0, 30)}
+                  {block.activities.map((activity) =>
+                    activity.kind === "post" ? (
+                      <OrganicPostRow
+                        key={activity.post.postId}
+                        post={activity.post}
+                        concurrentPosts={
+                          block.key === "promo" ? byRole.promo.length : 1
+                        }
+                        preEventSold={
+                          block.key === "promo" ? preEventSold : null
+                        }
+                        postWeight={
+                          block.key === "promo"
+                            ? organicAttributionWeight(activity.post)
+                            : 0
+                        }
+                        totalWeight={
+                          block.key === "promo" ? promoTotalWeight : 0
+                        }
+                      />
+                    ) : (
+                      <div
+                        key={activity.mail.campaignId}
+                        className="flex items-center justify-between gap-2 py-1"
+                      >
+                        <span className="flex min-w-0 items-center gap-1.5 truncate">
+                          <SocialChannelIcon channel="mail" size={14} alt="" />
+                          <span className="truncate text-text-muted">
+                            {activity.mail.name.slice(0, 30)}
+                          </span>
                         </span>
-                      </span>
-                      <span className="shrink-0 font-mono text-text-muted">
-                        {m.ordersAfter != null
-                          ? `~${formatNumber(m.ordersAfter)}`
-                          : `${formatNumber(m.sent)} sent`}
-                      </span>
-                    </div>
-                  ))}
+                        <span className="shrink-0 font-mono text-text-muted">
+                          {activity.mail.ordersAfter != null
+                            ? `~${formatNumber(activity.mail.ordersAfter)}`
+                            : `${formatNumber(activity.mail.sent)} sent`}
+                        </span>
+                      </div>
+                    ),
+                  )}
                 </div>
               </div>
             ))}
@@ -2237,9 +2353,6 @@ function OrganicPostRow({
                 />
               </button>
             )}
-            {role !== "after" && (
-              <OrganicPostWeightBars weight={post.impactWeight} />
-            )}
             <span
               className="font-mono text-text-muted"
               title={
@@ -2361,32 +2474,6 @@ function OrganicImpactVerdict({
         </p>
       </div>
     </div>
-  );
-}
-
-/** Per-post heaviness — same rising-bar language as concurrentie-omvang. */
-function OrganicPostWeightBars({ weight }: { weight: OrganicPostWeight }) {
-  const filled = weight === "heavy" ? 3 : weight === "medium" ? 2 : 1;
-  const label = organicPostWeightLabel(weight);
-  const heights = ["h-1.5", "h-2.5", "h-3.5"] as const;
-  return (
-    <span
-      className="inline-flex h-3.5 shrink-0 items-end gap-0.5"
-      title={`Impact per post: ${label}`}
-      aria-label={`Impact ${label}`}
-      role="img"
-    >
-      {heights.map((h, i) => (
-        <span
-          key={h}
-          className={cn(
-            "w-1 rounded-[1px]",
-            h,
-            i < filled ? "bg-text-muted" : "bg-border",
-          )}
-        />
-      ))}
-    </span>
   );
 }
 
@@ -2725,41 +2812,14 @@ function LineupBlock({
   );
 }
 
-/** Convert individual age buckets to 3-year range buckets (18-20, 21-23, etc.) */
-function groupAgesIntoRanges(ageBuckets: DemographicBucket[]): DemographicBucket[] {
-  const rangeMap = new Map<string, number>();
-
-  for (const bucket of ageBuckets) {
-    if (bucket.key === "onbekend") continue;
+/** Drop unusable age keys. Ranking happens with the other demographic lists. */
+function knownAges(ageBuckets: DemographicBucket[]): DemographicBucket[] {
+  return ageBuckets.filter((bucket) => {
+    if (bucket.key === "onbekend") return false;
     const age = Number(bucket.key);
-    if (!Number.isFinite(age) || age < 0) continue;
-
-    const rangeStart = age < 18 ? 0 : 18 + Math.floor((age - 18) / 3) * 3;
-    const rangeEnd = age < 18 ? 17 : rangeStart + 2;
-    const rangeKey = age < 18 ? "<18" : `${rangeStart}-${rangeEnd}`;
-
-    rangeMap.set(rangeKey, (rangeMap.get(rangeKey) ?? 0) + bucket.count);
-  }
-
-  return [...rangeMap.entries()]
-    .map(([key, count]) => ({ key, count }))
-    .sort((a, b) => {
-      if (a.key === "<18") return -1;
-      if (b.key === "<18") return 1;
-      const aStart = Number(a.key.split("-")[0]);
-      const bStart = Number(b.key.split("-")[0]);
-      return aStart - bStart;
-    });
+    return Number.isFinite(age) && age >= 0;
+  });
 }
-
-const DEMO_BAR_FILLS = [
-  "bg-accent",
-  "bg-info",
-  "bg-text",
-  "bg-text-muted",
-  "bg-success",
-  "bg-warn",
-] as const;
 
 function withOtherBucket(
   rows: DemographicBucket[],
@@ -2783,13 +2843,13 @@ function DemoMini({
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   rows: DemographicBucket[];
   limit?: number;
-  /** If true, group individual ages into 3-year ranges */
+  /** If true, keep one row per age. The largest `limit` rows stay; the rest become Overig. */
   isAge?: boolean;
 }) {
   const known = rows.filter((r) => r.key !== "onbekend");
-  const prepared = isAge
-    ? groupAgesIntoRanges(known)
-    : [...known].sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+  const prepared = (isAge ? knownAges(known) : known).sort(
+    (a, b) => b.count - a.count || a.key.localeCompare(b.key),
+  );
   const total = prepared.reduce((s, r) => s + r.count, 0);
   if (!total) return null;
   const display = withOtherBucket(prepared, limit);
@@ -2800,31 +2860,8 @@ function DemoMini({
         <Icon className="size-3" strokeWidth={1.5} />
         {title}
       </p>
-      <div
-        className="mb-2 flex h-1.5 w-full overflow-hidden bg-border"
-        role="img"
-        aria-label={`${title} verdeling`}
-      >
-        {display.map((r, i) => {
-          const pct = (r.count / total) * 100;
-          if (pct < 0.4) return null;
-          return (
-            <div
-              key={r.key}
-              className={cn(
-                "h-full",
-                r.key === "overig"
-                  ? "bg-text-dim/35"
-                  : DEMO_BAR_FILLS[i % DEMO_BAR_FILLS.length],
-              )}
-              style={{ width: `${pct}%` }}
-              title={`${r.key}: ${formatPercent(pct, 0)}`}
-            />
-          );
-        })}
-      </div>
       <ul className="space-y-1.5 text-xs">
-        {display.map((r, i) => {
+        {display.map((r) => {
           const pct = (r.count / total) * 100;
           const isOther = r.key === "overig";
           return (
@@ -2832,20 +2869,11 @@ function DemoMini({
               <div className="mb-0.5 flex items-center justify-between gap-2">
                 <span
                   className={cn(
-                    "flex min-w-0 items-center gap-1.5 truncate",
+                    "min-w-0 truncate",
                     isOther ? "text-text-dim" : "capitalize",
                   )}
                 >
-                  <span
-                    className={cn(
-                      "size-1.5 shrink-0",
-                      isOther
-                        ? "bg-text-dim/35"
-                        : DEMO_BAR_FILLS[i % DEMO_BAR_FILLS.length],
-                    )}
-                    aria-hidden
-                  />
-                  <span className="truncate">{isOther ? "Overig" : r.key}</span>
+                  {isOther ? "Overig" : r.key}
                 </span>
                 <span className="shrink-0 font-mono text-text-muted">
                   {formatPercent(pct, 0)}
@@ -2855,9 +2883,7 @@ function DemoMini({
                 <div
                   className={cn(
                     "h-full",
-                    isOther
-                      ? "bg-text-dim/40"
-                      : DEMO_BAR_FILLS[i % DEMO_BAR_FILLS.length],
+                    isOther ? "bg-text-dim/40" : "bg-accent",
                   )}
                   style={{ width: `${Math.min(100, pct)}%` }}
                 />

@@ -330,6 +330,8 @@ export type EventInsightPaidAd = {
   reach: number;
   clicks: number;
   permalink: string | null;
+  publishedAt: string | null;
+  dateStart: string | null;
 };
 
 export type EventInsightPaid = {
@@ -1175,6 +1177,13 @@ export async function loadEventInsightsFresh(options?: {
         reach: ad.reach ?? 0,
         clicks: ad.clicks ?? 0,
         permalink: ad.permalink,
+        publishedAt: ad.publishedAt?.toISOString() ?? null,
+        dateStart:
+          typeof ad.dateStart === "string"
+            ? ad.dateStart.slice(0, 10)
+            : ad.dateStart
+              ? amsterdamDay(ad.dateStart)
+              : null,
       }));
       const spendCents = paidAds.reduce((s, a) => s + a.spendCents, 0);
       const ticketRevenueCents = e.revenueCents ?? 0;

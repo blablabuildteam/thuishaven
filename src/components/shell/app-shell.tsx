@@ -98,7 +98,6 @@ const dashboardSections: NavSection[] = [
         href: "/dashboard/paid/tiktok",
         label: "TikTok",
         brand: "tiktok",
-        disabled: true,
       },
       {
         href: "/dashboard/paid/google",
