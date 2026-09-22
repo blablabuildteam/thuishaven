@@ -92,6 +92,26 @@ function isMissingModelError(status: number, body: string): boolean {
   );
 }
 
+function isRetryableModelError(status: number, body: string): boolean {
+  if (isMissingModelError(status, body)) return true;
+  if (status === 429 || status === 500 || status === 503) return true;
+  return /unavailable|high demand|overloaded|resource_exhausted/i.test(body);
+}
+
+function friendlyModelError(provider: "Gemini" | "OpenAI", status: number, body: string): string {
+  if (
+    status === 429 ||
+    status === 503 ||
+    /unavailable|high demand|overloaded|resource_exhausted/i.test(body)
+  ) {
+    return `${provider} is even overbelast. Probeer het zo nog een keer.`;
+  }
+  if (status === 401 || status === 403) {
+    return `${provider} weigert de sleutel. Check de API-key.`;
+  }
+  return `Geen antwoord van ${provider}. Probeer het nog een keer.`;
+}
+
 async function askOpenAi(input: {
   key: string;
   context: string;
@@ -125,9 +145,10 @@ async function askOpenAi(input: {
 
     if (!res.ok) {
       const text = await res.text();
+      console.error("[insights/llm] OpenAI HTTP", res.status, text.slice(0, 300));
       return {
         ok: false,
-        error: `OpenAI HTTP ${res.status}: ${text.slice(0, 200)}`,
+        error: friendlyModelError("OpenAI", res.status, text),
       };
     }
 
@@ -185,8 +206,12 @@ async function askGemini(input: {
 
       const text = await res.text();
       if (!res.ok) {
-        lastError = `Gemini HTTP ${res.status}: ${text.slice(0, 200)}`;
-        if (isMissingModelError(res.status, text)) continue;
+        console.error(
+          `[insights/llm] ${model} HTTP ${res.status}`,
+          text.slice(0, 300),
+        );
+        lastError = friendlyModelError("Gemini", res.status, text);
+        if (isRetryableModelError(res.status, text)) continue;
         return { ok: false, error: lastError };
       }
 

@@ -334,6 +334,46 @@ html.dark body::before {
   animation: insight-modal-panel 220ms ease-out both;
 }
 
+@keyframes chat-message-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chat-message-in {
+  animation: chat-message-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes chat-dot {
+  0%,
+  70%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.28;
+  }
+  35% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+.chat-dot {
+  animation: chat-dot 1.05s ease-in-out infinite;
+}
+
+.chat-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.chat-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
 @keyframes bar-grow {
   from {
     transform: scaleX(0);
@@ -464,7 +504,9 @@ html.dark body::before {
   .insight-loading-pass,
   .insight-modal-backdrop,
   .insight-modal-panel,
-  .mobile-nav-panel {
+  .mobile-nav-panel,
+  .chat-message-in,
+  .chat-dot {
     animation: none;
   }
 

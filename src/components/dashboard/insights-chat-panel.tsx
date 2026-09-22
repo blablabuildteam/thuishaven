@@ -1,9 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Plus, Send, Trash2 } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { format } from "date-fns";
+import { nl } from "date-fns/locale";
+import { Check, ChevronDown, Plus, Send, Trash2 } from "lucide-react";
+import { ChatMarkdown } from "@/components/dashboard/chat-markdown";
 import { cn } from "@/lib/utils";
 import type { InsightsChatMessage } from "@/lib/db/schema";
+
+const AGENT_MARK = "/brand/logo-mark.png";
 
 type InsightsChatSummary = {
   id: string;
@@ -40,7 +45,10 @@ export function InsightsChatPanel({ active = true }: { active?: boolean }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const historyRef = useRef<HTMLDivElement>(null);
+  const historyListId = useId();
 
   useEffect(() => {
     if (!active || hydrated) return;
@@ -76,12 +84,33 @@ export function InsightsChatPanel({ active = true }: { active?: boolean }) {
     el.scrollTop = el.scrollHeight;
   }, [messages, pending]);
 
+  useEffect(() => {
+    if (!historyOpen) return;
+    function onPointer(event: PointerEvent) {
+      if (!historyRef.current?.contains(event.target as Node)) {
+        setHistoryOpen(false);
+      }
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      setHistoryOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [historyOpen]);
+
   function startNewChat() {
     if (pending) return;
     setChatId(null);
     setMessages([WELCOME]);
     setInput("");
     setError(null);
+    setHistoryOpen(false);
   }
 
   function selectChat(id: string) {
@@ -90,6 +119,7 @@ export function InsightsChatPanel({ active = true }: { active?: boolean }) {
     setChatId(selected.id);
     setMessages(selected.messages.length ? selected.messages : [WELCOME]);
     setError(null);
+    setHistoryOpen(false);
   }
 
   async function removeChat(id: string) {
@@ -140,10 +170,11 @@ export function InsightsChatPanel({ active = true }: { active?: boolean }) {
       });
       const data = (await res.json()) as ChatAskResponse;
       if (!res.ok) {
-        const message =
+        const message = presentAssistantMessage(
           data.error ||
-          "Kon geen antwoord ophalen. Check GEMINI_API_KEY en of er data gesynchroniseerd is.";
-        setError(message);
+            "Kon geen antwoord ophalen. Check GEMINI_API_KEY en of er data gesynchroniseerd is.",
+        );
+        setError(null);
         setMessages((m) => [...m, { role: "assistant", content: message }]);
         return;
       }
@@ -164,7 +195,7 @@ export function InsightsChatPanel({ active = true }: { active?: boolean }) {
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : "Netwerkfout";
-      setError(message);
+      setError(null);
       setMessages((m) => [...m, { role: "assistant", content: message }]);
     } finally {
       setPending(false);
@@ -173,29 +204,101 @@ export function InsightsChatPanel({ active = true }: { active?: boolean }) {
 
   const showSuggestions =
     messages.length <= 1 && messages[0]?.content === WELCOME.content;
+  const currentChat = chats.find((chat) => chat.id === chatId);
+  const historyLabel = currentChat?.title ?? "Nieuw gesprek";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <label className="sr-only" htmlFor="insights-chat-history">
-          Eerdere gesprekken
-        </label>
-        <select
-          id="insights-chat-history"
-          value={chatId ?? ""}
-          onChange={(e) => {
-            if (e.target.value) selectChat(e.target.value);
-            else startNewChat();
-          }}
-          className="min-w-0 flex-1 border border-border bg-bg px-2 py-1.5 text-xs text-text outline-none focus:border-text"
-        >
-          <option value="">Nieuw gesprek</option>
-          {chats.map((chat) => (
-            <option key={chat.id} value={chat.id}>
-              {chat.title}
-            </option>
-          ))}
-        </select>
+      <div className="relative z-10 flex items-center gap-2 border-b border-border px-3 py-2">
+        <div ref={historyRef} className="relative min-w-0 flex-1">
+          <button
+            type="button"
+            id="insights-chat-history"
+            aria-haspopup="listbox"
+            aria-expanded={historyOpen}
+            aria-controls={historyListId}
+            aria-label={`Eerdere gesprekken, huidig: ${historyLabel}`}
+            disabled={pending}
+            onClick={() => setHistoryOpen((open) => !open)}
+            className="flex w-full min-w-0 items-center justify-between gap-2 border border-border bg-bg px-2.5 py-1.5 text-left text-xs text-text outline-none hover:border-text focus:border-text disabled:opacity-50"
+          >
+            <span className="truncate">{historyLabel}</span>
+            <ChevronDown
+              className={cn(
+                "size-3.5 shrink-0 text-text-dim transition-transform duration-200 motion-reduce:transition-none",
+                historyOpen && "rotate-180",
+              )}
+            />
+          </button>
+          <div
+            className={cn(
+              "collapse-panel absolute top-full right-0 left-0 z-20",
+              historyOpen && "shadow-[0_16px_40px_rgba(0,0,0,0.14)]",
+              !historyOpen && "pointer-events-none",
+            )}
+            data-open={historyOpen}
+          >
+            <div className="collapse-inner">
+              <div
+                id={historyListId}
+                role="listbox"
+                aria-label="Eerdere gesprekken"
+                aria-hidden={!historyOpen}
+                inert={!historyOpen}
+                className="mt-1 max-h-72 overflow-y-auto border border-border bg-surface"
+              >
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={!chatId}
+                  onClick={startNewChat}
+                  className={cn(
+                    "flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-xs hover:bg-surface-hover",
+                    !chatId && "bg-accent-soft shadow-[inset_2px_0_0_0_var(--highlight)]",
+                  )}
+                >
+                  <span className="font-medium text-text">Nieuw gesprek</span>
+                  {!chatId ? <Check className="size-3.5 shrink-0" /> : null}
+                </button>
+                {chats.length ? (
+                  chats.map((chat) => {
+                    const active = chat.id === chatId;
+                    return (
+                      <button
+                        key={chat.id}
+                        type="button"
+                        role="option"
+                        aria-selected={active}
+                        onClick={() => selectChat(chat.id)}
+                        className={cn(
+                          "flex w-full items-start justify-between gap-3 border-t border-border px-3 py-2.5 text-left hover:bg-surface-hover",
+                          active &&
+                            "bg-accent-soft shadow-[inset_2px_0_0_0_var(--highlight)]",
+                        )}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-xs text-text">
+                            {chat.title}
+                          </span>
+                          <span className="mt-0.5 block text-[10px] tracking-[0.08em] text-text-dim uppercase">
+                            {formatChatWhen(chat.updatedAt)}
+                          </span>
+                        </span>
+                        {active ? (
+                          <Check className="mt-0.5 size-3.5 shrink-0" />
+                        ) : null}
+                      </button>
+                    );
+                  })
+                ) : (
+                  <p className="border-t border-border px-3 py-3 text-xs text-text-dim">
+                    Nog geen eerdere gesprekken
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
         <button
           type="button"
           onClick={startNewChat}
@@ -219,26 +322,62 @@ export function InsightsChatPanel({ active = true }: { active?: boolean }) {
       </div>
 
       <div ref={scrollerRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-        {messages.map((msg, i) => (
-          <div
-            key={`${msg.role}-${i}`}
-            className={cn(
-              "whitespace-pre-wrap px-3 py-2 text-sm leading-relaxed",
-              msg.role === "user"
-                ? "ml-10 bg-accent text-accent-contrast"
-                : "mr-6 border border-border/70 bg-bg text-text-muted",
-            )}
-          >
-            {msg.content}
-          </div>
-        ))}
+        {messages.map((msg, i) => {
+          if (msg.role === "user") {
+            return (
+              <div
+                key={`${msg.role}-${i}`}
+                className="chat-message-in flex justify-end"
+              >
+                <div className="max-w-[85%] whitespace-pre-wrap bg-accent px-3 py-2 text-sm leading-relaxed text-accent-contrast">
+                  {msg.content}
+                </div>
+              </div>
+            );
+          }
+          return (
+            <div
+              key={`${msg.role}-${i}`}
+              className="chat-message-in flex items-start gap-2.5"
+            >
+              <AgentMark />
+              <div className="min-w-0 max-w-[calc(100%-2.5rem)] border border-border/70 bg-bg px-3 py-2.5 text-sm leading-relaxed text-text">
+                <ChatMarkdown content={presentAssistantMessage(msg.content)} />
+              </div>
+            </div>
+          );
+        })}
         {pending ? (
-          <p className="animate-pulse-soft text-xs text-text-dim">Denkt…</p>
+          <div className="chat-message-in flex items-start gap-2.5" aria-live="polite">
+            <AgentMark />
+            <div className="border border-border/70 bg-bg px-3 py-3">
+              <div className="flex items-center gap-2.5">
+                <span className="inline-flex items-end gap-1" aria-hidden>
+                  <span className="chat-dot size-1.5 bg-text" />
+                  <span className="chat-dot size-1.5 bg-text" />
+                  <span className="chat-dot size-1.5 bg-text" />
+                </span>
+                <span className="text-[10px] tracking-[0.12em] text-text-dim uppercase">
+                  Zoekt in de data
+                </span>
+              </div>
+              <div className="mt-3 space-y-1.5" aria-hidden>
+                <div className="skeleton-bone h-2 w-44" />
+                <div className="skeleton-bone h-2 w-32" />
+              </div>
+            </div>
+          </div>
         ) : null}
       </div>
 
-      {error ? (
-        <p className="border-t border-border px-3 py-2 text-xs text-danger">{error}</p>
+      {error &&
+      !messages.some(
+        (message) =>
+          presentAssistantMessage(message.content) === presentAssistantMessage(error),
+      ) ? (
+        <p className="border-t border-border px-3 py-2 text-xs text-danger">
+          {presentAssistantMessage(error)}
+        </p>
       ) : null}
 
       <div className="border-t border-border p-3">
@@ -284,4 +423,30 @@ export function InsightsChatPanel({ active = true }: { active?: boolean }) {
       </div>
     </div>
   );
+}
+
+function AgentMark() {
+  return (
+    <img
+      src={AGENT_MARK}
+      alt=""
+      width={28}
+      height={28}
+      className="size-7 shrink-0 bg-black object-contain"
+    />
+  );
+}
+
+function presentAssistantMessage(content: string) {
+  if (!/^(Gemini|OpenAI) HTTP \d+/i.test(content.trim())) return content;
+  if (/503|429|UNAVAILABLE|high demand|overloaded/i.test(content)) {
+    return "Gemini is even overbelast. Probeer het zo nog een keer.";
+  }
+  return "Geen antwoord van Gemini. Probeer het nog een keer.";
+}
+
+function formatChatWhen(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return format(date, "d MMM · HH:mm", { locale: nl });
 }

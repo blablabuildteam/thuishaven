@@ -32,9 +32,7 @@ export default async function InzichtenPage() {
         <EventInsightsSection />
       </Suspense>
 
-      <InsightsChatWidget
-        comingSoon={process.env.VERCEL_ENV === "production"}
-      />
+      <InsightsChatWidget />
     </div>
   );
 }
