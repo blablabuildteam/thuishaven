@@ -577,22 +577,18 @@ function InsightChip({
           setOpen(true);
         }}
         className={cn(
-          "group/chip inline-flex min-w-0 max-w-full items-center gap-2 rounded-sm border px-3 py-1.5 text-left text-[13px] font-medium leading-snug tracking-wide transition-shadow hover:shadow-sm",
+          "group/chip inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-sm border px-2 py-1 text-left text-[11px] font-medium leading-snug tracking-wide transition-shadow hover:shadow-sm",
           colors[insight.tone],
         )}
       >
         {insight.dimension === "email" ? (
-          <SocialChannelIcon channel="mail" size={15} alt="" />
+          <SocialChannelIcon channel="mail" size={13} alt="" />
         ) : (
-          <Icon className="size-4 shrink-0 opacity-85" strokeWidth={1.75} />
+          <Icon className="size-3.5 shrink-0 opacity-85" strokeWidth={1.75} />
         )}
-        <span className="inline-flex min-w-0 items-center">
-          <span className="min-w-0 break-words">{insight.text}</span>
-          <span className="grid grid-cols-[0fr] transition-[grid-template-columns] duration-200 ease-out group-hover/chip:grid-cols-[1fr] group-focus-visible/chip:grid-cols-[1fr] max-md:grid-cols-[1fr]">
-            <span className="min-w-0 overflow-hidden">
-              <GeminiMark size={16} className="ml-2 size-4" />
-            </span>
-          </span>
+        <span className="min-w-0 break-words">{insight.text}</span>
+        <span className="inline-flex size-4 shrink-0 items-center justify-center overflow-visible">
+          <GeminiMark size={14} className="block size-3.5" />
         </span>
       </button>
       {open &&
@@ -1296,7 +1292,7 @@ function EventRow({
         )}
       >
         {/* Main row: date + title, ticket bar underneath until the row is wide enough */}
-        <div className="flex w-full min-w-0 flex-col gap-3 px-3 py-3 sm:px-4 sm:py-4 md:flex-row md:items-start md:gap-4">
+        <div className="relative flex w-full min-w-0 flex-col gap-3 px-3 py-3 pr-10 sm:px-4 sm:py-4 sm:pr-11 md:flex-row md:items-start md:gap-4">
           <button
             type="button"
             aria-expanded={open}
@@ -1361,7 +1357,22 @@ function EventRow({
             aria-expanded={open}
             aria-label={open ? "Details sluiten" : "Details openen"}
             onClick={toggleOpen}
-            className="flex w-full min-w-0 items-center gap-3 md:w-[min(26rem,42%)] md:shrink-0 md:pt-1"
+            className="absolute top-2 right-2 inline-flex size-7 items-center justify-center text-text-dim hover:text-text sm:top-2.5 sm:right-2.5"
+          >
+            <ChevronDown
+              className={cn(
+                "size-4 shrink-0 transition-transform duration-300 ease-out",
+                open && "rotate-180",
+              )}
+              strokeWidth={1.5}
+            />
+          </button>
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-label={open ? "Details sluiten" : "Details openen"}
+            onClick={toggleOpen}
+            className="flex w-full min-w-0 items-center md:w-[min(26rem,42%)] md:shrink-0 md:pt-1"
           >
             <CompactTicketMetrics
               key={open ? `fill-${revealKey}` : "fill"}
@@ -1369,13 +1380,6 @@ function EventRow({
               capacity={event.tickets.capacity}
               scanned={event.tickets.scanned}
               animate={open && phase === "ready"}
-            />
-            <ChevronDown
-              className={cn(
-                "size-4 shrink-0 text-text-dim transition-transform duration-300 ease-out",
-                open && "rotate-180",
-              )}
-              strokeWidth={1.5}
             />
           </button>
         </div>
