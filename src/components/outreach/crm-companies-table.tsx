@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { statusLabels } from "@/lib/mock/outreach";
-import { type MailAngleId } from "@/lib/outreach/mail-angle";
+import { type MailAngleId, isMailableAngle, mailAngleTone } from "@/lib/outreach/mail-angle";
 
 /** Client-safe shape — avoid importing server crm.ts (postgres) into the browser. */
 type CrmRow = {
@@ -50,6 +50,7 @@ type Angle = {
   detail: string;
   jubileeMark?: number;
   jubileeYearsAway?: number;
+  also?: MailAngleId[];
 };
 
 type Row = {
@@ -61,16 +62,18 @@ type Props = {
   rows: Row[];
 };
 
-type MailFilter = "all" | "kans" | "jubileum" | "cold" | "onvolledig" | "past_niet";
+type MailFilter =
+  | "all"
+  | "kans"
+  | "jubileum"
+  | "seizoen"
+  | "funding"
+  | "recordjaar"
+  | "cold"
+  | "onvolledig"
+  | "past_niet";
 type RegionFilter = "all" | "in" | "out" | "unknown";
 type CompletenessFilter = "all" | "ready" | "missing_mdw" | "missing_email" | "missing_contact";
-
-function angleTone(id: string) {
-  if (id === "jubileum") return "accent" as const;
-  if (id === "algemeen") return "success" as const;
-  if (id === "past_niet" || id === "niet_mailen") return "danger" as const;
-  return "neutral" as const;
-}
 
 function fmt(iso: string | null) {
   if (!iso) return "—";
@@ -82,6 +85,15 @@ function sourceLabel(source?: string) {
   if (source === "paste" || source === "manual") return "Handmatig";
   if (source === "linkedin") return "LinkedIn";
   return source ?? "—";
+}
+
+function angleLabel(id: MailAngleId): string {
+  if (id === "seizoen") return "Seizoen";
+  if (id === "funding") return "Funding";
+  if (id === "recordjaar") return "Recordjaar";
+  if (id === "algemeen") return "Algemeen";
+  if (id === "jubileum") return "Jubileum";
+  return id;
 }
 
 function MdwCell({ row }: { row: CrmRow }) {
@@ -101,7 +113,9 @@ function MdwCell({ row }: { row: CrmRow }) {
     );
   }
   if (parts.length === 0) {
-    parts.push("Nog geen betrouwbaar aantal — vul aan via Lijst bijwerken of handmatig op het dossier");
+    parts.push(
+      "Nog geen betrouwbaar aantal — vul aan via Lijst bijwerken of handmatig op het dossier",
+    );
   } else {
     parts.push(
       display != null
@@ -146,6 +160,9 @@ export function CrmCompaniesTable({ rows }: Props) {
       all: rows.length,
       kans: 0,
       jubileum: 0,
+      seizoen: 0,
+      funding: 0,
+      recordjaar: 0,
       cold: 0,
       onvolledig: 0,
       past_niet: 0,
@@ -155,11 +172,25 @@ export function CrmCompaniesTable({ rows }: Props) {
       out: 0,
     };
     for (const { row, angle } of rows) {
-      if (angle.id === "jubileum" || angle.id === "algemeen") c.kans += 1;
+      if (isMailableAngle(angle.id)) c.kans += 1;
       if (angle.id === "jubileum") c.jubileum += 1;
+      if (angle.id === "seizoen") c.seizoen += 1;
       if (angle.id === "algemeen") c.cold += 1;
       if (angle.id === "nog_checken") c.onvolledig += 1;
       if (angle.id === "past_niet") c.past_niet += 1;
+      // Selectable even when not primary
+      if (
+        angle.id === "funding" ||
+        angle.also?.includes("funding")
+      ) {
+        c.funding += 1;
+      }
+      if (
+        angle.id === "recordjaar" ||
+        angle.also?.includes("recordjaar")
+      ) {
+        c.recordjaar += 1;
+      }
       if (row.employeeCount == null) c.missing_mdw += 1;
       if (!row.email) c.missing_email += 1;
       if (row.inRegion) c.in += 1;
@@ -182,10 +213,28 @@ export function CrmCompaniesTable({ rows }: Props) {
 
       switch (mail) {
         case "kans":
-          if (angle.id !== "jubileum" && angle.id !== "algemeen") return false;
+          if (!isMailableAngle(angle.id)) return false;
           break;
         case "jubileum":
           if (angle.id !== "jubileum") return false;
+          break;
+        case "seizoen":
+          if (angle.id !== "seizoen" && !angle.also?.includes("seizoen")) {
+            return false;
+          }
+          break;
+        case "funding":
+          if (angle.id !== "funding" && !angle.also?.includes("funding")) {
+            return false;
+          }
+          break;
+        case "recordjaar":
+          if (
+            angle.id !== "recordjaar" &&
+            !angle.also?.includes("recordjaar")
+          ) {
+            return false;
+          }
           break;
         case "cold":
           if (angle.id !== "algemeen") return false;
@@ -240,99 +289,85 @@ export function CrmCompaniesTable({ rows }: Props) {
     });
   }, [rows, q, mail, region, completeness]);
 
-  function chip(
-    active: boolean,
-    onClick: () => void,
-    label: string,
-    count?: number,
-  ) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        className={
-          active
-            ? "bg-accent px-3 py-1.5 font-display text-xs tracking-[0.08em] text-accent-contrast"
-            : "border border-border bg-surface px-3 py-1.5 font-display text-xs tracking-[0.08em] text-text-muted hover:border-accent"
-        }
-      >
-        {label}
-        {count != null ? ` (${count})` : ""}
-      </button>
-    );
-  }
-
   return (
     <div>
-      <div className="mb-4">
-        <label className="block">
-          <span className="font-display text-xs tracking-[0.14em] text-text-dim">
-            Zoek op bedrijfsnaam
+      <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto_auto_auto]">
+        <label className="block min-w-0">
+          <span className="text-[11px] uppercase tracking-wider text-text-dim">
+            Zoeken
           </span>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Typ een bedrijfsnaam…"
+            placeholder="Bedrijfsnaam…"
             autoFocus
-            className="mt-1.5 block w-full border border-border bg-bg px-4 py-3 text-base text-text"
+            className="mt-1.5 block w-full border border-border bg-bg px-3 py-2 text-sm text-text"
           />
+        </label>
+        <label className="block">
+          <span className="text-[11px] uppercase tracking-wider text-text-dim">
+            Invalshoek
+          </span>
+          <select
+            value={mail}
+            onChange={(e) => setMail(e.target.value as MailFilter)}
+            className="mt-1.5 block w-full min-w-[10rem] border border-border bg-bg px-3 py-2 text-sm text-text"
+          >
+            <option value="kans">Klaar om te mailen ({counts.kans})</option>
+            <option value="jubileum">Jubileum ({counts.jubileum})</option>
+            <option value="seizoen">Seizoen ({counts.seizoen})</option>
+            <option value="funding">Deal / funding ({counts.funding})</option>
+            <option value="recordjaar">Recordjaar ({counts.recordjaar})</option>
+            <option value="cold">Algemeen ({counts.cold})</option>
+            <option value="onvolledig">Onvolledig ({counts.onvolledig})</option>
+            <option value="past_niet">Past niet ({counts.past_niet})</option>
+            <option value="all">Alles ({counts.all})</option>
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-[11px] uppercase tracking-wider text-text-dim">
+            Regio
+          </span>
+          <select
+            value={region}
+            onChange={(e) => setRegion(e.target.value as RegionFilter)}
+            className="mt-1.5 block w-full min-w-[9rem] border border-border bg-bg px-3 py-2 text-sm text-text"
+          >
+            <option value="all">Alle regio’s</option>
+            <option value="in">In ~50 km ({counts.in})</option>
+            <option value="out">Buiten ({counts.out})</option>
+            <option value="unknown">Plaats onbekend</option>
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-[11px] uppercase tracking-wider text-text-dim">
+            Compleet
+          </span>
+          <select
+            value={completeness}
+            onChange={(e) =>
+              setCompleteness(e.target.value as CompletenessFilter)
+            }
+            className="mt-1.5 block w-full min-w-[10rem] border border-border bg-bg px-3 py-2 text-sm text-text"
+          >
+            <option value="all">Alles</option>
+            <option value="ready">Compleet genoeg</option>
+            <option value="missing_mdw">Geen mdw ({counts.missing_mdw})</option>
+            <option value="missing_email">
+              Geen e-mail ({counts.missing_email})
+            </option>
+            <option value="missing_contact">Geen contactpersoon</option>
+          </select>
         </label>
       </div>
 
-      <div className="mb-3 space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="w-full text-[11px] uppercase tracking-wider text-text-dim sm:w-auto">
-            Mailkans
-          </span>
-          {chip(mail === "kans", () => setMail("kans"), "Klaar om te mailen", counts.kans)}
-          {chip(mail === "jubileum", () => setMail("jubileum"), "Jubileum ≤16 mnd", counts.jubileum)}
-          {chip(mail === "cold", () => setMail("cold"), "Cold mail", counts.cold)}
-          {chip(mail === "onvolledig", () => setMail("onvolledig"), "Onvolledig", counts.onvolledig)}
-          {chip(mail === "past_niet", () => setMail("past_niet"), "Past niet", counts.past_niet)}
-          {chip(mail === "all", () => setMail("all"), "Alles", counts.all)}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="w-full text-[11px] uppercase tracking-wider text-text-dim sm:w-auto">
-            Regio
-          </span>
-          {chip(region === "all", () => setRegion("all"), "Alle regio’s")}
-          {chip(region === "in", () => setRegion("in"), "In ~50 km", counts.in)}
-          {chip(region === "out", () => setRegion("out"), "Buiten", counts.out)}
-          {chip(region === "unknown", () => setRegion("unknown"), "Plaats onbekend")}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="w-full text-[11px] uppercase tracking-wider text-text-dim sm:w-auto">
-            Compleet
-          </span>
-          {chip(completeness === "all", () => setCompleteness("all"), "Alles")}
-          {chip(completeness === "ready", () => setCompleteness("ready"), "Compleet genoeg")}
-          {chip(
-            completeness === "missing_mdw",
-            () => setCompleteness("missing_mdw"),
-            "Geen mdw",
-            counts.missing_mdw,
-          )}
-          {chip(
-            completeness === "missing_email",
-            () => setCompleteness("missing_email"),
-            "Geen e-mail",
-            counts.missing_email,
-          )}
-          {chip(
-            completeness === "missing_contact",
-            () => setCompleteness("missing_contact"),
-            "Geen contactpersoon",
-          )}
-        </div>
-      </div>
-
       <p className="mb-3 text-xs text-text-dim">
-        {filtered.length} van {rows.length} · Hover op mdw voor Apollo/KvK-bron ·
-        Jubileum = marker binnen ~16 maanden · anders cold mail bij fit
+        {filtered.length} van {rows.length}
+        {mail === "kans" ? " · klaar om te mailen" : ""}
       </p>
 
       {filtered.length === 0 ? (
-        <p className="border border-border bg-surface px-4 py-5 text-sm text-text-muted">
+        <p className="border-y border-border py-6 text-sm text-text-muted">
           Geen bedrijven in dit filter.{" "}
           <Link href="/outreach/lijst-bijwerken" className="text-accent underline">
             Lijst bijwerken
@@ -403,17 +438,19 @@ export function CrmCompaniesTable({ rows }: Props) {
                       </div>
                     ) : (
                       <span className="text-xs text-text-dim">
-                        Nog geen contact — stap 3 Lijst bijwerken
+                        Nog geen contact — via Lijst bijwerken
                       </span>
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <StatusBadge tone={angleTone(angle.id)}>
+                    <StatusBadge tone={mailAngleTone(angle.id)}>
                       {angle.label}
                     </StatusBadge>
-                    <p className="mt-1 max-w-[200px] text-xs text-text-dim">
-                      {angle.detail}
-                    </p>
+                    {angle.also && angle.also.length > 0 ? (
+                      <p className="mt-1 text-[10px] text-text-dim">
+                        Ook: {angle.also.map(angleLabel).join(" · ")}
+                      </p>
+                    ) : null}
                   </td>
                   <MdwCell row={row} />
                   <td className="px-4 py-3 text-xs text-text-muted">

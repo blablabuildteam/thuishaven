@@ -26,6 +26,7 @@ import {
   MessageSquare,
   Contact,
   X,
+  BookOpen,
   type LucideIcon,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
@@ -131,6 +132,11 @@ const outreachSections: NavSection[] = [
     items: [
       { href: "/outreach", label: "Overzicht", icon: Send, tourId: "nav-overzicht" },
       {
+        href: "/outreach/uitleg",
+        label: "Hoe het werkt",
+        icon: BookOpen,
+      },
+      {
         href: "/outreach/lijst-bijwerken",
         label: "Lijst bijwerken",
         icon: Users,
@@ -159,7 +165,7 @@ const outreachSections: NavSection[] = [
     items: [
       {
         href: "/outreach/prospects",
-        label: "Lijst (technisch)",
+        label: "Lijst (admin)",
         icon: Users,
         adminOnly: true,
       },

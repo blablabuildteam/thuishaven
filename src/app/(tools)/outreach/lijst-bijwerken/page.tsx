@@ -34,27 +34,23 @@ export default async function LijstBijwerkenPage() {
   const hunterReady = hasHunterConfig();
   const kvkReady = hasKvkConfig();
   const apolloNextPage = await nextApolloDiscoverPage();
-  const remainingApprox =
-    universe.total > 0
-      ? Math.max(0, universe.total - apolloOnList)
-      : null;
 
   return (
     <div>
       <SectionHeader
-        eyebrow="Leads binnenhalen"
+        eyebrow="Stap 1"
         title="Lijst bijwerken"
-        description="Eén knop vult KvK, contactpersonen en e-mails automatisch aan. Geen handmatig LinkedIn-werk nodig."
+        description="Bedrijven ophalen en aanvullen. Flow: Lijst bijwerken → Bedrijven → Mailen → Resultaten."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={apolloReady ? "success" : "danger"}>
-              {apolloReady ? "Ophalen klaar" : "Ophalen niet gekoppeld"}
+              {apolloReady ? "Apollo ok" : "Apollo ontbreekt"}
             </StatusBadge>
             <Link
               href="/outreach/crm"
               className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
             >
-              Naar bedrijven →
+              Volgende: Bedrijven →
             </Link>
           </div>
         }
@@ -77,7 +73,7 @@ export default async function LijstBijwerkenPage() {
         apolloUniverseCheckedAt={universe.checkedAt}
         apolloUniverseLabel={universe.criteriaLabel}
         apolloOnList={apolloOnList}
-        apolloRemainingApprox={remainingApprox}
+        initialCriteria={universe.criteria}
       />
     </div>
   );

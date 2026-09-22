@@ -1,0 +1,11 @@
+---
+description: Deploy Thuishaven under blablabuildteam / team@ — never xkgrowth
+alwaysApply: true
+---
+
+# Deploy identity
+
+- This repo deploys as **blablabuildteam** (team@ / BlaBlaBuild), not personal **xkgrowth**.
+- Git remote: `https://github.com/blablabuildteam/thuishaven.git`
+- Vercel project is under the BlaBlaBuild team — do not switch org/user to xkgrowth when linking, deploying, or running `vercel`.
+- Prefer `git push origin main` for production (Vercel Git integration). If using CLI: ensure `vercel whoami` / team scope is the BlaBlaBuild team before `vercel --prod`.

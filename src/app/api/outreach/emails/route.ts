@@ -13,7 +13,15 @@ export const dynamic = "force-dynamic";
 const generateSchema = z.object({
   prospectId: z.string().uuid(),
   variantId: z
-    .enum(["warm_tour", "open_dates", "jubileum", "short_checkin"])
+    .enum([
+      "warm_tour",
+      "open_dates",
+      "jubileum",
+      "seizoen",
+      "funding",
+      "recordjaar",
+      "short_checkin",
+    ])
     .optional(),
   subjectArm: z.enum(["a", "b"]).optional(),
 });

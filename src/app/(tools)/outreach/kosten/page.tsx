@@ -1,71 +1,28 @@
 import Link from "next/link";
 import { SectionHeader } from "@/components/ui/section-header";
-import { MetricCard } from "@/components/ui/metric-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { BatchCostPlanner } from "@/components/outreach/batch-cost-planner";
-import { DoelgroepUniverse } from "@/components/outreach/doelgroep-universe";
 import { getUsageSummary } from "@/lib/usage/store";
-import { UNIT_COST_EUR_CENTS } from "@/lib/usage/pricing";
 import {
   APOLLO_PAGE_SIZE,
   OUTREACH_RATES,
   formatEurFromCents,
 } from "@/lib/outreach/batch-costs";
+import { UNIVERSE, estimateCurrentUniverseCosts } from "@/lib/outreach/universe";
 import { formatNumber } from "@/lib/utils";
 
 export const metadata = { title: "Kosten · Outreach" };
 export const dynamic = "force-dynamic";
 
 const vendorLabel: Record<string, string> = {
-  openai: "OpenAI (tokens)",
-  anthropic: "Anthropic (tokens)",
-  brevo: "Brevo (e-mail)",
-  kvk: "KvK API",
-  google_places: "Google Places",
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  brevo: "Brevo",
+  kvk: "KvK",
+  google_places: "Places",
   enrichment: "Apollo / Hunter",
   other: "Overig",
 };
-
-const ritsRates = [
-  {
-    label: "Apollo · rits ophalen",
-    detail: `1 credit per pagina, nu ${APOLLO_PAGE_SIZE} bedrijven`,
-    amount: formatEurFromCents(OUTREACH_RATES.apolloCreditCents),
-    payer: "onze stack",
-  },
-  {
-    label: "Apollo · contactpersoon",
-    detail: "1 credit per bedrijf (conservatief)",
-    amount: formatEurFromCents(OUTREACH_RATES.apolloCreditCents),
-    payer: "onze stack",
-  },
-  {
-    label: "KvK · verrijken",
-    detail: `${OUTREACH_RATES.kvkCallsPerCompany} API-calls per bedrijf`,
-    amount: formatEurFromCents(
-      OUTREACH_RATES.kvkCallCents * OUTREACH_RATES.kvkCallsPerCompany,
-    ),
-    payer: "hun factuur",
-  },
-  {
-    label: "Website-mail",
-    detail: "events@ / info@ van de publieke site",
-    amount: "€ 0,00",
-    payer: "gratis",
-  },
-  {
-    label: "Hunter · Event Manager-mail",
-    detail: "Email finder: naam + domein, na Apollo-persoon",
-    amount: formatEurFromCents(OUTREACH_RATES.hunterSearchCents),
-    payer: "onze stack",
-  },
-  {
-    label: "Hunter · domain-search",
-    detail: "Generieke inbox, alleen als er geen persoon is",
-    amount: formatEurFromCents(OUTREACH_RATES.hunterSearchCents),
-    payer: "onze stack",
-  },
-];
 
 export default async function OutreachKostenPage() {
   let summary: Awaited<ReturnType<typeof getUsageSummary>>;
@@ -77,228 +34,179 @@ export default async function OutreachKostenPage() {
       <div>
         <SectionHeader
           eyebrow="Outreach"
-          title="Kostmeter"
-          description="Kon kosten niet laden. Check DATABASE_URL of probeer later."
+          title="Kosten"
+          description="Kon kosten niet laden. Check DATABASE_URL."
         />
       </div>
     );
   }
+
+  const universe = estimateCurrentUniverseCosts();
   const max = Math.max(...summary.byVendor.map((v) => v.costEurCents), 1);
 
   return (
     <div>
       <SectionHeader
         eyebrow="Outreach"
-        title="Kostmeter"
-        description="Geschatte omvang van de hele doelgroep, wat dat kost, en wat een rits kost. KvK loopt via hun account; Apollo en Hunter via onze keys tot anders afgesproken."
+        title="Kosten"
+        description="Schatting per rits · verbruik laatste 30 dagen. KvK op hun account; Apollo/Hunter op onze stack."
         action={
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/outreach/prospects"
-              className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
-            >
-              Lijst vullen →
-            </Link>
-            <Link
-              href="/koppelingen"
-              className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
-            >
-              Koppelingen →
-            </Link>
-          </div>
+          <Link
+            href="/outreach/lijst-bijwerken"
+            className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
+          >
+            Lijst bijwerken →
+          </Link>
         }
       />
 
-      <DoelgroepUniverse />
+      <div className="mb-6 flex flex-wrap items-baseline gap-x-6 gap-y-2 border-b border-border pb-4 text-sm">
+        <p>
+          <span className="text-text-dim">Doelgroep ~</span>{" "}
+          <strong className="text-text">
+            {UNIVERSE.fitLow}–{UNIVERSE.fitHigh}
+          </strong>
+        </p>
+        <p>
+          <span className="text-text-dim">Hele lijst slim</span>{" "}
+          <strong className="text-text">{universe.labels.full}</strong>
+        </p>
+        <p>
+          <span className="text-text-dim">30d totaal</span>{" "}
+          <strong className="text-text">
+            {formatEurFromCents(summary.totalEurCents)}
+          </strong>
+          <span className="ml-1 text-xs text-text-dim">
+            (hun {formatEurFromCents(summary.clientBilledEurCents)} · onze{" "}
+            {formatEurFromCents(summary.ourStackEurCents)})
+          </span>
+        </p>
+      </div>
 
       <BatchCostPlanner />
 
-      <section className="mb-8 border border-border bg-surface p-4">
-        <h2 className="mb-1 font-display text-2xl tracking-[0.06em]">
+      <section className="mb-8 border-t border-border pt-6">
+        <h2 className="font-display text-lg tracking-[0.06em]">
           Tarief per stap
         </h2>
-        <p className="mb-4 text-sm text-text-muted">
-          Indicatie op huidige plannen. Apollo Basic rekenen we op ~€0,08 per
-          credit; Hunter Starter ~€0,09 per domain-search. KvK volgt hun
-          Developer Portal.
-        </p>
-        <ul className="divide-y divide-border text-sm">
-          {ritsRates.map((row) => (
-            <li
-              key={row.label}
-              className="flex flex-wrap items-start justify-between gap-3 py-3"
-            >
-              <div>
-                <p className="text-text">{row.label}</p>
-                <p className="text-xs text-text-muted">{row.detail}</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <StatusBadge
-                  tone={
-                    row.payer === "hun factuur"
-                      ? "accent"
-                      : row.payer === "gratis"
-                        ? "neutral"
-                        : "info"
-                  }
-                >
-                  {row.payer}
-                </StatusBadge>
-                <p className="w-20 text-right font-display text-xs tracking-[0.08em] text-text">
-                  {row.amount}
-                </p>
-              </div>
-            </li>
-          ))}
+        <ul className="mt-3 divide-y divide-border text-sm">
+          <Rate
+            label={`Apollo · ${APOLLO_PAGE_SIZE} ophalen`}
+            amount={formatEurFromCents(OUTREACH_RATES.apolloCreditCents)}
+            payer="onze"
+          />
+          <Rate
+            label="Apollo · contactpersoon"
+            amount={formatEurFromCents(OUTREACH_RATES.apolloCreditCents)}
+            payer="onze"
+          />
+          <Rate
+            label={`KvK · ${OUTREACH_RATES.kvkCallsPerCompany} calls`}
+            amount={formatEurFromCents(
+              OUTREACH_RATES.kvkCallCents * OUTREACH_RATES.kvkCallsPerCompany,
+            )}
+            payer="hun"
+          />
+          <Rate
+            label="Hunter · e-mail"
+            amount={formatEurFromCents(OUTREACH_RATES.hunterSearchCents)}
+            payer="onze"
+          />
+          <Rate label="Website-mail" amount="€ 0,00" payer="gratis" />
         </ul>
       </section>
 
-      <div className="stagger mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          label="Totaal · 30 dagen"
-          value={formatEurFromCents(summary.totalEurCents)}
-          accent
-          hint="Geschat op basis van unit-prijzen"
-        />
-        <MetricCard
-          label="Op hun account"
-          value={formatEurFromCents(summary.clientBilledEurCents)}
-          hint="Nu: KvK credits"
-        />
-        <MetricCard
-          label="Onze stack"
-          value={formatEurFromCents(summary.ourStackEurCents)}
-          hint="AI + Brevo + Places e.d."
-        />
-        <MetricCard
-          label="Events gelogd"
-          value={formatNumber(summary.recent.length)}
-          hint="Laatste 25 in periode"
-        />
-      </div>
-
-      <div className="mb-8 grid gap-4 lg:grid-cols-2">
-        <section className="border border-border bg-surface p-4">
-          <h2 className="mb-1 font-display text-2xl tracking-[0.06em]">
-            Verdeling
-          </h2>
-          <p className="mb-4 text-sm text-text-muted">
-            Meter vult zich automatisch zodra live calls `recordUsage` aanroepen.
-            Onderstaande demo-data verdwijnt zodra echte events binnenkomen.
-          </p>
-          <ul className="space-y-4">
+      <section className="mb-8 border-t border-border pt-6">
+        <h2 className="font-display text-lg tracking-[0.06em]">
+          Verbruik · 30 dagen
+        </h2>
+        {summary.byVendor.length === 0 ? (
+          <p className="mt-2 text-sm text-text-muted">Nog geen events gelogd.</p>
+        ) : (
+          <ul className="mt-3 space-y-3">
             {summary.byVendor.map((row) => (
               <li key={row.vendor}>
-                <div className="mb-1 flex items-center justify-between gap-2 text-sm">
-                  <span className="flex items-center gap-2">
+                <div className="mb-1 flex justify-between gap-2 text-sm">
+                  <span>
                     {vendorLabel[row.vendor] ?? row.vendor}
-                    {row.vendor === "kvk" && (
-                      <StatusBadge tone="accent">hun factuur</StatusBadge>
-                    )}
+                    {row.vendor === "kvk" ? (
+                      <span className="ml-2 text-[10px] uppercase text-text-dim">
+                        hun
+                      </span>
+                    ) : null}
                   </span>
-                  <span className="font-display tracking-wide text-text">
+                  <span className="font-display tracking-wide">
                     {formatEurFromCents(row.costEurCents)}
                   </span>
                 </div>
-                <div className="h-2 bg-bg">
+                <div className="h-1.5 bg-bg-elevated">
                   <div
-                    className="h-full bg-accent transition-all"
+                    className="h-full bg-accent"
                     style={{ width: `${(row.costEurCents / max) * 100}%` }}
                   />
                 </div>
-                <p className="mt-1 text-xs text-text-dim">
-                  {formatNumber(Math.round(row.units))} {row.unitLabel} ·{" "}
-                  {row.share.toFixed(0)}%
-                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {summary.recent.length > 0 ? (
+        <section className="border-t border-border pt-6">
+          <h2 className="font-display text-lg tracking-[0.06em]">
+            Recent ({formatNumber(summary.recent.length)})
+          </h2>
+          <ul className="mt-3 divide-y divide-border text-sm">
+            {summary.recent.slice(0, 12).map((e) => (
+              <li
+                key={e.id}
+                className="flex flex-wrap items-baseline justify-between gap-2 py-2"
+              >
+                <span className="text-text-muted">
+                  {new Date(e.createdAt).toLocaleString("nl-NL", {
+                    day: "2-digit",
+                    month: "short",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}{" "}
+                  · {vendorLabel[e.vendor] ?? e.vendor} · {e.operation}
+                </span>
+                <span className="font-display tracking-wide">
+                  {formatEurFromCents(e.costEurCents)}
+                </span>
               </li>
             ))}
           </ul>
         </section>
-
-        <section className="border border-border bg-surface p-4">
-          <h2 className="mb-1 font-display text-2xl tracking-[0.06em]">
-            Tarieven (indicatie)
-          </h2>
-          <p className="mb-4 text-sm text-text-muted">
-            Aanpassen zodra echte facturen of KvK-tarieven bekend zijn.
-          </p>
-          <ul className="divide-y divide-border text-sm">
-            {(
-              Object.entries(UNIT_COST_EUR_CENTS) as Array<
-                [
-                  keyof typeof UNIT_COST_EUR_CENTS,
-                  (typeof UNIT_COST_EUR_CENTS)[keyof typeof UNIT_COST_EUR_CENTS],
-                ]
-              >
-            )
-              .filter(([k]) => k !== "other")
-              .map(([vendor, rate]) => (
-                <li
-                  key={vendor}
-                  className="flex items-start justify-between gap-3 py-3"
-                >
-                  <div>
-                    <p className="text-text">
-                      {vendorLabel[vendor] ?? vendor}
-                    </p>
-                    <p className="text-xs text-text-muted">{rate.note}</p>
-                  </div>
-                  <p className="shrink-0 font-display text-xs tracking-[0.08em] text-text-muted">
-                    {formatEurFromCents(rate.centsPerUnit)} / {rate.unitLabel}
-                  </p>
-                </li>
-              ))}
-          </ul>
-        </section>
-      </div>
-
-      <section className="border border-border bg-surface p-4">
-        <h2 className="mb-4 font-display text-2xl tracking-[0.06em]">
-          Recente events
-        </h2>
-        <div className="max-w-full overflow-x-auto">
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead className="border-b border-border text-[11px] uppercase tracking-wider text-text-muted">
-              <tr>
-                <th className="pb-3 font-medium">Wanneer</th>
-                <th className="pb-3 font-medium">Vendor</th>
-                <th className="pb-3 font-medium">Operatie</th>
-                <th className="pb-3 font-medium">Volume</th>
-                <th className="pb-3 font-medium">Kosten</th>
-              </tr>
-            </thead>
-            <tbody>
-              {summary.recent.map((e) => (
-                <tr key={e.id} className="border-b border-border last:border-0">
-                  <td className="py-3 text-text-muted">
-                    {new Date(e.createdAt).toLocaleString("nl-NL", {
-                      day: "2-digit",
-                      month: "short",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </td>
-                  <td className="py-3">
-                    {vendorLabel[e.vendor] ?? e.vendor}
-                    {e.vendor === "kvk" && (
-                      <span className="ml-2 text-[10px] uppercase tracking-wider text-accent">
-                        hun
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3 text-text">{e.operation}</td>
-                  <td className="py-3 text-text-muted">
-                    {formatNumber(Math.round(e.units))} {e.unitLabel}
-                  </td>
-                  <td className="py-3 font-display tracking-wide">
-                    {formatEurFromCents(e.costEurCents)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      ) : null}
     </div>
+  );
+}
+
+function Rate({
+  label,
+  amount,
+  payer,
+}: {
+  label: string;
+  amount: string;
+  payer: string;
+}) {
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-2 py-2">
+      <span className="text-text">{label}</span>
+      <span className="flex items-center gap-2">
+        <StatusBadge
+          tone={
+            payer === "hun" ? "info" : payer === "gratis" ? "neutral" : "neutral"
+          }
+        >
+          {payer}
+        </StatusBadge>
+        <span className="w-16 text-right font-display text-xs tracking-[0.08em]">
+          {amount}
+        </span>
+      </span>
+    </li>
   );
 }

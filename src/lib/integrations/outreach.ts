@@ -314,6 +314,45 @@ Zin om een keertje langs te komen?
 
 Groet,`;
   }
+  if (input.variantId === "seizoen") {
+    return `Hoi,
+
+Bij veel bedrijven speelt nu weer een zomerfeest of einde-jaar / kerstborrel. Speelt dat ook bij ${input.companyName}?
+
+Thuishaven is doordeweeks vaak beschikbaar — een korte rondleiding zegt meestal meer dan een lange mail.
+
+${input.availabilityUrl}
+
+Laat maar weten of dat interessant is.
+
+Groet,`;
+  }
+  if (input.variantId === "funding") {
+    return `Hoi,
+
+Als jullie bij ${input.companyName} iets te vieren hebben na een deal, funding of overname: soms zoeken teams daar een avondlocatie voor.
+
+Thuishaven in Amsterdam-West is doordeweeks beschikbaar. Geen pitch — gewoon kijken of de sfeer past.
+
+${input.availabilityUrl}
+
+Zin om even langs te komen?
+
+Groet,`;
+  }
+  if (input.variantId === "recordjaar") {
+    return `Hoi,
+
+Als jullie bij ${input.companyName} een sterk jaar of targets vieren — kick-off, afterparty, teamavond — dan is Thuishaven misschien een idee.
+
+Doordeweeks zijn we vaak beschikbaar. Een korte rondleiding zegt meestal genoeg.
+
+${input.availabilityUrl}
+
+Laat maar weten of dat speelt.
+
+Groet,`;
+  }
   return `Hoi,
 
 Ik dacht aan ${input.companyName} — misschien speelt er ergens een bedrijfsevent of borrel?

@@ -1,8 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { StatusBadge } from "@/components/ui/status-badge";
 import {
   OUTREACH_VARIANTS,
   type OutreachSubjectArm,
@@ -40,7 +40,7 @@ export function OutreachEmailWorkbench({ prospects }: Props) {
   );
 
   const [prospectId, setProspectId] = useState(ready[0]?.id ?? "");
-  const [variantId, setVariantId] = useState<OutreachVariantId>("jubileum");
+  const [variantId, setVariantId] = useState<OutreachVariantId>("seizoen");
   const [subjectArm, setSubjectArm] = useState<OutreachSubjectArm | "auto">(
     "auto",
   );
@@ -99,39 +99,36 @@ export function OutreachEmailWorkbench({ prospects }: Props) {
       return;
     }
     setMessage(
-      `Test verzonden naar ${data.deliveredTo?.join(", ")} (bedoeld: ${data.intendedTo}). Open de mail → check Resultaten.`,
+      `Test naar ${data.deliveredTo?.join(", ")} (bedoeld: ${data.intendedTo}). Check Resultaten na openen.`,
     );
     startTransition(() => router.refresh());
   }
 
   if (!ready.length) {
     return (
-      <div className="border border-border bg-surface p-4 text-sm text-text-muted">
-        Geen bedrijven met e-mail klaar. Zoek eerst contactmails op{" "}
-        <a href="/outreach/prospects" className="text-accent underline">
-          Lijst vullen
-        </a>
+      <p className="border-y border-border py-6 text-sm text-text-muted">
+        Geen bedrijven met e-mail klaar. Vul eerst contactmails aan via{" "}
+        <Link href="/outreach/lijst-bijwerken" className="text-accent underline">
+          Lijst bijwerken
+        </Link>
         .
-      </div>
+      </p>
     );
   }
 
   return (
-    <div className="mb-8 border border-border bg-surface p-4">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <StatusBadge tone="accent">Testsend → team@</StatusBadge>
-        <StatusBadge tone="danger">Live prospects locked</StatusBadge>
-        <p className="text-sm text-text-muted">
-          Stuur alleen naar <code className="text-accent">team@blablabuild.com</code>{" "}
-          om opens/A/B te valideren.
-        </p>
-      </div>
+    <div className="mb-10">
+      <p className="mb-4 text-sm text-text-muted">
+        Alleen test naar{" "}
+        <code className="text-accent">team@blablabuild.com</code> — live naar
+        prospects staat uit.
+      </p>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <label className="text-xs text-text-muted">
+        <label className="text-xs text-text-dim">
           Bedrijf
           <select
-            className="mt-1 w-full border border-border bg-bg px-3 py-2 text-sm"
+            className="mt-1.5 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
             value={prospectId}
             onChange={(e) => setProspectId(e.target.value)}
           >
@@ -142,10 +139,10 @@ export function OutreachEmailWorkbench({ prospects }: Props) {
             ))}
           </select>
         </label>
-        <label className="text-xs text-text-muted">
-          Variant
+        <label className="text-xs text-text-dim">
+          Invalshoek
           <select
-            className="mt-1 w-full border border-border bg-bg px-3 py-2 text-sm"
+            className="mt-1.5 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
             value={variantId}
             onChange={(e) =>
               setVariantId(e.target.value as OutreachVariantId)
@@ -160,22 +157,18 @@ export function OutreachEmailWorkbench({ prospects }: Props) {
             ))}
           </select>
         </label>
-        <label className="text-xs text-text-muted">
-          A/B onderwerp
+        <label className="text-xs text-text-dim">
+          Onderwerp A/B
           <select
-            className="mt-1 w-full border border-border bg-bg px-3 py-2 text-sm"
+            className="mt-1.5 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
             value={subjectArm}
             onChange={(e) =>
               setSubjectArm(e.target.value as OutreachSubjectArm | "auto")
             }
           >
             <option value="auto">Auto (50/50)</option>
-            <option value="a">
-              A — {variant?.subjects.a ?? "arm A"}
-            </option>
-            <option value="b">
-              B — {variant?.subjects.b ?? "arm B"}
-            </option>
+            <option value="a">A — {variant?.subjects.a ?? "arm A"}</option>
+            <option value="b">B — {variant?.subjects.b ?? "arm B"}</option>
           </select>
         </label>
       </div>
@@ -185,7 +178,7 @@ export function OutreachEmailWorkbench({ prospects }: Props) {
           type="button"
           disabled={!prospectId || pending}
           onClick={() => void generate()}
-          className="bg-accent px-4 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
+          className="bg-accent px-4 py-2.5 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
         >
           Genereer draft
         </button>
@@ -193,33 +186,29 @@ export function OutreachEmailWorkbench({ prospects }: Props) {
           type="button"
           disabled={!draft || pending}
           onClick={() => void sendTest()}
-          className="border border-border px-4 py-2 font-display text-sm tracking-[0.1em] hover:border-accent disabled:opacity-50"
+          className="border border-border px-4 py-2.5 font-display text-sm tracking-[0.1em] hover:border-accent disabled:opacity-50"
         >
-          Stuur test naar team@
+          Stuur test
         </button>
-        <a
-          href="/outreach/analytics"
-          className="border border-border px-4 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
-        >
-          Resultaten →
-        </a>
       </div>
 
-      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      {error && (
+        <p className="mt-3 text-sm text-danger" role="alert">
+          {error}
+        </p>
+      )}
       {message && <p className="mt-3 text-sm text-text-muted">{message}</p>}
 
       {draft && (
-        <article className="mt-4 border border-border bg-bg">
-          <div className="border-b border-border px-4 py-3">
-            <p className="text-xs text-text-dim">
-              Subject
-              {draft.subjectKey
-                ? ` · arm ${draft.subjectKey.toUpperCase()}`
-                : ""}
-            </p>
-            <h3 className="text-sm font-medium text-text">{draft.subject}</h3>
-          </div>
-          <pre className="whitespace-pre-wrap px-4 py-4 font-sans text-sm leading-relaxed text-text-muted">
+        <article className="mt-6 border-t border-border pt-4">
+          <p className="text-xs text-text-dim">
+            Concept
+            {draft.subjectKey
+              ? ` · arm ${draft.subjectKey.toUpperCase()}`
+              : ""}
+          </p>
+          <h3 className="mt-1 font-medium text-text">{draft.subject}</h3>
+          <pre className="mt-3 whitespace-pre-wrap font-sans text-sm leading-relaxed text-text-muted">
             {draft.body}
           </pre>
         </article>

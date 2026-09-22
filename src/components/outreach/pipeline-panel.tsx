@@ -5,7 +5,6 @@ import Link from "next/link";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { PipelineStage } from "@/lib/outreach/pipeline";
-import { PROSPECT_SOURCES } from "@/lib/outreach/sources";
 
 type DryRunResult = {
   ranAt: string;
@@ -18,15 +17,15 @@ type DryRunResult = {
 };
 
 const statusTone = {
-  ready_mock: "success" as const,
-  needs_credentials: "danger" as const,
-  partial: "warn" as const,
+  ready: "success" as const,
+  blocked: "danger" as const,
+  partial: "info" as const,
 };
 
 const statusLabel = {
-  ready_mock: "Mock klaar",
-  needs_credentials: "Credentials nodig",
-  partial: "Gedeeltelijk",
+  ready: "Klaar",
+  blocked: "Blokkeert",
+  partial: "Deels klaar",
 };
 
 export function OutreachPipelinePanel() {
@@ -51,25 +50,33 @@ export function OutreachPipelinePanel() {
         });
         const data = await res.json();
         setDryRun(data);
+        const stagesRes = await fetch("/api/outreach/pipeline/dry-run");
+        const stagesData = await stagesRes.json();
+        setStages(stagesData.stages ?? []);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Dry-run mislukt");
       }
     });
   }
 
+  const blocked = stages.filter((s) => s.status === "blocked").length;
+
   return (
     <div>
       <SectionHeader
-        eyebrow="Volgende stap"
-        title="Data-pipeline"
-        description="Apollo haalt de doelgroep. KvK keurt. Website levert events@ / info@. Daarna draft + test naar team@."
+        eyebrow="Systeem"
+        title="Pipeline"
+        description="Status van de keten: ophalen → verrijken → mailen → meten. Rood alleen als iets écht blokkeert."
         action={
           <div className="flex flex-wrap gap-2">
+            <StatusBadge tone={blocked ? "danger" : "success"}>
+              {blocked ? `${blocked} blokkeert` : "Geen blockers"}
+            </StatusBadge>
             <Link
-              href="/koppelingen"
+              href="/outreach/lijst-bijwerken"
               className="border border-border px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
             >
-              Koppelingen
+              Lijst bijwerken →
             </Link>
             <button
               type="button"
@@ -77,93 +84,62 @@ export function OutreachPipelinePanel() {
               onClick={runDryRun}
               className="bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
             >
-              {pending ? "Draait…" : "Dry-run starten"}
+              {pending ? "Draait…" : "Check opnieuw"}
             </button>
           </div>
         }
       />
 
       {error && (
-        <p className="mb-4 border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
+        <p className="mb-4 text-sm text-danger" role="alert">
           {error}
         </p>
       )}
 
-      <ol className="space-y-3">
+      <ol className="divide-y divide-border border-y border-border">
         {stages.map((stage) => (
-          <li key={stage.id} className="border border-border bg-surface p-4">
+          <li key={stage.id} className="py-4">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-display text-xl tracking-[0.06em]">
+              <h2 className="font-display text-lg tracking-[0.06em]">
                 {stage.name}
               </h2>
               <StatusBadge tone={statusTone[stage.status]}>
                 {statusLabel[stage.status]}
               </StatusBadge>
             </div>
-            <p className="mt-2 text-sm text-text-muted">{stage.description}</p>
-            <p className="mt-2 text-xs text-text-dim">Bron: {stage.dataSource}</p>
-            {stage.missing && stage.missing.length > 0 && (
-              <p className="mt-1 font-mono text-xs text-danger">
-                Nog nodig: {stage.missing.join(" · ")}
+            <p className="mt-1 max-w-2xl text-sm text-text-muted">
+              {stage.description}
+            </p>
+            {stage.missing && stage.missing.length > 0 ? (
+              <p className="mt-1 text-xs text-text-dim">
+                {stage.status === "blocked" ? "Nodig: " : "Optioneel / bewust: "}
+                {stage.missing.join(" · ")}
               </p>
-            )}
+            ) : null}
           </li>
         ))}
       </ol>
 
-      {dryRun && (
-        <section className="mt-8 border border-border bg-surface p-4">
-          <h2 className="font-display text-2xl tracking-[0.06em]">
-            Dry-run resultaat
+      {dryRun ? (
+        <section className="mt-8 border-t border-border pt-6">
+          <h2 className="font-display text-lg tracking-[0.06em]">
+            Laatste check
           </h2>
           <p className="mt-1 text-xs text-text-dim">
             {new Date(dryRun.ranAt).toLocaleString("nl-NL")}
           </p>
-          <ul className="mt-4 space-y-3">
+          <ul className="mt-3 space-y-2 text-sm">
             {dryRun.steps.map((step) => (
-              <li
-                key={step.stage}
-                className="border border-border bg-bg px-3 py-3"
-              >
-                <div className="flex items-center gap-2">
-                  <StatusBadge tone={step.ok ? "success" : "warn"}>
-                    {step.stage}
-                  </StatusBadge>
-                  <span className="text-sm text-text-muted">{step.summary}</span>
-                </div>
-                {step.sample != null && (
-                  <pre className="mt-2 overflow-x-auto bg-surface p-2 font-mono text-[11px] text-text-dim">
-                    {JSON.stringify(step.sample, null, 2)}
-                  </pre>
-                )}
+              <li key={step.stage} className="flex gap-2">
+                <StatusBadge tone={step.ok ? "success" : "danger"}>
+                  {step.stage}
+                </StatusBadge>
+                <span className="text-text-muted">{step.summary}</span>
               </li>
             ))}
           </ul>
         </section>
-      )}
-
-      <section className="mt-8 border border-border bg-surface p-4">
-        <h2 className="font-display text-xl tracking-[0.06em]">
-          Bronnen in scope
-        </h2>
-        <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-          {PROSPECT_SOURCES.map((s) => (
-            <li
-              key={s.id}
-              className="border border-border bg-bg px-3 py-2 text-sm text-text-muted"
-            >
-              <span className="font-display tracking-[0.06em] text-text">
-                {s.name}
-              </span>
-              <span className="text-text-dim"> · {s.status}</span>
-            </li>
-          ))}
-        </ul>
-        <p className="mt-4 text-sm text-text-muted">
-          Voorstel: starten met <strong className="text-text">bureau-import + CRM-uitsluitingen + website-scrape</strong>,
-          parallel KvK aanvragen. Enrichment/Places alleen als KvK te traag of te duur blijkt.
-        </p>
-      </section>
+      ) : null}
     </div>
   );
 }
