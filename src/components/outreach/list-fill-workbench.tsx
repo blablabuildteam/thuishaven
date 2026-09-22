@@ -110,6 +110,8 @@ export function ListFillWorkbench({
       .filter(Boolean)
       .slice(0, 8),
   });
+  const criteriaChanged =
+    Boolean(universeLabel) && activeLabel !== universeLabel;
 
   const remainingApprox =
     universeTotal > 0 ? Math.max(0, universeTotal - apolloOnList) : null;
