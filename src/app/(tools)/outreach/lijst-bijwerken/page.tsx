@@ -73,6 +73,7 @@ export default async function LijstBijwerkenPage() {
         apolloUniverseCheckedAt={universe.checkedAt}
         apolloUniverseLabel={universe.criteriaLabel}
         apolloOnList={apolloOnList}
+        initialCriteria={universe.criteria}
       />
     </div>
   );

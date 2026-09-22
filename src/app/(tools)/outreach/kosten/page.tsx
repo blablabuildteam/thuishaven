@@ -69,7 +69,7 @@ export default async function OutreachKostenPage() {
         </p>
         <p>
           <span className="text-text-dim">Hele lijst slim</span>{" "}
-          <strong className="text-text">{universe.labels.smart}</strong>
+          <strong className="text-text">{universe.labels.full}</strong>
         </p>
         <p>
           <span className="text-text-dim">30d totaal</span>{" "}
