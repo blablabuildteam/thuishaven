@@ -201,7 +201,7 @@ function DailySalesTooltip({
   return (
     <div
       ref={ref}
-      className="max-h-80 max-w-[min(34rem,calc(100vw-2rem))] overflow-y-auto border px-3 py-2 text-xs shadow-sm"
+      className="max-h-[calc(100dvh-2rem)] max-w-[min(34rem,calc(100vw-2rem))] overflow-y-auto border px-3 py-2 text-xs shadow-sm"
       style={{
         background: colors.tooltipBg,
         borderColor: colors.primary,
