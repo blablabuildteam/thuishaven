@@ -8,7 +8,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { CrmNoteForm } from "@/components/outreach/crm-note-form";
 import { LinkedinEstimateForm } from "@/components/outreach/linkedin-estimate-form";
 import { getCrmDossier, statusLabels } from "@/lib/outreach/crm";
-import { mailAngleFor } from "@/lib/outreach/mail-angle";
+import { mailAngleFor, mailAngleTone } from "@/lib/outreach/mail-angle";
 import {
   linkedinCompanySearchUrl,
   linkedinPeopleSearchUrl,
@@ -73,17 +73,7 @@ export default async function CrmDossierPage({
         }
         action={
           <div className="flex flex-wrap gap-2">
-            <StatusBadge
-              tone={
-                angle.id === "jubileum"
-                  ? "accent"
-                  : angle.id === "algemeen"
-                    ? "success"
-                    : angle.id === "past_niet" || angle.id === "niet_mailen"
-                      ? "danger"
-                      : "neutral"
-              }
-            >
+            <StatusBadge tone={mailAngleTone(angle.id)}>
               {angle.label}
             </StatusBadge>
             <StatusBadge
@@ -117,7 +107,12 @@ export default async function CrmDossierPage({
         }
       />
 
-      <p className="mb-6 text-sm text-text-muted">{angle.detail}</p>
+      <p className="mb-6 text-sm text-text-muted">
+        {angle.detail}
+        {angle.also && angle.also.length > 0
+          ? ` · Andere invalshoeken: ${angle.also.join(", ")}`
+          : ""}
+      </p>
 
       {dossier.existingCustomer ? (
         <div className="mb-6 border border-danger/40 bg-surface px-4 py-3 text-sm text-text-muted">

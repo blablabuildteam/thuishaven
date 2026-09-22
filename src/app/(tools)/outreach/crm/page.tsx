@@ -33,10 +33,13 @@ export default async function OutreachCrmPage() {
         a.row.companyName.localeCompare(b.row.companyName, "nl"),
     );
 
-  const mailable = companies.filter(
-    (c) => c.angle.id === "jubileum" || c.angle.id === "algemeen",
+  const mailable = companies.filter((c) =>
+    ["jubileum", "seizoen", "algemeen", "funding", "recordjaar"].includes(
+      c.angle.id,
+    ),
   ).length;
   const jubileum = companies.filter((c) => c.angle.id === "jubileum").length;
+  const seizoen = companies.filter((c) => c.angle.id === "seizoen").length;
   const incomplete = companies.filter(
     (c) => c.angle.id === "nog_checken" || c.row.incomplete,
   ).length;
@@ -47,7 +50,7 @@ export default async function OutreachCrmPage() {
       <SectionHeader
         eyebrow="Lijst"
         title="Bedrijven"
-        description="Zoek op naam, filter op mailkans (jubileum ≤16 mnd of cold mail). Medewerkers: hover voor Apollo/KvK-bron."
+        description="Invalshoeken: jubileum · seizoensfeest · deal/funding · recordjaar · algemeen. Filter en mail via Mailen."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={source === "db" ? "success" : "neutral"}>
@@ -76,11 +79,12 @@ export default async function OutreachCrmPage() {
           label="Klaar om te mailen"
           value={formatNumber(mailable)}
           accent
-          hint="Jubileum of cold mail"
+          hint="Met een invalshoek"
         />
         <MetricCard
-          label="Jubileum ≤16 mnd"
-          value={formatNumber(jubileum)}
+          label="Jubileum / seizoen"
+          value={formatNumber(jubileum + seizoen)}
+          hint={`${jubileum} jubileum · ${seizoen} seizoen`}
         />
         <MetricCard
           label="Nog aanvullen"
@@ -91,22 +95,15 @@ export default async function OutreachCrmPage() {
 
       <div className="mb-6 space-y-2 border border-border bg-surface px-4 py-3 text-sm text-text-muted">
         <p>
-          <strong className="text-text">KvK</strong> gebruiken we vooral voor{" "}
-          <em>oprichtingsdatum</em> (jubileum), KvK-nummer, non-mailing,
-          website/SBI en vestigingsplaats. Medewerkers-aantal uit KvK is alleen
-          vestiging — niet leidend. Matches worden op naam gescoord; twijfel =
-          flag.
+          <strong className="text-text">Invalshoeken om te mailen:</strong>{" "}
+          jubileum (auto via KvK) · seizoensfeest / einde-jaar (auto in seizoen)
+          · deal/funding · recordjaar / targets. Bij Mailen kies je de variant.
         </p>
         <p>
-          <strong className="text-text">Medewerkers:</strong> automatisch via{" "}
-          <em>Apollo</em> (zoek + org-enrich op domein). Geen handmatige
-          LinkedIn-invoer in de member-flow.
-        </p>
-        <p>
-          <strong className="text-text">Contacten:</strong> Apollo zoekt Event /
-          Office / Facilities Manager (+ Hunter voor mail). Kolom{" "}
-          <em>Contact</em> toont tot 3 personen — anders eerst stap 3 op Lijst
-          bijwerken.
+          <strong className="text-text">KvK</strong> vooral voor{" "}
+          <em>oprichtingsdatum</em> (jubileum).{" "}
+          <strong className="text-text">Medewerkers</strong> via Apollo
+          automatisch.
         </p>
       </div>
 

@@ -12,7 +12,7 @@ import {
   type OutreachProspect,
   type ProspectStatus,
 } from "@/lib/outreach/data";
-import { mailAngleFor } from "@/lib/outreach/mail-angle";
+import { mailAngleFor, mailAngleTone } from "@/lib/outreach/mail-angle";
 import { hasKvkConfig } from "@/lib/integrations/kvk";
 import { hasApolloConfig } from "@/lib/integrations/apollo/client";
 import { hasHunterConfig } from "@/lib/integrations/hunter/client";
@@ -28,13 +28,6 @@ const toneFor = (status: ProspectStatus) => {
   if (status === "opened" || status === "contacted") return "info" as const;
   return "neutral" as const;
 };
-
-function angleTone(id: string) {
-  if (id === "jubileum") return "accent" as const;
-  if (id === "algemeen") return "success" as const;
-  if (id === "past_niet" || id === "niet_mailen") return "danger" as const;
-  return "neutral" as const;
-}
 
 function sourceLabel(source?: string) {
   switch (source) {
@@ -99,7 +92,7 @@ function ProspectTable({ rows }: { rows: OutreachProspect[] }) {
                   <p className="text-xs text-text-dim">{p.city ?? p.sector ?? "—"}</p>
                 </td>
                 <td className="px-4 py-3">
-                  <StatusBadge tone={angleTone(angle.id)}>{angle.label}</StatusBadge>
+                  <StatusBadge tone={mailAngleTone(angle.id)}>{angle.label}</StatusBadge>
                   <p className="mt-1 max-w-[200px] text-xs text-text-dim">
                     {angle.detail}
                   </p>

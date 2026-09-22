@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { statusLabels } from "@/lib/mock/outreach";
-import { type MailAngleId } from "@/lib/outreach/mail-angle";
+import { type MailAngleId, isMailableAngle, mailAngleTone } from "@/lib/outreach/mail-angle";
 
 /** Client-safe shape — avoid importing server crm.ts (postgres) into the browser. */
 type CrmRow = {
@@ -50,6 +50,7 @@ type Angle = {
   detail: string;
   jubileeMark?: number;
   jubileeYearsAway?: number;
+  also?: MailAngleId[];
 };
 
 type Row = {
@@ -61,16 +62,18 @@ type Props = {
   rows: Row[];
 };
 
-type MailFilter = "all" | "kans" | "jubileum" | "cold" | "onvolledig" | "past_niet";
+type MailFilter =
+  | "all"
+  | "kans"
+  | "jubileum"
+  | "seizoen"
+  | "funding"
+  | "recordjaar"
+  | "cold"
+  | "onvolledig"
+  | "past_niet";
 type RegionFilter = "all" | "in" | "out" | "unknown";
 type CompletenessFilter = "all" | "ready" | "missing_mdw" | "missing_email" | "missing_contact";
-
-function angleTone(id: string) {
-  if (id === "jubileum") return "accent" as const;
-  if (id === "algemeen") return "success" as const;
-  if (id === "past_niet" || id === "niet_mailen") return "danger" as const;
-  return "neutral" as const;
-}
 
 function fmt(iso: string | null) {
   if (!iso) return "—";
@@ -82,6 +85,15 @@ function sourceLabel(source?: string) {
   if (source === "paste" || source === "manual") return "Handmatig";
   if (source === "linkedin") return "LinkedIn";
   return source ?? "—";
+}
+
+function angleLabel(id: MailAngleId): string {
+  if (id === "seizoen") return "Seizoen";
+  if (id === "funding") return "Funding";
+  if (id === "recordjaar") return "Recordjaar";
+  if (id === "algemeen") return "Algemeen";
+  if (id === "jubileum") return "Jubileum";
+  return id;
 }
 
 function MdwCell({ row }: { row: CrmRow }) {
@@ -146,6 +158,9 @@ export function CrmCompaniesTable({ rows }: Props) {
       all: rows.length,
       kans: 0,
       jubileum: 0,
+      seizoen: 0,
+      funding: 0,
+      recordjaar: 0,
       cold: 0,
       onvolledig: 0,
       past_niet: 0,
@@ -155,11 +170,25 @@ export function CrmCompaniesTable({ rows }: Props) {
       out: 0,
     };
     for (const { row, angle } of rows) {
-      if (angle.id === "jubileum" || angle.id === "algemeen") c.kans += 1;
+      if (isMailableAngle(angle.id)) c.kans += 1;
       if (angle.id === "jubileum") c.jubileum += 1;
+      if (angle.id === "seizoen") c.seizoen += 1;
       if (angle.id === "algemeen") c.cold += 1;
       if (angle.id === "nog_checken") c.onvolledig += 1;
       if (angle.id === "past_niet") c.past_niet += 1;
+      // Selectable even when not primary
+      if (
+        angle.id === "funding" ||
+        angle.also?.includes("funding")
+      ) {
+        c.funding += 1;
+      }
+      if (
+        angle.id === "recordjaar" ||
+        angle.also?.includes("recordjaar")
+      ) {
+        c.recordjaar += 1;
+      }
       if (row.employeeCount == null) c.missing_mdw += 1;
       if (!row.email) c.missing_email += 1;
       if (row.inRegion) c.in += 1;
@@ -182,10 +211,28 @@ export function CrmCompaniesTable({ rows }: Props) {
 
       switch (mail) {
         case "kans":
-          if (angle.id !== "jubileum" && angle.id !== "algemeen") return false;
+          if (!isMailableAngle(angle.id)) return false;
           break;
         case "jubileum":
           if (angle.id !== "jubileum") return false;
+          break;
+        case "seizoen":
+          if (angle.id !== "seizoen" && !angle.also?.includes("seizoen")) {
+            return false;
+          }
+          break;
+        case "funding":
+          if (angle.id !== "funding" && !angle.also?.includes("funding")) {
+            return false;
+          }
+          break;
+        case "recordjaar":
+          if (
+            angle.id !== "recordjaar" &&
+            !angle.also?.includes("recordjaar")
+          ) {
+            return false;
+          }
           break;
         case "cold":
           if (angle.id !== "algemeen") return false;
@@ -282,11 +329,14 @@ export function CrmCompaniesTable({ rows }: Props) {
       <div className="mb-3 space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="w-full text-[11px] uppercase tracking-wider text-text-dim sm:w-auto">
-            Mailkans
+            Invalshoek
           </span>
           {chip(mail === "kans", () => setMail("kans"), "Klaar om te mailen", counts.kans)}
-          {chip(mail === "jubileum", () => setMail("jubileum"), "Jubileum ≤16 mnd", counts.jubileum)}
-          {chip(mail === "cold", () => setMail("cold"), "Cold mail", counts.cold)}
+          {chip(mail === "jubileum", () => setMail("jubileum"), "Jubileum", counts.jubileum)}
+          {chip(mail === "seizoen", () => setMail("seizoen"), "Seizoen", counts.seizoen)}
+          {chip(mail === "funding", () => setMail("funding"), "Deal / funding", counts.funding)}
+          {chip(mail === "recordjaar", () => setMail("recordjaar"), "Recordjaar", counts.recordjaar)}
+          {chip(mail === "cold", () => setMail("cold"), "Algemeen", counts.cold)}
           {chip(mail === "onvolledig", () => setMail("onvolledig"), "Onvolledig", counts.onvolledig)}
           {chip(mail === "past_niet", () => setMail("past_niet"), "Past niet", counts.past_niet)}
           {chip(mail === "all", () => setMail("all"), "Alles", counts.all)}
@@ -327,8 +377,8 @@ export function CrmCompaniesTable({ rows }: Props) {
       </div>
 
       <p className="mb-3 text-xs text-text-dim">
-        {filtered.length} van {rows.length} · Hover op mdw voor Apollo/KvK-bron ·
-        Jubileum = marker binnen ~16 maanden · anders cold mail bij fit
+        {filtered.length} van {rows.length} · Invalshoeken: jubileum · seizoen ·
+        funding · recordjaar · algemeen · Hover op mdw voor bron
       </p>
 
       {filtered.length === 0 ? (
@@ -408,12 +458,17 @@ export function CrmCompaniesTable({ rows }: Props) {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <StatusBadge tone={angleTone(angle.id)}>
+                    <StatusBadge tone={mailAngleTone(angle.id)}>
                       {angle.label}
                     </StatusBadge>
-                    <p className="mt-1 max-w-[200px] text-xs text-text-dim">
+                    <p className="mt-1 max-w-[220px] text-xs text-text-dim">
                       {angle.detail}
                     </p>
+                    {angle.also && angle.also.length > 0 ? (
+                      <p className="mt-1 text-[10px] text-text-dim">
+                        Ook: {angle.also.map(angleLabel).join(" · ")}
+                      </p>
+                    ) : null}
                   </td>
                   <MdwCell row={row} />
                   <td className="px-4 py-3 text-xs text-text-muted">

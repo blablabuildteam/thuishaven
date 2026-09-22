@@ -40,6 +40,9 @@ export type OutreachVariantId =
   | "warm_tour"
   | "open_dates"
   | "jubileum"
+  | "seizoen"
+  | "funding"
+  | "recordjaar"
   | "short_checkin";
 
 export type OutreachSubjectArm = "a" | "b";
@@ -56,11 +59,11 @@ export type OutreachVariant = {
 export const OUTREACH_VARIANTS: OutreachVariant[] = [
   {
     id: "warm_tour",
-    name: "Warm · bezichtiging",
+    name: "Algemeen feest",
     audience: "both",
-    description: "Persoonlijk, dicht bij Reijners stijl — soft uitnodiging voor een rondleiding.",
+    description: "Persoonlijk, dicht bij Reijners stijl — bedrijfsfeest zonder specifieke trigger.",
     guidance:
-      "Schrijf alsof Reijner zelf mailt. Warm en rustig. Max 2–3 area's met karakter. Geen sales-taal, geen 'unieke kans', geen druk. Soft: zin om even langs te komen.",
+      "Schrijf alsof Reijner zelf mailt. Warm en rustig. Soft vraag of er een bedrijfsfeest, teamavond of borrel speelt. Soft: zin om even langs te komen. Geen sales-taal.",
     subjects: {
       a: "Even kennismaken op Thuishaven?",
       b: "Thuishaven als locatie — zin in een rondleiding?",
@@ -80,7 +83,7 @@ export const OUTREACH_VARIANTS: OutreachVariant[] = [
   },
   {
     id: "jubileum",
-    name: "Jubileum · bedrijf",
+    name: "Jubileum",
     audience: "company",
     description: "Oprechte felicitatie, geen hard pitch.",
     guidance:
@@ -88,6 +91,42 @@ export const OUTREACH_VARIANTS: OutreachVariant[] = [
     subjects: {
       a: "Gefeliciteerd — en een klein idee",
       b: "Jullie jubileum · Thuishaven",
+    },
+  },
+  {
+    id: "seizoen",
+    name: "Seizoensfeest",
+    audience: "company",
+    description: "Zomerfeest, einde-jaar of kerstborrel.",
+    guidance:
+      "Koppel aan het seizoen (zomerfeest of einde-jaar/kerstborrel) zonder pushy te zijn. Kort: speelt er iets met het team? Soft rondleiding. Geen 'nu boeken'.",
+    subjects: {
+      a: "Zomerfeest / einde-jaar op locatie?",
+      b: "Idee voor jullie seizoensfeest",
+    },
+  },
+  {
+    id: "funding",
+    name: "Deal / funding",
+    audience: "company",
+    description: "IPO, funding round of overname vieren.",
+    guidance:
+      "Geen aanname dat je het nieuws zeker weet — soft: 'als jullie iets te vieren hebben na een deal/funding'. Warm, kort, uitnodiging tot bezichtiging. Geen finance-jargon.",
+    subjects: {
+      a: "Iets te vieren na een deal?",
+      b: "Funding / mijlpaal · Thuishaven",
+    },
+  },
+  {
+    id: "recordjaar",
+    name: "Recordjaar",
+    audience: "company",
+    description: "Targets gehaald — kick-off of afterparty.",
+    guidance:
+      "Toon: team dat een sterk jaar of targets viert. Soft vraag naar kick-off, afterparty of teamfeest. Geen 'congrats on crushing quota'-hype. Nederlands, rustig, Reijner-stijl.",
+    subjects: {
+      a: "Targets gehaald — teamavond?",
+      b: "Kick-off of afterparty op Thuishaven?",
     },
   },
   {

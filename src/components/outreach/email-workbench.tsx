@@ -40,7 +40,7 @@ export function OutreachEmailWorkbench({ prospects }: Props) {
   );
 
   const [prospectId, setProspectId] = useState(ready[0]?.id ?? "");
-  const [variantId, setVariantId] = useState<OutreachVariantId>("jubileum");
+  const [variantId, setVariantId] = useState<OutreachVariantId>("seizoen");
   const [subjectArm, setSubjectArm] = useState<OutreachSubjectArm | "auto">(
     "auto",
   );
