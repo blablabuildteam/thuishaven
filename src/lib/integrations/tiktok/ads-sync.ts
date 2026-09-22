@@ -4,8 +4,8 @@ import {
   listTikTokAdInsights,
   listTikTokAds,
   resolveTikTokAdvertiser,
-  tiktokAdsAccessToken,
 } from "@/lib/integrations/tiktok/ads";
+import { ensureTikTokAdsAccessToken } from "@/lib/integrations/tiktok/ads-auth";
 import { logIntegration } from "@/lib/integrations/log";
 import { socialSyncSince } from "@/lib/integrations/social/sync-window";
 
@@ -32,7 +32,7 @@ export async function syncTikTokAdsReadOnly(options?: {
   limit?: number;
 }): Promise<TikTokAdsSyncResult> {
   const notes: string[] = [];
-  if (!tiktokAdsAccessToken()) {
+  if (!(await ensureTikTokAdsAccessToken())) {
     return {
       ok: false,
       fetched: 0,

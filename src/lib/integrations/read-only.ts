@@ -35,7 +35,10 @@ export function assertExternalReadOnly(
     options?.allowAuthTokenPost &&
     upper === "POST" &&
     (/auth\.weeztix\.com\/tokens\/?$/i.test(url) ||
-      /^https:\/\/open\.tiktokapis\.com\/v2\/oauth\/token\/?$/i.test(url))
+      /^https:\/\/open\.tiktokapis\.com\/v2\/oauth\/token\/?$/i.test(url) ||
+      /^https:\/\/business-api\.tiktok\.com\/open_api\/v1\.3\/oauth2\/access_token\/?$/i.test(
+        url,
+      ))
   ) {
     return;
   }

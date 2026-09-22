@@ -1,19 +1,19 @@
+import {
+  ensureTikTokAdsAccessToken,
+  tiktokAdsAppCredentials,
+} from "@/lib/integrations/tiktok/ads-auth";
+
+export { tiktokAdsAccessToken } from "@/lib/integrations/tiktok/ads-auth";
+
 const API = "https://business-api.tiktok.com/open_api/v1.3";
 const PAGE_SIZE = 1000;
-
-export function tiktokAdsAccessToken(): string | null {
-  return process.env.TIKTOK_ADS_ACCESS_TOKEN?.trim() || null;
-}
 
 export function tiktokAdvertiserIdFromEnv(): string | null {
   return process.env.TIKTOK_ADVERTISER_ID?.trim() || null;
 }
 
 function adsAppCredentials(): { appId: string; secret: string } | null {
-  const appId = process.env.TIKTOK_ADS_APP_ID?.trim();
-  const secret = process.env.TIKTOK_ADS_APP_SECRET?.trim();
-  if (!appId || !secret) return null;
-  return { appId, secret };
+  return tiktokAdsAppCredentials();
 }
 
 export function explainTikTokAdsError(message: string, code?: number): string {
@@ -42,7 +42,7 @@ async function adsGet<T>(
   path: string,
   params: Record<string, string> = {},
 ): Promise<{ ok: true; data: T } | { ok: false; error: string; code?: number }> {
-  const token = tiktokAdsAccessToken();
+  const token = await ensureTikTokAdsAccessToken();
   if (!token) {
     return { ok: false, error: "TIKTOK_ADS_ACCESS_TOKEN ontbreekt" };
   }
@@ -150,7 +150,7 @@ export async function fetchTikTokAdvertiserInfo(
 export async function resolveTikTokAdvertiser(): Promise<
   { ok: true; account: TikTokAdvertiser } | { ok: false; error: string }
 > {
-  if (!tiktokAdsAccessToken()) {
+  if (!(await ensureTikTokAdsAccessToken())) {
     return { ok: false, error: "TIKTOK_ADS_ACCESS_TOKEN ontbreekt" };
   }
 
