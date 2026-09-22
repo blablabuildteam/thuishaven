@@ -20,7 +20,7 @@ import {
   type SalesDayPoint,
 } from "@/lib/insights/sales-curve";
 import { formatDayNl, formatDayShort } from "@/lib/time/amsterdam";
-import { formatNumber } from "@/lib/utils";
+import { cn, formatNumber } from "@/lib/utils";
 import {
   SocialChannelIcon,
   paidAdBrandChannel,
@@ -234,18 +234,28 @@ function ActivityLane({
   return (
     <div className="flex items-center gap-0">
       <div
-        className="w-8 shrink-0 pr-1 text-right text-[8px] font-medium tracking-[0.08em] text-text-dim uppercase"
+        className={cn(
+          "w-8 shrink-0 pr-1 text-right text-[8px] font-medium tracking-[0.08em] uppercase",
+          paid ? "text-success" : "text-text-dim",
+        )}
         aria-hidden
       >
         {label}
       </div>
-      <div className="relative h-5 flex-1" style={{ marginRight: PLOT_RIGHT }}>
+      <div className="relative h-6 flex-1" style={{ marginRight: PLOT_RIGHT }}>
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-x-0 top-1/2 h-px",
+            paid ? "bg-success/40" : "bg-border",
+          )}
+          aria-hidden
+        />
         {marks.map((mark) => {
           const left = (mark.index / last) * 100;
           return (
             <div
               key={mark.row.day}
-              className="absolute top-0 -translate-x-1/2"
+              className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
               style={{ left: `${left}%` }}
               onMouseEnter={(event) => {
                 const rect = event.currentTarget.getBoundingClientRect();

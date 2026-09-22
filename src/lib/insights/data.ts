@@ -139,6 +139,7 @@ export type InsightsSnapshot = {
     ads: number;
     linked: number;
     spendCents: number;
+    purchases: number;
     events: number;
     rows: Array<{
       name: string;
@@ -149,6 +150,7 @@ export type InsightsSnapshot = {
       sold: number;
       fillPct: number | null;
       roas: number | null;
+      purchases: number;
     }>;
   };
   notes: string[];
@@ -642,13 +644,14 @@ export function snapshotToPromptContext(snap: InsightsSnapshot): string {
     lines.push(
       "",
       "=== Paid ads (Meta/TikTok/YouTube, gekoppeld aan edities) ===",
-      `Ads in DB: ${snap.paidAds.ads} · gekoppeld: ${snap.paidAds.linked} · events: ${snap.paidAds.events} · spend ≈ €${spendEur.toLocaleString("nl-NL")}`,
+      `Ads in DB: ${snap.paidAds.ads} · gekoppeld: ${snap.paidAds.linked} · events: ${snap.paidAds.events} · spend ≈ €${spendEur.toLocaleString("nl-NL")} · pixelPurchases=${snap.paidAds.purchases}`,
       "ROAS = ticketomzet / ad spend (niet winst; DJ-fees zitten daar niet in).",
+      "pixelPurchases = Meta purchase of TikTok complete_payment (last-click van het advertentieplatform, niet alle Weeztix-tickets).",
       "Per event (hoogste spend eerst):",
     );
     for (const row of snap.paidAds.rows) {
       lines.push(
-        `- ${row.day} ${displayEditionName(row.name)} | ${row.status} | spend=€${Math.round(row.spendCents / 100).toLocaleString("nl-NL")} | ads=${row.ads} | sold=${row.sold} | fill=${row.fillPct != null ? `${Math.round(row.fillPct)}%` : "n/a"} | ROAS=${row.roas != null ? `${row.roas.toFixed(1)}×` : "n/a"}`,
+        `- ${row.day} ${displayEditionName(row.name)} | ${row.status} | spend=€${Math.round(row.spendCents / 100).toLocaleString("nl-NL")} | ads=${row.ads} | pixelPurchases=${row.purchases} | sold=${row.sold} | fill=${row.fillPct != null ? `${Math.round(row.fillPct)}%` : "n/a"} | ROAS=${row.roas != null ? `${row.roas.toFixed(1)}×` : "n/a"}`,
       );
     }
   }

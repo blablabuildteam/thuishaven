@@ -64,6 +64,43 @@ export function organicBarFill(level: ImpactLevel): string {
   }
 }
 
+/** Paid ticket volume: 1 = weinig ad-aankopen → 5 = veel. */
+export function paidSalesBarFill(level: ImpactLevel): string {
+  return organicBarFill(level);
+}
+
+/** ROAS: 1 = zwak t.o.v. andere events → 5 = sterk. */
+export function roasBarFill(level: ImpactLevel): string {
+  switch (level) {
+    case 1:
+      return "bg-danger";
+    case 2:
+      return "bg-warn";
+    case 3:
+      return "bg-accent";
+    case 4:
+      return "bg-[color-mix(in_srgb,var(--accent)_25%,var(--success))]";
+    case 5:
+      return "bg-success";
+  }
+}
+
+export function paidSalesLevelLabel(level: ImpactLevel): string {
+  if (level === 5) return "zeer veel ad-aankopen t.o.v. andere events";
+  if (level === 4) return "veel ad-aankopen t.o.v. andere events";
+  if (level === 3) return "gemiddeld aantal ad-aankopen";
+  if (level === 2) return "weinig ad-aankopen t.o.v. andere events";
+  return "zeer weinig ad-aankopen t.o.v. andere events";
+}
+
+export function paidRoasLevelLabel(level: ImpactLevel): string {
+  if (level === 5) return "zeer hoge ROAS t.o.v. andere events";
+  if (level === 4) return "hoge ROAS t.o.v. andere events";
+  if (level === 3) return "gemiddelde ROAS";
+  if (level === 2) return "lage ROAS t.o.v. andere events";
+  return "zeer lage ROAS t.o.v. andere events";
+}
+
 /** DJ-fees: 1 = lage investering → 5 = zeer hoge investering. */
 export function djFeeBarFill(level: ImpactLevel): string {
   switch (level) {

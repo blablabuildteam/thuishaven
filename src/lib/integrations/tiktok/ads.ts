@@ -190,6 +190,8 @@ export type TikTokAdInsightRow = {
   impressions: number;
   reach: number;
   clicks: number;
+  /** TikTok `complete_payment`. 0 when the metric is unavailable. */
+  purchases: number;
   dateStart: string;
   dateStop: string;
 };
@@ -272,7 +274,7 @@ async function fetchReportWindow(
   start: string,
   end: string,
   maxItems: number,
-  metrics = ["spend", "impressions", "clicks", "reach"],
+  metrics = ["spend", "impressions", "clicks", "reach", "complete_payment"],
 ): Promise<{ ok: true; rows: unknown[] } | { ok: false; error: string }> {
   const listed = await paginateAdsGet<{
     list?: unknown[];
@@ -293,6 +295,19 @@ async function fetchReportWindow(
     (data) => data.list ?? [],
     maxItems,
   );
+  if (
+    !listed.ok &&
+    metrics.includes("complete_payment") &&
+    /complete_payment|metric|invalid/i.test(listed.error)
+  ) {
+    return fetchReportWindow(
+      advertiserId,
+      start,
+      end,
+      maxItems,
+      metrics.filter((metric) => metric !== "complete_payment"),
+    );
+  }
   if (
     !listed.ok &&
     metrics.includes("reach") &&
@@ -352,6 +367,13 @@ export async function listTikTokAdInsights(options: {
       const clicks = Math.round(
         Number(row.metrics?.clicks ?? row.clicks ?? 0) || 0,
       );
+      const purchases = Math.max(
+        0,
+        Math.round(
+          Number(row.metrics?.complete_payment ?? row.complete_payment ?? 0) ||
+            0,
+        ),
+      );
       if (!prev) {
         merged.set(adId, {
           adId,
@@ -359,6 +381,7 @@ export async function listTikTokAdInsights(options: {
           impressions,
           reach,
           clicks,
+          purchases,
           dateStart: start,
           dateStop: end,
         });
@@ -368,6 +391,7 @@ export async function listTikTokAdInsights(options: {
       prev.impressions += impressions;
       prev.reach += reach;
       prev.clicks += clicks;
+      prev.purchases += purchases;
       if (start < prev.dateStart) prev.dateStart = start;
       if (end > prev.dateStop) prev.dateStop = end;
     }

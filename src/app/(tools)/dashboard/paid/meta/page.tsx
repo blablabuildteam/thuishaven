@@ -27,6 +27,7 @@ export default async function PaidMetaPage() {
       impressions: 0,
       reach: 0,
       clicks: 0,
+      purchases: 0,
       linked: 0,
     },
     lastSyncedAt: null,
@@ -44,7 +45,7 @@ export default async function PaidMetaPage() {
         title="Meta ads"
         description={
           hasToken
-            ? "Spend, impressions en clicks per campagne · ads koppelen aan edities zoals organic posts."
+            ? "Spend en ad-aankopen (Meta-pixel purchases) per campagne. Last-click van Meta, niet alle Weeztix-tickets."
             : "Wacht op META_ACCESS_TOKEN. Zodra ads_read op de system user staat, synct deze view."
         }
       />
@@ -75,7 +76,14 @@ export default async function PaidMetaPage() {
               value={formatEuroFromCents(data.totals.spendCents, currency)}
               label="spend"
             />
-            <Stat value={formatNumber(data.totals.impressions)} label="impr." />
+            <Stat
+              value={
+                data.totals.purchases > 0
+                  ? formatNumber(data.totals.purchases)
+                  : "—"
+              }
+              label="aankopen"
+            />
             <Stat value={formatNumber(data.totals.clicks)} label="clicks" />
             <Stat
               value={ctr != null ? formatPercent(ctr, 2) : "—"}

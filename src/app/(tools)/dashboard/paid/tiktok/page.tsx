@@ -27,6 +27,7 @@ export default async function PaidTikTokPage() {
       impressions: 0,
       reach: 0,
       clicks: 0,
+      purchases: 0,
       linked: 0,
     },
     lastSyncedAt: null,
@@ -44,7 +45,7 @@ export default async function PaidTikTokPage() {
         title="TikTok ads"
         description={
           hasToken
-            ? "Spend, impressions en clicks per campagne · ads koppelen aan edities zoals organic posts."
+            ? "Spend en ad-aankopen (TikTok complete payment) per campagne. Last-click van TikTok, niet alle Weeztix-tickets."
             : "Wacht op TIKTOK_ADS_ACCESS_TOKEN (Marketing API, niet Login Kit)."
         }
       />
@@ -78,7 +79,14 @@ export default async function PaidTikTokPage() {
               value={formatEuroFromCents(data.totals.spendCents, currency)}
               label="spend"
             />
-            <Stat value={formatNumber(data.totals.impressions)} label="impr." />
+            <Stat
+              value={
+                data.totals.purchases > 0
+                  ? formatNumber(data.totals.purchases)
+                  : "—"
+              }
+              label="aankopen"
+            />
             <Stat value={formatNumber(data.totals.clicks)} label="clicks" />
             <Stat
               value={ctr != null ? formatPercent(ctr, 2) : "—"}

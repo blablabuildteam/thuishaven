@@ -1,7 +1,8 @@
 /**
- * Organic social impact for an edition — same pattern as competition:
- * score each promo/eventdag post, combine, map to 1–5 impact level.
- * Aftermovies do not count toward sales impact.
+ * Organic social impact for an edition.
+ * Score each promo/eventdag post, then combine into one edition score.
+ * The 1–5 label is not a fixed cutoff — it is this score ranked against
+ * the other events in the insights set (quintiles). Aftermovies do not count.
  */
 
 import type { SalesImpactRole } from "@/lib/marketing/sales-impact";
@@ -211,9 +212,10 @@ export function organicPostWeightLabel(weight: OrganicPostWeight): string {
 }
 
 /**
- * Combine per-post scores into edition-level organic impact.
- * Uses top posts with mild diminishing returns so duplicate creatives
- * don't auto-max the score.
+ * Combine per-post scores into one edition score.
+ * Uses the top posts with mild diminishing returns so duplicate creatives
+ * don't dominate. The 1–5 level is assigned later by ranking this score
+ * against every other event that has promo or event-day posts.
  */
 export function summarizeOrganicImpact(posts: OrganicImpactPost[]): {
   level: OrganicImpactLevel | null;
@@ -248,15 +250,8 @@ export function summarizeOrganicImpact(posts: OrganicImpactPost[]): {
   score = Math.round(score * 10) / 10;
   const heavyCount = scored.filter((s) => s.weight === "heavy").length;
 
-  let level: OrganicImpactLevel;
-  if (score >= 22) level = 5;
-  else if (score >= 15) level = 4;
-  else if (score >= 8) level = 3;
-  else if (score >= 4) level = 2;
-  else level = 1;
-
   return {
-    level,
+    level: null,
     score,
     promoCount: scored.length,
     heavyCount,

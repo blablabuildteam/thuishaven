@@ -629,6 +629,11 @@ export const marketingAds = pgTable(
     impressions: integer("impressions").notNull().default(0),
     reach: integer("reach").notNull().default(0),
     clicks: integer("clicks").notNull().default(0),
+    /**
+     * Platform-reported purchases (Meta `purchase`, TikTok `complete_payment`).
+     * Last-click of the ad platform — not a Weeztix ticket count.
+     */
+    purchases: integer("purchases").notNull().default(0),
     /** Ad object created_time — used to score against editions. */
     publishedAt: timestamp("published_at", { withTimezone: true }),
     dateStart: date("date_start"),

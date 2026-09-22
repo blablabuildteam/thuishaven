@@ -329,6 +329,8 @@ export type EventInsightPaidAd = {
   impressions: number;
   reach: number;
   clicks: number;
+  /** Platform-reported purchases for this ad. */
+  purchases: number;
   permalink: string | null;
   publishedAt: string | null;
   dateStart: string | null;
@@ -339,6 +341,13 @@ export type EventInsightPaid = {
   ads: number;
   impressions: number;
   clicks: number;
+  /** Meta pixel purchases + TikTok complete payments. */
+  purchases: number;
+  /**
+   * Ad-aankopen × gemiddelde ticketprijs / ad spend.
+   * Null without purchases, spend, or a ticket price.
+   */
+  purchaseRoas: number | null;
   /** Ticketomzet / ad spend. Null when spend or revenue is missing. */
   roas: number | null;
 };
@@ -424,6 +433,10 @@ export type EventInsight = {
   organicImpactScore: number;
   /** 1–5 vs other events with priced DJ-fees. Null without ranges. */
   djFeeInvestmentLevel: DjFeeInvestmentLevel | null;
+  /** 1–5 ad-aankopen vs other events with paid purchases. */
+  paidSalesLevel: DjFeeInvestmentLevel | null;
+  /** 1–5 purchase ROAS vs other events with a purchase ROAS. */
+  paidRoasLevel: DjFeeInvestmentLevel | null;
   /** 1–5 vs other events with linked ad spend. */
   paidInvestmentLevel: DjFeeInvestmentLevel | null;
   /** 1–5 vs other events on DJ-fee midpoint + ad spend. */
@@ -1176,6 +1189,7 @@ export async function loadEventInsightsFresh(options?: {
         impressions: ad.impressions ?? 0,
         reach: ad.reach ?? 0,
         clicks: ad.clicks ?? 0,
+        purchases: ad.purchases ?? 0,
         permalink: ad.permalink,
         publishedAt: ad.publishedAt?.toISOString() ?? null,
         dateStart:
@@ -1186,12 +1200,21 @@ export async function loadEventInsightsFresh(options?: {
               : null,
       }));
       const spendCents = paidAds.reduce((s, a) => s + a.spendCents, 0);
+      const purchases = paidAds.reduce((s, a) => s + a.purchases, 0);
       const ticketRevenueCents = e.revenueCents ?? 0;
       const paid: EventInsightPaid = {
         spendCents,
         ads: paidAds.length,
         impressions: paidAds.reduce((s, a) => s + a.impressions, 0),
         clicks: paidAds.reduce((s, a) => s + a.clicks, 0),
+        purchases,
+        purchaseRoas:
+          spendCents > 0 &&
+          purchases > 0 &&
+          avgPriceEur != null &&
+          avgPriceEur > 0
+            ? (purchases * avgPriceEur) / (spendCents / 100)
+            : null,
         roas:
           spendCents > 0 && ticketRevenueCents > 0
             ? ticketRevenueCents / spendCents
@@ -1333,6 +1356,8 @@ export async function loadEventInsightsFresh(options?: {
         organicImpactLevel: null,
         organicImpactScore: 0,
         djFeeInvestmentLevel: null,
+        paidSalesLevel: null,
+        paidRoasLevel: null,
         paidInvestmentLevel: null,
         investmentLevel: null,
       };
@@ -1465,7 +1490,7 @@ export async function loadEventInsightsFresh(options?: {
   // Upcoming/past are cached separately — annotate after merge so cohorts
   // include the full set. Mode "all" (recovery path) annotates here.
   if (mode === "all") {
-    applyInvestmentRanks(insights);
+    applyCrossEventRanks(insights);
     applyAnomalies(insights);
   }
   if (mode === "upcoming") {
@@ -1486,8 +1511,32 @@ function combinedInvestmentEuros(event: EventInsight): number | null {
   return (fee ?? 0) + paidEur;
 }
 
+function applyCrossEventRanks(events: EventInsight[]): void {
+  applyOrganicImpactRanks(events);
+  applyInvestmentRanks(events);
+}
+
+/** 1–5 organic label = this edition's score vs every other event with promo or event-day posts. */
+function applyOrganicImpactRanks(events: EventInsight[]): void {
+  const scored = events.filter((event) =>
+    event.socialPosts.some((post) => post.salesImpactRole !== "after"),
+  );
+  const rank = rankDjFeeInvestment(
+    scored.map((event) => event.organicImpactScore),
+  );
+  const scoredIds = new Set(scored.map((event) => event.editionId));
+  for (const event of events) {
+    if (!rank || !scoredIds.has(event.editionId)) {
+      event.organicImpactLevel = null;
+      continue;
+    }
+    event.organicImpactLevel = rank(event.organicImpactScore);
+  }
+}
+
 function applyInvestmentRanks(events: EventInsight[]): void {
   applyDjFeeInvestment(events);
+  applyPaidOutcomeRanks(events);
   const paidRank = rankDjFeeInvestment(
     events
       .map((event) =>
@@ -1508,6 +1557,31 @@ function applyInvestmentRanks(events: EventInsight[]): void {
     const combined = combinedInvestmentEuros(event);
     event.investmentLevel =
       combinedRank && combined != null ? combinedRank(combined) : null;
+  }
+}
+
+function applyPaidOutcomeRanks(events: EventInsight[]): void {
+  const salesRank = rankDjFeeInvestment(
+    events
+      .map((event) =>
+        event.paid.purchases > 0 ? event.paid.purchases : null,
+      )
+      .filter((n): n is number => n != null),
+  );
+  const roasRank = rankDjFeeInvestment(
+    events
+      .map((event) => event.paid.purchaseRoas)
+      .filter((n): n is number => n != null),
+  );
+  for (const event of events) {
+    event.paidSalesLevel =
+      salesRank && event.paid.purchases > 0
+        ? salesRank(event.paid.purchases)
+        : null;
+    event.paidRoasLevel =
+      roasRank && event.paid.purchaseRoas != null
+        ? roasRank(event.paid.purchaseRoas)
+        : null;
   }
 }
 
@@ -1550,7 +1624,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v31"],
+  ["event-insights-upcoming-v32"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1566,7 +1640,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v31"],
+  ["event-insights-past-v32"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],
@@ -1589,7 +1663,7 @@ export const loadEventInsights = cache(async (options?: {
   const asOfDay = amsterdamDay(new Date());
 
   return rememberTtl(
-    `event-insights:${limit}:${asOfDay}`,
+    `event-insights:v33:${limit}:${asOfDay}`,
     DASHBOARD_TTL_MS,
     async () => {
       // Outside Next data cache: recover empty DB / schedule list refresh
@@ -1602,7 +1676,7 @@ export const loadEventInsights = cache(async (options?: {
       ]);
 
       const merged = [...upcoming, ...past];
-      applyInvestmentRanks(merged);
+      applyCrossEventRanks(merged);
       applyAnomalies(merged);
       return merged;
     },

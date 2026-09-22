@@ -32,6 +32,7 @@ function emptyBundle(): MarketingAdsBundle {
       impressions: 0,
       reach: 0,
       clicks: 0,
+      purchases: 0,
       linked: 0,
     },
     lastSyncedAt: null,
@@ -129,6 +130,7 @@ async function loadMarketingAdsBundleFresh(
         impressions: ad.impressions ?? 0,
         reach: ad.reach ?? 0,
         clicks: ad.clicks ?? 0,
+        purchases: ad.purchases ?? 0,
         publishedAt: ad.publishedAt?.toISOString() ?? null,
         dateStart: ad.dateStart ?? null,
         dateStop: ad.dateStop ?? null,
@@ -151,6 +153,7 @@ async function loadMarketingAdsBundleFresh(
             impressions: ad.impressions,
             reach: ad.reach,
             clicks: ad.clicks,
+            purchases: ad.purchases,
             startsAt: campaignStartsAt([ad]),
             rows: [ad],
           });
@@ -161,6 +164,7 @@ async function loadMarketingAdsBundleFresh(
         existing.impressions += ad.impressions;
         existing.reach += ad.reach;
         existing.clicks += ad.clicks;
+        existing.purchases += ad.purchases;
         existing.rows.push(ad);
         existing.startsAt = campaignStartsAt(existing.rows);
       }
@@ -187,6 +191,7 @@ async function loadMarketingAdsBundleFresh(
           impressions: ads.reduce((s, a) => s + a.impressions, 0),
           reach: ads.reduce((s, a) => s + a.reach, 0),
           clicks: ads.reduce((s, a) => s + a.clicks, 0),
+          purchases: ads.reduce((s, a) => s + a.purchases, 0),
           linked: ads.filter((a) => a.editionId).length,
         },
         lastSyncedAt,
@@ -206,12 +211,15 @@ export type PaidAdsInsightsRow = {
   sold: number;
   fillPct: number | null;
   roas: number | null;
+  /** Meta pixel purchases + TikTok complete payments on linked ads. */
+  purchases: number;
 };
 
 export type PaidAdsInsightsSummary = {
   ads: number;
   linked: number;
   spendCents: number;
+  purchases: number;
   events: number;
   rows: PaidAdsInsightsRow[];
 };
@@ -227,6 +235,7 @@ export async function loadPaidAdsInsightsSummary(): Promise<PaidAdsInsightsSumma
       startsAt: editions.startsAt,
       ads: sql<number>`count(*)::int`,
       spendCents: sql<number>`coalesce(sum(${marketingAds.spendCents}), 0)::int`,
+      purchases: sql<number>`coalesce(sum(${marketingAds.purchases}), 0)::int`,
       sold: ticketInventory.sold,
       capacity: ticketInventory.capacity,
       revenueCents: ticketInventory.revenueCents,
@@ -256,6 +265,7 @@ export async function loadPaidAdsInsightsSummary(): Promise<PaidAdsInsightsSumma
       ads: sql<number>`count(*)::int`,
       linked: sql<number>`count(*) filter (where ${marketingAds.editionId} is not null)::int`,
       spendCents: sql<number>`coalesce(sum(${marketingAds.spendCents}), 0)::int`,
+      purchases: sql<number>`coalesce(sum(${marketingAds.purchases}), 0)::int`,
     })
     .from(marketingAds);
 
@@ -276,6 +286,7 @@ export async function loadPaidAdsInsightsSummary(): Promise<PaidAdsInsightsSumma
         capacity != null && capacity > 0 ? (sold / capacity) * 100 : null,
       roas:
         spendCents > 0 && revenueCents > 0 ? revenueCents / spendCents : null,
+      purchases: Number(row.purchases) || 0,
     };
   });
 
@@ -283,6 +294,7 @@ export async function loadPaidAdsInsightsSummary(): Promise<PaidAdsInsightsSumma
     ads: Number(totals[0]?.ads) || 0,
     linked: Number(totals[0]?.linked) || 0,
     spendCents: Number(totals[0]?.spendCents) || 0,
+    purchases: Number(totals[0]?.purchases) || 0,
     events: grouped.length,
     rows,
   };

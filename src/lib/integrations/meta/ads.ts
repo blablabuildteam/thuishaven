@@ -175,10 +175,21 @@ export type MetaAdInsightRow = {
   impressions: number;
   reach: number;
   clicks: number;
+  /** Meta `purchase` action only — omni/pixel aliases count the same event. */
+  purchases: number;
   currency: string | null;
   dateStart: string | null;
   dateStop: string | null;
 };
+
+function purchaseCount(
+  actions: Array<{ action_type?: string; value?: string }> | undefined,
+): number {
+  const raw = actions?.find((action) => action.action_type === "purchase")
+    ?.value;
+  const n = Math.round(Number(raw ?? 0));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
 
 export type MetaAdObject = {
   adId: string;
@@ -253,12 +264,13 @@ export async function listMetaAdInsights(options: {
     account_currency?: string;
     date_start?: string;
     date_stop?: string;
+    actions?: Array<{ action_type?: string; value?: string }>;
   }>(
     `${encodeURIComponent(options.actId)}/insights`,
     {
       level: "ad",
       fields:
-        "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,reach,clicks,account_currency,date_start,date_stop",
+        "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,reach,clicks,actions,account_currency,date_start,date_stop",
       time_range: JSON.stringify({
         since: isoDay(options.since),
         until: isoDay(until),
@@ -285,6 +297,7 @@ export async function listMetaAdInsights(options: {
           impressions: Math.round(Number(row.impressions ?? 0) || 0),
           reach: Math.round(Number(row.reach ?? 0) || 0),
           clicks: Math.round(Number(row.clicks ?? 0) || 0),
+          purchases: purchaseCount(row.actions),
           currency: row.account_currency?.trim() || null,
           dateStart: row.date_start ?? null,
           dateStop: row.date_stop ?? null,

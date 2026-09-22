@@ -96,10 +96,11 @@ export function marketingActivitiesByDay(input: {
   const byDay = new Map<string, SalesCurveActivity[]>();
 
   function push(day: string, activity: SalesCurveActivity) {
-    if (!day) return;
-    const list = byDay.get(day) ?? [];
+    if (!day && activity.kind !== "paid") return;
+    const key = day || "";
+    const list = byDay.get(key) ?? [];
     list.push(activity);
-    byDay.set(day, list);
+    byDay.set(key, list);
   }
 
   for (const post of input.posts) {
@@ -124,24 +125,90 @@ export function marketingActivitiesByDay(input: {
     push(day, { kind: "mail", channel: "mail", title });
   }
   for (const ad of input.ads ?? []) {
-    const raw = ad.publishedAt || ad.dateStart?.slice(0, 10);
-    if (!raw) continue;
-    const day = raw.length === 10 && !raw.includes("T") ? raw : amsterdamDay(raw);
     const title = ad.adName?.trim() || ad.campaignName?.trim() || "Paid ad";
-    push(day, { kind: "paid", channel: ad.platform, title });
+    push(paidActivityDay(ad), {
+      kind: "paid",
+      channel: ad.platform,
+      title,
+    });
   }
   return byDay;
+}
+
+/** YYYY-MM-DD for a paid ad, or "" when the payload has no usable date. */
+function paidActivityDay(ad: {
+  publishedAt: string | null;
+  dateStart: string | null;
+}): string {
+  const published =
+    typeof ad.publishedAt === "string" ? ad.publishedAt.trim() : "";
+  const start = typeof ad.dateStart === "string" ? ad.dateStart.trim() : "";
+  const raw = published || start;
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw.slice(0, 10)) && !raw.includes("T")) {
+    return raw.slice(0, 10);
+  }
+  return amsterdamDay(raw);
 }
 
 export function applyActivitiesToSeries(
   series: SalesCurvePoint[],
   byDay: Map<string, SalesCurveActivity[]>,
 ): SalesCurvePoint[] {
-  if (byDay.size === 0) return series;
-  return series.map((row) => ({
+  if (byDay.size === 0 || series.length === 0) return series;
+  const first = series[0]!.day;
+  const last = series[series.length - 1]!.day;
+  const indexByDay = new Map(series.map((row, index) => [row.day, index]));
+  const eventIndex = series.findIndex((row) => row.isEvent);
+  const buckets = series.map(() => [] as SalesCurveActivity[]);
+
+  for (const [day, list] of byDay) {
+    const organic = list.filter((activity) => activity.kind !== "paid");
+    const paid = list.filter((activity) => activity.kind === "paid");
+    const key = day.slice(0, 10);
+    const exact = key ? indexByDay.get(key) : undefined;
+    if (exact != null) {
+      buckets[exact]!.push(...organic, ...paid);
+      continue;
+    }
+    if (organic.length > 0 && key) {
+      const organicIndex = indexByDay.get(key);
+      if (organicIndex != null) buckets[organicIndex]!.push(...organic);
+    }
+    if (paid.length === 0) continue;
+    const target = !key
+      ? eventIndex >= 0
+        ? eventIndex
+        : 0
+      : key < first
+        ? 0
+        : key > last
+          ? series.length - 1
+          : nearestSeriesIndex(series, key);
+    buckets[target]!.push(...paid);
+  }
+
+  return series.map((row, index) => ({
     ...row,
-    activities: byDay.get(row.day) ?? [],
+    activities: buckets[index]!,
   }));
+}
+
+function nearestSeriesIndex(series: SalesCurvePoint[], day: string): number {
+  const target = Date.parse(`${day}T12:00:00Z`);
+  if (Number.isNaN(target)) return 0;
+  let best = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < series.length; index++) {
+    const distance = Math.abs(
+      Date.parse(`${series[index]!.day}T12:00:00Z`) - target,
+    );
+    if (distance < bestDistance) {
+      best = index;
+      bestDistance = distance;
+    }
+  }
+  return best;
 }
 
 export function uniqueActivityChannels(

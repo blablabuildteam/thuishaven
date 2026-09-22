@@ -30,21 +30,28 @@ export function PaidAdsView({
 
   return (
     <div className="overflow-x-auto border border-border">
-      <table className="w-full min-w-[880px] table-fixed text-left text-sm">
+      <table className="w-full min-w-[980px] table-fixed text-left text-sm">
         <colgroup>
-          <col className="w-[26%]" />
-          <col className="w-[22%]" />
-          <col className="w-[13%]" />
-          <col className="w-[11%]" />
+          <col className="w-[24%]" />
+          <col className="w-[20%]" />
+          <col className="w-[12%]" />
           <col className="w-[10%]" />
-          <col className="w-[9%]" />
-          <col className="w-[9%]" />
+          <col className="w-[10%]" />
+          <col className="w-[8%]" />
+          <col className="w-[8%]" />
+          <col className="w-[8%]" />
         </colgroup>
         <thead className="border-b border-border bg-surface text-[10px] tracking-[0.12em] text-text-dim uppercase">
           <tr>
             <th className="px-3 py-2 font-medium">Ad</th>
             <th className="px-3 py-2 font-medium">Event</th>
             <th className="px-3 py-2 text-right font-medium">Spend</th>
+            <th
+              className="px-3 py-2 text-right font-medium"
+              title="Meta-pixel purchases of TikTok complete payment. Geen Weeztix-telling."
+            >
+              Aankopen
+            </th>
             <th className="px-3 py-2 text-right font-medium">Impr.</th>
             <th className="px-3 py-2 text-right font-medium">Clicks</th>
             <th className="px-3 py-2 text-right font-medium">CTR</th>
@@ -89,6 +96,9 @@ function CampaignRows({
         </td>
         <MetricCell>
           {formatEuroFromCents(campaign.spendCents, currency)}
+        </MetricCell>
+        <MetricCell>
+          {campaign.purchases > 0 ? formatNumber(campaign.purchases) : "—"}
         </MetricCell>
         <MetricCell>{formatNumber(campaign.impressions)}</MetricCell>
         <MetricCell>{formatNumber(campaign.clicks)}</MetricCell>
@@ -151,6 +161,9 @@ function CampaignRows({
             </td>
             <MetricCell>
               {formatEuroFromCents(ad.spendCents, currency)}
+            </MetricCell>
+            <MetricCell>
+              {ad.purchases > 0 ? formatNumber(ad.purchases) : "—"}
             </MetricCell>
             <MetricCell>{formatNumber(ad.impressions)}</MetricCell>
             <MetricCell>{formatNumber(ad.clicks)}</MetricCell>

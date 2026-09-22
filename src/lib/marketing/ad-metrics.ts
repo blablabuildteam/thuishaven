@@ -18,6 +18,8 @@ export type MarketingAdRow = {
   impressions: number;
   reach: number;
   clicks: number;
+  /** Platform-reported purchases (Meta pixel / TikTok complete payment). */
+  purchases: number;
   publishedAt: string | null;
   dateStart: string | null;
   dateStop: string | null;
@@ -34,6 +36,7 @@ export type MarketingAdsCampaignGroup = {
   impressions: number;
   reach: number;
   clicks: number;
+  purchases: number;
   /** Linked event day (YYYY-MM-DD), used to sort campaigns chronologically. */
   startsAt: string | null;
   rows: MarketingAdRow[];
@@ -49,6 +52,7 @@ export type MarketingAdsBundle = {
     impressions: number;
     reach: number;
     clicks: number;
+    purchases: number;
     linked: number;
   };
   lastSyncedAt: string | null;

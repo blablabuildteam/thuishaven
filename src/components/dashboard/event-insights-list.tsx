@@ -86,6 +86,11 @@ import {
   competitionBarFill,
   djFeeBarFill,
   organicBarFill,
+  paidRoasLevelLabel,
+  paidSalesBarFill,
+  paidSalesLevelLabel,
+  roasBarFill,
+  type ImpactLevel,
 } from "@/lib/insights/impact-scale";
 import type { DemographicBucket } from "@/lib/db/schema";
 import type { TakedownChannel } from "@/lib/integrations/alerts/types";
@@ -130,11 +135,14 @@ function paidSummaryLine(
   const count = options?.withCount
     ? ` · ${event.paid?.ads ?? 0} ads`
     : "";
+  const purchases = event.paid?.purchases ?? 0;
+  const tickets =
+    purchases > 0 ? ` · ${formatNumber(purchases)} ad-aankopen` : "";
   const roas =
-    event.paid?.roas != null
-      ? ` · ticket-ROAS ${event.paid.roas.toFixed(1)}×`
+    event.paid?.purchaseRoas != null
+      ? ` · ROAS ${event.paid.purchaseRoas.toFixed(1)}×`
       : "";
-  return `Paid ${platforms} · ${formatEuroFromCents(spend)}${count}${roas}`;
+  return `Paid ${platforms} · ${formatEuroFromCents(spend)}${tickets}${count}${roas}`;
 }
 
 const ORGANIC_ROLE_ORDER = ["promo", "same_day", "after"] as const;
@@ -1349,6 +1357,12 @@ function EventRow({
             onClick={toggleOpen}
             className="flex shrink-0 items-center gap-3 pt-1"
           >
+            <PaidEventSignals
+              purchases={event.paid.purchases}
+              salesLevel={event.paidSalesLevel}
+              purchaseRoas={event.paid.purchaseRoas}
+              roasLevel={event.paidRoasLevel}
+            />
             <CompactTicketMetrics
               key={open ? `fill-${revealKey}` : "fill"}
               sold={event.tickets.sold}
@@ -1640,6 +1654,8 @@ function EventDetail({ event }: { event: EventInsight }) {
             <PaidMarketingBlock
               paid={event.paid}
               ads={event.paidAds}
+              salesLevel={event.paidSalesLevel}
+              roasLevel={event.paidRoasLevel}
             />
 
             <SectionDivider label="Line-up" />
@@ -1667,9 +1683,13 @@ function EventDetail({ event }: { event: EventInsight }) {
 function PaidMarketingBlock({
   paid,
   ads,
+  salesLevel,
+  roasLevel,
 }: {
   paid: EventInsight["paid"] | undefined;
   ads: EventInsightPaidAd[] | undefined;
+  salesLevel: EventInsight["paidSalesLevel"];
+  roasLevel: EventInsight["paidRoasLevel"];
 }) {
   const [expanded, setExpanded] = useState(false);
   const summary = paid ?? {
@@ -1677,9 +1697,14 @@ function PaidMarketingBlock({
     ads: 0,
     impressions: 0,
     clicks: 0,
+    purchases: 0,
+    purchaseRoas: null,
     roas: null,
   };
-  const all = ads ?? [];
+  const all = [...(ads ?? [])].sort((a, b) => {
+    if (b.purchases !== a.purchases) return b.purchases - a.purchases;
+    return b.spendCents - a.spendCents;
+  });
   const PREVIEW = 6;
   const rows = expanded ? all : all.slice(0, PREVIEW);
   const hidden = Math.max(0, all.length - PREVIEW);
@@ -1709,13 +1734,39 @@ function PaidMarketingBlock({
           </p>
         </div>
         <div>
-          <p className="text-[10px] text-text-dim">Paid ads</p>
-          <p className="font-mono text-text">{formatNumber(summary.ads)}</p>
+          <p className="text-[10px] text-text-dim">Ad-aankopen</p>
+          <p className="flex items-center gap-1.5 font-mono text-text">
+            {salesLevel != null && (
+              <ImpactLevelBars
+                level={salesLevel}
+                fill={paidSalesBarFill(salesLevel)}
+                label={paidSalesLevelLabel(salesLevel)}
+              />
+            )}
+            {summary.purchases > 0 ? formatNumber(summary.purchases) : "—"}
+          </p>
+          {summary.purchases > 0 && (
+            <p className="text-[10px] text-text-dim">
+              {formatEuroFromCents(
+                Math.round(summary.spendCents / summary.purchases),
+              )}{" "}
+              / aankoop
+            </p>
+          )}
         </div>
         <div>
-          <p className="text-[10px] text-text-dim">Ticket-ROAS</p>
-          <p className="font-mono text-text">
-            {summary.roas != null ? `${summary.roas.toFixed(1)}×` : "—"}
+          <p className="text-[10px] text-text-dim">ROAS</p>
+          <p className="flex items-center gap-1.5 font-mono text-text">
+            {roasLevel != null && (
+              <ImpactLevelBars
+                level={roasLevel}
+                fill={roasBarFill(roasLevel)}
+                label={paidRoasLevelLabel(roasLevel)}
+              />
+            )}
+            {summary.purchaseRoas != null
+              ? `${summary.purchaseRoas.toFixed(1)}×`
+              : "—"}
           </p>
         </div>
       </div>
@@ -1737,6 +1788,9 @@ function PaidMarketingBlock({
               </span>
             </span>
             <span className="shrink-0 font-mono text-text-muted">
+              {ad.purchases > 0
+                ? `${formatNumber(ad.purchases)} · `
+                : ""}
               {formatEuroFromCents(ad.spendCents)}
             </span>
           </div>
@@ -1753,12 +1807,15 @@ function PaidMarketingBlock({
             : `Toon alle ${formatNumber(all.length)} ads`}
         </button>
       )}
-      {summary.impressions > 0 && (
-        <p className="mt-2 text-[10px] text-text-dim">
-          {formatNumber(summary.impressions)} impr. ·{" "}
-          {formatNumber(summary.clicks)} clicks
-        </p>
-      )}
+      <p className="mt-2 text-[10px] leading-relaxed text-text-dim">
+        {summary.impressions > 0
+          ? `${formatNumber(summary.ads)} ads · ${formatNumber(summary.impressions)} impr. · ${formatNumber(summary.clicks)} clicks. `
+          : `${formatNumber(summary.ads)} ads. `}
+        Ad-aankopen zijn Meta-pixel purchases en TikTok complete payments,
+        opgeteld. De balkjes zijn 1–5 t.o.v. andere events. ROAS = ad-aankopen
+        × gemiddelde ticketprijs / spend. Dezelfde koper kan op beide
+        platformen meetellen.
+      </p>
     </div>
   );
 }
@@ -1882,7 +1939,9 @@ function OrganicMarketingBlock({
         postActivity(post, postTicketRank(post, { concurrentPosts: 1 })),
       )
       .sort(byExpectedTickets),
-    after: byRole.after.map((post) => postActivity(post, 0)),
+    after: byRole.after.map((post) =>
+      postActivity(post, { high: 0, low: 0 }),
+    ),
   };
 
   const blocks = ORGANIC_ROLE_ORDER.flatMap((role) => {
@@ -2452,6 +2511,84 @@ function OrganicVariantRow({
   return <li>{inner}</li>;
 }
 
+function PaidEventSignals({
+  purchases,
+  salesLevel,
+  purchaseRoas,
+  roasLevel,
+}: {
+  purchases: number;
+  salesLevel: EventInsight["paidSalesLevel"];
+  purchaseRoas: number | null;
+  roasLevel: EventInsight["paidRoasLevel"];
+}) {
+  if (salesLevel == null && roasLevel == null) return null;
+  return (
+    <span className="flex items-center gap-3">
+      {salesLevel != null && (
+        <span className="flex items-center gap-1.5">
+          <ImpactLevelBars
+            level={salesLevel}
+            fill={paidSalesBarFill(salesLevel)}
+            label={paidSalesLevelLabel(salesLevel)}
+          />
+          <span className="text-right">
+            <span className="block font-mono text-[13px] font-medium leading-none tabular-nums">
+              {formatNumber(purchases)}
+            </span>
+            <span className="mt-1 block text-[10px] tracking-wide text-text-dim uppercase">
+              Ads
+            </span>
+          </span>
+        </span>
+      )}
+      {roasLevel != null && purchaseRoas != null && (
+        <span className="flex items-center gap-1.5">
+          <ImpactLevelBars
+            level={roasLevel}
+            fill={roasBarFill(roasLevel)}
+            label={paidRoasLevelLabel(roasLevel)}
+          />
+          <span className="text-right">
+            <span className="block font-mono text-[13px] font-medium leading-none tabular-nums">
+              {purchaseRoas.toFixed(1)}×
+            </span>
+            <span className="mt-1 block text-[10px] tracking-wide text-text-dim uppercase">
+              ROAS
+            </span>
+          </span>
+        </span>
+      )}
+    </span>
+  );
+}
+
+function ImpactLevelBars({
+  level,
+  fill,
+  label,
+}: {
+  level: ImpactLevel;
+  fill: string;
+  label: string;
+}) {
+  return (
+    <span
+      className="inline-flex h-3 shrink-0 items-end gap-0.5"
+      title={label}
+      aria-label={label}
+      role="img"
+    >
+      {IMPACT_BAR_HEIGHTS.map((h, i) => (
+        <span
+          key={h}
+          className={cn("w-1 rounded-[1px]", h, i < level ? fill : "bg-border")}
+        />
+      ))}
+    </span>
+  );
+}
+
 function OrganicImpactVerdict({
   level,
   score,
@@ -2470,7 +2607,7 @@ function OrganicImpactVerdict({
         <p className="text-[10px] text-text-dim">
           {empty
             ? "Geen promo-posts die meetellen voor sales"
-            : `Conclusie op bereik, engagement en ticketlift · score ${score}`}
+            : `Score ${score} t.o.v. andere events · bereik, engagement en ticketlift`}
         </p>
       </div>
     </div>
