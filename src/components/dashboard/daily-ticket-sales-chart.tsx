@@ -14,6 +14,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { ticketRevenueExclBtwCents } from "@/lib/dashboard/ticket-btw";
 import { displayEditionName } from "@/lib/editions/lineup";
 import type {
   DailyTicketSales,
@@ -195,11 +196,15 @@ function DailySalesTooltip({
     );
   const totalPaid = rows.reduce((sum, row) => sum + row.paidSold, 0);
   const totalRevenue = rows.reduce((sum, row) => sum + row.revenueCents, 0);
+  const totalExcl = rows.reduce(
+    (sum, row) => sum + ticketRevenueExclBtwCents(row.revenueCents),
+    0,
+  );
 
   return createPortal(
     <div
       ref={ref}
-      className="pointer-events-none max-h-[calc(100dvh-2rem)] max-w-[min(34rem,calc(100vw-2rem))] overflow-y-auto border px-3 py-2 text-xs shadow-sm"
+      className="pointer-events-none max-h-[calc(100dvh-2rem)] max-w-[min(42rem,calc(100vw-2rem))] overflow-y-auto border px-3 py-2 text-xs shadow-sm"
       style={{
         position: "fixed",
         left,
@@ -219,7 +224,8 @@ function DailySalesTooltip({
             <tr className="text-[10px] tracking-[0.08em] text-text-dim uppercase">
               <th className="pb-1.5 pr-3 font-medium text-left">Event</th>
               <th className="pb-1.5 pl-2 font-medium text-right">Betaald</th>
-              <th className="pb-1.5 pl-2 font-medium text-right">Omzet</th>
+              <th className="pb-1.5 pl-2 font-medium text-right">Incl. btw</th>
+              <th className="pb-1.5 pl-2 font-medium text-right">Excl. btw</th>
             </tr>
           </thead>
           <tbody>
@@ -248,6 +254,9 @@ function DailySalesTooltip({
                 <td className="py-1 pl-2 text-right align-top font-mono tabular-nums whitespace-nowrap">
                   {formatEuroCents(row.revenueCents)}
                 </td>
+                <td className="py-1 pl-2 text-right align-top font-mono tabular-nums whitespace-nowrap">
+                  {formatEuroCents(ticketRevenueExclBtwCents(row.revenueCents))}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -260,10 +269,18 @@ function DailySalesTooltip({
               <td className="pt-1.5 pl-2 text-right font-mono font-medium tabular-nums whitespace-nowrap">
                 {formatEuroCents(totalRevenue)}
               </td>
+              <td className="pt-1.5 pl-2 text-right font-mono font-medium tabular-nums whitespace-nowrap">
+                {formatEuroCents(totalExcl)}
+              </td>
             </tr>
           </tfoot>
         </table>
       )}
+      {rows.length > 0 ? (
+        <p className="mt-2 text-[10px] text-text-dim">
+          Weeztix-prijs is inclusief 9% btw.
+        </p>
+      ) : null}
     </div>,
     document.body,
   );
