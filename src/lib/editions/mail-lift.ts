@@ -183,10 +183,11 @@ export async function getMailLiftByEdition(options?: {
     const editionId = c.editionId!;
     const ed = edMap.get(editionId);
     if (!ed || /TEMPLATE/i.test(ed.name) || !c.sentAt) continue;
+    const sentAt = c.sentAt;
 
     const curve = hourlyByEdition.get(editionId);
     const covers = curve != null;
-    const afterSold = covers ? ticketsSoldIn24h(curve, c.sentAt) : null;
+    const afterSold = covers ? ticketsSoldIn24h(curve, sentAt) : null;
 
     const sent = c.sent ?? 0;
     const opens = c.opens ?? 0;
@@ -194,7 +195,7 @@ export async function getMailLiftByEdition(options?: {
     const effect: MailAfterEffect = {
       campaignId: c.campaignId,
       campaignName: c.campaignName,
-      sentAt: c.sentAt.toISOString(),
+      sentAt: sentAt.toISOString(),
       sent,
       opens,
       clicks,
@@ -205,7 +206,7 @@ export async function getMailLiftByEdition(options?: {
         curve == null
           ? 0
           : curve.filter((point) => {
-              const start = c.sentAt.getTime();
+              const start = sentAt.getTime();
               const end = start + 24 * 60 * 60 * 1000;
               return point.at + 60 * 60 * 1000 > start && point.at < end;
             }).length,
