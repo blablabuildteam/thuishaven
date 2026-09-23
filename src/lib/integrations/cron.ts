@@ -1,7 +1,8 @@
 import { timingSafeEqual } from "crypto";
+import { AMSTERDAM_SYNC_HOURS } from "@/lib/time/amsterdam";
 
 /** Amsterdam-uren voor dashboard-sync (Weeztix + TicketSwap + RA). */
-export const AMSTERDAM_SYNC_HOURS = [8, 13, 19, 23] as const;
+export { AMSTERDAM_SYNC_HOURS };
 export const TICKETSWAP_CRON_HOURS_AMSTERDAM = AMSTERDAM_SYNC_HOURS;
 export const WEEZTIX_CRON_HOURS_AMSTERDAM = AMSTERDAM_SYNC_HOURS;
 export const RA_CRON_HOURS_AMSTERDAM = AMSTERDAM_SYNC_HOURS;

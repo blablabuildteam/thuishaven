@@ -1,4 +1,4 @@
-import { eq, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { editions, ticketInventory } from "@/lib/db/schema";
 import {
@@ -247,6 +247,8 @@ export async function syncWeeztixReadOnly(options?: {
 export async function syncWeeztixTicketStatsFromEditions(options?: {
   concurrency?: number;
   onlyMissing?: boolean;
+  /** Limit to these editions. Empty list syncs nothing. */
+  editionIds?: string[];
 }): Promise<{
   ok: boolean;
   attempted: number;
@@ -266,6 +268,18 @@ export async function syncWeeztixTicketStatsFromEditions(options?: {
     };
   }
 
+  const editionIds = options?.editionIds;
+  if (editionIds && editionIds.length === 0) {
+    return {
+      ok: true,
+      attempted: 0,
+      upserted: 0,
+      failed: 0,
+      totalSold: 0,
+      errors: [],
+    };
+  }
+
   const db = getDb();
   const rows = await db
     .select({
@@ -274,7 +288,11 @@ export async function syncWeeztixTicketStatsFromEditions(options?: {
       name: editions.name,
     })
     .from(editions)
-    .where(isNotNull(editions.weeztixEventId));
+    .where(
+      editionIds
+        ? and(isNotNull(editions.weeztixEventId), inArray(editions.id, editionIds))
+        : isNotNull(editions.weeztixEventId),
+    );
 
   let targets = rows.filter(
     (r) => r.guid && r.name && !/TEMPLATE/i.test(r.name),

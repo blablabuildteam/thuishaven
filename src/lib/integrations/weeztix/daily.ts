@@ -215,6 +215,68 @@ async function fetchWeeztixOrderDayCurve(input: {
   };
 }
 
+export type HourlyTicketPoint = { at: number; sold: number };
+
+/** Tickets per uur. `key` is de start van het uur in epoch-ms (UTC). */
+export function hourlyTicketsFromOrderAggregations(
+  eventGuid: string,
+  data: unknown,
+): { points: HourlyTicketPoint[]; error?: string } {
+  const countNode = eventAggNode(data, "eventCounts", eventGuid);
+  if (!countNode) return { points: [], error: "geen uurcurve" };
+  const points: HourlyTicketPoint[] = [];
+  for (const bucket of histogramBuckets(countNode)) {
+    const key = Number(bucket.key);
+    const sold = typeof bucket.doc_count === "number" ? bucket.doc_count : 0;
+    if (!Number.isFinite(key) || sold <= 0) continue;
+    points.push({ at: key < 1e12 ? key * 1000 : key, sold });
+  }
+  return { points };
+}
+
+let companyIdPromise: Promise<string | undefined> | null = null;
+
+async function resolveWeeztixCompanyId(
+  eventGuid: string,
+): Promise<string | undefined> {
+  const fromEnv = process.env.WEEZTIX_COMPANY_GUID?.trim();
+  if (fromEnv) return fromEnv;
+  if (!companyIdPromise) {
+    companyIdPromise = getWeeztixEvent(eventGuid).then((event) =>
+      event.ok && typeof event.event.company_id === "string"
+        ? event.event.company_id
+        : undefined,
+    );
+  }
+  return companyIdPromise;
+}
+
+/** Uurcurve voor één event. Lege `points` met geen error = gemeten, nul tickets. */
+export async function fetchWeeztixHourlyTickets(input: {
+  eventGuid: string;
+  start: Date;
+  end: Date;
+}): Promise<{ points: HourlyTicketPoint[]; error?: string }> {
+  const companyId = await resolveWeeztixCompanyId(input.eventGuid);
+  if (!companyId) return { points: [], error: "geen company id" };
+  const res = await weeztixPost({
+    path: `/statistics/orders/${companyId}`,
+    companyGuid: companyId,
+    body: {
+      offset: 0,
+      limit: 0,
+      start: isoOffset(input.start),
+      end: isoOffset(input.end),
+      timeunit: "hour",
+      events: [input.eventGuid],
+    },
+  });
+  if (!res.ok) {
+    return { points: [], error: res.error ?? "uurcurve mislukt" };
+  }
+  return hourlyTicketsFromOrderAggregations(input.eventGuid, res.data);
+}
+
 async function upsertDailySalesCurve(input: {
   editionId: string;
   points: Array<{ day: string; sold: number; revenueCents: number }>;
@@ -527,6 +589,40 @@ export async function syncWeeztixDailySales(options?: {
  * Tickets écht verkocht vandaag (ticketCountToday), per event in de
  * verkoopwindow. Licht: alleen dashboard-stats, geen timeToBank-curve.
  */
+/** Events that can still sell: started within 14 days, or still upcoming. */
+export async function listOnSaleWeeztixEditions(limit = 120): Promise<
+  Array<{ id: string; name: string; guid: string }>
+> {
+  if (!hasDatabase()) return [];
+  const db = getDb();
+  const from = new Date();
+  from.setUTCDate(from.getUTCDate() - 14);
+  const to = new Date();
+  to.setUTCFullYear(to.getUTCFullYear() + 1);
+
+  const rows = await db
+    .select({
+      id: editions.id,
+      name: editions.name,
+      guid: editions.weeztixEventId,
+    })
+    .from(editions)
+    .where(
+      and(
+        isNotNull(editions.weeztixEventId),
+        gte(editions.startsAt, from),
+        lte(editions.startsAt, to),
+      ),
+    )
+    .orderBy(asc(editions.startsAt))
+    .limit(limit);
+
+  return rows.filter(
+    (row): row is { id: string; name: string; guid: string } =>
+      Boolean(row.guid) && !/TEMPLATE/i.test(row.name),
+  );
+}
+
 export async function syncWeeztixSaleDays(options?: {
   limit?: number;
   concurrency?: number;
@@ -549,32 +645,9 @@ export async function syncWeeztixSaleDays(options?: {
     };
   }
 
-  const db = getDb();
   const limit = options?.limit ?? 120;
   const concurrency = Math.max(1, options?.concurrency ?? 4);
-  const from = new Date();
-  from.setUTCDate(from.getUTCDate() - 14);
-  const to = new Date();
-  to.setUTCFullYear(to.getUTCFullYear() + 1);
-
-  const rows = (
-    await db
-      .select({
-        id: editions.id,
-        name: editions.name,
-        guid: editions.weeztixEventId,
-      })
-      .from(editions)
-      .where(
-        and(
-          isNotNull(editions.weeztixEventId),
-          gte(editions.startsAt, from),
-          lte(editions.startsAt, to),
-        ),
-      )
-      .orderBy(asc(editions.startsAt))
-      .limit(limit)
-  ).filter((row) => row.guid && !/TEMPLATE/i.test(row.name));
+  const rows = await listOnSaleWeeztixEditions(limit);
 
   let daysUpserted = 0;
   let ticketsToday = 0;

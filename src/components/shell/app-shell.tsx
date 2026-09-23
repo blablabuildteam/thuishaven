@@ -10,6 +10,7 @@ import {
   Bell,
   CalendarDays,
   Disc3,
+  Euro,
   ClipboardList,
   Home,
   Menu,
@@ -33,6 +34,7 @@ import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { UserMenu } from "@/components/auth/user-menu";
 import { OutreachOnboardingTour } from "@/components/outreach/onboarding-tour";
 import { DjFeesNavBadge, useDjFeesPendingCount } from "@/components/dashboard/dj-fees-nav-badge";
+import { OmzetNavBadge, useOmzetPendingCount } from "@/components/dashboard/omzet-nav-badge";
 import {
   SocialChannelIcon,
   type SocialBrandChannel,
@@ -54,7 +56,7 @@ type NavItem = {
   /** Spotlight tour target id */
   tourId?: string;
   /** Extra nav affordance */
-  badge?: "dj-fees-pending";
+  badge?: "dj-fees-pending" | "omzet-pending";
 };
 
 type NavSection = {
@@ -75,6 +77,7 @@ const dashboardSections: NavSection[] = [
     items: [
       { href: "/dashboard/inzichten", label: "Inzichten", icon: LineChart },
       { href: "/dashboard/tickets", label: "Tickets", icon: Ticket },
+      { href: "/dashboard/omzet", label: "Omzet", icon: Euro, badge: "omzet-pending" },
       { href: "/dashboard/alerts", label: "Alerts", icon: Bell },
       { href: "/dashboard/dj-fees", label: "DJ-fees", icon: Disc3, badge: "dj-fees-pending" },
     ],
@@ -278,6 +281,8 @@ function NavLink({
       <span className="min-w-0 flex-1 truncate">{item.label}</span>
       {item.badge === "dj-fees-pending" ? (
         <DjFeesNavBadge count={badgeCount ?? null} active={active} />
+      ) : item.badge === "omzet-pending" ? (
+        <OmzetNavBadge count={badgeCount ?? null} active={active} />
       ) : null}
     </>
   );
@@ -320,6 +325,7 @@ function ShellNav({
   sections,
   systemNav,
   djFeesPending,
+  omzetPending,
   onNavigate,
   onClose,
 }: {
@@ -328,6 +334,7 @@ function ShellNav({
   sections: NavSection[];
   systemNav: NavItem[];
   djFeesPending: number | null;
+  omzetPending: number | null;
   onNavigate?: () => void;
   onClose?: () => void;
 }) {
@@ -401,7 +408,11 @@ function ShellNav({
                       isNavActive(pathname, item.href)
                     }
                     badgeCount={
-                      item.badge === "dj-fees-pending" ? djFeesPending : null
+                      item.badge === "dj-fees-pending"
+                        ? djFeesPending
+                        : item.badge === "omzet-pending"
+                          ? omzetPending
+                          : null
                     }
                     onNavigate={onNavigate}
                   />
@@ -454,6 +465,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isAdmin = data?.user?.role === "admin";
   const isOutreach = pathname.startsWith("/outreach");
   const djFeesPending = useDjFeesPendingCount(!isOutreach);
+  const omzetPending = useOmzetPendingCount(!isOutreach);
   const sections = isOutreach
     ? filterSections(outreachSections, isAdmin)
     : dashboardSections;
@@ -499,6 +511,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     sections,
     systemNav,
     djFeesPending,
+    omzetPending,
   };
 
   return (

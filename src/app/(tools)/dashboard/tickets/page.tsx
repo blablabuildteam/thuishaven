@@ -10,6 +10,7 @@ import {
 import { SectionHeader } from "@/components/ui/section-header";
 import {
   DAILY_TICKET_SALES_WINDOW,
+  latestDailyTicketSalesRefreshAt,
   loadDailyTicketSales,
 } from "@/lib/dashboard/daily-ticket-sales";
 import { DASHBOARD_TTL_MS, rememberTtl } from "@/lib/cache/ttl";
@@ -42,8 +43,9 @@ function poolCell(row: PoolInventory | undefined): TicketPoolCell {
 
 const loadTicketsSheetRows = cache(async () => {
   const db = getDb();
+  const refreshedAt = await latestDailyTicketSalesRefreshAt();
   return rememberTtl(
-    `tickets:sheet:${DAILY_TICKET_SALES_WINDOW}`,
+    `tickets:sheet:${DAILY_TICKET_SALES_WINDOW}:${refreshedAt ?? "none"}`,
     DASHBOARD_TTL_MS,
     () =>
     Promise.all([

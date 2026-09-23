@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  ManualEntryField,
+  manualEntryInputClass,
+} from "@/components/ui/manual-entry-field";
 import { cn } from "@/lib/utils";
 
 function toDraft(value: number | null): string {
@@ -93,16 +97,18 @@ export function ExternalEventCell({
   const label = field === "sold" ? "Sold" : "Gescand";
 
   return (
-    <label className="block">
-      <span className="sr-only">
-        {label} {eventName}
-      </span>
+    <ManualEntryField
+      label={`${label} ${eventName}`}
+      filled={draft !== ""}
+      error={error != null}
+      saving={saving}
+    >
       <input
         type="text"
         inputMode="numeric"
         pattern="[0-9]*"
         value={draft}
-        placeholder="—"
+        placeholder="0"
         disabled={saving}
         autoComplete="off"
         onFocus={() => {
@@ -128,13 +134,8 @@ export function ExternalEventCell({
         }}
         aria-invalid={error != null}
         title={error ?? `${label} — typ het aantal`}
-        className={cn(
-          "ml-auto block w-[4.5rem] bg-transparent py-0.5 text-right font-mono text-sm tabular-nums outline-none",
-          "border border-transparent px-1 hover:border-border focus:border-text",
-          saving && "opacity-60",
-          error && "border-danger text-danger",
-        )}
+        className={cn(manualEntryInputClass, error && "text-danger")}
       />
-    </label>
+    </ManualEntryField>
   );
 }

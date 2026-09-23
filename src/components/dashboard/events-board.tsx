@@ -528,7 +528,7 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
                     ? ` · laatste week ${formatNumber(r.lastWeekSold)}`
                     : ""}
                   {r.mailOrdersAfter != null && r.mailOrdersAfter > 0
-                    ? ` · ${formatNumber(r.mailOrdersAfter)} tickets in de week na mail`
+                    ? ` · ${formatNumber(r.mailOrdersAfter)} tickets in de 24 uur na mail`
                     : ""}
                 </p>
               </div>

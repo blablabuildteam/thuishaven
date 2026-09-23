@@ -1058,6 +1058,9 @@ function detectEmail(
   const deltaMail =
     withMail != null && withoutMail != null ? withMail - withoutMail : null;
   const orders = e.emailCampaigns.reduce((s, m) => s + (m.ordersAfter ?? 0), 0);
+  const mailWindowMeasured = e.emailCampaigns.every(
+    (m) => m.ordersAfter != null,
+  );
 
   if (!hasMail(e)) {
     if (e.status !== "past" || fill == null || withMail == null) return null;
@@ -1076,6 +1079,8 @@ function detectEmail(
       ),
     };
   }
+
+  if (!mailWindowMeasured) return null;
 
   const mailPeer = resolveCohort(e, baselines, "mailOrders");
   const usualOrders = mailPeer?.mailOrders;
@@ -1098,10 +1103,10 @@ function detectEmail(
         1,
         0.5 + Math.min(0.35, (orders - usualOrders.median) / 800),
       ),
-      detail: `${e.emailCampaigns.length === 1 ? "Na de mail" : "Na de mails"} gingen er ongeveer ${fmtCount(orders)} tickets weg in de week erna${fill != null ? ` (${fmtPct(fill)} verkocht)` : ""}. Bij vergelijkbare ${mailPeer.label} met een mail is dat meestal ongeveer ${usualOrdersLabel}. Dat is een samenhang, geen harde toewijzing.`,
+      detail: `${e.emailCampaigns.length === 1 ? "Na de mail" : "Na de mails"} gingen er ongeveer ${fmtCount(orders)} tickets weg in de 24 uur erna${fill != null ? ` (${fmtPct(fill)} verkocht)` : ""}. Bij vergelijkbare ${mailPeer.label} met een mail is dat meestal ongeveer ${usualOrdersLabel}. Dat is een samenhang, geen harde toewijzing.`,
       facts: facts(
         ["Campagnes", String(e.emailCampaigns.length)],
-        ["Tickets in de week erna", "~" + fmtCount(orders)],
+        ["Tickets in de 24 uur erna", "~" + fmtCount(orders)],
         ["Meestal na een mail", "~" + usualOrdersLabel],
         ["Verkocht", fill != null ? fmtPct(fill) : null],
       ),
@@ -1122,10 +1127,10 @@ function detectEmail(
       tone: "neutral",
       dimension: "email",
       significance: sigFromPp(withMail - fill, 24),
-      detail: `Er ${e.emailCampaigns.length === 1 ? "is een mailcampagne" : `zijn ${e.emailCampaigns.length} mailcampagnes`} gekoppeld, maar in de week erna gingen er maar ongeveer ${fmtCount(orders)} tickets weg${usualOrdersLabel ? `. Bij vergelijkbare ${mailPeer?.label ?? "events"} met een mail is dat meestal ongeveer ${usualOrdersLabel}` : ""}. ${fmtPct(fill)} verkocht; events mét mail zitten meestal rond ${fmtPct(withMail)}.`,
+      detail: `Er ${e.emailCampaigns.length === 1 ? "is een mailcampagne" : `zijn ${e.emailCampaigns.length} mailcampagnes`} gekoppeld, maar in de 24 uur erna gingen er maar ongeveer ${fmtCount(orders)} tickets weg${usualOrdersLabel ? `. Bij vergelijkbare ${mailPeer?.label ?? "events"} met een mail is dat meestal ongeveer ${usualOrdersLabel}` : ""}. ${fmtPct(fill)} verkocht; events mét mail zitten meestal rond ${fmtPct(withMail)}.`,
       facts: facts(
         ["Campagnes", String(e.emailCampaigns.length)],
-        ["Tickets in de week erna", "~" + fmtCount(orders)],
+        ["Tickets in de 24 uur erna", "~" + fmtCount(orders)],
         ["Meestal na een mail", usualOrdersLabel ? "~" + usualOrdersLabel : null],
         ["Verkocht", fmtPct(fill)],
         ["Events mét mail", fmtPct(withMail)],

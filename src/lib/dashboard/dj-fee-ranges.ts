@@ -1,6 +1,7 @@
 import { formatNumber } from "@/lib/utils";
 
 export const DJ_FEE_RANGE_IDS = [
+  "0",
   "0_600",
   "600_1000",
   "1000_2500",
@@ -26,6 +27,14 @@ export type DjFeeRangeDef = {
 
 /** Same bands as the Google Sheets DJ-fee overview. */
 export const DJ_FEE_RANGES: readonly DjFeeRangeDef[] = [
+  {
+    id: "0",
+    label: "€0",
+    min: 0,
+    max: 0,
+    className:
+      "bg-stone-200 text-stone-900 dark:bg-stone-700/70 dark:text-stone-100",
+  },
   {
     id: "0_600",
     label: "€0–€600",

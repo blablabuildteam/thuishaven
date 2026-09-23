@@ -1,12 +1,24 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { MousePointerClick } from "lucide-react";
 import {
   DJ_FEE_RANGES,
   djFeeRangeDef,
   type DjFeeRangeId,
 } from "@/lib/dashboard/dj-fee-ranges";
 import { cn } from "@/lib/utils";
+
+const EMPTY_FEE_LABEL = "Invullen Bitte";
+
+function EmptyFeeLabel() {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {EMPTY_FEE_LABEL}
+      <MousePointerClick className="size-3.5 shrink-0" strokeWidth={1.5} aria-hidden />
+    </span>
+  );
+}
 
 export function DjFeeRangeSelect({
   value,
@@ -58,14 +70,14 @@ export function DjFeeRangeSelect({
           disabled && "opacity-60",
         )}
       >
-        {selected?.label ?? "—"}
+        {selected ? selected.label : <EmptyFeeLabel />}
       </button>
       {open && (
         <div
           id={listId}
           role="listbox"
           aria-label="Prijsrange"
-          className="absolute top-full left-0 z-20 mt-1 min-w-[11rem] border border-border bg-surface p-1 shadow-lg"
+          className="absolute top-full left-0 z-20 mt-1 min-w-full border border-border bg-surface p-1 shadow-lg"
         >
           {DJ_FEE_RANGES.map((range) => (
             <button
@@ -95,7 +107,7 @@ export function DjFeeRangeSelect({
             }}
             className="mt-0.5 block w-full px-2.5 py-1 text-left text-sm text-text-dim hover:bg-surface-hover"
           >
-            —
+            <EmptyFeeLabel />
           </button>
         </div>
       )}

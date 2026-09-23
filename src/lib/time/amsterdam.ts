@@ -64,6 +64,31 @@ export function formatTicketSheetDate(dayIso: string): string {
   return `${weekday} ${date}`;
 }
 
+/** Hours (Europe/Amsterdam) when the Weeztix sales sync runs. */
+export const AMSTERDAM_SYNC_HOURS = [8, 13, 19, 23] as const;
+
+function amsterdamHourMinute(at: Date): { hour: number; minute: number } {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Amsterdam",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(at);
+  const read = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value ?? "0");
+  const hour = read("hour");
+  return { hour: hour === 24 ? 0 : hour, minute: read("minute") };
+}
+
+/** Next planned Weeztix sync: today at 08:00, 13:00, 19:00, or 23:00, else tomorrow 08:00. */
+export function formatNextAmsterdamSync(at: Date = new Date()): string {
+  const { hour, minute } = amsterdamHourMinute(at);
+  const current = hour * 60 + minute;
+  const nextHour = AMSTERDAM_SYNC_HOURS.find((slot) => slot * 60 > current);
+  const clock = `${String(nextHour ?? AMSTERDAM_SYNC_HOURS[0]).padStart(2, "0")}:00`;
+  return `Volgende automatisch ${nextHour != null ? "vandaag" : "morgen"} ${clock}`;
+}
+
 export function amsterdamClock(input: Date): string {
   return new Intl.DateTimeFormat("en-GB", {
     timeZone: "Europe/Amsterdam",

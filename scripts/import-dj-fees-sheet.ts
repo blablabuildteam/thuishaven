@@ -41,6 +41,8 @@ function parsePrice(raw: string): DjFeeRangeId | null {
     .replace(/[–—−]/g, "-")
     .trim();
   switch (compact) {
+    case "0":
+      return "0";
     case "0-600":
       return "0_600";
     case "600-1000":

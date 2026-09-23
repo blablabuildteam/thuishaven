@@ -2,6 +2,10 @@ import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from
 import { cache } from "react";
 import { unstable_cache, revalidateTag } from "next/cache";
 import { DASHBOARD_TTL_MS, clearTtl, rememberTtl } from "@/lib/cache/ttl";
+import {
+  loadMailHourCurves,
+  ticketsSoldIn24h,
+} from "@/lib/editions/mail-window";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import {
   editions,
@@ -197,13 +201,20 @@ async function ensureRaCompetition(): Promise<void> {
   }
 }
 
-async function safeQuery<T>(label: string, run: () => Promise<T>, fallback: T): Promise<T> {
-  try {
-    return await run();
-  } catch (err) {
-    console.error(`[loadEventInsights] ${label}`, err);
-    return fallback;
+/** A failed query returned a fallback. Do not store that payload in the data cache. */
+class InsightsDegradedError extends Error {
+  readonly insights: EventInsight[];
+
+  constructor(insights: EventInsight[]) {
+    super("event insights degraded");
+    this.name = "InsightsDegradedError";
+    this.insights = insights;
   }
+}
+
+function insightsFromError(err: unknown): EventInsight[] | null {
+  if (err instanceof InsightsDegradedError) return err.insights;
+  return null;
 }
 
 export type CompetingEvent = {
@@ -465,24 +476,6 @@ function weatherTone(kind: WeatherKind): "positive" | "neutral" | "caution" {
 }
 
 
-const AFTER_DAYS = 7;
-
-function sumAfterWindow(
-  byDay: Map<string, number>,
-  sendDay: string,
-): { sold: number; days: number } {
-  const end = shiftIsoDay(sendDay, AFTER_DAYS - 1);
-  let sold = 0;
-  let days = 0;
-  for (const [day, n] of byDay) {
-    if (day >= sendDay && day <= end) {
-      sold += n;
-      days += 1;
-    }
-  }
-  return { sold, days };
-}
-
 export async function loadEventInsightsFresh(options?: {
   limit?: number;
   /** Skip Weeztix ensure (used after an explicit recovery sync). */
@@ -494,6 +487,27 @@ export async function loadEventInsightsFresh(options?: {
   /** YYYY-MM-DD; defaults to today (Amsterdam). Baked into cache keys. */
   asOfDay?: string;
 }): Promise<EventInsight[]> {
+  const degraded = { current: false };
+
+  async function safeQuery<T>(
+    label: string,
+    run: () => Promise<T>,
+    fallback: T,
+  ): Promise<T> {
+    try {
+      return await run();
+    } catch (err) {
+      console.error(`[loadEventInsights] ${label}`, err);
+      degraded.current = true;
+      return fallback;
+    }
+  }
+
+  function finish(rows: EventInsight[]): EventInsight[] {
+    if (degraded.current) throw new InsightsDegradedError(rows);
+    return rows;
+  }
+
   if (!hasDatabase()) return [];
 
   if (!options?.skipEnsure) {
@@ -527,6 +541,7 @@ export async function loadEventInsightsFresh(options?: {
       id: editions.id,
       name: editions.name,
       startsAt: editions.startsAt,
+      weeztixEventId: editions.weeztixEventId,
       sold: ticketInventory.sold,
       capacity: ticketInventory.capacity,
       available: ticketInventory.available,
@@ -920,6 +935,25 @@ export async function loadEventInsightsFresh(options?: {
       return day >= startDay && day <= endDay;
     }
 
+    const hourRequests = [...campsByEdition.entries()].flatMap(
+      ([editionId, list]) => {
+        const guid = filtered.find((row) => row.id === editionId)?.weeztixEventId;
+        const sent = list
+          .map((c) => c.sentAt)
+          .filter((d): d is Date => d instanceof Date);
+        if (!guid || sent.length === 0) return [];
+        return [
+          {
+            editionId,
+            guid,
+            from: new Date(Math.min(...sent.map((d) => d.getTime())) - 60 * 60 * 1000),
+            to: new Date(Math.max(...sent.map((d) => d.getTime())) + 25 * 60 * 60 * 1000),
+          },
+        ];
+      },
+    );
+    const hourlyByEdition = await loadMailHourCurves(hourRequests);
+
     const insights: EventInsight[] = filtered.map((e) => {
       const day = amsterdamDay(e.startsAt);
       const lineup = parseEditionLineup(e.name);
@@ -1222,19 +1256,21 @@ export async function loadEventInsightsFresh(options?: {
       };
 
       const linked = campsByEdition.get(e.id) ?? [];
+      const hourCurve = hourlyByEdition.get(e.id);
       const emailCampaigns: EventInsightMail[] = linked.map((c) => {
         const sent = c.sent ?? 0;
         const opens = c.opens ?? 0;
-        const sendDay = c.sentAt ? amsterdamDay(c.sentAt) : null;
-        const after =
-          sendDay ? sumAfterWindow(curve, sendDay) : { sold: 0, days: 0 };
+        const ordersAfter =
+          c.sentAt && hourCurve
+            ? ticketsSoldIn24h(hourCurve, c.sentAt)
+            : null;
         return {
           campaignId: c.id,
           name: c.name,
           sent,
           opens,
           openRate: sent > 0 ? (opens / sent) * 100 : null,
-          ordersAfter: after.days > 0 ? after.sold : null,
+          ordersAfter,
           sentAt: c.sentAt?.toISOString() ?? null,
         };
       });
@@ -1494,12 +1530,12 @@ export async function loadEventInsightsFresh(options?: {
     applyAnomalies(insights);
   }
   if (mode === "upcoming") {
-    return insights.filter((e) => e.status === "upcoming");
+    return finish(insights.filter((e) => e.status === "upcoming"));
   }
   if (mode === "past") {
-    return insights.filter((e) => e.status === "past");
+    return finish(insights.filter((e) => e.status === "past"));
   }
-  return insights;
+  return finish(insights);
 }
 
 function combinedInvestmentEuros(event: EventInsight): number | null {
@@ -1624,7 +1660,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v45"],
+  ["event-insights-upcoming-v47"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1640,7 +1676,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v45"],
+  ["event-insights-past-v47"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],
@@ -1662,8 +1698,34 @@ export const loadEventInsights = cache(async (options?: {
   const limit = options?.limit ?? 120;
   const asOfDay = amsterdamDay(new Date());
 
+  async function readCached(
+    mode: "upcoming" | "past",
+    load: () => Promise<EventInsight[]>,
+  ): Promise<EventInsight[]> {
+    try {
+      return await load();
+    } catch (err) {
+      const partial = insightsFromError(err);
+      if (partial) return partial;
+      console.error(`[loadEventInsights] ${mode} cache`, err);
+      try {
+        return await loadEventInsightsFresh({
+          limit,
+          asOfDay,
+          mode,
+          skipEnsure: true,
+          skipWeather: mode === "past",
+        });
+      } catch (retryErr) {
+        const retryPartial = insightsFromError(retryErr);
+        if (retryPartial) return retryPartial;
+        throw retryErr;
+      }
+    }
+  }
+
   return rememberTtl(
-    `event-insights:v45:${limit}:${asOfDay}`,
+    `event-insights:v46:${limit}:${asOfDay}`,
     DASHBOARD_TTL_MS,
     async () => {
       // Outside Next data cache: recover empty DB / schedule list refresh
@@ -1671,8 +1733,10 @@ export const loadEventInsights = cache(async (options?: {
       await ensureRaCompetition();
 
       const [upcoming, past] = await Promise.all([
-        loadUpcomingEventInsightsCached(limit, asOfDay),
-        loadPastEventInsightsCached(limit, asOfDay),
+        readCached("upcoming", () =>
+          loadUpcomingEventInsightsCached(limit, asOfDay),
+        ),
+        readCached("past", () => loadPastEventInsightsCached(limit, asOfDay)),
       ]);
 
       const merged = [...upcoming, ...past];

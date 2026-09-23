@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, not } from 
 import { z } from "zod";
 import {
   addDjFeeRangeToSpend,
+  DJ_FEE_RANGE_IDS,
   DJ_FEES_FROM_YEAR,
   djFeeSpendMidpoint,
   djFeesFromDate,
@@ -25,14 +26,7 @@ import {
 } from "@/lib/editions/lineup";
 import { amsterdamDay } from "@/lib/time/amsterdam";
 
-export const DJ_FEE_RANGE_ZOD = z.enum([
-  "0_600",
-  "600_1000",
-  "1000_2500",
-  "2500_5000",
-  "5000_10000",
-  "10000_plus",
-]);
+export const DJ_FEE_RANGE_ZOD = z.enum(DJ_FEE_RANGE_IDS);
 
 export const addDjFeeArtistSchema = z.object({
   editionId: z.string().uuid(),

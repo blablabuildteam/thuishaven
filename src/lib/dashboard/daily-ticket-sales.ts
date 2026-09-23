@@ -1,4 +1,4 @@
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, eq, gte, lte, max } from "drizzle-orm";
 import { cache } from "react";
 import { DASHBOARD_TTL_MS, rememberTtl } from "@/lib/cache/ttl";
 import { getDb, hasDatabase } from "@/lib/db/client";
@@ -67,7 +67,7 @@ export type DailyTicketSalesDay = {
   breakdown: DailyTicketSalesBreakdown[];
 };
 
-export type DailyTicketSales = {
+export type DailyTicketSalesSeries = {
   startDay: string;
   endDay: string;
   windowDays: number;
@@ -76,11 +76,16 @@ export type DailyTicketSales = {
   days: DailyTicketSalesDay[];
 };
 
+export type DailyTicketSales = DailyTicketSalesSeries & {
+  /** Last time Weeztix wrote the rows this chart reads. */
+  refreshedAt: string | null;
+};
+
 function colorForIndex(index: number): string {
   return EVENT_COLORS[index % EVENT_COLORS.length];
 }
 
-function emptySeries(endDay: string, windowDays: number): DailyTicketSales {
+function emptySeries(endDay: string, windowDays: number): DailyTicketSalesSeries {
   const startDay = shiftIsoDay(endDay, -(windowDays - 1));
   const days: DailyTicketSalesDay[] = [];
   let cursor = startDay;
@@ -139,7 +144,7 @@ export function buildDailyTicketSales(input: {
   endDay: string;
   windowDays: number;
   rows: DailyTicketSalesRow[];
-}): DailyTicketSales {
+}): DailyTicketSalesSeries {
   const windowDays = Math.max(1, input.windowDays);
   const startDay = shiftIsoDay(input.endDay, -(windowDays - 1));
   const byEdition = new Map<
@@ -240,23 +245,91 @@ export function buildDailyTicketSales(input: {
   };
 }
 
+function asTime(value: unknown): number | null {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.getTime();
+  }
+  if (typeof value === "string") {
+    const time = new Date(value).getTime();
+    return Number.isNaN(time) ? null : time;
+  }
+  return null;
+}
+
+/** Newest sync stamp among the tables that feed the sales-per-day chart. */
+export async function latestDailyTicketSalesRefreshAt(): Promise<string | null> {
+  if (!hasDatabase()) return null;
+  const db = getDb();
+  const [orders, onDay, inventory] = await Promise.all([
+    db.select({ at: max(ticketSalesDaily.syncedAt) }).from(ticketSalesDaily),
+    db.select({ at: max(ticketSalesOnDay.syncedAt) }).from(ticketSalesOnDay),
+    db
+      .select({ at: max(ticketInventoryDaily.syncedAt) })
+      .from(ticketInventoryDaily),
+  ]);
+  const times = [orders[0]?.at, onDay[0]?.at, inventory[0]?.at]
+    .map(asTime)
+    .filter((time): time is number => time != null);
+  if (times.length === 0) return null;
+  return new Date(Math.max(...times)).toISOString();
+}
+
+/**
+ * Pull live Weeztix totals for events still on sale and write today's snapshot.
+ * That is the intra-day update this chart uses between the morning curve sync.
+ */
+export async function refreshDailyTicketSales(): Promise<{
+  ok: boolean;
+  refreshedAt: string | null;
+  error?: string;
+}> {
+  const { listOnSaleWeeztixEditions, syncWeeztixSaleDays } = await import(
+    "@/lib/integrations/weeztix/daily"
+  );
+  const { syncWeeztixTicketStatsFromEditions } = await import(
+    "@/lib/integrations/weeztix/sync"
+  );
+  const editionsOnSale = await listOnSaleWeeztixEditions();
+  const inventory = await syncWeeztixTicketStatsFromEditions({
+    editionIds: editionsOnSale.map((row) => row.id),
+    concurrency: 4,
+  });
+  const saleDays = inventory.ok
+    ? await syncWeeztixSaleDays({ limit: 120 }).catch((err) => ({
+        ok: false as const,
+        errors: [err instanceof Error ? err.message : "Dagverkoop ophalen mislukt"],
+      }))
+    : null;
+  const refreshedAt = await latestDailyTicketSalesRefreshAt();
+  const error = !inventory.ok
+    ? inventory.errors[0] ?? "Weeztix-sync mislukt"
+    : saleDays && !saleDays.ok
+      ? saleDays.errors[0] ?? "Dagverkoop ophalen mislukt"
+      : undefined;
+  return { ok: !error, refreshedAt, error };
+}
+
 export const loadDailyTicketSales = cache(
   async (windowDays = DAILY_TICKET_SALES_WINDOW): Promise<DailyTicketSales> => {
     const endDay = amsterdamDay(new Date());
-    if (!hasDatabase()) return emptySeries(endDay, windowDays);
+    if (!hasDatabase()) {
+      return { ...emptySeries(endDay, windowDays), refreshedAt: null };
+    }
 
-    return rememberTtl(
-      `tickets:daily:${windowDays}:${endDay}`,
+    const refreshedAt = await latestDailyTicketSalesRefreshAt();
+    const series = await rememberTtl(
+      `tickets:daily:${windowDays}:${endDay}:${refreshedAt ?? "none"}`,
       DASHBOARD_TTL_MS,
       () => loadDailyTicketSalesFresh(endDay, windowDays),
     );
+    return { ...series, refreshedAt };
   },
 );
 
 async function loadDailyTicketSalesFresh(
   endDay: string,
   windowDays: number,
-): Promise<DailyTicketSales> {
+): Promise<DailyTicketSalesSeries> {
     const db = getDb();
     const startDay = shiftIsoDay(endDay, -(windowDays - 1));
     const prevDay = shiftIsoDay(startDay, -1);

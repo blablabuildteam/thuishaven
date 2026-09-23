@@ -708,6 +708,7 @@ export const alerts = pgTable("alerts", {
 
 /** DJ-fee bandbreedtes, gelijk aan het Google Sheets-overzicht. */
 export const djFeeRangeEnum = pgEnum("dj_fee_range", [
+  "0",
   "0_600",
   "600_1000",
   "1000_2500",
@@ -745,6 +746,32 @@ export const djFeeArtists = pgTable(
     uniqueIndex("dj_fee_artists_edition_name").on(t.editionId, t.nameKey),
     index("dj_fee_artists_edition").on(t.editionId),
   ],
+);
+
+/**
+ * Handmatige horeca-omzet per editie, exclusief btw.
+ * Horeca = bar + keuken. Lege velden betekenen nog niet ingevuld.
+ */
+export const horecaRevenue = pgTable(
+  "horeca_revenue",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    editionId: uuid("edition_id")
+      .notNull()
+      .references(() => editions.id, { onDelete: "cascade" }),
+    /** Baromzet exclusief btw, in centen. */
+    barCents: integer("bar_cents"),
+    /** Keukenomzet exclusief btw, in centen. */
+    kitchenCents: integer("kitchen_cents"),
+    updatedByEmail: text("updated_by_email"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [uniqueIndex("horeca_revenue_edition").on(t.editionId)],
 );
 
 export const syncJobs = pgTable("sync_jobs", {
