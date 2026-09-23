@@ -527,6 +527,40 @@ export async function syncWeeztixDailySales(options?: {
  * Tickets écht verkocht vandaag (ticketCountToday), per event in de
  * verkoopwindow. Licht: alleen dashboard-stats, geen timeToBank-curve.
  */
+/** Events that can still sell: started within 14 days, or still upcoming. */
+export async function listOnSaleWeeztixEditions(limit = 120): Promise<
+  Array<{ id: string; name: string; guid: string }>
+> {
+  if (!hasDatabase()) return [];
+  const db = getDb();
+  const from = new Date();
+  from.setUTCDate(from.getUTCDate() - 14);
+  const to = new Date();
+  to.setUTCFullYear(to.getUTCFullYear() + 1);
+
+  const rows = await db
+    .select({
+      id: editions.id,
+      name: editions.name,
+      guid: editions.weeztixEventId,
+    })
+    .from(editions)
+    .where(
+      and(
+        isNotNull(editions.weeztixEventId),
+        gte(editions.startsAt, from),
+        lte(editions.startsAt, to),
+      ),
+    )
+    .orderBy(asc(editions.startsAt))
+    .limit(limit);
+
+  return rows.filter(
+    (row): row is { id: string; name: string; guid: string } =>
+      Boolean(row.guid) && !/TEMPLATE/i.test(row.name),
+  );
+}
+
 export async function syncWeeztixSaleDays(options?: {
   limit?: number;
   concurrency?: number;
@@ -549,32 +583,9 @@ export async function syncWeeztixSaleDays(options?: {
     };
   }
 
-  const db = getDb();
   const limit = options?.limit ?? 120;
   const concurrency = Math.max(1, options?.concurrency ?? 4);
-  const from = new Date();
-  from.setUTCDate(from.getUTCDate() - 14);
-  const to = new Date();
-  to.setUTCFullYear(to.getUTCFullYear() + 1);
-
-  const rows = (
-    await db
-      .select({
-        id: editions.id,
-        name: editions.name,
-        guid: editions.weeztixEventId,
-      })
-      .from(editions)
-      .where(
-        and(
-          isNotNull(editions.weeztixEventId),
-          gte(editions.startsAt, from),
-          lte(editions.startsAt, to),
-        ),
-      )
-      .orderBy(asc(editions.startsAt))
-      .limit(limit)
-  ).filter((row) => row.guid && !/TEMPLATE/i.test(row.name));
+  const rows = await listOnSaleWeeztixEditions(limit);
 
   let daysUpserted = 0;
   let ticketsToday = 0;
