@@ -7,6 +7,7 @@
 ## Revenue
 
 - [ ] Track revenue during the event itself (on-site, not ticket sales)
+- [ ] Add chat functionality across the tools
 
 ## Marketing
 
@@ -18,8 +19,8 @@
 
 ### Organic
 
-- [ ] Sync Instagram after Meta token install
+- [x] Sync Instagram after Meta token install
 
 ## UI
 
-- [ ] Mobile optimisations for the UI
+- [x] Mobile optimisations for the UI

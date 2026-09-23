@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { BarShapeProps } from "recharts";
 import {
   Bar,
@@ -138,47 +139,36 @@ function clampNodeToViewport(node: HTMLElement) {
 function DailySalesTooltip({
   active,
   payload,
+  coordinate,
   events,
   colors,
+  containerRef,
 }: {
   active?: boolean;
   payload?: Array<{ payload?: ChartRow }>;
+  coordinate?: { x?: number; y?: number };
   events: DailyTicketSalesEvent[];
   colors: { tooltipBg: string; tooltipFg: string; primary: string };
+  containerRef: { current: HTMLDivElement | null };
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const point = active && payload?.length ? payload[0]?.payload : undefined;
+  const wrapper =
+    containerRef.current?.querySelector(".recharts-wrapper") ??
+    containerRef.current;
+  const anchor = wrapper?.getBoundingClientRect();
+  const left = (anchor?.left ?? 0) + (coordinate?.x ?? 0) + 12;
+  const top = (anchor?.top ?? 0) + (coordinate?.y ?? 0) + 12;
 
   useLayoutEffect(() => {
     const node = ref.current;
     if (!point || !node) return;
-    let cancelled = false;
-    const run = () => {
-      if (!cancelled) clampNodeToViewport(node);
-    };
-    run();
+    clampNodeToViewport(node);
+    const frame = requestAnimationFrame(() => clampNodeToViewport(node));
+    return () => cancelAnimationFrame(frame);
+  }, [point?.day, left, top]);
 
-    const wrapper = node.parentElement;
-    const mutation = new MutationObserver(run);
-    if (wrapper) {
-      mutation.observe(wrapper, {
-        attributes: true,
-        attributeFilter: ["style", "class"],
-      });
-    }
-    const frame = requestAnimationFrame(() => {
-      run();
-      requestAnimationFrame(run);
-    });
-
-    return () => {
-      cancelled = true;
-      mutation.disconnect();
-      cancelAnimationFrame(frame);
-    };
-  }, [point?.day]);
-
-  if (!point) return null;
+  if (!point || typeof document === "undefined") return null;
 
   const eventById = new Map(events.map((event) => [event.id, event]));
   const rows = point.breakdown
@@ -198,11 +188,15 @@ function DailySalesTooltip({
   const totalPaid = rows.reduce((sum, row) => sum + row.paidSold, 0);
   const totalRevenue = rows.reduce((sum, row) => sum + row.revenueCents, 0);
 
-  return (
+  return createPortal(
     <div
       ref={ref}
-      className="max-h-[calc(100dvh-2rem)] max-w-[min(34rem,calc(100vw-2rem))] overflow-y-auto border px-3 py-2 text-xs shadow-sm"
+      className="pointer-events-none max-h-[calc(100dvh-2rem)] max-w-[min(34rem,calc(100vw-2rem))] overflow-y-auto border px-3 py-2 text-xs shadow-sm"
       style={{
+        position: "fixed",
+        left,
+        top,
+        zIndex: 80,
         background: colors.tooltipBg,
         borderColor: colors.primary,
         color: colors.tooltipFg,
@@ -262,12 +256,14 @@ function DailySalesTooltip({
           </tfoot>
         </table>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
 export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
   const colors = useChartColors();
+  const chartRef = useRef<HTMLDivElement>(null);
   const chartData = useMemo<ChartRow[]>(
     () =>
       data.days.map((day) => ({
@@ -301,7 +297,7 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
         {data.windowDays} dagen. Hover een dag voor de verdeling per event.
       </p>
       <div className="daily-sales-chart relative h-64 w-full min-w-0 border border-border bg-surface sm:h-72">
-        <div className="absolute inset-0 p-2 sm:p-3">
+        <div ref={chartRef} className="absolute inset-0 p-2 sm:p-3">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={chartData}
@@ -331,11 +327,15 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
               <Tooltip
                 cursor={{ fill: colors.primary, fillOpacity: 0.06 }}
                 content={
-                  <DailySalesTooltip events={data.events} colors={colors} />
+                  <DailySalesTooltip
+                    events={data.events}
+                    colors={colors}
+                    containerRef={chartRef}
+                  />
                 }
-                allowEscapeViewBox={{ x: false, y: false }}
+                allowEscapeViewBox={{ x: true, y: true }}
                 isAnimationActive={false}
-                wrapperStyle={{ zIndex: 20, pointerEvents: "none" }}
+                wrapperStyle={{ visibility: "hidden", pointerEvents: "none" }}
               />
               {data.events.map((event) => (
                 <Bar

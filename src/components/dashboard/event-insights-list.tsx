@@ -2898,13 +2898,25 @@ function LineupBlock({
   );
 }
 
-/** Drop unusable age keys. Ranking happens with the other demographic lists. */
-function knownAges(ageBuckets: DemographicBucket[]): DemographicBucket[] {
-  return ageBuckets.filter((bucket) => {
-    if (bucket.key === "onbekend") return false;
+const AGE_RANGE_YEARS = 3;
+
+/** Fixed 3-year bands (18–20, 21–23, …) so the top rows are ranges, not single ages. */
+function ageRanges(ageBuckets: DemographicBucket[]): DemographicBucket[] {
+  const totals = new Map<string, number>();
+  for (const bucket of ageBuckets) {
+    if (bucket.key === "onbekend") continue;
     const age = Number(bucket.key);
-    return Number.isFinite(age) && age >= 0;
-  });
+    if (!Number.isFinite(age) || age < 0) continue;
+    const start = Math.floor(age / AGE_RANGE_YEARS) * AGE_RANGE_YEARS;
+    const key = `${start}–${start + AGE_RANGE_YEARS - 1}`;
+    totals.set(key, (totals.get(key) ?? 0) + bucket.count);
+  }
+  return [...totals.entries()].map(([key, count]) => ({ key, count }));
+}
+
+function ageRangeStart(key: string): number {
+  const start = Number(key.split("–")[0]);
+  return Number.isFinite(start) ? start : 0;
 }
 
 function withOtherBucket(
@@ -2929,13 +2941,17 @@ function DemoMini({
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   rows: DemographicBucket[];
   limit?: number;
-  /** If true, keep one row per age. The largest `limit` rows stay; the rest become Overig. */
+  /** If true, roll single ages into 3-year ranges, then keep the largest `limit` ranges. */
   isAge?: boolean;
 }) {
   const known = rows.filter((r) => r.key !== "onbekend");
-  const prepared = (isAge ? knownAges(known) : known).sort(
-    (a, b) => b.count - a.count || a.key.localeCompare(b.key),
-  );
+  const prepared = (isAge ? ageRanges(known) : known).sort((a, b) => {
+    const byCount = b.count - a.count;
+    if (byCount !== 0) return byCount;
+    return isAge
+      ? ageRangeStart(a.key) - ageRangeStart(b.key)
+      : a.key.localeCompare(b.key);
+  });
   const total = prepared.reduce((s, r) => s + r.count, 0);
   if (!total) return null;
   const display = withOtherBucket(prepared, limit);
