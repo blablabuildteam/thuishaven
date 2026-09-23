@@ -5,12 +5,9 @@ import {
   emailCampaignMetrics,
   ticketInventory,
   ticketSaleReferrers,
-  ticketSalesDaily,
 } from "@/lib/db/schema";
+import { loadMailHourCurves, ticketsSoldIn24h } from "@/lib/editions/mail-window";
 import { normalizeWeeztixInventory } from "@/lib/integrations/weeztix/inventory";
-
-/** Dagen ná verzending die we als “effect-window” meenemen. */
-const AFTER_DAYS = 7;
 
 export type MailAfterEffect = {
   campaignId: string;
@@ -21,9 +18,9 @@ export type MailAfterEffect = {
   clicks: number;
   openRate: number | null;
   clickRate: number | null;
-  /** Orders in de 7 dagen ná verzending (incl. verzenddag), uit dagcurve */
+  /** Tickets in de 24 uur ná verzending (uur van verzending telt mee). */
   ordersAfter: number | null;
-  /** Aantal dagen in de curve binnen dat window */
+  /** Uren in het venster met verkoop. */
   daysCovered: number;
   /** Of de dagcurve dit mail-moment überhaupt dekt */
   curveCoversSend: boolean;
@@ -47,57 +44,8 @@ export type EditionMailEffect = {
   totalOrdersAfterMails: number;
 };
 
-function dayIso(d: Date): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Amsterdam",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(d);
-}
-
-function addDays(isoDay: string, delta: number): string {
-  const d = new Date(`${isoDay}T12:00:00+02:00`);
-  d.setUTCDate(d.getUTCDate() + delta);
-  return dayIso(d);
-}
-
-function normalizeDay(day: string | Date): string {
-  if (typeof day === "string") return day.slice(0, 10);
-  return dayIso(day);
-}
-
-function sumAfter(
-  byDay: Map<string, number>,
-  sendDay: string,
-  afterDays: number,
-): { sold: number; days: number } {
-  const end = addDays(sendDay, afterDays - 1);
-  let sold = 0;
-  let days = 0;
-  for (const [day, n] of byDay) {
-    if (day >= sendDay && day <= end) {
-      sold += n;
-      days += 1;
-    }
-  }
-  return { sold, days };
-}
-
-function curveTouchesWindow(
-  byDay: Map<string, number>,
-  sendDay: string,
-  afterDays: number,
-): boolean {
-  const end = addDays(sendDay, afterDays - 1);
-  for (const day of byDay.keys()) {
-    if (day >= sendDay && day <= end) return true;
-  }
-  return false;
-}
-
 /**
- * Effect ná mail: orders in de dagen na verzending + Brevo-klikreferrers.
+ * Effect ná mail: tickets in de 24 uur na verzending + Brevo-klikreferrers.
  * Geen “vóór vs na”-vergelijking — jullie kopen na de mail, dus we meten die window.
  */
 export async function getMailLiftByEdition(options?: {
@@ -113,8 +61,8 @@ export async function getMailLiftByEdition(options?: {
   notes: string[];
 }> {
   const notes: string[] = [
-    "Focus: verkopen ná de mail (verzenddag + 6 dagen), niet ervoor.",
-    "Orders/dag uit Weeztix timeToBank — dekt soms alleen de late fase vóór het event.",
+    "Focus: tickets in de 24 uur ná de mail, niet de week erna.",
+    "Weeztix-uurcurve. Het uur waarin de mail vertrok telt helemaal mee.",
     "‘Via Brevo-klik’ = orders waarvan de referrer Arenametrix/routage is (trackinglink in de mail). Dichtste attributie die Weeztix geeft.",
   ];
 
@@ -155,6 +103,7 @@ export async function getMailLiftByEdition(options?: {
       id: editions.id,
       name: editions.name,
       startsAt: editions.startsAt,
+      guid: editions.weeztixEventId,
       sold: ticketInventory.sold,
       capacity: ticketInventory.capacity,
       available: ticketInventory.available,
@@ -171,25 +120,36 @@ export async function getMailLiftByEdition(options?: {
 
   const edMap = new Map(eds.map((e) => [e.id, e]));
 
-  const daily = await db
-    .select({
-      editionId: ticketSalesDaily.editionId,
-      day: ticketSalesDaily.day,
-      sold: ticketSalesDaily.sold,
-    })
-    .from(ticketSalesDaily)
-    .where(eq(ticketSalesDaily.platform, "weeztix"));
-
-  const dailyByEdition = new Map<string, Map<string, number>>();
-  for (const row of daily) {
-    const day = normalizeDay(row.day as string | Date);
-    let m = dailyByEdition.get(row.editionId);
-    if (!m) {
-      m = new Map();
-      dailyByEdition.set(row.editionId, m);
+  const hourRequests: Array<{
+    editionId: string;
+    guid: string;
+    from: Date;
+    to: Date;
+  }> = [];
+  const sentByEdition = new Map<string, Date[]>();
+  for (const c of camps) {
+    const editionId = c.editionId;
+    const ed = editionId ? edMap.get(editionId) : undefined;
+    if (!editionId || !ed?.guid || /TEMPLATE/i.test(ed.name) || !c.sentAt) {
+      continue;
     }
-    m.set(day, (m.get(day) ?? 0) + (row.sold ?? 0));
+    const list = sentByEdition.get(editionId) ?? [];
+    list.push(c.sentAt);
+    sentByEdition.set(editionId, list);
   }
+  for (const [editionId, sent] of sentByEdition) {
+    const guid = edMap.get(editionId)?.guid;
+    if (!guid) continue;
+    const fromMs = Math.min(...sent.map((d) => d.getTime())) - 60 * 60 * 1000;
+    const toMs = Math.max(...sent.map((d) => d.getTime())) + 25 * 60 * 60 * 1000;
+    hourRequests.push({
+      editionId,
+      guid,
+      from: new Date(fromMs),
+      to: new Date(toMs),
+    });
+  }
+  const hourlyByEdition = await loadMailHourCurves(hourRequests);
 
   const refs = await db
     .select({
@@ -224,10 +184,9 @@ export async function getMailLiftByEdition(options?: {
     const ed = edMap.get(editionId);
     if (!ed || /TEMPLATE/i.test(ed.name) || !c.sentAt) continue;
 
-    const sendDay = dayIso(c.sentAt);
-    const curve = dailyByEdition.get(editionId) ?? new Map();
-    const covers = curveTouchesWindow(curve, sendDay, AFTER_DAYS);
-    const after = sumAfter(curve, sendDay, AFTER_DAYS);
+    const curve = hourlyByEdition.get(editionId);
+    const covers = curve != null;
+    const afterSold = covers ? ticketsSoldIn24h(curve, c.sentAt) : null;
 
     const sent = c.sent ?? 0;
     const opens = c.opens ?? 0;
@@ -241,8 +200,15 @@ export async function getMailLiftByEdition(options?: {
       clicks,
       openRate: sent > 0 ? (opens / sent) * 100 : null,
       clickRate: sent > 0 ? (clicks / sent) * 100 : null,
-      ordersAfter: covers ? after.sold : null,
-      daysCovered: after.days,
+      ordersAfter: afterSold,
+      daysCovered:
+        curve == null
+          ? 0
+          : curve.filter((point) => {
+              const start = c.sentAt.getTime();
+              const end = start + 24 * 60 * 60 * 1000;
+              return point.at + 60 * 60 * 1000 > start && point.at < end;
+            }).length,
       curveCoversSend: covers,
       signal: covers ? "measured" : "no_curve",
     };
@@ -265,7 +231,7 @@ export async function getMailLiftByEdition(options?: {
         capacity,
         sellThrough:
           capacity != null && capacity > 0 ? (sold / capacity) * 100 : null,
-        curveDays: curve.size,
+        curveDays: curve?.length ?? 0,
         brevoClickOrders: ref?.brevo ?? 0,
         referrerBreakdown: [...(ref?.byChannel.entries() ?? [])]
           .map(([channel, orders]) => ({ channel, orders }))
@@ -293,9 +259,11 @@ export async function getMailLiftByEdition(options?: {
       return e;
     })
     .sort((a, b) => {
-      const score = (e: EditionMailEffect) =>
-        e.brevoClickOrders * 10 + e.totalOrdersAfterMails;
-      return score(b) - score(a);
+      const byEvent = b.startsAt.localeCompare(a.startsAt);
+      if (byEvent !== 0) return byEvent;
+      const aMail = a.campaigns[0]?.sentAt ?? "";
+      const bMail = b.campaigns[0]?.sentAt ?? "";
+      return bMail.localeCompare(aMail);
     });
 
   const limit = options?.limit ?? 40;

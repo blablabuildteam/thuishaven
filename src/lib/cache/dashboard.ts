@@ -18,8 +18,8 @@ export const loadWeatherImpact = cache(async () =>
 );
 
 export const loadMailLift = cache(async () =>
-  rememberTtl("mail-lift", DASHBOARD_TTL_MS, () =>
-    getMailLiftByEdition({ limit: 40 }),
+  rememberTtl("mail-lift:24h", DASHBOARD_TTL_MS, () =>
+    getMailLiftByEdition({ limit: 200 }),
   ),
 );
 

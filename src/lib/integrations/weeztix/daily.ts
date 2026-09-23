@@ -215,6 +215,68 @@ async function fetchWeeztixOrderDayCurve(input: {
   };
 }
 
+export type HourlyTicketPoint = { at: number; sold: number };
+
+/** Tickets per uur. `key` is de start van het uur in epoch-ms (UTC). */
+export function hourlyTicketsFromOrderAggregations(
+  eventGuid: string,
+  data: unknown,
+): { points: HourlyTicketPoint[]; error?: string } {
+  const countNode = eventAggNode(data, "eventCounts", eventGuid);
+  if (!countNode) return { points: [], error: "geen uurcurve" };
+  const points: HourlyTicketPoint[] = [];
+  for (const bucket of histogramBuckets(countNode)) {
+    const key = Number(bucket.key);
+    const sold = typeof bucket.doc_count === "number" ? bucket.doc_count : 0;
+    if (!Number.isFinite(key) || sold <= 0) continue;
+    points.push({ at: key < 1e12 ? key * 1000 : key, sold });
+  }
+  return { points };
+}
+
+let companyIdPromise: Promise<string | undefined> | null = null;
+
+async function resolveWeeztixCompanyId(
+  eventGuid: string,
+): Promise<string | undefined> {
+  const fromEnv = process.env.WEEZTIX_COMPANY_GUID?.trim();
+  if (fromEnv) return fromEnv;
+  if (!companyIdPromise) {
+    companyIdPromise = getWeeztixEvent(eventGuid).then((event) =>
+      event.ok && typeof event.event.company_id === "string"
+        ? event.event.company_id
+        : undefined,
+    );
+  }
+  return companyIdPromise;
+}
+
+/** Uurcurve voor één event. Lege `points` met geen error = gemeten, nul tickets. */
+export async function fetchWeeztixHourlyTickets(input: {
+  eventGuid: string;
+  start: Date;
+  end: Date;
+}): Promise<{ points: HourlyTicketPoint[]; error?: string }> {
+  const companyId = await resolveWeeztixCompanyId(input.eventGuid);
+  if (!companyId) return { points: [], error: "geen company id" };
+  const res = await weeztixPost({
+    path: `/statistics/orders/${companyId}`,
+    companyGuid: companyId,
+    body: {
+      offset: 0,
+      limit: 0,
+      start: isoOffset(input.start),
+      end: isoOffset(input.end),
+      timeunit: "hour",
+      events: [input.eventGuid],
+    },
+  });
+  if (!res.ok) {
+    return { points: [], error: res.error ?? "uurcurve mislukt" };
+  }
+  return hourlyTicketsFromOrderAggregations(input.eventGuid, res.data);
+}
+
 async function upsertDailySalesCurve(input: {
   editionId: string;
   points: Array<{ day: string; sold: number; revenueCents: number }>;

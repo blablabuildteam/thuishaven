@@ -674,6 +674,9 @@ export async function listRecentCampaigns(limit = 24) {
   return db
     .select()
     .from(emailCampaignMetrics)
-    .orderBy(desc(emailCampaignMetrics.sentAt), desc(emailCampaignMetrics.sent))
+    .orderBy(
+      sql`${emailCampaignMetrics.sentAt} desc nulls last`,
+      desc(emailCampaignMetrics.sent),
+    )
     .limit(limit);
 }
