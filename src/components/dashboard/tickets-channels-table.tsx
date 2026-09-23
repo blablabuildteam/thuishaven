@@ -216,12 +216,7 @@ function TicketsTable({
             <th className="px-4 py-3 font-medium">Datum</th>
             <th className="px-4 py-3 font-medium">Tijd</th>
             {showExpected && (
-              <th className="px-3 py-3 text-right font-medium">
-                Expected
-                <span className="mt-0.5 block font-normal tracking-normal text-text-dim normal-case">
-                  handmatig
-                </span>
-              </th>
+              <th className="px-3 py-3 text-right font-medium">Expected</th>
             )}
             {columns.map((col) => (
               <th
@@ -232,11 +227,6 @@ function TicketsTable({
                 )}
               >
                 {col.label}
-                {col.key === "deurverkoop" && (
-                  <span className="mt-0.5 block font-normal tracking-normal text-text-dim normal-case">
-                    handmatig
-                  </span>
-                )}
                 {col.pending && col.key !== "wingame" && (
                   <span className="mt-0.5 block font-normal tracking-normal text-text-dim normal-case">
                     binnenkort

@@ -20,7 +20,9 @@
   --warn: #f1c40f;
   --warn-fg: #6e5600;
   --danger: #d22624;
+  --danger-soft: rgba(210, 38, 36, 0.1);
   --info: #79cae5;
+  --info-soft: rgba(121, 202, 229, 0.32);
   /* Duidelijke “werkt”-status — past bij cream/zwart, geen neon */
   --success: #1f7a45;
   --success-soft: rgba(31, 122, 69, 0.1);
@@ -54,7 +56,9 @@
   --warn: #d4a017;
   --warn-fg: #e8c96a;
   --danger: #d22624;
+  --danger-soft: rgba(210, 38, 36, 0.16);
   --info: #79cae5;
+  --info-soft: rgba(121, 202, 229, 0.18);
   --success: #3d9b5f;
   --success-soft: rgba(61, 155, 95, 0.14);
   --hub-glow: linear-gradient(180deg, #0a0a0a 0%, #000000 60%);
@@ -84,7 +88,9 @@
   --color-warn: var(--warn);
   --color-warn-fg: var(--warn-fg);
   --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
   --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
   --color-cream: var(--cream);
@@ -332,6 +338,38 @@ html.dark body::before {
 
 .insight-modal-panel {
   animation: insight-modal-panel 220ms ease-out both;
+}
+
+@keyframes missing-hint-above {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes missing-hint-below {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.missing-hint-pop-above {
+  transform-origin: bottom center;
+  animation: missing-hint-above 160ms ease-out both;
+}
+
+.missing-hint-pop-below {
+  transform-origin: top center;
+  animation: missing-hint-below 160ms ease-out both;
 }
 
 @keyframes chat-message-in {

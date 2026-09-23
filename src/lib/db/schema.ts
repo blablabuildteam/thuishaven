@@ -748,6 +748,32 @@ export const djFeeArtists = pgTable(
   ],
 );
 
+/**
+ * Handmatige horeca-omzet per editie, exclusief btw.
+ * Horeca = bar + keuken. Lege velden betekenen nog niet ingevuld.
+ */
+export const horecaRevenue = pgTable(
+  "horeca_revenue",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    editionId: uuid("edition_id")
+      .notNull()
+      .references(() => editions.id, { onDelete: "cascade" }),
+    /** Baromzet exclusief btw, in centen. */
+    barCents: integer("bar_cents"),
+    /** Keukenomzet exclusief btw, in centen. */
+    kitchenCents: integer("kitchen_cents"),
+    updatedByEmail: text("updated_by_email"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [uniqueIndex("horeca_revenue_edition").on(t.editionId)],
+);
+
 export const syncJobs = pgTable("sync_jobs", {
   id: uuid("id").defaultRandom().primaryKey(),
   source: text("source").notNull(),
