@@ -16,7 +16,12 @@ function defaultMonth(days: string[], today: string): string {
   return next ?? months[months.length - 1] ?? current;
 }
 
-export default async function DjFeesPage() {
+export default async function DjFeesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ edition?: string; month?: string }>;
+}) {
+  const sp = await searchParams;
   if (!hasDatabase()) {
     return (
       <div>
@@ -31,12 +36,30 @@ export default async function DjFeesPage() {
 
   const events = await loadDjFeeBoard();
   const today = amsterdamDay(new Date());
-  const initialMonth = defaultMonth(
-    events.map((event) => event.day),
-    today,
-  );
+  const editionId = sp.edition?.trim();
+  const focused = editionId
+    ? events.find((event) => event.id === editionId)
+    : undefined;
+  const requestedMonth = /^\d{4}-\d{2}$/.test(sp.month ?? "")
+    ? sp.month
+    : undefined;
+  const monthExists =
+    requestedMonth != null &&
+    events.some((event) => monthKeyFromDay(event.day) === requestedMonth);
+  const initialMonth = focused
+    ? monthKeyFromDay(focused.day)
+    : monthExists && requestedMonth
+      ? requestedMonth
+      : defaultMonth(
+          events.map((event) => event.day),
+          today,
+        );
 
   return (
-    <DjFeesWorkbench initialEvents={events} initialMonth={initialMonth} />
+    <DjFeesWorkbench
+      initialEvents={events}
+      initialMonth={initialMonth}
+      focusEditionId={focused?.id}
+    />
   );
 }

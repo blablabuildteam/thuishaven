@@ -708,6 +708,7 @@ export const alerts = pgTable("alerts", {
 
 /** DJ-fee bandbreedtes, gelijk aan het Google Sheets-overzicht. */
 export const djFeeRangeEnum = pgEnum("dj_fee_range", [
+  "0",
   "0_600",
   "600_1000",
   "1000_2500",

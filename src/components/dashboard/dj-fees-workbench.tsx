@@ -25,8 +25,8 @@ import { formatTicketSheetDate } from "@/lib/time/amsterdam";
 import { cn } from "@/lib/utils";
 
 /** Fixed control columns — pinned to the card's right edge so they align across events. */
-const DJ_FEE_CONTROLS_W = "w-[26.25rem]"; // 12 + 9.5 + 4.75 rem
-const DJ_FEE_ROW = "flex w-full min-w-[42rem] items-center";
+const DJ_FEE_CONTROLS_W = "w-[28.25rem]"; // 14 + 9.5 + 4.75 rem
+const DJ_FEE_ROW = "flex w-full min-w-[44rem] items-center";
 
 function spendFor(artists: DjFeeArtistView[]): DjFeeSpend {
   const spend = emptyDjFeeSpend();
@@ -111,9 +111,11 @@ function TenHourToggle({
 export function DjFeesWorkbench({
   initialEvents,
   initialMonth,
+  focusEditionId,
 }: {
   initialEvents: DjFeeEventView[];
   initialMonth: string;
+  focusEditionId?: string;
 }) {
   const [events, setEvents] = useState(initialEvents);
   const [month, setMonth] = useState(initialMonth);
@@ -173,6 +175,13 @@ export function DjFeesWorkbench({
     );
     selected?.scrollIntoView({ inline: "center", block: "nearest" });
   }, [month]);
+
+  useEffect(() => {
+    if (!focusEditionId) return;
+    document
+      .getElementById(`dj-fee-${focusEditionId}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusEditionId, month]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -452,6 +461,7 @@ export function DjFeesWorkbench({
             <EventCard
               key={event.id}
               event={event}
+              focused={event.id === focusEditionId}
               busyId={busyId}
               onFeeChange={(artist, feeRange) =>
                 void patchArtist(event.id, artist, { feeRange })
@@ -473,6 +483,7 @@ export function DjFeesWorkbench({
 
 function EventCard({
   event,
+  focused,
   busyId,
   onFeeChange,
   onTenHourToggle,
@@ -480,6 +491,7 @@ function EventCard({
   onAdd,
 }: {
   event: DjFeeEventView;
+  focused?: boolean;
   busyId: string | null;
   onFeeChange: (artist: DjFeeArtistView, feeRange: DjFeeRangeId | null) => void;
   onTenHourToggle: (artist: DjFeeArtistView) => void;
@@ -496,7 +508,13 @@ function EventCard({
         : "Nog geen line-up — voeg DJs zelf toe";
 
   return (
-    <section className="border border-border bg-surface">
+    <section
+      id={`dj-fee-${event.id}`}
+      className={cn(
+        "scroll-mt-24 border border-border bg-surface",
+        focused && "ring-1 ring-text",
+      )}
+    >
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
         <div className="min-w-0">
           <p className="text-xs tracking-wide text-text-dim uppercase">
@@ -520,7 +538,7 @@ function EventCard({
       </header>
 
       <div className="max-w-full overflow-x-auto">
-        <div className="w-full min-w-[42rem]">
+        <div className="w-full min-w-[44rem]">
           <div
             className={cn(
               DJ_FEE_ROW,
@@ -534,7 +552,7 @@ function EventCard({
                 DJ_FEE_CONTROLS_W,
               )}
             >
-              <div className="w-[12rem] px-4 py-2 font-medium">Prijs</div>
+              <div className="w-[14rem] px-4 py-2 font-medium">Prijs</div>
               <div className="w-[9.5rem] px-4 py-2 font-medium">10HRS</div>
               <div className="w-[4.75rem] px-4 py-2">
                 <span className="sr-only">Acties</span>
@@ -570,7 +588,7 @@ function EventCard({
                     DJ_FEE_CONTROLS_W,
                   )}
                 >
-                  <div className="w-[12rem] px-4 py-2.5">
+                  <div className="w-[14rem] px-4 py-2.5">
                     <DjFeeRangeSelect
                       value={artist.feeRange}
                       disabled={busy}
