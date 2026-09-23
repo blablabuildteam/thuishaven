@@ -885,3 +885,17 @@ export const insightsChats = pgTable(
   },
   (t) => [index("insights_chats_user_updated").on(t.userId, t.updatedAt)],
 );
+
+/** Editable outreach mail templates (overrides code defaults in tone.ts). */
+export const outreachTemplateOverrides = pgTable("outreach_template_overrides", {
+  variantKey: text("variant_key").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  guidance: text("guidance").notNull(),
+  subjectA: text("subject_a").notNull(),
+  subjectB: text("subject_b").notNull(),
+  bodyTemplate: text("body_template").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});

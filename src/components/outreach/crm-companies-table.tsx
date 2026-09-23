@@ -2,11 +2,13 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { statusLabels } from "@/lib/mock/outreach";
 import { type MailAngleId, isMailableAngle, mailAngleTone } from "@/lib/outreach/mail-angle";
+import { isEventRelevantTitle } from "@/lib/outreach/decision-titles";
 
 /** Client-safe shape — avoid importing server crm.ts (postgres) into the browser. */
 type CrmRow = {
@@ -149,6 +151,7 @@ function MdwCell({ row }: { row: CrmRow }) {
 }
 
 export function CrmCompaniesTable({ rows }: Props) {
+  const router = useRouter();
   const [q, setQ] = useState("");
   const [mail, setMail] = useState<MailFilter>("kans");
   const [region, setRegion] = useState<RegionFilter>("all");
@@ -364,6 +367,7 @@ export function CrmCompaniesTable({ rows }: Props) {
       <p className="mb-3 text-xs text-text-dim">
         {filtered.length} van {rows.length}
         {mail === "kans" ? " · klaar om te mailen" : ""}
+        {" · klik een rij om te openen"}
       </p>
 
       {filtered.length === 0 ? (
@@ -392,15 +396,21 @@ export function CrmCompaniesTable({ rows }: Props) {
               {filtered.map(({ row, angle }) => (
                 <tr
                   key={row.id}
-                  className="border-b border-border last:border-0 hover:bg-surface/50"
+                  role="link"
+                  tabIndex={0}
+                  onClick={() => router.push(`/outreach/crm/${row.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      router.push(`/outreach/crm/${row.id}`);
+                    }
+                  }}
+                  className="cursor-pointer border-b border-border last:border-0 hover:bg-surface/80"
                 >
                   <td className="px-4 py-3">
-                    <Link
-                      href={`/outreach/crm/${row.id}`}
-                      className="font-medium text-text hover:text-accent"
-                    >
+                    <span className="font-medium text-text group-hover:text-accent">
                       {row.companyName}
-                    </Link>
+                    </span>
                     <p className="text-xs text-text-dim">
                       {row.apolloCity && row.inRegion
                         ? row.apolloCity
@@ -429,7 +439,14 @@ export function CrmCompaniesTable({ rows }: Props) {
                           <div key={`${c.name}-${c.title ?? ""}`}>
                             <p className="text-sm text-text">{c.name}</p>
                             <p className="text-xs text-text-dim">
-                              {[c.title, c.email ?? "geen mail"]
+                              {[
+                                c.title
+                                  ? isEventRelevantTitle(c.title)
+                                    ? c.title
+                                    : `${c.title} · check rol`
+                                  : null,
+                                c.email ?? "geen mail",
+                              ]
                                 .filter(Boolean)
                                 .join(" · ")}
                             </p>

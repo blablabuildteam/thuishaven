@@ -144,6 +144,7 @@ const outreachSections: NavSection[] = [
       },
       { href: "/outreach/crm", label: "Bedrijven", icon: Contact, tourId: "nav-bedrijven" },
       { href: "/outreach/emails", label: "Mailen", icon: Mail, tourId: "nav-mailen" },
+      { href: "/outreach/templates", label: "Templates", icon: Sparkles },
       {
         href: "/outreach/analytics",
         label: "Resultaten",

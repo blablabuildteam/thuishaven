@@ -43,7 +43,8 @@ export type OutreachVariantId =
   | "seizoen"
   | "funding"
   | "recordjaar"
-  | "short_checkin";
+  | "short_checkin"
+  | "brochure";
 
 export type OutreachSubjectArm = "a" | "b";
 
@@ -139,6 +140,19 @@ export const OUTREACH_VARIANTS: OutreachVariant[] = [
     subjects: {
       a: "Korte vraag",
       b: "Even checken",
+    },
+  },
+  {
+    id: "brochure",
+    name: "Brochure (link)",
+    audience: "company",
+    description:
+      "Korte mail met link naar de PDF-brochure — geen bijlage (spam-veiliger).",
+    guidance:
+      "Kort en rustig. Verwijs naar de brochure-link (geen attachment). Soft vraag of er een feest speelt + rondleiding. Geen sales-taal.",
+    subjects: {
+      a: "Onze brochure — Thuishaven",
+      b: "Even de brochure meesturen",
     },
   },
 ];

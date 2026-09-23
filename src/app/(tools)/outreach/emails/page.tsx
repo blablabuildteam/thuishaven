@@ -18,12 +18,18 @@ export default async function EmailsPage() {
       <SectionHeader
         eyebrow="Outbound"
         title="Mailen"
-        description="Stap 3: kies bedrijf + invalshoek, genereer draft, stuur test naar team@."
+        description="Stap 3: kies bedrijven + één mailtemplate, genereer drafts, stuur test naar team@."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={source === "db" ? "success" : "neutral"}>
               {emails.length} drafts
             </StatusBadge>
+            <Link
+              href="/outreach/templates"
+              className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
+            >
+              Templates
+            </Link>
             <Link
               href="/outreach/analytics"
               className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"

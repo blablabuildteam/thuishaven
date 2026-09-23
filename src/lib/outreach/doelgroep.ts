@@ -3,6 +3,7 @@
  * Partner bureaus are NOT this list.
  */
 
+import { LINKEDIN_PEOPLE_SEARCH } from "./decision-titles";
 import { AMS_REGION_PLACES, DEFAULT_MAX_EMPLOYEES, DEFAULT_MIN_EMPLOYEES } from "@/lib/integrations/kvk/discovery";
 
 export const DOELGROEP = {
@@ -14,8 +15,7 @@ export const DOELGROEP = {
   trigger: "Jubileum (5 / 10 / 15 / 20 / 25 / 50 jaar) of intern event",
   linkedinCompanySearch:
     "Companies · Netherlands · Amsterdam Area · 501–5.000 employees",
-  linkedinPeopleSearch:
-    "Event Manager OR Office Manager OR Facilities Manager OR Internal Communications",
+  linkedinPeopleSearch: LINKEDIN_PEOPLE_SEARCH,
 } as const;
 
 /**

@@ -143,32 +143,18 @@ export async function searchDoelgroepCompanies(options?: {
   };
 }
 
+import {
+  DECISION_TITLES,
+  isEventRelevantTitle,
+  titleRelevanceScore,
+} from "@/lib/outreach/decision-titles";
+
 export type ApolloPerson = {
   name: string;
   title?: string;
   email?: string;
   linkedinUrl?: string;
 };
-
-const DECISION_TITLES = [
-  "event manager",
-  "office manager",
-  "facilities manager",
-  "internal communications",
-  "people operations",
-  "workplace manager",
-  "evenementenmanager",
-  "event coördinator",
-  "event coordinator",
-  "office management",
-  "facilitair manager",
-  "facility manager",
-  "hoofd facilitair",
-  "manager facilities",
-  "interne communicatie",
-  "hr manager",
-  "people manager",
-];
 
 function domainFromWebsite(website?: string | null): string | null {
   if (!website) return null;
@@ -256,8 +242,8 @@ export async function searchDecisionMakers(input: {
   const body: Record<string, unknown> = {
     page: 1,
     per_page: 5,
-    person_titles: DECISION_TITLES,
-    include_similar_titles: true,
+    person_titles: [...DECISION_TITLES],
+    include_similar_titles: false,
   };
   if (domain) body.q_organization_domains_list = [domain];
   else body.q_organization_name = input.companyName;
@@ -308,24 +294,36 @@ export async function searchDecisionMakers(input: {
     meta: { companyName: input.companyName, endpoint: "api_search" },
   }).catch(() => undefined);
 
-  const candidates = [...(json.people ?? [])].sort((a, b) => {
-    const titleScore = (t?: string) => {
-      const s = (t ?? "").toLowerCase();
-      if (s.includes("event")) return 0;
-      if (s.includes("office") || s.includes("facilit")) return 1;
-      if (s.includes("workplace") || s.includes("people")) return 2;
-      return 3;
-    };
-    const ae = a.has_email === true ? 0 : 1;
-    const be = b.has_email === true ? 0 : 1;
-    return ae - be || titleScore(a.title) - titleScore(b.title);
-  });
+  const candidates = [...(json.people ?? [])]
+    .filter((p) => isEventRelevantTitle(p.title))
+    .sort((a, b) => {
+      const ae = a.has_email === true ? 0 : 1;
+      const be = b.has_email === true ? 0 : 1;
+      return (
+        ae - be ||
+        titleRelevanceScore(a.title) - titleRelevanceScore(b.title)
+      );
+    });
+
+  // If filter emptied the list (rare), fall back to scored raw hits but still reject HR-only.
+  const pool =
+    candidates.length > 0
+      ? candidates
+      : [...(json.people ?? [])]
+          .filter((p) => {
+            const s = (p.title ?? "").toLowerCase();
+            return !/\b(hr|people ops|recruiter|talent)\b/.test(s);
+          })
+          .sort(
+            (a, b) =>
+              titleRelevanceScore(a.title) - titleRelevanceScore(b.title),
+          );
 
   const people: ApolloPerson[] = [];
   // Unlock up to 2 people with email preference (credits). Keep a 3rd search hit as option.
   let unlocks = 0;
-  for (let i = 0; i < Math.min(candidates.length, 3); i++) {
-    const raw = candidates[i]!;
+  for (let i = 0; i < Math.min(pool.length, 3); i++) {
+    const raw = pool[i]!;
     const wantUnlock =
       unlocks < 2 &&
       Boolean(raw.id) &&

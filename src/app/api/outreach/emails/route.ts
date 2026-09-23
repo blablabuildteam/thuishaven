@@ -10,21 +10,27 @@ import { logSessionActivity } from "@/lib/audit/session-log";
 
 export const dynamic = "force-dynamic";
 
-const generateSchema = z.object({
-  prospectId: z.string().uuid(),
-  variantId: z
-    .enum([
-      "warm_tour",
-      "open_dates",
-      "jubileum",
-      "seizoen",
-      "funding",
-      "recordjaar",
-      "short_checkin",
-    ])
-    .optional(),
-  subjectArm: z.enum(["a", "b"]).optional(),
-});
+const VARIANT_IDS = [
+  "warm_tour",
+  "open_dates",
+  "jubileum",
+  "seizoen",
+  "funding",
+  "recordjaar",
+  "short_checkin",
+  "brochure",
+] as const;
+
+const generateSchema = z
+  .object({
+    prospectId: z.string().uuid().optional(),
+    prospectIds: z.array(z.string().uuid()).min(1).max(40).optional(),
+    variantId: z.enum(VARIANT_IDS).optional(),
+    subjectArm: z.enum(["a", "b"]).optional(),
+  })
+  .refine((d) => Boolean(d.prospectId || d.prospectIds?.length), {
+    message: "prospectId of prospectIds verplicht",
+  });
 
 export async function GET() {
   const session = await auth();
@@ -52,7 +58,6 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
     }
-    // Only test sends for now (team@). Live requires separate unlock.
     const result = await sendStoredDraft({
       emailId: parsed.data.emailId,
       forceTest: true,
@@ -77,21 +82,78 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
   }
 
-  const result = await generateAndStoreDraft(parsed.data);
-  if ("error" in result) {
-    return NextResponse.json(result, { status: 400 });
+  const ids =
+    parsed.data.prospectIds ??
+    (parsed.data.prospectId ? [parsed.data.prospectId] : []);
+
+  if (ids.length === 1) {
+    const result = await generateAndStoreDraft({
+      prospectId: ids[0]!,
+      variantId: parsed.data.variantId,
+      subjectArm: parsed.data.subjectArm,
+    });
+    if ("error" in result) {
+      return NextResponse.json(result, { status: 400 });
+    }
+    await logSessionActivity(session, {
+      action: "email_draft",
+      summary: `Draft gemaakt · prospect ${ids[0]}`,
+      path: "/api/outreach/emails",
+      method: "POST",
+      status: 201,
+      tool: "outreach",
+      meta: {
+        prospectId: ids[0],
+        variantId: parsed.data.variantId,
+      },
+    });
+    return NextResponse.json(result, { status: 201 });
   }
+
+  const results: Array<{
+    prospectId: string;
+    emailId?: string;
+    subject?: string;
+    error?: string;
+  }> = [];
+  for (const prospectId of ids) {
+    const result = await generateAndStoreDraft({
+      prospectId,
+      variantId: parsed.data.variantId,
+      subjectArm: parsed.data.subjectArm,
+    });
+    if ("error" in result) {
+      results.push({ prospectId, error: result.error });
+    } else {
+      results.push({
+        prospectId,
+        emailId: result.emailId,
+        subject: result.subject,
+      });
+    }
+  }
+
+  const ok = results.filter((r) => r.emailId).length;
   await logSessionActivity(session, {
-    action: "email_draft",
-    summary: `Draft gemaakt · prospect ${parsed.data.prospectId}`,
+    action: "email_draft_bulk",
+    summary: `Bulk drafts · ${ok}/${ids.length} · ${parsed.data.variantId ?? "auto"}`,
     path: "/api/outreach/emails",
     method: "POST",
     status: 201,
     tool: "outreach",
     meta: {
-      prospectId: parsed.data.prospectId,
       variantId: parsed.data.variantId,
+      count: ids.length,
+      ok,
     },
   });
-  return NextResponse.json(result, { status: 201 });
+
+  return NextResponse.json(
+    {
+      ok,
+      failed: results.length - ok,
+      results,
+    },
+    { status: 201 },
+  );
 }

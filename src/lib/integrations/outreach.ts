@@ -20,11 +20,12 @@ import {
 import {
   appendOutreachSignature,
   buildOutreachSystemPrompt,
-  getOutreachVariant,
   pickSubjectArm,
   type OutreachSubjectArm,
   type OutreachVariantId,
 } from "@/lib/outreach/tone";
+import { resolveTemplateForSend } from "@/lib/outreach/templates";
+import { getBrochureUrl } from "@/lib/outreach/body-templates";
 import { recordUsage } from "@/lib/usage/store";
 import { getPublicAvailabilityUrl } from "@/lib/mock/availability";
 
@@ -184,41 +185,39 @@ export async function generateOutreachEmail(input: {
     }
   | { error: string }
 > {
-  const variant = getOutreachVariant(
+  const variantId: OutreachVariantId =
     input.variantId ??
-      (input.type === "agency"
-        ? "open_dates"
-        : input.anniversaryYears
-          ? "jubileum"
-          : "warm_tour"),
-  );
+    (input.type === "agency"
+      ? "open_dates"
+      : input.anniversaryYears
+        ? "jubileum"
+        : "warm_tour");
 
   const subjectKey =
     input.subjectArm ??
-    pickSubjectArm(`${input.companyName}:${variant.id}:${Date.now()}`);
-  const subject = variant.subjects[subjectKey];
+    pickSubjectArm(`${input.companyName}:${variantId}:${Date.now()}`);
 
   const availability =
     input.availabilitySummary ?? (await availabilitySummaryForEmail());
   const availabilityUrl = input.availabilityUrl ?? getPublicAvailabilityUrl();
+
+  const resolved = await resolveTemplateForSend({
+    variantId,
+    subjectArm: subjectKey,
+    companyName: input.companyName,
+    availabilityUrl,
+  });
+  const subject = resolved.subject;
 
   const hasAi =
     Boolean(process.env.OPENAI_API_KEY?.trim()) ||
     Boolean(process.env.GEMINI_API_KEY?.trim());
 
   if (!hasAi) {
-    const body = appendOutreachSignature(
-      templateOutreachBody({
-        variantId: variant.id,
-        companyName: input.companyName,
-        availabilityUrl,
-        availability,
-      }),
-    );
     return {
       subject,
-      body,
-      variantId: variant.id,
+      body: appendOutreachSignature(resolved.body),
+      variantId,
       subjectKey,
     };
   }
@@ -226,13 +225,14 @@ export async function generateOutreachEmail(input: {
   const prompt = `Schrijf ALLEEN de body van één outbound mail (geen subject verzinnen).
 
 Subject (vast, A/B-arm ${subjectKey.toUpperCase()}): ${subject}
-Variant: ${variant.name}
-Guidance: ${variant.guidance}
+Variant: ${variantId}
+Guidance: ${resolved.guidance}
 Audience: ${input.type === "agency" ? "eventbureau" : "bedrijf"}
 Bedrijf: ${input.companyName}
 Contactpersoon: ${input.contactName ?? "onbekend"}
 Sector: ${input.sector ?? "onbekend"}
 Jubileum-jaren: ${input.anniversaryYears ?? "n.v.t."}
+Brochure-URL (alleen noemen bij brochure-variant): ${getBrochureUrl()}
 Availability summary:
 ${availability}
 Availability URL: ${availabilityUrl}
@@ -256,7 +256,7 @@ Gebruik exact dit subject.`;
       units: 1,
       unitLabel: "mail",
       meta: {
-        variant: variant.id,
+        variant: variantId,
         subjectKey,
         company: input.companyName,
       },
@@ -268,102 +268,9 @@ Gebruik exact dit subject.`;
   return {
     subject,
     body: appendOutreachSignature(parsed.body),
-    variantId: variant.id,
+    variantId,
     subjectKey,
   };
-}
-
-function templateOutreachBody(input: {
-  variantId: OutreachVariantId;
-  companyName: string;
-  availabilityUrl: string;
-  availability: string;
-}): string {
-  if (input.variantId === "open_dates") {
-    return `Hoi,
-
-Hopelijk alles goed bij ${input.companyName}. Even kort doorgeven: we hebben weer een paar doordeweekse data openstaan.
-
-${input.availabilityUrl}
-
-Handig als je ergens een pitch voor maakt. Mocht je floorplans of capacity willen, hoor ik het graag.
-
-Spreek je snel,`;
-  }
-  if (input.variantId === "short_checkin") {
-    return `Hoi,
-
-Speelt er bij jullie binnenkort iets — borrel, teamdag, bedrijfsevent? Dan is het misschien leuk om even langs te komen op Thuishaven.
-
-Live agenda: ${input.availabilityUrl}
-
-Laat maar weten of een korte rondleiding zinvol is.
-
-Groet,`;
-  }
-  if (input.variantId === "jubileum") {
-    return `Hoi,
-
-Gefeliciteerd met het jubileum van ${input.companyName} — mooie mijlpaal.
-
-Mocht je ergens over nadenken voor een avond met het team: Thuishaven is doordeweeks beschikbaar. Geen druk, gewoon even kijken of de sfeer past.
-
-${input.availabilityUrl}
-
-Zin om een keertje langs te komen?
-
-Groet,`;
-  }
-  if (input.variantId === "seizoen") {
-    return `Hoi,
-
-Bij veel bedrijven speelt nu weer een zomerfeest of einde-jaar / kerstborrel. Speelt dat ook bij ${input.companyName}?
-
-Thuishaven is doordeweeks vaak beschikbaar — een korte rondleiding zegt meestal meer dan een lange mail.
-
-${input.availabilityUrl}
-
-Laat maar weten of dat interessant is.
-
-Groet,`;
-  }
-  if (input.variantId === "funding") {
-    return `Hoi,
-
-Als jullie bij ${input.companyName} iets te vieren hebben na een deal, funding of overname: soms zoeken teams daar een avondlocatie voor.
-
-Thuishaven in Amsterdam-West is doordeweeks beschikbaar. Geen pitch — gewoon kijken of de sfeer past.
-
-${input.availabilityUrl}
-
-Zin om even langs te komen?
-
-Groet,`;
-  }
-  if (input.variantId === "recordjaar") {
-    return `Hoi,
-
-Als jullie bij ${input.companyName} een sterk jaar of targets vieren — kick-off, afterparty, teamavond — dan is Thuishaven misschien een idee.
-
-Doordeweeks zijn we vaak beschikbaar. Een korte rondleiding zegt meestal genoeg.
-
-${input.availabilityUrl}
-
-Laat maar weten of dat speelt.
-
-Groet,`;
-  }
-  return `Hoi,
-
-Ik dacht aan ${input.companyName} — misschien speelt er ergens een bedrijfsevent of borrel?
-
-Thuishaven is een festivalterrein in Amsterdam-West met een paar areas met echt karakter (Mainstage, Circustent, Loods). Doordeweeks zijn we vaak beschikbaar; een korte rondleiding zegt meestal meer dan een lange mail.
-
-${input.availabilityUrl}
-
-Laat maar weten of dat interessant is.
-
-Groet,`;
 }
 
 export function resolveOutreachRecipients(intended: string[]): {
