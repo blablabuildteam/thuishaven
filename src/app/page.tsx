@@ -71,7 +71,7 @@ export default async function HubPage() {
             href="/outreach"
             eyebrow="Outreach"
             title="Bedrijfsevent Outreach"
-            description="Agenda, bedrijven mailen en resultaten volgen."
+            description="Bedrijven mailen en resultaten volgen."
           />
         </div>
       </div>

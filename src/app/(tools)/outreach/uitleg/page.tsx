@@ -47,13 +47,6 @@ const FLOW = [
     verb: "Meten & opvolgen",
     body: "Opens via Brevo. Replies log je voorlopig handmatig (evenement@) → KPIs, follow-up, warme leads.",
   },
-  {
-    n: "05",
-    title: "Agenda",
-    href: "/outreach/beschikbaarheid",
-    verb: "Optioneel",
-    body: "Selecteer dagen, kies status, pas toe. Open slots komen in de mail-link.",
-  },
 ] as const;
 
 const CONNECTIONS = [
@@ -141,6 +134,12 @@ export default function OutreachUitlegPage() {
           >
             Naar Bedrijven
           </Link>
+          <Link
+            href="/outreach/juridisch"
+            className="border border-border px-5 py-3 font-display text-sm tracking-[0.12em] hover:border-accent"
+          >
+            Juridisch
+          </Link>
           <StatusBadge tone={readyCount >= 4 ? "success" : "info"}>
             {readyCount}/{CONNECTIONS.length} koppelingen
           </StatusBadge>
@@ -155,7 +154,7 @@ export default function OutreachUitlegPage() {
               Route
             </p>
             <h2 className="mt-1 font-display text-2xl tracking-[0.04em] sm:text-3xl">
-              Vijf stappen
+              Vier stappen
             </h2>
           </div>
           <p className="hidden max-w-xs text-right text-xs text-text-dim sm:block">
@@ -189,7 +188,7 @@ export default function OutreachUitlegPage() {
                   {step.body}
                 </p>
                 {i < FLOW.length - 1 ? null : (
-                  <p className="mt-2 text-xs text-text-dim">Laatste stap · optioneel</p>
+                  <p className="mt-2 text-xs text-text-dim">Laatste stap</p>
                 )}
               </div>
             </li>

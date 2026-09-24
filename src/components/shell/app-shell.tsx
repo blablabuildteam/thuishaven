@@ -28,6 +28,7 @@ import {
   Contact,
   X,
   BookOpen,
+  Scale,
   type LucideIcon,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
@@ -140,6 +141,11 @@ const outreachSections: NavSection[] = [
         icon: BookOpen,
       },
       {
+        href: "/outreach/juridisch",
+        label: "Juridisch",
+        icon: Scale,
+      },
+      {
         href: "/outreach/lijst-bijwerken",
         label: "Lijst bijwerken",
         icon: Users,
@@ -154,12 +160,6 @@ const outreachSections: NavSection[] = [
         icon: LineChart,
         tourId: "nav-resultaten",
       },
-      {
-        href: "/outreach/beschikbaarheid",
-        label: "Agenda",
-        icon: CalendarDays,
-        tourId: "nav-agenda",
-      },
     ],
   },
   {
@@ -167,6 +167,12 @@ const outreachSections: NavSection[] = [
     label: "Beheer",
     adminOnly: true,
     items: [
+      {
+        href: "/outreach/beschikbaarheid",
+        label: "Agenda",
+        icon: CalendarDays,
+        adminOnly: true,
+      },
       {
         href: "/outreach/prospects",
         label: "Lijst (admin)",

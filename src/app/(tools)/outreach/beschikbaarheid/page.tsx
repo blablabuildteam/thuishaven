@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { SectionHeader } from "@/components/ui/section-header";
 import { AvailabilityAdmin } from "@/components/outreach/availability-admin";
 import {
@@ -11,6 +13,11 @@ export const metadata = { title: "Agenda" };
 export const dynamic = "force-dynamic";
 
 export default async function BeschikbaarheidPage() {
+  const session = await auth();
+  if (session?.user?.role !== "admin") {
+    redirect("/outreach");
+  }
+
   const { days, source } = await listAvailabilityDays();
   const open = days.filter((d) => d.status === "available");
   const liveUrl = getPublicAvailabilityUrl();
@@ -18,7 +25,7 @@ export default async function BeschikbaarheidPage() {
   return (
     <div>
       <SectionHeader
-        eyebrow="Agenda"
+        eyebrow="Agenda · admin"
         title="Beschikbaarheid"
         description="Klik op dagen in de kalender. Open dagen verschijnen op de publieke link in mails."
         action={

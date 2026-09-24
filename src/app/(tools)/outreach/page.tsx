@@ -29,8 +29,8 @@ export default async function OutreachPage() {
   const session = await auth();
   const isAdmin = session?.user?.role === "admin";
   const overview = await getOutreachOverview();
-  const openSlots = await openAvailabilityDaysLive();
-  const liveUrl = getPublicAvailabilityUrl();
+  const openSlots = isAdmin ? await openAvailabilityDaysLive() : [];
+  const liveUrl = isAdmin ? getPublicAvailabilityUrl() : null;
   const sendBlock = outreachLiveSendBlockReason();
   const openRate =
     overview.kpis.sent > 0
@@ -139,36 +139,40 @@ export default async function OutreachPage() {
           )}
         </section>
 
-        <section>
-          <div className="mb-3 flex items-baseline justify-between gap-2">
-            <h2 className="font-display text-lg tracking-[0.06em]">
-              Agenda · {openSlots.length} open
-            </h2>
-            <Link
-              href="/outreach/beschikbaarheid"
-              className="text-xs text-text-dim hover:text-accent"
-            >
-              Beheren →
-            </Link>
-          </div>
-          {openSlots.length === 0 ? (
-            <p className="text-sm text-text-muted">Nog geen open dagen.</p>
-          ) : (
-            <ul className="space-y-1.5 text-sm text-text-muted">
-              {openSlots.slice(0, 5).map((slot) => (
-                <li key={slot.id}>{slotLine(slot.date, slot.label)}</li>
-              ))}
-            </ul>
-          )}
-          <a
-            href={liveUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 inline-block break-all font-mono text-xs text-accent underline-offset-2 hover:underline"
-          >
-            {liveUrl}
-          </a>
-        </section>
+        {isAdmin ? (
+          <section>
+            <div className="mb-3 flex items-baseline justify-between gap-2">
+              <h2 className="font-display text-lg tracking-[0.06em]">
+                Agenda · {openSlots.length} open
+              </h2>
+              <Link
+                href="/outreach/beschikbaarheid"
+                className="text-xs text-text-dim hover:text-accent"
+              >
+                Beheren →
+              </Link>
+            </div>
+            {openSlots.length === 0 ? (
+              <p className="text-sm text-text-muted">Nog geen open dagen.</p>
+            ) : (
+              <ul className="space-y-1.5 text-sm text-text-muted">
+                {openSlots.slice(0, 5).map((slot) => (
+                  <li key={slot.id}>{slotLine(slot.date, slot.label)}</li>
+                ))}
+              </ul>
+            )}
+            {liveUrl ? (
+              <a
+                href={liveUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-block break-all font-mono text-xs text-accent underline-offset-2 hover:underline"
+              >
+                {liveUrl}
+              </a>
+            ) : null}
+          </section>
+        ) : null}
       </div>
     </div>
   );

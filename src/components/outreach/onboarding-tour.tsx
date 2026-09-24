@@ -47,11 +47,6 @@ const STEPS: TourStep[] = [
     title: "4 · Resultaten",
     body: "Opens, replies en leads komen hier terug.",
   },
-  {
-    target: "nav-agenda",
-    title: "Agenda · optioneel",
-    body: "Alleen nodig als je open dagen wilt delen in een mail.",
-  },
 ];
 
 type Rect = { top: number; left: number; width: number; height: number };
