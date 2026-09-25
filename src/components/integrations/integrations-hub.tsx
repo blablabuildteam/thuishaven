@@ -480,6 +480,70 @@ export function IntegrationsHub() {
     );
   }
 
+  function runYouTubeAdsSync() {
+    void runSourceJob(
+      "youtube_ads",
+      "Sync ads",
+      async (signal) => {
+        const res = await fetch("/api/integrations/youtube-ads/sync", {
+          method: "POST",
+          signal,
+        });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          fetched?: number;
+          upserted?: number;
+          linked?: number;
+          accountName?: string;
+        };
+        if (!res.ok || data.ok === false) {
+          throw new Error(data.error ?? "YouTube ads sync mislukt");
+        }
+        const okMessage = `${data.upserted ?? 0}/${data.fetched ?? 0} ads · ${data.linked ?? 0} gekoppeld${
+          data.accountName ? ` · ${data.accountName}` : ""
+        }`;
+        return {
+          okMessage,
+          patch: { status: "verified" as const, message: okMessage },
+        };
+      },
+      3 * 60 * 1000,
+    );
+  }
+
+  function runGoogleAdsSync() {
+    void runSourceJob(
+      "google_ads",
+      "Sync ads",
+      async (signal) => {
+        const res = await fetch("/api/integrations/google-ads/sync", {
+          method: "POST",
+          signal,
+        });
+        const data = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          fetched?: number;
+          upserted?: number;
+          linked?: number;
+          accountName?: string;
+        };
+        if (!res.ok || data.ok === false) {
+          throw new Error(data.error ?? "Google Ads sync mislukt");
+        }
+        const okMessage = `${data.upserted ?? 0}/${data.fetched ?? 0} ads · ${data.linked ?? 0} gekoppeld${
+          data.accountName ? ` · ${data.accountName}` : ""
+        }`;
+        return {
+          okMessage,
+          patch: { status: "verified" as const, message: okMessage },
+        };
+      },
+      3 * 60 * 1000,
+    );
+  }
+
   function runYouTubeSync() {
     void runSourceJob(
       "youtube",
@@ -690,6 +754,8 @@ export function IntegrationsHub() {
                     onMetaAdsSync={runMetaAdsSync}
                     onTikTokAdsSync={runTikTokAdsSync}
                     onYouTubeSync={runYouTubeSync}
+                    onYouTubeAdsSync={runYouTubeAdsSync}
+                    onGoogleAdsSync={runGoogleAdsSync}
                     onTikTokSync={runTikTokSync}
                     onAlertTest={runAlertTest}
                   />
@@ -742,6 +808,8 @@ function IntegrationCard({
   onMetaAdsSync,
   onTikTokAdsSync,
   onYouTubeSync,
+  onYouTubeAdsSync,
+  onGoogleAdsSync,
   onTikTokSync,
   onAlertTest,
 }: {
@@ -759,6 +827,8 @@ function IntegrationCard({
   onMetaAdsSync: () => void;
   onTikTokAdsSync: () => void;
   onYouTubeSync: () => void;
+  onYouTubeAdsSync: () => void;
+  onGoogleAdsSync: () => void;
   onTikTokSync: () => void;
   onAlertTest: () => void;
 }) {
@@ -967,6 +1037,32 @@ function IntegrationCard({
                 <Loader2 className="size-3.5 animate-spin" />
               )}
               {actionLabel("Sync videos")}
+            </button>
+          )}
+          {row.id === "youtube_ads" && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onYouTubeAdsSync}
+              className="inline-flex items-center gap-1.5 border border-border px-3 py-1.5 text-sm hover:border-text disabled:opacity-50"
+            >
+              {isThisAction("Sync ads") && (
+                <Loader2 className="size-3.5 animate-spin" />
+              )}
+              {actionLabel("Sync ads")}
+            </button>
+          )}
+          {row.id === "google_ads" && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onGoogleAdsSync}
+              className="inline-flex items-center gap-1.5 border border-border px-3 py-1.5 text-sm hover:border-text disabled:opacity-50"
+            >
+              {isThisAction("Sync ads") && (
+                <Loader2 className="size-3.5 animate-spin" />
+              )}
+              {actionLabel("Sync ads")}
             </button>
           )}
           {row.id === "tiktok" && (

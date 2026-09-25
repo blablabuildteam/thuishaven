@@ -22,6 +22,8 @@ export type SalesCurvePoint = {
   sold: number;
   cumulative: number;
   isEvent: boolean;
+  /** True for days after today (projected, not actual sales). */
+  isFuture: boolean;
   activities: SalesCurveActivity[];
 };
 
@@ -37,26 +39,40 @@ export function buildSalesCurveSeries(
     if (!day || point.sold <= 0) continue;
     byDay.set(day, (byDay.get(day) ?? 0) + point.sold);
   }
-  if (byDay.size === 0) return [];
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const isFutureEvent = eventDay && eventDay > todayIso;
+
+  // For future events with no sales yet, show a chart from today to event date
+  if (byDay.size === 0) {
+    if (!isFutureEvent) return [];
+    // Future event: show empty chart from today to event
+    const series: SalesCurvePoint[] = [];
+    let cursor = todayIso;
+    while (cursor <= eventDay) {
+      series.push({
+        day: cursor,
+        label: formatDayShort(cursor),
+        sold: 0,
+        cumulative: 0,
+        isEvent: cursor === eventDay,
+        isFuture: cursor > todayIso,
+        activities: [],
+      });
+      cursor = shiftIsoDay(cursor, 1);
+    }
+    return series;
+  }
 
   const days = [...byDay.keys()].sort();
   const firstSale = days[0]!;
   const lastSale = days[days.length - 1]!;
+  // For future events, always extend to event date
   const end =
     eventDay && eventDay > lastSale ? eventDay : lastSale;
 
-  const activityDays = extraDays
-    .map((day) => day.slice(0, 10))
-    .filter((day) => day && (!eventDay || day <= eventDay))
-    .sort();
-  const earliestActivity = activityDays[0];
-  const lookbackFloor = shiftIsoDay(firstSale, -90);
-  const start =
-    earliestActivity && earliestActivity < firstSale
-      ? earliestActivity < lookbackFloor
-        ? lookbackFloor
-        : earliestActivity
-      : firstSale;
+  // Start 7 days before first sale (cleaner chart, no months of empty space)
+  const start = shiftIsoDay(firstSale, -7);
 
   const series: SalesCurvePoint[] = [];
   let cumulative = 0;
@@ -70,6 +86,7 @@ export function buildSalesCurveSeries(
       sold,
       cumulative,
       isEvent: cursor === eventDay,
+      isFuture: cursor > todayIso,
       activities: [],
     });
     cursor = shiftIsoDay(cursor, 1);

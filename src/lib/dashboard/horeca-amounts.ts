@@ -18,7 +18,7 @@ export type HorecaRevenueEvent = {
     priced: number;
     missing: number;
   } | null;
-  /** Gekoppelde Meta/TikTok-spend in centen. 0 als er geen ads aan het event hangen. */
+  /** Gekoppelde paid-ads-spend (Meta, TikTok, YouTube) in centen. 0 als er geen ads aan het event hangen. */
   adsCents: number | null;
 };
 

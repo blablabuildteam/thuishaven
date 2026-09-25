@@ -7,16 +7,20 @@ import { cn } from "@/lib/utils";
 
 const STALE_AFTER_MS = 15 * 60 * 1000;
 
-export type PaidAdsChannel = "meta" | "tiktok";
+export type PaidAdsChannel = "meta" | "tiktok" | "youtube" | "google";
 
 const SYNC_PATH: Record<PaidAdsChannel, string> = {
   meta: "/api/integrations/meta-ads/sync",
   tiktok: "/api/integrations/tiktok-ads/sync",
+  youtube: "/api/integrations/youtube-ads/sync",
+  google: "/api/integrations/google-ads/sync",
 };
 
 const CHANNEL_LABEL: Record<PaidAdsChannel, string> = {
   meta: "Meta",
   tiktok: "TikTok",
+  youtube: "YouTube",
+  google: "Google Ads",
 };
 
 type Props = {

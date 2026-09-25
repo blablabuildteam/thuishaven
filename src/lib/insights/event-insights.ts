@@ -3,6 +3,10 @@ import { cache } from "react";
 import { unstable_cache, revalidateTag } from "next/cache";
 import { DASHBOARD_TTL_MS, clearTtl, rememberTtl } from "@/lib/cache/ttl";
 import {
+  paidSpendByPlatform,
+  type PaidSpendByPlatform,
+} from "@/lib/marketing/ad-metrics";
+import {
   loadMailHourCurves,
   ticketsSoldIn24h,
 } from "@/lib/editions/mail-window";
@@ -347,12 +351,19 @@ export type EventInsightPaidAd = {
   dateStart: string | null;
 };
 
+export type { PaidSpendByPlatform } from "@/lib/marketing/ad-metrics";
+export {
+  formatPaidSpendSplit,
+  paidSpendByPlatform,
+} from "@/lib/marketing/ad-metrics";
+
 export type EventInsightPaid = {
   spendCents: number;
   ads: number;
   impressions: number;
   clicks: number;
-  /** Meta pixel purchases + TikTok complete payments. */
+  spendByPlatform: PaidSpendByPlatform;
+  /** Meta purchase + TikTok complete_payment + Google Ads conversions. */
   purchases: number;
   /**
    * Ad-aankopen × gemiddelde ticketprijs / ad spend.
@@ -1241,6 +1252,7 @@ export async function loadEventInsightsFresh(options?: {
         ads: paidAds.length,
         impressions: paidAds.reduce((s, a) => s + a.impressions, 0),
         clicks: paidAds.reduce((s, a) => s + a.clicks, 0),
+        spendByPlatform: paidSpendByPlatform(paidAds),
         purchases,
         purchaseRoas:
           spendCents > 0 &&

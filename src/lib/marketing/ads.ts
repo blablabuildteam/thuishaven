@@ -79,7 +79,7 @@ function compareCampaignsChronologically(
 
 export const loadMarketingAdsBundle = cache(
   async (options?: {
-    platform?: "meta" | "tiktok" | "youtube";
+    platform?: "meta" | "tiktok" | "youtube" | "google";
     limit?: number;
   }): Promise<MarketingAdsBundle> => {
     const platform = options?.platform ?? "meta";
@@ -93,7 +93,7 @@ export const loadMarketingAdsBundle = cache(
 );
 
 async function loadMarketingAdsBundleFresh(
-  platform: "meta" | "tiktok" | "youtube",
+  platform: "meta" | "tiktok" | "youtube" | "google",
   limit: number,
 ): Promise<MarketingAdsBundle> {
     if (!hasDatabase()) return emptyBundle();
@@ -207,11 +207,15 @@ export type PaidAdsInsightsRow = {
   day: string;
   status: "upcoming" | "past";
   spendCents: number;
+  googleSpendCents: number;
+  youtubeSpendCents: number;
+  metaSpendCents: number;
+  tiktokSpendCents: number;
   ads: number;
   sold: number;
   fillPct: number | null;
   roas: number | null;
-  /** Meta pixel purchases + TikTok complete payments on linked ads. */
+  /** Meta purchase + TikTok complete_payment + Google Ads conversions. */
   purchases: number;
 };
 
@@ -219,6 +223,10 @@ export type PaidAdsInsightsSummary = {
   ads: number;
   linked: number;
   spendCents: number;
+  googleSpendCents: number;
+  youtubeSpendCents: number;
+  metaSpendCents: number;
+  tiktokSpendCents: number;
   purchases: number;
   events: number;
   rows: PaidAdsInsightsRow[];
@@ -235,6 +243,10 @@ export async function loadPaidAdsInsightsSummary(): Promise<PaidAdsInsightsSumma
       startsAt: editions.startsAt,
       ads: sql<number>`count(*)::int`,
       spendCents: sql<number>`coalesce(sum(${marketingAds.spendCents}), 0)::int`,
+      googleSpendCents: sql<number>`coalesce(sum(${marketingAds.spendCents}) filter (where ${marketingAds.platform} = 'google'), 0)::int`,
+      youtubeSpendCents: sql<number>`coalesce(sum(${marketingAds.spendCents}) filter (where ${marketingAds.platform} = 'youtube'), 0)::int`,
+      metaSpendCents: sql<number>`coalesce(sum(${marketingAds.spendCents}) filter (where ${marketingAds.platform} = 'meta'), 0)::int`,
+      tiktokSpendCents: sql<number>`coalesce(sum(${marketingAds.spendCents}) filter (where ${marketingAds.platform} = 'tiktok'), 0)::int`,
       purchases: sql<number>`coalesce(sum(${marketingAds.purchases}), 0)::int`,
       sold: ticketInventory.sold,
       capacity: ticketInventory.capacity,
@@ -265,11 +277,15 @@ export async function loadPaidAdsInsightsSummary(): Promise<PaidAdsInsightsSumma
       ads: sql<number>`count(*)::int`,
       linked: sql<number>`count(*) filter (where ${marketingAds.editionId} is not null)::int`,
       spendCents: sql<number>`coalesce(sum(${marketingAds.spendCents}), 0)::int`,
+      googleSpendCents: sql<number>`coalesce(sum(${marketingAds.spendCents}) filter (where ${marketingAds.platform} = 'google'), 0)::int`,
+      youtubeSpendCents: sql<number>`coalesce(sum(${marketingAds.spendCents}) filter (where ${marketingAds.platform} = 'youtube'), 0)::int`,
+      metaSpendCents: sql<number>`coalesce(sum(${marketingAds.spendCents}) filter (where ${marketingAds.platform} = 'meta'), 0)::int`,
+      tiktokSpendCents: sql<number>`coalesce(sum(${marketingAds.spendCents}) filter (where ${marketingAds.platform} = 'tiktok'), 0)::int`,
       purchases: sql<number>`coalesce(sum(${marketingAds.purchases}), 0)::int`,
     })
     .from(marketingAds);
 
-  const rows: PaidAdsInsightsRow[] = grouped.slice(0, 24).map((row) => {
+  const mapped: PaidAdsInsightsRow[] = grouped.map((row) => {
     const day = row.startsAt ? amsterdamDay(row.startsAt) : "";
     const sold = row.sold ?? 0;
     const capacity = row.capacity;
@@ -280,6 +296,10 @@ export async function loadPaidAdsInsightsSummary(): Promise<PaidAdsInsightsSumma
       day,
       status: day && day >= today ? "upcoming" : "past",
       spendCents,
+      googleSpendCents: Number(row.googleSpendCents) || 0,
+      youtubeSpendCents: Number(row.youtubeSpendCents) || 0,
+      metaSpendCents: Number(row.metaSpendCents) || 0,
+      tiktokSpendCents: Number(row.tiktokSpendCents) || 0,
       ads: Number(row.ads) || 0,
       sold,
       fillPct:
@@ -289,11 +309,24 @@ export async function loadPaidAdsInsightsSummary(): Promise<PaidAdsInsightsSumma
       purchases: Number(row.purchases) || 0,
     };
   });
+  const top = mapped.slice(0, 24);
+  const extraGoogle = mapped
+    .filter(
+      (row) =>
+        (row.googleSpendCents > 0 || row.youtubeSpendCents > 0) &&
+        !top.some((existing) => existing.name === row.name && existing.day === row.day),
+    )
+    .slice(0, 12);
+  const rows = [...top, ...extraGoogle];
 
   return {
     ads: Number(totals[0]?.ads) || 0,
     linked: Number(totals[0]?.linked) || 0,
     spendCents: Number(totals[0]?.spendCents) || 0,
+    googleSpendCents: Number(totals[0]?.googleSpendCents) || 0,
+    youtubeSpendCents: Number(totals[0]?.youtubeSpendCents) || 0,
+    metaSpendCents: Number(totals[0]?.metaSpendCents) || 0,
+    tiktokSpendCents: Number(totals[0]?.tiktokSpendCents) || 0,
     purchases: Number(totals[0]?.purchases) || 0,
     events: grouped.length,
     rows,

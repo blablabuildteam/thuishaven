@@ -98,7 +98,7 @@ export default async function PaidTikTokPage() {
             />
             <Stat
               value={`${data.totals.linked}/${data.totals.ads}`}
-              label="gekoppeld"
+              label="gekoppeld aan event"
             />
           </section>
 

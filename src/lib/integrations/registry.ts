@@ -274,6 +274,60 @@ export const INTEGRATIONS: IntegrationDef[] = [
     priority: "medium",
   },
   {
+    id: "youtube_ads",
+    name: "YouTube Ads (Google Ads)",
+    tool: "dashboard",
+    description:
+      "Paid Video / Demand Gen via Google Ads API → marketing_ads. Access level zit op het Cloud-project (Explorer), niet op een developer token.",
+    envKeys: [
+      "GOOGLE_ADS_CLIENT_ID",
+      "GOOGLE_ADS_CLIENT_SECRET",
+      "GOOGLE_ADS_REFRESH_TOKEN",
+      "GOOGLE_ADS_CUSTOMER_ID",
+    ],
+    optionalEnvKeys: [
+      "GOOGLE_ADS_LOGIN_CUSTOMER_ID",
+      "GOOGLE_ADS_DEVELOPER_TOKEN",
+      "GOOGLE_ADS_API_VERSION",
+    ],
+    askFromClient: [
+      "Explorer access op het Google Cloud-project van de OAuth-client",
+      "MCC login-customer-id als je via de manager het client aanroept",
+    ],
+    verifyHint:
+      "GAQL customer + Video/Demand Gen · OAuth + Explorer op Cloud project",
+    docsUrl:
+      "https://developers.google.com/google-ads/api/docs/api-policy/developer-token",
+    priority: "high",
+  },
+  {
+    id: "google_ads",
+    name: "Google Ads (Search/Display)",
+    tool: "dashboard",
+    description:
+      "Search, Performance Max, Display & Smart campagnes via Google Ads API → marketing_ads. Zelfde credentials als YouTube Ads.",
+    envKeys: [
+      "GOOGLE_ADS_CLIENT_ID",
+      "GOOGLE_ADS_CLIENT_SECRET",
+      "GOOGLE_ADS_REFRESH_TOKEN",
+      "GOOGLE_ADS_CUSTOMER_ID",
+    ],
+    optionalEnvKeys: [
+      "GOOGLE_ADS_LOGIN_CUSTOMER_ID",
+      "GOOGLE_ADS_DEVELOPER_TOKEN",
+      "GOOGLE_ADS_API_VERSION",
+    ],
+    askFromClient: [
+      "Explorer access op het Google Cloud-project van de OAuth-client",
+      "MCC login-customer-id als je via de manager het client aanroept",
+    ],
+    verifyHint:
+      "GAQL customer + Search/PMax/Display · OAuth + Explorer op Cloud project",
+    docsUrl:
+      "https://developers.google.com/google-ads/api/docs/api-policy/developer-token",
+    priority: "high",
+  },
+  {
     id: "kvk",
     name: "KvK API",
     tool: "outreach",

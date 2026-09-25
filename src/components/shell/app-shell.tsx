@@ -110,13 +110,11 @@ const dashboardSections: NavSection[] = [
         href: "/dashboard/paid/google",
         label: "Google Ads",
         brand: "google_ads",
-        pending: true,
       },
       {
         href: "/dashboard/paid/youtube",
         label: "YouTube",
         brand: "youtube",
-        pending: true,
       },
     ],
   },

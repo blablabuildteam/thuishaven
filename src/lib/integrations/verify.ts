@@ -834,6 +834,56 @@ async function verifyTikTokAds(): Promise<VerifyResult> {
   });
 }
 
+async function verifyYouTubeAds(): Promise<VerifyResult> {
+  const name = "YouTube Ads (Google Ads)";
+  const { fetchGoogleAdsAccount, googleAdsConfigured } = await import(
+    "@/lib/integrations/google-ads/client"
+  );
+  if (!googleAdsConfigured()) {
+    return base(
+      "youtube_ads",
+      name,
+      "missing",
+      "GOOGLE_ADS_CLIENT_ID / SECRET / REFRESH_TOKEN / CUSTOMER_ID ontbreekt",
+    );
+  }
+
+  const account = await fetchGoogleAdsAccount();
+  if (!account.ok) {
+    return base("youtube_ads", name, "error", account.error.slice(0, 280));
+  }
+
+  return base("youtube_ads", name, "verified", account.account.name, {
+    customerId: account.account.customerId,
+    currency: account.account.currency,
+  });
+}
+
+async function verifyGoogleAds(): Promise<VerifyResult> {
+  const name = "Google Ads (Search/Display)";
+  const { fetchGoogleAdsAccount, googleAdsConfigured } = await import(
+    "@/lib/integrations/google-ads/client"
+  );
+  if (!googleAdsConfigured()) {
+    return base(
+      "google_ads",
+      name,
+      "missing",
+      "GOOGLE_ADS_CLIENT_ID / SECRET / REFRESH_TOKEN / CUSTOMER_ID ontbreekt",
+    );
+  }
+
+  const account = await fetchGoogleAdsAccount();
+  if (!account.ok) {
+    return base("google_ads", name, "error", account.error.slice(0, 280));
+  }
+
+  return base("google_ads", name, "verified", `${account.account.name} · Search/PMax/Display`, {
+    customerId: account.account.customerId,
+    currency: account.account.currency,
+  });
+}
+
 async function verifyAuth(): Promise<VerifyResult> {
   const name = "Medewerker-login";
 
@@ -1025,6 +1075,10 @@ export async function verifyIntegration(id: string): Promise<VerifyResult> {
       return verifyTikTok();
     case "tiktok_ads":
       return verifyTikTokAds();
+    case "youtube_ads":
+      return verifyYouTubeAds();
+    case "google_ads":
+      return verifyGoogleAds();
     case "alert_notify":
       return verifyAlertNotify();
     default: {
@@ -1066,11 +1120,11 @@ export async function probeConfiguredIntegrations(): Promise<VerifyResult[]> {
       (row.status !== "manual" &&
         row.status !== "on_hold" &&
         row.status !== "missing" &&
-        ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "kvk", "apollo", "hunter", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "meta_ads", "tiktok", "tiktok_ads", "alert_notify"].includes(
+        ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "kvk", "apollo", "hunter", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "meta_ads", "tiktok", "tiktok_ads", "youtube_ads", "google_ads", "alert_notify"].includes(
           row.id,
         )),
   );
-  const always = ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "apollo", "hunter", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "meta_ads", "tiktok", "tiktok_ads", "alert_notify"];
+  const always = ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "apollo", "hunter", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "meta_ads", "tiktok", "tiktok_ads", "youtube_ads", "google_ads", "alert_notify"];
   const ids = new Set([
     ...toProbe.map((r) => r.id),
     ...always.filter((id) => {
