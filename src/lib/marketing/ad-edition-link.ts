@@ -7,7 +7,7 @@ import {
 } from "@/lib/editions/lineup";
 import { scorePostAgainstEditions } from "@/lib/marketing/edition-link";
 
-type AdPlatform = "meta" | "tiktok" | "youtube";
+type AdPlatform = "meta" | "tiktok" | "youtube" | "google";
 
 export type AdEditionLink = {
   adId: string;

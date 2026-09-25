@@ -119,6 +119,19 @@ export async function syncTikTokAds(): Promise<SyncResult> {
   };
 }
 
+export async function syncYouTubeAds(): Promise<SyncResult> {
+  const { syncYouTubeAdsReadOnly } = await import(
+    "@/lib/integrations/google-ads/ads-sync"
+  );
+  const result = await syncYouTubeAdsReadOnly();
+  return {
+    source: "youtube_ads",
+    ok: result.ok,
+    records: result.upserted || result.fetched,
+    error: result.error,
+  };
+}
+
 export async function syncYouTube(): Promise<SyncResult> {
   const { syncYouTubeReadOnly } = await import(
     "@/lib/integrations/youtube/sync"

@@ -139,6 +139,10 @@ export type InsightsSnapshot = {
     ads: number;
     linked: number;
     spendCents: number;
+    googleSpendCents: number;
+    youtubeSpendCents: number;
+    metaSpendCents: number;
+    tiktokSpendCents: number;
     purchases: number;
     events: number;
     rows: Array<{
@@ -146,6 +150,10 @@ export type InsightsSnapshot = {
       day: string;
       status: "upcoming" | "past";
       spendCents: number;
+      googleSpendCents: number;
+      youtubeSpendCents: number;
+      metaSpendCents: number;
+      tiktokSpendCents: number;
       ads: number;
       sold: number;
       fillPct: number | null;
@@ -641,17 +649,55 @@ export function snapshotToPromptContext(snap: InsightsSnapshot): string {
 
   if (snap.paidAds) {
     const spendEur = Math.round(snap.paidAds.spendCents / 100);
+    const hasPlatformSpend =
+      snap.paidAds.googleSpendCents > 0 ||
+      snap.paidAds.youtubeSpendCents > 0 ||
+      snap.paidAds.metaSpendCents > 0 ||
+      snap.paidAds.tiktokSpendCents > 0;
+    const spendSplitParts = [
+      snap.paidAds.googleSpendCents > 0
+        ? `Google €${Math.round(snap.paidAds.googleSpendCents / 100).toLocaleString("nl-NL")}`
+        : null,
+      snap.paidAds.youtubeSpendCents > 0
+        ? `YouTube €${Math.round(snap.paidAds.youtubeSpendCents / 100).toLocaleString("nl-NL")}`
+        : null,
+      snap.paidAds.metaSpendCents > 0
+        ? `Meta €${Math.round(snap.paidAds.metaSpendCents / 100).toLocaleString("nl-NL")}`
+        : null,
+      snap.paidAds.tiktokSpendCents > 0
+        ? `TikTok €${Math.round(snap.paidAds.tiktokSpendCents / 100).toLocaleString("nl-NL")}`
+        : null,
+    ].filter(Boolean);
     lines.push(
       "",
-      "=== Paid ads (Meta/TikTok/YouTube, gekoppeld aan edities) ===",
-      `Ads in DB: ${snap.paidAds.ads} · gekoppeld: ${snap.paidAds.linked} · events: ${snap.paidAds.events} · spend ≈ €${spendEur.toLocaleString("nl-NL")} · pixelPurchases=${snap.paidAds.purchases}`,
+      "=== Paid ads (Google Search / YouTube / Meta / TikTok, gekoppeld aan edities) ===",
+      `Ads in DB: ${snap.paidAds.ads} · gekoppeld: ${snap.paidAds.linked} · events: ${snap.paidAds.events} · spend ≈ €${spendEur.toLocaleString("nl-NL")} · platformPurchases=${snap.paidAds.purchases}`,
+      hasPlatformSpend
+        ? `Spend-split: ${spendSplitParts.join(" · ")}`
+        : "Spend-split: nog geen platformtotalen.",
       "ROAS = ticketomzet / ad spend (niet winst; DJ-fees zitten daar niet in).",
-      "pixelPurchases = Meta purchase of TikTok complete_payment (last-click van het advertentieplatform, niet alle Weeztix-tickets).",
+      "platformPurchases = Meta purchase, TikTok complete_payment of Google Ads conversions (last-click van het advertentieplatform, niet alle Weeztix-tickets).",
       "Per event (hoogste spend eerst):",
     );
     for (const row of snap.paidAds.rows) {
+      const split = [
+        row.googleSpendCents > 0
+          ? `GA €${Math.round(row.googleSpendCents / 100).toLocaleString("nl-NL")}`
+          : null,
+        row.youtubeSpendCents > 0
+          ? `YT €${Math.round(row.youtubeSpendCents / 100).toLocaleString("nl-NL")}`
+          : null,
+        row.metaSpendCents > 0
+          ? `Meta €${Math.round(row.metaSpendCents / 100).toLocaleString("nl-NL")}`
+          : null,
+        row.tiktokSpendCents > 0
+          ? `TT €${Math.round(row.tiktokSpendCents / 100).toLocaleString("nl-NL")}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
       lines.push(
-        `- ${row.day} ${displayEditionName(row.name)} | ${row.status} | spend=€${Math.round(row.spendCents / 100).toLocaleString("nl-NL")} | ads=${row.ads} | pixelPurchases=${row.purchases} | sold=${row.sold} | fill=${row.fillPct != null ? `${Math.round(row.fillPct)}%` : "n/a"} | ROAS=${row.roas != null ? `${row.roas.toFixed(1)}×` : "n/a"}`,
+        `- ${row.day} ${displayEditionName(row.name)} | ${row.status} | spend=€${Math.round(row.spendCents / 100).toLocaleString("nl-NL")}${split ? ` (${split})` : ""} | ads=${row.ads} | platformPurchases=${row.purchases} | sold=${row.sold} | fill=${row.fillPct != null ? `${Math.round(row.fillPct)}%` : "n/a"} | ROAS=${row.roas != null ? `${row.roas.toFixed(1)}×` : "n/a"}`,
       );
     }
   }

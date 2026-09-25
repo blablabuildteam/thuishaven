@@ -33,6 +33,14 @@
       "schedule": "0 6,7,11,12,17,18,21,22 * * *"
     },
     {
+      "path": "/api/cron/youtube-ads",
+      "schedule": "0 6,7,11,12,17,18,21,22 * * *"
+    },
+    {
+      "path": "/api/cron/google-ads",
+      "schedule": "0 6,7,11,12,17,18,21,22 * * *"
+    },
+    {
       "path": "/api/cron/outreach-followup",
       "schedule": "0 7 * * *"
     }

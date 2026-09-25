@@ -119,7 +119,8 @@ export type AnomalyEventInput = {
     impressions: number;
     clicks: number;
     roas: number | null;
-    /** Platform-reported purchases (Meta pixel / TikTok complete payment). */
+    spendByPlatform?: { meta: number; tiktok: number; youtube: number; google: number };
+    /** Meta purchase + TikTok complete_payment + Google Ads conversions. */
     purchases?: number;
   } | null;
   /** 1–5 purchase volume vs other events. Optional; story uses the raw count. */
@@ -465,6 +466,17 @@ function roasPeer(
   const cohort = resolveCohort(e, baselines, "roas");
   if (!cohort?.roas || cohort.roas.n < MIN_COHORT) return null;
   return { label: cohort.label, median: cohort.roas.median };
+}
+
+function paidPlatformSplit(e: AnomalyEventInput): string | null {
+  const spend = e.paid?.spendByPlatform;
+  if (!spend) return null;
+  const parts: string[] = [];
+  if (spend.google > 0) parts.push(`Google ${fmtEur(spend.google / 100)}`);
+  if (spend.youtube > 0) parts.push(`YouTube ${fmtEur(spend.youtube / 100)}`);
+  if (spend.meta > 0) parts.push(`Meta ${fmtEur(spend.meta / 100)}`);
+  if (spend.tiktok > 0) parts.push(`TikTok ${fmtEur(spend.tiktok / 100)}`);
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 function paidSpendLabel(e: AnomalyEventInput): string | null {
@@ -1467,7 +1479,7 @@ function detectPaid(
         tone: "positive",
         dimension: "paid",
         significance: 0.5,
-        detail: `${investLabel.toLowerCase()} t.o.v. andere events (${spendLabel} · ${ads} ads). ${fmtPct(fill)} van de kaarten verkocht${roasLabel ? `. Ticketomzet / ad spend = ${roasLabel}` : ""}${peer ? `, vergelijkbare ${peer.label} met ads meestal ${fmtRoas(peer.median)}` : ""}. ${roas != null ? paidRoasWhy(e, fill) : ""}`,
+        detail: `${investLabel.toLowerCase()} t.o.v. andere events (${spendLabel}${paidPlatformSplit(e) ? ` · ${paidPlatformSplit(e)}` : ""} · ${ads} ads). ${fmtPct(fill)} van de kaarten verkocht${roasLabel ? `. Ticketomzet / ad spend = ${roasLabel}` : ""}${peer ? `, vergelijkbare ${peer.label} met ads meestal ${fmtRoas(peer.median)}` : ""}. ${roas != null ? paidRoasWhy(e, fill) : ""}`,
         facts: facts(
           ["Ad-investering", `${level}/5`],
           ["Ad spend", spendLabel],
@@ -1846,6 +1858,7 @@ type StoryRead = {
   organicLift: number;
   organicStrong: boolean;
   paidSpendEur: number;
+  paidSplit: string | null;
   paidPurchases: number;
   purchaseShare: number | null;
   paidSpendHigh: boolean;
@@ -1959,6 +1972,7 @@ function readStory(
     organicLift: lift,
     organicStrong,
     paidSpendEur: spendEur,
+    paidSplit: paidPlatformSplit(e),
     paidPurchases: purchases,
     purchaseShare,
     paidSpendHigh,
@@ -1989,7 +2003,14 @@ function storyFacts(e: AnomalyEventInput, ctx: StoryRead): AnomalyFact[] {
       "Tickets rond posts",
       ctx.organicLift > 0 ? `+${fmtCount(ctx.organicLift)}` : null,
     ],
-    ["Ad spend", ctx.paidSpendEur >= 50 ? fmtEur(ctx.paidSpendEur) : "geen"],
+    [
+      "Ad spend",
+      ctx.paidSpendEur >= 50
+        ? ctx.paidSplit
+          ? `${fmtEur(ctx.paidSpendEur)} (${ctx.paidSplit})`
+          : fmtEur(ctx.paidSpendEur)
+        : "geen",
+    ],
     [
       "Ad-aankopen",
       ctx.paidPurchases > 0
@@ -2026,7 +2047,9 @@ function marketingSentence(ctx: StoryRead): string {
       ctx.paidPurchases > 0
         ? `${fmtCount(ctx.paidPurchases)} aankopen`
         : "geen platform-aankopen";
-    bits.push(`${fmtEur(ctx.paidSpendEur)} ad spend (${purchases})`);
+    bits.push(
+      `${fmtEur(ctx.paidSpendEur)} ad spend${ctx.paidSplit ? ` (${ctx.paidSplit})` : ""} (${purchases})`,
+    );
   } else {
     bits.push("nauwelijks ad spend");
   }

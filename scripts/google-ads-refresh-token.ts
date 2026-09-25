@@ -49,6 +49,7 @@ authUrl.searchParams.set("scope", SCOPE);
 authUrl.searchParams.set("access_type", "offline");
 authUrl.searchParams.set("prompt", "consent");
 authUrl.searchParams.set("include_granted_scopes", "true");
+authUrl.searchParams.set("login_hint", "xennith@blablabuild.com");
 
 const server = createServer(async (req, res) => {
   try {
@@ -118,7 +119,7 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  console.log("Sign in as team@blablabuild.com (the account invited to Google Ads).");
+  console.log("Sign in as xennith@blablabuild.com (MCC 315-570-5691).");
   console.log("If Google says the app is unverified: Advanced → Go to Thuishaven Dashboard.");
   console.log(authUrl.toString());
   openBrowser(authUrl.toString());

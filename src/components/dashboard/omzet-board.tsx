@@ -700,7 +700,7 @@ function MonthRows({
                 costCol,
                 partValue,
               )}
-              title="Meta- en TikTok-spend gekoppeld aan dit event"
+              title="Betaalde ads (Meta, TikTok, YouTube) gekoppeld aan dit event"
             >
               {euroOrDash(row.adsCents)}
             </td>
@@ -937,7 +937,7 @@ export function OmzetBoard({ past }: { past: HorecaRevenueEvent[] }) {
       <p className="mt-3 text-xs text-text-dim">
         Bedragen voor tickets, bar en keuken zijn exclusief btw. Horeca = bar + keuken.
         Omzet = tickets + horeca. DJ-fees zijn de bandbreedte uit DJ-fees. Ads zijn de
-        Meta- en TikTok-spend die aan het event hangt; geen ads telt als €0. Kosten =
+        betaalde ad-spend (Meta, TikTok, YouTube) die aan het event hangt; geen ads telt als €0. Kosten =
         DJ-fees + ads. Resultaat = omzet − kosten; bij een DJ-range is dat zelf een
         range. Onvolledig betekent dat bar, keuken of DJ-fees nog missen. Leeg laten
         bij bar of keuken betekent nog niet ingevuld; 0 is een echte nul.{" "}

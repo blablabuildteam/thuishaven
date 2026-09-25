@@ -4,7 +4,7 @@ export type MarketingAdRow = {
   id: string;
   editionId: string | null;
   editionName: string | null;
-  platform: "meta" | "tiktok" | "youtube";
+  platform: "meta" | "tiktok" | "youtube" | "google";
   campaignId: string | null;
   campaignName: string | null;
   adsetName: string | null;
@@ -75,4 +75,43 @@ export function cpmCents(
 ): number | null {
   if (impressions <= 0) return null;
   return Math.round((spendCents / impressions) * 1000);
+}
+
+export type PaidSpendByPlatform = {
+  meta: number;
+  tiktok: number;
+  youtube: number;
+  google: number;
+};
+
+export function paidSpendByPlatform(
+  ads: Array<{ platform: string; spendCents: number }>,
+): PaidSpendByPlatform {
+  const out: PaidSpendByPlatform = { meta: 0, tiktok: 0, youtube: 0, google: 0 };
+  for (const ad of ads) {
+    if (ad.platform === "tiktok") out.tiktok += ad.spendCents;
+    else if (ad.platform === "youtube") out.youtube += ad.spendCents;
+    else if (ad.platform === "meta") out.meta += ad.spendCents;
+    else if (ad.platform === "google") out.google += ad.spendCents;
+  }
+  return out;
+}
+
+export function formatPaidSpendSplit(spend: PaidSpendByPlatform | undefined | null): string | null {
+  if (!spend) return null;
+  const parts: string[] = [];
+  // Defensive checks for older cached data that may not have all platforms
+  if ((spend.google ?? 0) > 0) {
+    parts.push(`Google €${Math.round(spend.google / 100).toLocaleString("nl-NL")}`);
+  }
+  if ((spend.youtube ?? 0) > 0) {
+    parts.push(`YouTube €${Math.round(spend.youtube / 100).toLocaleString("nl-NL")}`);
+  }
+  if ((spend.meta ?? 0) > 0) {
+    parts.push(`Meta €${Math.round(spend.meta / 100).toLocaleString("nl-NL")}`);
+  }
+  if ((spend.tiktok ?? 0) > 0) {
+    parts.push(`TikTok €${Math.round(spend.tiktok / 100).toLocaleString("nl-NL")}`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
 }

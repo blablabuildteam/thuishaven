@@ -95,6 +95,7 @@ import {
   roasBarFill,
 } from "@/lib/insights/impact-scale";
 import type { DemographicBucket } from "@/lib/db/schema";
+import { formatPaidSpendSplit } from "@/lib/marketing/ad-metrics";
 import type { TakedownChannel } from "@/lib/integrations/alerts/types";
 
 const COLLAPSE_MS = 380;
@@ -116,6 +117,7 @@ const PAID_PLATFORM_LABEL: Record<string, string> = {
   meta: "Meta",
   tiktok: "TikTok",
   youtube: "YouTube",
+  google: "Google Ads",
 };
 
 function paidPlatformsLabel(ads: EventInsightPaidAd[] | undefined): string {
@@ -1674,6 +1676,7 @@ function EventDetail({ event }: { event: EventInsight }) {
               impactScore={event.organicImpactScore}
               ticketsSold={tickets.sold}
               sameDaySold={tickets.sameDaySold}
+              eventDay={event.day}
             />
 
             <SectionDivider label="Marketing · paid" />
@@ -1723,10 +1726,12 @@ function PaidMarketingBlock({
     ads: 0,
     impressions: 0,
     clicks: 0,
+    spendByPlatform: { meta: 0, tiktok: 0, youtube: 0, google: 0 },
     purchases: 0,
     purchaseRoas: null,
     roas: null,
   };
+  const platformSplit = formatPaidSpendSplit(summary.spendByPlatform);
   const all = [...(ads ?? [])].sort((a, b) => {
     const purchaseDelta = (b.purchases ?? 0) - (a.purchases ?? 0);
     if (purchaseDelta !== 0) return purchaseDelta;
@@ -1744,8 +1749,8 @@ function PaidMarketingBlock({
           Geen paid ads gekoppeld
         </p>
         <p className="mt-1 leading-relaxed">
-          Paid ads verschijnen hier zodra Meta- of TikTok-campagnes aan deze
-          editie gekoppeld zijn.
+          Paid ads verschijnen hier zodra Meta-, TikTok- of YouTube-campagnes
+          aan deze editie gekoppeld zijn.
         </p>
       </div>
     );
@@ -1838,10 +1843,11 @@ function PaidMarketingBlock({
         {summary.impressions > 0
           ? `${formatNumber(summary.ads)} ads · ${formatNumber(summary.impressions)} impr. · ${formatNumber(summary.clicks)} clicks. `
           : `${formatNumber(summary.ads)} ads. `}
-        Ticket Sales zijn Meta-pixel purchases en TikTok complete payments,
-        opgeteld. De balkjes zijn 1–5 t.o.v. andere events. ROAS = ticket sales
-        × gemiddelde ticketprijs / spend. Dezelfde koper kan op beide
-        platformen meetellen.
+        {platformSplit ? `${platformSplit}. ` : ""}
+        Ticket Sales zijn Meta-pixel purchases, TikTok complete payments en
+        Google Ads conversions, opgeteld. De balkjes zijn 1–5 t.o.v. andere
+        events. ROAS = ticket sales × gemiddelde ticketprijs / spend. Dezelfde
+        koper kan op meerdere platformen meetellen.
       </p>
     </div>
   );
@@ -1927,6 +1933,7 @@ function OrganicMarketingBlock({
   impactScore,
   ticketsSold,
   sameDaySold,
+  eventDay,
 }: {
   socialPosts: EventInsightSocial[];
   emailCampaigns: EventInsightMail[];
@@ -1934,12 +1941,27 @@ function OrganicMarketingBlock({
   impactScore: number;
   ticketsSold: number;
   sameDaySold: number | null;
+  eventDay: string;
 }) {
+  // For future events, don't show "after" section - event hasn't happened yet
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const isFutureEvent = eventDay > todayIso;
+
   const byRole: Record<SalesImpactRole, EventInsightSocial[]> = {
     promo: socialPosts.filter((p) => p.salesImpactRole === "promo"),
     same_day: socialPosts.filter((p) => p.salesImpactRole === "same_day"),
-    after: socialPosts.filter((p) => p.salesImpactRole === "after"),
+    // For future events, reclassify "after" posts as "promo" (they can't be after an event that hasn't happened)
+    after: isFutureEvent
+      ? []
+      : socialPosts.filter((p) => p.salesImpactRole === "after"),
   };
+  // Add reclassified posts to promo for future events
+  if (isFutureEvent) {
+    const reclassified = socialPosts.filter(
+      (p) => p.salesImpactRole === "after",
+    );
+    byRole.promo = [...byRole.promo, ...reclassified];
+  }
   const promoWeights = byRole.promo.map(organicAttributionWeight);
   const promoTotalWeight = promoWeights.reduce((s, w) => s + w, 0);
   const preEventSold = Math.max(0, ticketsSold - (sameDaySold ?? 0));

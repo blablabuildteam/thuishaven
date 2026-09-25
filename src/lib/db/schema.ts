@@ -605,6 +605,7 @@ export const marketingAdPlatformEnum = pgEnum("marketing_ad_platform", [
   "meta",
   "tiktok",
   "youtube",
+  "google",
 ]);
 
 /** Paid ads (Meta / later TikTok + YouTube) — sibling of marketing_posts. */

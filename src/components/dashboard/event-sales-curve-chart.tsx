@@ -441,6 +441,22 @@ export function EventSalesCurveChart({
     return applyActivitiesToSeries(built, activityDays);
   }, [points, eventDay, activityDays]);
 
+  // Split into actual (solid) and projected (dashed) lines
+  const chartData = useMemo(() => {
+    const todayIso = new Date().toISOString().slice(0, 10);
+    // Find the last actual data point (today or last sale, whichever is earlier)
+    const lastActualIdx = series.findIndex((row) => row.day > todayIso);
+    const bridgeIdx = lastActualIdx > 0 ? lastActualIdx - 1 : series.length - 1;
+
+    return series.map((row, idx) => ({
+      ...row,
+      // actual: solid line for past/today
+      actual: row.day <= todayIso ? row.cumulative : null,
+      // projected: dashed line for future (starts at bridge point)
+      projected: idx >= bridgeIdx && row.day >= todayIso ? row.cumulative : null,
+    }));
+  }, [series]);
+
   if (series.length === 0) return null;
 
   const total = series[series.length - 1]?.cumulative ?? 0;
@@ -449,6 +465,7 @@ export function EventSalesCurveChart({
   const eventInRange = series.some((row) => row.isEvent);
   const yMax = Math.max(...series.map((row) => row.cumulative), 0);
   const hasActivities = series.some((row) => row.activities.length > 0);
+  const hasFuture = series.some((row) => row.isFuture);
 
   return (
     <div className="mt-3 border-t border-border pt-3">
@@ -468,7 +485,7 @@ export function EventSalesCurveChart({
       <div ref={chartRef} className="h-28 w-full min-w-0">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
-            data={series}
+            data={chartData}
             margin={{ top: 8, right: PLOT_RIGHT, left: -10, bottom: 0 }}
           >
             <CartesianGrid
@@ -515,16 +532,33 @@ export function EventSalesCurveChart({
                 }}
               />
             )}
+            {/* Solid line for actual sales (past/today) */}
             <Line
               type="linear"
-              dataKey="cumulative"
+              dataKey="actual"
               stroke={colors.primary}
               strokeWidth={1.75}
               dot={false}
               activeDot={{ r: 3, strokeWidth: 0 }}
               isAnimationActive={false}
               name={reactId}
+              connectNulls={false}
             />
+            {/* Dashed line for projected future (today to event) */}
+            {hasFuture && (
+              <Line
+                type="linear"
+                dataKey="projected"
+                stroke={colors.primary}
+                strokeWidth={1.75}
+                strokeDasharray="4 4"
+                dot={false}
+                activeDot={{ r: 3, strokeWidth: 0 }}
+                isAnimationActive={false}
+                name={`${reactId}-projected`}
+                connectNulls={false}
+              />
+            )}
           </LineChart>
         </ResponsiveContainer>
       </div>

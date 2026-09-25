@@ -95,7 +95,7 @@ export default async function PaidMetaPage() {
             />
             <Stat
               value={`${data.totals.linked}/${data.totals.ads}`}
-              label="gekoppeld"
+              label="gekoppeld aan event"
             />
           </section>
 
