@@ -8,8 +8,7 @@ import { nl } from "date-fns/locale";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { statusLabels } from "@/lib/mock/outreach";
 import { type MailAngleId, isMailableAngle, mailAngleTone } from "@/lib/outreach/mail-angle";
-import { isEventRelevantTitle } from "@/lib/outreach/decision-titles";
-import { leadTierTone, type LeadScore } from "@/lib/outreach/lead-score";
+import { type LeadScore } from "@/lib/outreach/lead-score";
 import { OUTREACH_VARIANTS } from "@/lib/outreach/tone";
 
 const FOLLOW_UP_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
@@ -141,67 +140,6 @@ function sourceLabel(source?: string) {
   if (source === "paste" || source === "manual") return "Handmatig";
   if (source === "linkedin") return "LinkedIn";
   return source ?? "—";
-}
-
-function angleLabel(id: MailAngleId): string {
-  if (id === "seizoen") return "Seizoen";
-  if (id === "funding") return "Funding";
-  if (id === "recordjaar") return "Recordjaar";
-  if (id === "algemeen") return "Algemeen";
-  if (id === "jubileum") return "Jubileum";
-  return id;
-}
-
-function MdwCell({ row }: { row: CrmRow }) {
-  const display = row.employeeCount;
-  const parts: string[] = [];
-  if (row.apolloEmployeeCount != null) {
-    parts.push(`Apollo ~${row.apolloEmployeeCount} (concern-schatting)`);
-  }
-  if (row.linkedinEmployeeEstimate != null) {
-    parts.push(`Handmatig/LinkedIn ~${row.linkedinEmployeeEstimate}`);
-  }
-  if (row.kvkEmployeeCount != null) {
-    parts.push(
-      `KvK ${row.kvkEmployeeCount} (vestiging${
-        row.kvkHeadcountOff ? ", vaak te laag" : ""
-      })`,
-    );
-  }
-  if (parts.length === 0) {
-    parts.push(
-      "Nog geen betrouwbaar aantal — vul aan via Lijst bijwerken of handmatig op het dossier",
-    );
-  } else {
-    parts.push(
-      display != null
-        ? `Voor fit gebruiken we: ${display}`
-        : "Voor fit: nog geen bruikbaar aantal (lage KvK telt niet)",
-    );
-  }
-  const title = parts.join("\n");
-
-  return (
-    <td className="px-4 py-3" title={title}>
-      <span className="font-mono text-text">
-        {display != null ? `~${display}` : "—"}
-      </span>
-      <p className="mt-0.5 max-w-[9rem] text-[10px] leading-snug text-text-dim">
-        {row.apolloEmployeeCount != null
-          ? "Apollo"
-          : row.linkedinEmployeeEstimate != null
-            ? "Handmatig"
-            : row.kvkEmployeeCount != null
-              ? row.kvkHeadcountOff
-                ? "KvK onbruikbaar"
-                : "KvK"
-              : "Ontbreekt"}
-        {row.apolloEmployeeCount != null && row.kvkEmployeeCount != null
-          ? ` · KvK ${row.kvkEmployeeCount}`
-          : ""}
-      </p>
-    </td>
-  );
 }
 
 export function CrmCompaniesTable({ rows }: Props) {
@@ -506,13 +444,22 @@ export function CrmCompaniesTable({ rows }: Props) {
           {" · klik een rij om te openen"}
         </p>
         {mailableIds.length > 0 ? (
-          <Link
-            href={`/outreach/emails?ids=${mailableIds.slice(0, MAX_HANDOFF).join(",")}`}
-            className="border border-accent px-3 py-1.5 font-display text-xs tracking-[0.1em] text-accent hover:bg-accent/10"
-          >
-            Mail deze {Math.min(mailableIds.length, MAX_HANDOFF)}
-            {mailableIds.length > MAX_HANDOFF ? ` (van ${mailableIds.length})` : ""} →
-          </Link>
+          <div className="text-right">
+            <Link
+              href={`/outreach/emails?ids=${mailableIds.slice(0, MAX_HANDOFF).join(",")}`}
+              className="border border-accent px-3 py-1.5 font-display text-xs tracking-[0.1em] text-accent hover:bg-accent/10"
+            >
+              Mail deze {Math.min(mailableIds.length, MAX_HANDOFF)}
+              {mailableIds.length > MAX_HANDOFF
+                ? ` (van ${mailableIds.length})`
+                : ""}{" "}
+              →
+            </Link>
+            <p className="mt-1 text-[11px] text-text-dim">
+              Alleen dit filter, met e-mail, nog nooit gemaild. Maximaal{" "}
+              {MAX_HANDOFF} per keer.
+            </p>
+          </div>
         ) : null}
       </div>
 
@@ -526,17 +473,12 @@ export function CrmCompaniesTable({ rows }: Props) {
         </p>
       ) : (
         <div className="max-w-full overflow-x-auto border border-border">
-          <table className="w-full min-w-[1080px] text-left text-sm">
+          <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
               <tr>
-                <th className="px-4 py-3 font-medium">Score</th>
                 <th className="px-4 py-3 font-medium">Bedrijf</th>
-                <th className="px-4 py-3 font-medium">Contact</th>
-                <th className="px-4 py-3 font-medium">Mailkans</th>
-                <th className="px-4 py-3 font-medium">Mdw</th>
-                <th className="px-4 py-3 font-medium">Jubileum</th>
+                <th className="px-4 py-3 font-medium">Waarom nu</th>
                 <th className="px-4 py-3 font-medium">Laatste mail</th>
-                <th className="px-4 py-3 font-medium">Open / klik / reply</th>
               </tr>
             </thead>
             <tbody>
@@ -554,12 +496,6 @@ export function CrmCompaniesTable({ rows }: Props) {
                   }}
                   className="cursor-pointer border-b border-border last:border-0 hover:bg-surface/80"
                 >
-                  <td className="px-4 py-3" title={score.reasons.join("\n")}>
-                    <StatusBadge tone={leadTierTone(score.tier)}>
-                      {score.score}
-                    </StatusBadge>
-                    <p className="mt-1 text-[10px] text-text-dim">{score.tier}</p>
-                  </td>
                   <td className="px-4 py-3">
                     <span className="font-medium text-text group-hover:text-accent">
                       {row.companyName}
@@ -580,68 +516,17 @@ export function CrmCompaniesTable({ rows }: Props) {
                       {row.kvkMatchWeak ? " · KvK-match checken" : ""}
                     </p>
                   </td>
-                  <td className="px-4 py-3">
-                    {row.contacts?.length || row.decisionMakerName ? (
-                      <div className="space-y-1.5">
-                        {(row.contacts?.length
-                          ? row.contacts
-                          : [
-                              {
-                                name: row.decisionMakerName!,
-                                title: row.decisionMakerTitle,
-                                email: row.decisionMakerEmail,
-                                linkedinUrl: row.decisionMakerLinkedin,
-                              },
-                            ]
-                        ).slice(0, 3).map((c) => (
-                          <div key={`${c.name}-${c.title ?? ""}`}>
-                            <p className="text-sm text-text">{c.name}</p>
-                            <p className="text-xs text-text-dim">
-                              {[
-                                c.title
-                                  ? isEventRelevantTitle(c.title)
-                                    ? c.title
-                                    : `${c.title} · check rol`
-                                  : null,
-                                c.email ?? "geen mail",
-                              ]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-text-dim">
-                        Nog geen contact — via Lijst bijwerken
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" title={score.reasons.join("\n")}>
                     <StatusBadge tone={mailAngleTone(angle.id)}>
                       {angle.label}
                     </StatusBadge>
-                    {angle.also && angle.also.length > 0 ? (
-                      <p className="mt-1 text-[10px] text-text-dim">
-                        Ook: {angle.also.map(angleLabel).join(" · ")}
-                      </p>
-                    ) : null}
-                  </td>
-                  <MdwCell row={row} />
-                  <td className="px-4 py-3 text-xs text-text-muted">
-                    {row.anniversaryYears != null
-                      ? `${row.anniversaryYears} jr oud`
-                      : "—"}
-                    {angle.jubileeMark != null ? (
-                      <p className="text-text-dim">
-                        → {angle.jubileeMark} jr
-                        {angle.jubileeYearsAway === 0
-                          ? " dit jaar"
-                          : angle.jubileeYearsAway === 1
-                            ? " ≤16 mnd"
-                            : ` over ${angle.jubileeYearsAway} jr`}
-                      </p>
-                    ) : null}
+                    <p className="mt-1 max-w-sm text-xs text-text-muted">
+                      {angle.detail}
+                    </p>
+                    <p className="mt-1 text-[10px] text-text-dim">
+                      Score {score.score} · {score.tier}
+                      {row.decisionMakerName ? ` · ${row.decisionMakerName}` : ""}
+                    </p>
                   </td>
                   <td className="px-4 py-3 text-xs text-text-muted">
                     {row.lastSentAt ? (
@@ -650,16 +535,14 @@ export function CrmCompaniesTable({ rows }: Props) {
                         <p className="text-text-dim">
                           {templateName(row.lastVariantKey) ?? "—"}
                           {row.mailCount > 1 ? ` · ${row.mailCount}× gemaild` : ""}
+                        {row.mailCount > 0
+                          ? ` · ${row.openCount} open · ${row.clickCount} klik · ${row.replyCount} reply`
+                          : ""}
                         </p>
                       </>
                     ) : (
                       <span className="text-text-dim">Nog niet gemaild</span>
                     )}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-text-muted">
-                    {row.mailCount === 0
-                      ? "—"
-                      : `${row.openCount} / ${row.clickCount} / ${row.replyCount}`}
                   </td>
                 </tr>
               ))}

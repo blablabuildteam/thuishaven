@@ -40,13 +40,13 @@ export default async function EmailsPage({
     .filter(Boolean);
 
   const workbenchProspects: WorkbenchProspect[] = [];
+  let skippedNoEmail = 0;
   for (const r of records) {
     if (
       r.type !== "company" ||
       r.partner ||
       r.existingCustomer ||
-      r.nonMailing ||
-      !r.email
+      r.nonMailing
     ) {
       continue;
     }
@@ -59,6 +59,10 @@ export default async function EmailsPage({
     });
     const suggested = suggestedVariantForAngle(angle.id);
     if (!suggested) continue;
+    if (!r.email) {
+      skippedNoEmail += 1;
+      continue;
+    }
     const score = leadScore({
       doelgroepFit: r.doelgroepFit,
       angleId: angle.id,
@@ -120,6 +124,7 @@ export default async function EmailsPage({
         templateStats={templateStats}
         bestTemplate={bestTemplateKey(templateStats)}
         preselectIds={preselectIds}
+        skippedNoEmail={skippedNoEmail}
       />
 
       {emails.length === 0 ? (

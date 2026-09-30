@@ -1,7 +1,7 @@
 /**
  * Record inbound replies against outreach mails.
- * Brevo transactional webhooks do not emit reply events — replies land in
- * evenement@. Use this from the manual Resultaten form or a future mailbox hook.
+ * Brevo open/click webhooks do not include replies. Replies to evenement@
+ * arrive through the inbound webhook and land on the same dossier.
  */
 
 import { and, eq, sql } from "drizzle-orm";

@@ -255,6 +255,7 @@ export async function POST(request: Request) {
     prospectId: string;
     emailId?: string;
     subject?: string;
+    body?: string;
     variantId?: string;
     error?: string;
   }> = [];
@@ -275,6 +276,7 @@ export async function POST(request: Request) {
         prospectId: job.prospectId,
         emailId: result.emailId,
         subject: result.subject,
+        body: result.body,
         variantId: result.variantId,
       });
     }

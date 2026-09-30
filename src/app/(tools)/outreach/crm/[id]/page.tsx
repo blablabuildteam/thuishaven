@@ -119,7 +119,7 @@ export default async function CrmDossierPage({
                 href={`/outreach/emails?prospect=${dossier.id}`}
                 className="bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast"
               >
-                Mail schrijven
+                Zet klaar in Mailen
               </Link>
             ) : null}
           </div>
@@ -173,13 +173,17 @@ export default async function CrmDossierPage({
             . Vul aan via{" "}
             <Link href="/outreach/lijst-bijwerken" className="text-accent underline">
               Lijst bijwerken
-            </Link>{" "}
-            of de headcount-override hiernaast.
+            </Link>
+            .
           </p>
         </div>
       ) : null}
 
-      <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <details className="mb-8">
+        <summary className="cursor-pointer text-sm text-text-muted hover:text-text">
+          Gegevens
+        </summary>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Fact label="KvK" value={dossier.kvkNumber ?? "—"} />
         <Fact
           label="Mdw (voor fit)"
@@ -250,6 +254,7 @@ export default async function CrmDossierPage({
           value={`${dossier.openCount} / ${dossier.clickCount} / ${dossier.replyCount}`}
         />
       </div>
+      </details>
 
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="space-y-6">

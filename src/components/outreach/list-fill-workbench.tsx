@@ -379,9 +379,8 @@ export function ListFillWorkbench({
           1 · Wat zoeken we?
         </h2>
         <p className="mt-1 text-sm text-text-muted">
-          Elke combinatie van zone en grootte is een apart vakje. Wat al is
-          opgehaald, halen we nooit opnieuw op — maak je de straal groter, dan
-          komt alleen de nieuwe zone erbij.
+          Wat al binnen is, halen we niet opnieuw op. Een grotere afstand pakt
+          alleen de extra ring.
         </p>
 
         <p className="mt-4 text-[11px] uppercase tracking-wider text-text-dim">
@@ -441,6 +440,57 @@ export function ListFillWorkbench({
           </p>
         </div>
 
+        <ul className="mt-4 space-y-1 text-sm text-text-muted">
+          <li>
+            Al op de lijst:{" "}
+            <strong className="text-text">{companyCount}</strong>
+          </li>
+          <li>
+            Deze filters:{" "}
+            <strong className="text-text">{plan.doneSlices}</strong> van{" "}
+            {selectedSlices.length} zones binnen
+            {plan.doneSlices < selectedSlices.length ? (
+              <>
+                {" "}
+                · nog{" "}
+                <strong className="text-text">
+                  {selectedSlices.length - plan.doneSlices}
+                </strong>{" "}
+                nieuw
+              </>
+            ) : null}
+          </li>
+          {!plan.allDone ? (
+            <li>
+              Ophalen kost ongeveer{" "}
+              <strong className="text-text">
+                {formatEurFromCents(fetchCents)}
+              </strong>
+              {plan.unknownSlices > 0
+                ? " — de prijs wordt preciezer zodra een zone een keer geteld is"
+                : ""}
+            </li>
+          ) : (
+            <li>Niets nieuws voor deze afstand en grootte.</li>
+          )}
+        </ul>
+        <button
+          type="button"
+          disabled={pending || !apolloReady || plan.allDone}
+          onClick={fetchNew}
+          className="mt-4 bg-accent px-5 py-2.5 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
+        >
+          {pending
+            ? "Bezig…"
+            : plan.allDone
+              ? "Alles al binnen"
+              : `Haal de nieuwe op · ~${formatEurFromCents(fetchCents)}`}
+        </button>
+
+        <details className="mt-4">
+          <summary className="cursor-pointer text-sm text-text-muted hover:text-text">
+            Per zone
+          </summary>
         <div className="mt-3 overflow-x-auto border border-border">
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
@@ -500,57 +550,19 @@ export function ListFillWorkbench({
           </table>
         </div>
         <p className="mt-2 text-xs text-text-dim">
-          Gekleurde vakjes = je huidige filters. Namen die al op de lijst staan
-          worden altijd overgeslagen.
+          Gekleurde vakjes horen bij de gekozen filters.
         </p>
-
-        <div className="mt-4 border border-border bg-bg-elevated/50 px-4 py-3 text-sm dark:bg-surface">
-          <p className="text-text-muted">
-            {selectedSlices.length} vakjes geselecteerd · {plan.doneSlices} klaar
-            {plan.total > 0
-              ? ` · Apollo ≈${plan.total.toLocaleString("nl-NL")} bedrijven`
-              : ""}
-            {plan.uncounted > 0 ? ` · ${plan.uncounted} nog niet geteld` : ""}
-          </p>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            {plan.uncounted > 0 ? (
-              <button
-                type="button"
-                disabled={pending || !apolloReady}
-                onClick={() => count(false)}
-                className="border border-border px-3 py-2 text-sm hover:border-accent disabled:opacity-50"
-              >
-                {pending
-                  ? "…"
-                  : `Tel ${plan.uncounted} nieuwe vakje${plan.uncounted === 1 ? "" : "s"} · ${formatEurFromCents(plan.uncounted * OUTREACH_RATES.apolloCreditCents)}`}
-              </button>
-            ) : null}
-            <button
-              type="button"
-              disabled={pending || !apolloReady || plan.allDone}
-              onClick={fetchNew}
-              className="bg-accent px-5 py-2.5 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
-            >
-              {pending
-                ? "Bezig…"
-                : plan.allDone
-                  ? "Alles al binnen voor deze filters"
-                  : plan.unknownSlices > 0
-                    ? `Haal nieuwe op · vanaf ~${formatEurFromCents(fetchCents)}`
-                    : `Haal nieuwe op · ~${formatEurFromCents(fetchCents)}`}
-            </button>
-            {plan.uncounted < selectedSlices.length ? (
-              <button
-                type="button"
-                disabled={pending || !apolloReady}
-                onClick={() => count(true)}
-                className="text-xs text-text-dim underline hover:text-text disabled:opacity-50"
-              >
-                Opnieuw tellen (Apollo groeit)
-              </button>
-            ) : null}
-          </div>
-        </div>
+        {plan.uncounted < selectedSlices.length ? (
+          <button
+            type="button"
+            disabled={pending || !apolloReady}
+            onClick={() => count(true)}
+            className="mt-2 text-xs text-text-dim underline hover:text-text disabled:opacity-50"
+          >
+            Opnieuw tellen
+          </button>
+        ) : null}
+        </details>
 
         {pastSearches.length > 0 ? (
           <details className="mt-4">

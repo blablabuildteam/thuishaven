@@ -45,7 +45,7 @@ const FLOW = [
     title: "Resultaten",
     href: "/outreach/analytics",
     verb: "Meten & opvolgen",
-    body: "Opens via Brevo. Replies log je voorlopig handmatig (evenement@) → KPIs, follow-up, warme leads.",
+    body: "Opens en kliks via Brevo. Antwoorden op evenement@ komen automatisch op het dossier.",
   },
 ] as const;
 
@@ -342,8 +342,7 @@ export default function OutreachUitlegPage() {
           </li>
           <li>
             <span className="text-text">Resultaten</span> — opens (Brevo
-            webhook). Replies voorlopig handmatig loggen tot evenement@
-            gekoppeld is.
+            webhook). Antwoorden komen automatisch binnen via evenement@.
           </li>
           <li>
             <span className="text-text">Niet mailen</span> — bestaande

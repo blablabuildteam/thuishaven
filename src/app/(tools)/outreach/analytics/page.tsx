@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { LogReplyForm } from "@/components/outreach/log-reply-form";
 import { getOutreachResultsSnapshot } from "@/lib/outreach/results";
 import { formatPercent } from "@/lib/utils";
 import { format } from "date-fns";
@@ -32,21 +31,16 @@ function statusLabel(status: string) {
 
 export default async function OutreachAnalyticsPage() {
   const snap = await getOutreachResultsSnapshot();
-  const loggableMails = snap.rows
-    .filter((r) => r.status !== "draft" && Boolean(r.sentAt) && !r.replied)
-    .map((r) => ({
-      id: r.id,
-      companyName: r.companyName,
-      toEmail: r.toEmail,
-      subject: r.subject,
-    }));
+  const happened = snap.rows.filter(
+    (r) => r.status !== "draft" && Boolean(r.sentAt),
+  );
 
   return (
-    <div>
+    <div className="flex flex-col">
       <SectionHeader
         eyebrow="Stap 4 van 4"
         title="Resultaten"
-        description="Welke mails worden geopend en beantwoord. Replies log je voorlopig handmatig, tot evenement@ automatisch binnenkomt."
+        description="Wat er echt verstuurd is, en of het geopend, geklikt of beantwoord is. Antwoorden komen vanzelf binnen, net als opens en kliks."
         action={
           <Link
             href="/outreach/emails"
@@ -89,14 +83,7 @@ export default async function OutreachAnalyticsPage() {
         )}
       </div>
 
-      <section className="mb-10">
-        <h2 className="font-display text-lg tracking-[0.06em]">Reply loggen</h2>
-        <div className="mt-3 max-w-xl">
-          <LogReplyForm mails={loggableMails} />
-        </div>
-      </section>
-
-      <section className="mb-10 border-t border-border pt-8">
+      <section className="order-3 mb-10 border-t border-border pt-8">
         <h2 className="font-display text-lg tracking-[0.06em]">
           Follow-up queue
         </h2>
@@ -131,7 +118,7 @@ export default async function OutreachAnalyticsPage() {
         )}
       </section>
 
-      <section className="mb-10 border-t border-border pt-8">
+      <section className="order-4 mb-10 border-t border-border pt-8">
         <h2 className="font-display text-lg tracking-[0.06em]">
           A/B onderwerpen
         </h2>
@@ -184,9 +171,16 @@ export default async function OutreachAnalyticsPage() {
         )}
       </section>
 
-      <section className="mb-10 border-t border-border pt-8">
-        <h2 className="font-display text-lg tracking-[0.06em]">Alle mails</h2>
-        {snap.rows.length === 0 ? (
+      <section className="order-1 mb-10 border-t border-border pt-8">
+        <h2 className="font-display text-lg tracking-[0.06em]">
+          Wat er gebeurd is
+        </h2>
+        <p className="mt-1 mb-4 text-sm text-text-muted">
+          Alleen echte verzendingen. Opens en kliks komen via Brevo.
+          Antwoorden op evenement@ komen via de inbox-koppeling op hetzelfde
+          dossier terecht.
+        </p>
+        {happened.length === 0 ? (
           <p className="mt-2 text-sm text-text-muted">
             Nog geen mails.{" "}
             <Link href="/outreach/emails" className="text-accent underline">
@@ -208,7 +202,7 @@ export default async function OutreachAnalyticsPage() {
                 </tr>
               </thead>
               <tbody>
-                {snap.rows.map((row) => (
+                {happened.map((row) => (
                   <tr key={row.id} className="border-b border-border last:border-0">
                     <td className="py-2.5 pr-3">
                       <p className="text-text">{row.companyName}</p>
@@ -253,7 +247,7 @@ export default async function OutreachAnalyticsPage() {
         )}
       </section>
 
-      <section className="border-t border-border pt-8">
+      <section className="order-2 border-t border-border pt-8">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="font-display text-lg tracking-[0.06em]">
             Inbox · replies
@@ -266,7 +260,9 @@ export default async function OutreachAnalyticsPage() {
           </Link>
         </div>
         {snap.recentReplies.length === 0 ? (
-          <p className="text-sm text-text-muted">Nog geen gelogde replies.</p>
+          <p className="text-sm text-text-muted">
+            Nog geen antwoorden binnengekomen.
+          </p>
         ) : (
           <ul className="divide-y divide-border border-y border-border">
             {snap.recentReplies.map((reply) => (

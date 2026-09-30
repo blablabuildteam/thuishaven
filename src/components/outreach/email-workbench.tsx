@@ -37,6 +37,14 @@ type Props = {
   templateStats: Record<string, TemplateStat>;
   bestTemplate: string | null;
   preselectIds?: string[];
+  skippedNoEmail?: number;
+};
+
+type DraftEdit = {
+  emailId: string;
+  companyName: string;
+  subject: string;
+  body: string;
 };
 
 const ANGLE_FILTERS: { id: string; label: string }[] = [
@@ -61,6 +69,7 @@ export function OutreachEmailWorkbench({
   templateStats,
   bestTemplate,
   preselectIds = [],
+  skippedNoEmail = 0,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -108,11 +117,7 @@ export function OutreachEmailWorkbench({
   );
   const [testTo, setTestTo] = useState(defaultTestTo);
   const [lastEmailIds, setLastEmailIds] = useState<string[]>([]);
-  const [draftPreview, setDraftPreview] = useState<{
-    emailId: string;
-    subject: string;
-    body: string;
-  } | null>(null);
+  const [drafts, setDrafts] = useState<DraftEdit[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -172,7 +177,7 @@ export function OutreachEmailWorkbench({
   async function generate() {
     setError(null);
     setMessage(null);
-    setDraftPreview(null);
+    setDrafts([]);
     const picks = prospects.filter((p) => selected.has(p.id));
     if (!picks.length) {
       setError("Selecteer minstens één bedrijf");
@@ -198,44 +203,58 @@ export function OutreachEmailWorkbench({
       return;
     }
 
-    if (data.emailId) {
-      setLastEmailIds([data.emailId]);
-      setDraftPreview({
-        emailId: data.emailId,
-        subject: data.subject,
-        body: data.body,
-      });
-      setMessage("1 draft klaar — stuur een test of selecteer meer.");
-    } else {
-      const ids = (data.results ?? [])
-        .map((r: { emailId?: string }) => r.emailId)
-        .filter(Boolean) as string[];
-      setLastEmailIds(ids);
-      setMessage(
-        `${data.ok} drafts gemaakt` +
-          (data.failed ? ` · ${data.failed} mislukt` : "") +
-          " — hieronder kun je tests sturen.",
-      );
-    }
+    const made: DraftEdit[] = data.emailId
+      ? [
+          {
+            emailId: data.emailId,
+            companyName: picks[0]?.companyName ?? "",
+            subject: data.subject,
+            body: data.body,
+          },
+        ]
+      : (
+          (data.results ?? []) as Array<{
+            prospectId?: string;
+            emailId?: string;
+            subject?: string;
+            body?: string;
+          }>
+        )
+          .filter((r) => r.emailId && r.subject && r.body)
+          .map((r) => ({
+            emailId: r.emailId!,
+            companyName:
+              picks.find((p) => p.id === r.prospectId)?.companyName ?? "",
+            subject: r.subject!,
+            body: r.body!,
+          }));
+    setLastEmailIds(made.map((d) => d.emailId));
+    setDrafts(made);
+    setMessage(
+      made.length
+        ? `${made.length} draft${made.length === 1 ? "" : "s"} — lees ze na, pas aan, stuur dan de test.`
+        : "Geen drafts gemaakt.",
+    );
     startTransition(() => router.refresh());
   }
 
   async function saveDraftEdits() {
-    if (!draftPreview) return true;
-    const res = await fetch("/api/outreach/emails", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "update-draft",
-        emailId: draftPreview.emailId,
-        subject: draftPreview.subject,
-        body: draftPreview.body,
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setError(data.error ?? "Opslaan draft mislukt");
-      return false;
+    for (const draft of drafts) {
+      const res = await fetch("/api/outreach/emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update-draft",
+          emailId: draft.emailId,
+          subject: draft.subject,
+          body: draft.body,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? `Opslaan mislukt voor ${draft.companyName}`);
+        return false;
+      }
     }
     return true;
   }
@@ -247,7 +266,7 @@ export function OutreachEmailWorkbench({
     }
     setError(null);
     setMessage(null);
-    if (draftPreview && lastEmailIds.length === 1) {
+    if (drafts.length) {
       const saved = await saveDraftEdits();
       if (!saved) return;
     }
@@ -591,45 +610,71 @@ export function OutreachEmailWorkbench({
       ) : null}
       {message ? <p className="text-sm text-text-muted">{message}</p> : null}
 
-      {draftPreview ? (
-        <article className="border-t border-border pt-4">
+      {skippedNoEmail > 0 ? (
+        <p className="text-sm text-text-muted">
+          {skippedNoEmail} bedrijven niet meegenomen: geen e-mail. Vul die aan
+          via Lijst bijwerken.
+        </p>
+      ) : null}
+
+      {drafts.length > 0 ? (
+        <div className="space-y-6 border-t border-border pt-4">
           <p className="text-xs text-text-dim">
-            Concept — pas aan vóór testsend (bij 1 draft)
+            Lees elke draft na en pas aan vóór je de test stuurt.
           </p>
-          <label className="mt-2 block text-xs text-text-dim">
-            Onderwerp
-            <input
-              className="mt-1.5 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
-              value={draftPreview.subject}
-              onChange={(e) =>
-                setDraftPreview({ ...draftPreview, subject: e.target.value })
-              }
-            />
-          </label>
-          <label className="mt-3 block text-xs text-text-dim">
-            Body
-            <textarea
-              rows={14}
-              className="mt-1.5 w-full border border-border bg-bg px-3 py-2 font-sans text-sm leading-relaxed text-text"
-              value={draftPreview.body}
-              onChange={(e) =>
-                setDraftPreview({ ...draftPreview, body: e.target.value })
-              }
-            />
-          </label>
+          {drafts.map((draft) => (
+            <article key={draft.emailId} className="border border-border p-4">
+              <p className="text-sm font-medium text-text">
+                {draft.companyName || "Bedrijf"}
+              </p>
+              <label className="mt-2 block text-xs text-text-dim">
+                Onderwerp
+                <input
+                  className="mt-1.5 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
+                  value={draft.subject}
+                  onChange={(e) =>
+                    setDrafts((list) =>
+                      list.map((d) =>
+                        d.emailId === draft.emailId
+                          ? { ...d, subject: e.target.value }
+                          : d,
+                      ),
+                    )
+                  }
+                />
+              </label>
+              <label className="mt-3 block text-xs text-text-dim">
+                Tekst
+                <textarea
+                  rows={10}
+                  className="mt-1.5 w-full border border-border bg-bg px-3 py-2 font-sans text-sm leading-relaxed text-text"
+                  value={draft.body}
+                  onChange={(e) =>
+                    setDrafts((list) =>
+                      list.map((d) =>
+                        d.emailId === draft.emailId
+                          ? { ...d, body: e.target.value }
+                          : d,
+                      ),
+                    )
+                  }
+                />
+              </label>
+            </article>
+          ))}
           <button
             type="button"
             disabled={pending}
             onClick={() =>
               void saveDraftEdits().then((ok) => {
-                if (ok) setMessage("Draft opgeslagen.");
+                if (ok) setMessage("Drafts opgeslagen.");
               })
             }
-            className="mt-3 border border-border px-3 py-1.5 text-xs tracking-[0.08em] hover:border-accent disabled:opacity-50"
+            className="border border-border px-3 py-1.5 text-xs tracking-[0.08em] hover:border-accent disabled:opacity-50"
           >
             Wijzigingen opslaan
           </button>
-        </article>
+        </div>
       ) : null}
     </div>
   );
