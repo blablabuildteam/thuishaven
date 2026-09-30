@@ -4,12 +4,17 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { TemplatesWorkbench } from "@/components/outreach/templates-workbench";
 import { listEditableTemplates } from "@/lib/outreach/templates";
 import { getBrochureUrl } from "@/lib/outreach/body-templates";
+import { getTemplateStats } from "@/lib/outreach/template-stats";
+import { bestTemplateKey } from "@/lib/outreach/template-stat-label";
 
 export const metadata = { title: "Mailtemplates" };
 export const dynamic = "force-dynamic";
 
 export default async function OutreachTemplatesPage() {
-  const templates = await listEditableTemplates();
+  const [templates, stats] = await Promise.all([
+    listEditableTemplates(),
+    getTemplateStats(),
+  ]);
   const brochureUrl = getBrochureUrl();
 
   return (
@@ -31,7 +36,12 @@ export default async function OutreachTemplatesPage() {
         }
       />
 
-      <TemplatesWorkbench initial={templates} brochureUrl={brochureUrl} />
+      <TemplatesWorkbench
+        initial={templates}
+        brochureUrl={brochureUrl}
+        stats={stats}
+        bestTemplate={bestTemplateKey(stats)}
+      />
     </div>
   );
 }

@@ -114,6 +114,82 @@ export function keepForIntake<T extends CompanyWithCity>(companies: T[]): T[] {
   return [...inRegion, ...unknownCity];
 }
 
+/**
+ * Concentric search zones. A place preset is the union of zones up to that
+ * distance, so widening the radius only adds the outer zone(s) to fetch.
+ */
+export type SearchZone = "ams" | "kern" | "ring";
+
+export const SEARCH_ZONES: { id: SearchZone; label: string; hint: string }[] = [
+  { id: "ams", label: "Amsterdam", hint: "Alleen de stad zelf" },
+  {
+    id: "kern",
+    label: "Kern · tot ~25 km",
+    hint: "Amstelveen, Diemen, Zaandam, Schiphol, Hoofddorp…",
+  },
+  {
+    id: "ring",
+    label: "Ring · 25–50 km",
+    hint: "Haarlem, Almere, Hilversum, Utrecht, Purmerend…",
+  },
+];
+
+export function zonesForPreset(preset: PlacePreset): SearchZone[] {
+  if (preset === "amsterdam") return ["ams"];
+  if (preset === "kern") return ["ams", "kern"];
+  return ["ams", "kern", "ring"];
+}
+
+export function placesForZone(zone: SearchZone): string[] {
+  const lower = (s: string) => s.toLowerCase();
+  if (zone === "ams") return ["Amsterdam"];
+  if (zone === "kern") {
+    return AMS_KERN_PLACES.filter((p) => p !== "Amsterdam");
+  }
+  const inner = new Set(AMS_KERN_PLACES.map(lower));
+  return placesForPreset("ring").filter((p) => !inner.has(lower(p)));
+}
+
+export function zoneLabel(zone: SearchZone): string {
+  return SEARCH_ZONES.find((z) => z.id === zone)?.label ?? zone;
+}
+
+export function keywordKey(tags: string[]): string {
+  return [...new Set(tags.map((t) => t.trim().toLowerCase()).filter(Boolean))]
+    .sort()
+    .join("+");
+}
+
+export type SearchSlice = {
+  key: string;
+  zone: SearchZone;
+  range: string;
+  keywords: string[];
+};
+
+export function sliceKey(zone: SearchZone, range: string, tags: string[]): string {
+  return `${zone}|${range}|${keywordKey(tags)}`;
+}
+
+/** Every zone × headcount bucket the criteria cover, for the given keywords. */
+export function slicesForCriteria(c: ApolloSearchCriteria): SearchSlice[] {
+  const keywords = keywordKey(c.keywordTags).split("+").filter(Boolean);
+  const out: SearchSlice[] = [];
+  for (const zone of zonesForPreset(c.placePreset)) {
+    for (const range of c.employeeRanges) {
+      out.push({ key: sliceKey(zone, range, keywords), zone, range, keywords });
+    }
+  }
+  return out;
+}
+
+export function sliceLabel(s: Pick<SearchSlice, "zone" | "range" | "keywords">): string {
+  const size =
+    APOLLO_EMPLOYEE_RANGES.find((r) => r.id === s.range)?.label ?? s.range;
+  const tags = s.keywords.length ? ` · ${s.keywords.join(", ")}` : "";
+  return `${zoneLabel(s.zone)} · ${size} mdw${tags}`;
+}
+
 export function criteriaSummary(c: ApolloSearchCriteria): string {
   const sizes = c.employeeRanges
     .map((id) => APOLLO_EMPLOYEE_RANGES.find((r) => r.id === id)?.label ?? id)

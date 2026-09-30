@@ -5,13 +5,24 @@ import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { EditableTemplate } from "@/lib/outreach/templates";
 import type { OutreachVariantId } from "@/lib/outreach/tone";
+import {
+  formatTemplateStat,
+  type TemplateStat,
+} from "@/lib/outreach/template-stat-label";
 
 type Props = {
   initial: EditableTemplate[];
   brochureUrl: string;
+  stats: Record<string, TemplateStat>;
+  bestTemplate: string | null;
 };
 
-export function TemplatesWorkbench({ initial, brochureUrl }: Props) {
+export function TemplatesWorkbench({
+  initial,
+  brochureUrl,
+  stats,
+  bestTemplate,
+}: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [templates, setTemplates] = useState(initial);
@@ -149,6 +160,12 @@ export function TemplatesWorkbench({ initial, brochureUrl }: Props) {
             {t.overridden ? (
               <span className="ml-1 text-[10px] text-accent">aangepast</span>
             ) : null}
+            {t.id === bestTemplate ? (
+              <span className="ml-1 text-[10px] text-success">beste reply</span>
+            ) : null}
+            <span className="block text-[10px] text-text-dim">
+              {formatTemplateStat(stats[t.id])}
+            </span>
           </button>
         ))}
       </nav>

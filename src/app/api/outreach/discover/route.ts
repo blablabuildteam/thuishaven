@@ -22,6 +22,7 @@ import {
   rememberApolloPage,
   rememberApolloUniverse,
 } from "@/lib/outreach/apollo-page";
+import { countSlices, drainSlices } from "@/lib/outreach/search-coverage";
 import { logSessionActivity } from "@/lib/audit/session-log";
 import { OUTREACH_RATES } from "@/lib/outreach/batch-costs";
 
@@ -41,6 +42,8 @@ const schema = z.object({
   apply: z.boolean().optional(),
   /** Alleen Apollo-totaal ophalen (per_page=1, 1 credit). */
   countOnly: z.boolean().optional(),
+  /** With countOnly: also re-count segments we already counted. */
+  recount: z.boolean().optional(),
   /** Loop pages until empty / done (Apollo max 100 per page = 1 credit each). */
   drain: z.boolean().optional(),
   /** Safety cap when drain=true (default 15 ≈ tot ~1.500 orgs). */
@@ -162,122 +165,77 @@ export async function POST(request: Request) {
   const maxPages = parsed.data.maxPages ?? 15;
 
   if (countOnly) {
-    const one = await fetchAndOptionallyApplyPage({
-      page: 1,
+    const counted = await countSlices({
       criteria,
-      apply: false,
-      countOnly: true,
+      recount: parsed.data.recount === true,
     });
-    if (!one.ok) {
-      return NextResponse.json({ error: one.error }, { status: 400 });
+    if (!counted.ok) {
+      return NextResponse.json({ error: counted.error }, { status: 400 });
     }
     await logSessionActivity(session, {
       action: "apollo_count",
-      summary: `Apollo-universum ~${one.search.total} · ${criteriaSummary(one.search.criteria)}`,
+      summary: `Apollo geteld: ${counted.counted} segmenten · ~${counted.total} · ${criteriaSummary(criteria)}`,
       path: "/api/outreach/discover",
       method: "POST",
       status: 200,
       tool: "outreach",
-      meta: {
-        total: one.search.total,
-        criteria: one.search.criteria,
-        countOnly: true,
-      },
+      meta: { total: counted.total, counted: counted.counted, criteria },
     });
     return NextResponse.json({
       ok: true,
       countOnly: true,
-      creditUsed: 1,
-      estimatedCostCents: OUTREACH_RATES.apolloCreditCents,
-      total: one.search.total,
-      totalPages: Math.ceil(one.search.total / 100),
-      criteria: one.search.criteria,
-      criteriaLabel: criteriaSummary(one.search.criteria),
-      note: "Apollo soft-match op HQ-locatie + size. Wij filteren hard op plaats bij binnenhalen.",
+      creditUsed: counted.counted,
+      estimatedCostCents: counted.counted * OUTREACH_RATES.apolloCreditCents,
+      total: counted.total,
+      counted: counted.counted,
+      coverage: counted.states,
+      criteria,
+      criteriaLabel: criteriaSummary(criteria),
     });
   }
 
   if (drain && parsed.data.apply) {
-    let page = parsed.data.page ?? (await nextApolloDiscoverPage());
-    let created = 0;
-    let duplicate = 0;
-    let outOfRegion = 0;
-    let pages = 0;
-    let total = 0;
-    let lastCriteria = criteria;
-    let emptyPage = false;
-
-    while (pages < maxPages) {
-      const one = await fetchAndOptionallyApplyPage({
-        page,
-        criteria,
-        apply: true,
-      });
-      if (!one.ok) {
-        return NextResponse.json(
-          {
-            error: one.error,
-            partial: { pages, created, duplicate, outOfRegion },
-          },
-          { status: 400 },
-        );
-      }
-      pages += 1;
-      created += one.created;
-      duplicate += one.duplicate;
-      outOfRegion += one.split.outOfRegion.length;
-      total = one.search.total;
-      lastCriteria = one.search.criteria;
-
-      const raw = one.search.companies.length;
-      if (raw === 0) {
-        emptyPage = true;
-        break;
-      }
-      // Next page; stop if we've walked past reported total
-      page += 1;
-      if (page > Math.ceil(Math.max(total, 1) / 100)) break;
+    const drained = await drainSlices({ criteria, maxPages });
+    if (!drained.ok) {
+      return NextResponse.json(
+        {
+          error: drained.error,
+          partial: { pages: drained.pages, created: drained.created },
+        },
+        { status: 400 },
+      );
     }
-
-    const totalPages = Math.ceil(Math.max(total, 1) / 100);
-    const done = emptyPage || page > totalPages;
 
     await logSessionActivity(session, {
       action: "apollo_discover_drain",
-      summary: `Apollo drain ${pages} pagina’s: +${created} nieuw · ~${total} universe`,
+      summary: `Apollo ${drained.pages} pagina’s: +${drained.created} nieuw · ${criteriaSummary(criteria)}`,
       path: "/api/outreach/discover",
       method: "POST",
       status: 200,
       tool: "outreach",
       meta: {
-        pages,
-        created,
-        duplicate,
-        outOfRegion,
-        total,
-        done,
-        criteria: lastCriteria,
+        pages: drained.pages,
+        created: drained.created,
+        duplicate: drained.duplicate,
+        outOfRegion: drained.outOfRegion,
+        done: drained.done,
+        criteria,
       },
     });
 
     return NextResponse.json({
       applied: true,
       drain: true,
-      done,
-      pages,
-      creditUsed: pages,
-      estimatedCostCents: pages * OUTREACH_RATES.apolloCreditCents,
-      total,
-      totalPages,
-      nextPage: page,
-      created,
-      duplicate,
-      pageOutOfRegion: outOfRegion,
-      criteria: lastCriteria,
-      criteriaLabel: criteriaSummary(lastCriteria),
-      note: done
-        ? "Alles binnen gehaald voor deze filters (Apollo levert max 100 per pagina; wij liepen ze achter elkaar af)."
-        : `Gestopt na ${pages} pagina’s (limiet). Klik nog eens om door te gaan.`,
+      done: drained.done,
+      pages: drained.pages,
+      creditUsed: drained.pages,
+      estimatedCostCents: drained.pages * OUTREACH_RATES.apolloCreditCents,
+      created: drained.created,
+      duplicate: drained.duplicate,
+      pageOutOfRegion: drained.outOfRegion,
+      coverage: drained.states,
+      criteria,
+      criteriaLabel: criteriaSummary(criteria),
     });
   }
 

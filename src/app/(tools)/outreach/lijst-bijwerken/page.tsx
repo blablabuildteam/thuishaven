@@ -6,17 +6,19 @@ import { listProspects } from "@/lib/outreach/data";
 import { hasKvkConfig } from "@/lib/integrations/kvk";
 import { hasApolloConfig } from "@/lib/integrations/apollo/client";
 import { hasHunterConfig } from "@/lib/integrations/hunter/client";
-import { nextApolloDiscoverPage, getApolloUniverseSnapshot } from "@/lib/outreach/apollo-page";
+import { getApolloUniverseSnapshot } from "@/lib/outreach/apollo-page";
 import { countAutoFillPending } from "@/lib/outreach/auto-fill";
+import { readCoverage } from "@/lib/outreach/search-coverage";
 
 export const metadata = { title: "Lijst bijwerken" };
 export const dynamic = "force-dynamic";
 
 export default async function LijstBijwerkenPage() {
   const { rows } = await listProspects();
-  const [pending, universe] = await Promise.all([
+  const [pending, universe, coverage] = await Promise.all([
     countAutoFillPending(),
     getApolloUniverseSnapshot(),
+    readCoverage(),
   ]);
   const companies = rows.filter(
     (p) =>
@@ -33,8 +35,6 @@ export default async function LijstBijwerkenPage() {
   const apolloReady = hasApolloConfig();
   const hunterReady = hasHunterConfig();
   const kvkReady = hasKvkConfig();
-  const apolloNextPage = await nextApolloDiscoverPage();
-
   return (
     <div>
       <SectionHeader
@@ -65,14 +65,11 @@ export default async function LijstBijwerkenPage() {
         apolloReady={apolloReady}
         hunterReady={hunterReady}
         kvkReady={kvkReady}
-        apolloNextPage={apolloNextPage}
         companyCount={pipeline.length}
         withEmailCount={withEmail}
         outOfRegionCount={outOfRegion}
-        apolloUniverseTotal={universe.total}
-        apolloUniverseCheckedAt={universe.checkedAt}
-        apolloUniverseLabel={universe.criteriaLabel}
         apolloOnList={apolloOnList}
+        coverage={Object.values(coverage)}
         initialCriteria={universe.criteria}
       />
     </div>

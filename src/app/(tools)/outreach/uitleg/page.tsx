@@ -318,13 +318,16 @@ export default function OutreachUitlegPage() {
         </h2>
         <ol className="mt-5 list-decimal space-y-3 pl-5 text-sm leading-relaxed text-text-muted">
           <li>
-            <span className="text-text">Lijst bijwerken</span> — filters goed,
-            ophalen, open items aanvullen (mdw → KvK → contact → mail).
+            <span className="text-text">Lijst bijwerken</span> — kies afstand +
+            grootte, check de zoekdekking (wat al binnen is haalt hij niet
+            opnieuw op), haal nieuwe op, vul gegevens aan (mdw → KvK → contact
+            → mail).
           </li>
           <li>
-            <span className="text-text">Bedrijven</span> — filter “klaar om te
-            mailen”. Check contactrol; bij twijfel: opnieuw Event Manager
-            zoeken op het dossier.
+            <span className="text-text">Bedrijven</span> — begin bij de
+            signalen (jubileum, gereageerd, geopend zonder reply). Sorteer op
+            leadscore. Check contactrol; bij twijfel opnieuw Event Manager
+            zoeken op het dossier. “Mail deze →” neemt de selectie mee.
           </li>
           <li>
             <span className="text-text">Templates</span> — kies/pas aan (Zomer,

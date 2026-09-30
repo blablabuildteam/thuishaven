@@ -26,7 +26,7 @@ export async function nextApolloDiscoverPage(): Promise<number> {
   return snap.nextPage;
 }
 
-async function readCursorMeta(): Promise<Record<string, unknown>> {
+export async function readCursorMeta(): Promise<Record<string, unknown>> {
   if (!hasDatabase()) return {};
   const db = getDb();
   const [existing] = await db
@@ -64,7 +64,7 @@ export async function getApolloUniverseSnapshot(): Promise<ApolloUniverseSnapsho
   };
 }
 
-async function upsertApolloCursor(
+export async function upsertApolloCursor(
   patch: Record<string, unknown>,
 ): Promise<void> {
   if (!hasDatabase()) return;

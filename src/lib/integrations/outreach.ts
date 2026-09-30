@@ -647,16 +647,17 @@ export async function sendStoredDraft(input: {
     ? sent.messageId.replace(/^<|>$/g, "").trim()
     : null;
 
-  await db
-    .update(outreachEmails)
-    .set({
-      status: "sent",
-      brevoMessageId: storedMessageId,
-      sentAt: new Date(),
-    })
-    .where(eq(outreachEmails.id, row.id));
-
+  // Test sends go to our own inbox: keep the draft a draft so team opens don't
+  // count as prospect engagement and the company isn't marked as mailed.
   if (!forceTest) {
+    await db
+      .update(outreachEmails)
+      .set({
+        status: "sent",
+        brevoMessageId: storedMessageId,
+        sentAt: new Date(),
+      })
+      .where(eq(outreachEmails.id, row.id));
     await db
       .update(prospects)
       .set({ status: "contacted", updatedAt: new Date() })

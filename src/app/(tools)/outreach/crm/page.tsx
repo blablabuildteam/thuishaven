@@ -4,6 +4,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { CrmCompaniesTable } from "@/components/outreach/crm-companies-table";
 import { listCrmRecords } from "@/lib/outreach/crm";
 import { mailAngleFor } from "@/lib/outreach/mail-angle";
+import { leadScore } from "@/lib/outreach/lead-score";
 
 export const metadata = { title: "Bedrijven" };
 export const dynamic = "force-dynamic";
@@ -15,21 +16,30 @@ export default async function OutreachCrmPage() {
   );
   const companies = rows
     .filter((r) => !r.partner && !r.existingCustomer)
-    .map((row) => ({
-      row,
-      angle: mailAngleFor({
+    .map((row) => {
+      const angle = mailAngleFor({
         status: row.status,
         existingCustomer: row.existingCustomer,
         doelgroepFit: row.doelgroepFit,
         doelgroepReason: row.doelgroepReason,
         anniversaryYears: row.anniversaryYears,
-      }),
-    }))
-    .sort(
-      (a, b) =>
-        a.angle.rank - b.angle.rank ||
-        a.row.companyName.localeCompare(b.row.companyName, "nl"),
-    );
+      });
+      return {
+        row,
+        angle,
+        score: leadScore({
+          doelgroepFit: row.doelgroepFit,
+          angleId: angle.id,
+          jubileeYearsAway: angle.jubileeYearsAway,
+          hasEmail: Boolean(row.email),
+          hasContact: Boolean(row.decisionMakerName),
+          openCount: row.openCount,
+          clickCount: row.clickCount,
+          replyCount: row.replyCount,
+          status: row.status,
+        }),
+      };
+    });
 
   const mailable = companies.filter((c) =>
     ["jubileum", "seizoen", "algemeen", "funding", "recordjaar"].includes(
@@ -42,7 +52,7 @@ export default async function OutreachCrmPage() {
       <SectionHeader
         eyebrow="Lijst"
         title="Bedrijven"
-        description="Stap 2: filter, klik een bedrijf open. Klaar om te mailen? → Mailen."
+        description="Stap 2: signalen en leadscore laten zien wie nu de moeite waard is. Klik een bedrijf open voor maillog en notities."
         action={
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge tone={source === "db" ? "success" : "neutral"}>

@@ -9,6 +9,17 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { statusLabels } from "@/lib/mock/outreach";
 import { type MailAngleId, isMailableAngle, mailAngleTone } from "@/lib/outreach/mail-angle";
 import { isEventRelevantTitle } from "@/lib/outreach/decision-titles";
+import { leadTierTone, type LeadScore } from "@/lib/outreach/lead-score";
+import { OUTREACH_VARIANTS } from "@/lib/outreach/tone";
+
+const FOLLOW_UP_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
+/** Keeps the Mailen hand-off URL a sane length; one batch at a time. */
+const MAX_HANDOFF = 50;
+
+function templateName(key: string | null): string | null {
+  if (!key) return null;
+  return OUTREACH_VARIANTS.find((v) => v.id === key)?.name ?? key;
+}
 
 /** Client-safe shape — avoid importing server crm.ts (postgres) into the browser. */
 type CrmRow = {
@@ -29,7 +40,11 @@ type CrmRow = {
   kvkHeadcountOff: boolean;
   mailCount: number;
   openCount: number;
+  clickCount: number;
   replyCount: number;
+  lastSentAt: string | null;
+  lastVariantKey: string | null;
+  searchLabel: string | null;
   incomplete: boolean;
   source?: string;
   doelgroepReason?: string;
@@ -58,6 +73,7 @@ type Angle = {
 type Row = {
   row: CrmRow;
   angle: Angle;
+  score: LeadScore;
 };
 
 type Props = {
@@ -66,6 +82,11 @@ type Props = {
 
 type MailFilter =
   | "all"
+  | "sig_jub_now"
+  | "sig_jub_soon"
+  | "sig_fresh"
+  | "sig_followup"
+  | "sig_replied"
   | "kans"
   | "jubileum"
   | "seizoen"
@@ -74,6 +95,39 @@ type MailFilter =
   | "cold"
   | "onvolledig"
   | "past_niet";
+type SortKey = "score" | "name" | "last";
+
+type SignalId = Extract<MailFilter, `sig_${string}`>;
+
+function signalMatch(id: SignalId, row: CrmRow, angle: Angle): boolean {
+  const mailable = isMailableAngle(angle.id);
+  switch (id) {
+    case "sig_jub_now":
+      return angle.id === "jubileum" && angle.jubileeYearsAway === 0 && row.mailCount === 0;
+    case "sig_jub_soon":
+      return angle.id === "jubileum" && (angle.jubileeYearsAway ?? 0) >= 1 && row.mailCount === 0;
+    case "sig_fresh":
+      return mailable && Boolean(row.email) && row.mailCount === 0;
+    case "sig_followup":
+      return (
+        row.openCount > 0 &&
+        row.replyCount === 0 &&
+        row.lastSentAt != null &&
+        Date.now() - new Date(row.lastSentAt).getTime() >= FOLLOW_UP_AFTER_MS
+      );
+    case "sig_replied":
+      return row.replyCount > 0 && row.status !== "lead";
+  }
+}
+
+const SIGNALS: { id: SignalId; label: string; hint: string }[] = [
+  { id: "sig_jub_now", label: "Jubileum dit jaar", hint: "Nog niet gemaild" },
+  { id: "sig_jub_soon", label: "Jubileum binnenkort", hint: "≤16 mnd · nog niet gemaild" },
+  { id: "sig_replied", label: "Gereageerd", hint: "Opvolgen — nog geen lead" },
+  { id: "sig_followup", label: "Geopend, geen reply", hint: "≥3 dagen · herinnering?" },
+  { id: "sig_fresh", label: "Klaar, nooit gemaild", hint: "E-mail + mailkans" },
+];
+
 type RegionFilter = "all" | "in" | "out" | "unknown";
 type CompletenessFilter = "all" | "ready" | "missing_mdw" | "missing_email" | "missing_contact";
 
@@ -157,6 +211,15 @@ export function CrmCompaniesTable({ rows }: Props) {
   const [region, setRegion] = useState<RegionFilter>("all");
   const [completeness, setCompleteness] =
     useState<CompletenessFilter>("all");
+  const [sort, setSort] = useState<SortKey>("score");
+
+  const signalCounts = useMemo(() => {
+    const out = {} as Record<SignalId, number>;
+    for (const s of SIGNALS) {
+      out[s.id] = rows.filter(({ row, angle }) => signalMatch(s.id, row, angle)).length;
+    }
+    return out;
+  }, [rows]);
 
   const counts = useMemo(() => {
     const c = {
@@ -204,7 +267,7 @@ export function CrmCompaniesTable({ rows }: Props) {
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return rows.filter(({ row, angle }) => {
+    const list = rows.filter(({ row, angle }) => {
       if (
         needle &&
         !row.companyName.toLowerCase().includes(needle) &&
@@ -212,6 +275,10 @@ export function CrmCompaniesTable({ rows }: Props) {
         !(row.email ?? "").toLowerCase().includes(needle)
       ) {
         return false;
+      }
+
+      if (mail.startsWith("sig_")) {
+        if (!signalMatch(mail as SignalId, row, angle)) return false;
       }
 
       switch (mail) {
@@ -290,11 +357,60 @@ export function CrmCompaniesTable({ rows }: Props) {
 
       return true;
     });
-  }, [rows, q, mail, region, completeness]);
+    return [...list].sort((a, b) => {
+      if (sort === "name") {
+        return a.row.companyName.localeCompare(b.row.companyName, "nl");
+      }
+      if (sort === "last") {
+        return (b.row.lastTouchAt ?? "").localeCompare(a.row.lastTouchAt ?? "");
+      }
+      return (
+        b.score.score - a.score.score ||
+        a.row.companyName.localeCompare(b.row.companyName, "nl")
+      );
+    });
+  }, [rows, q, mail, region, completeness, sort]);
+
+  const mailableIds = filtered
+    .filter(
+      ({ row, angle }) =>
+        isMailableAngle(angle.id) && Boolean(row.email) && row.mailCount === 0,
+    )
+    .map(({ row }) => row.id);
 
   return (
     <div>
-      <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto_auto_auto]">
+      <div className="mb-6">
+        <p className="mb-2 text-[11px] uppercase tracking-wider text-text-dim">
+          Signalen · klik om te filteren
+        </p>
+        <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          {SIGNALS.map((s) => {
+            const on = mail === s.id;
+            const n = signalCounts[s.id];
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setMail(on ? "kans" : s.id)}
+                className={`border px-3 py-2.5 text-left transition-colors ${
+                  on
+                    ? "border-accent bg-accent/10"
+                    : n > 0
+                      ? "border-border bg-surface hover:border-accent"
+                      : "border-border bg-surface opacity-60"
+                }`}
+              >
+                <p className="font-display text-2xl leading-none text-text">{n}</p>
+                <p className="mt-1 text-sm text-text">{s.label}</p>
+                <p className="text-[11px] text-text-dim">{s.hint}</p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto_auto_auto_auto]">
         <label className="block min-w-0">
           <span className="text-[11px] uppercase tracking-wider text-text-dim">
             Zoeken
@@ -316,7 +432,12 @@ export function CrmCompaniesTable({ rows }: Props) {
             onChange={(e) => setMail(e.target.value as MailFilter)}
             className="mt-1.5 block w-full min-w-[10rem] border border-border bg-bg px-3 py-2 text-sm text-text"
           >
-            <option value="kans">Klaar om te mailen ({counts.kans})</option>
+            {mail.startsWith("sig_") ? (
+              <option value={mail}>
+                Signaal: {SIGNALS.find((s) => s.id === mail)?.label}
+              </option>
+            ) : null}
+            <option value="kans">Mailkans ({counts.kans})</option>
             <option value="jubileum">Jubileum ({counts.jubileum})</option>
             <option value="seizoen">Seizoen ({counts.seizoen})</option>
             <option value="funding">Deal / funding ({counts.funding})</option>
@@ -362,13 +483,38 @@ export function CrmCompaniesTable({ rows }: Props) {
             <option value="missing_contact">Geen contactpersoon</option>
           </select>
         </label>
+        <label className="block">
+          <span className="text-[11px] uppercase tracking-wider text-text-dim">
+            Sorteer
+          </span>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortKey)}
+            className="mt-1.5 block w-full min-w-[8rem] border border-border bg-bg px-3 py-2 text-sm text-text"
+          >
+            <option value="score">Leadscore</option>
+            <option value="last">Laatste contact</option>
+            <option value="name">Naam</option>
+          </select>
+        </label>
       </div>
 
-      <p className="mb-3 text-xs text-text-dim">
-        {filtered.length} van {rows.length}
-        {mail === "kans" ? " · klaar om te mailen" : ""}
-        {" · klik een rij om te openen"}
-      </p>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-text-dim">
+          {filtered.length} van {rows.length}
+          {mail === "kans" ? " · met mailkans" : ""}
+          {" · klik een rij om te openen"}
+        </p>
+        {mailableIds.length > 0 ? (
+          <Link
+            href={`/outreach/emails?ids=${mailableIds.slice(0, MAX_HANDOFF).join(",")}`}
+            className="border border-accent px-3 py-1.5 font-display text-xs tracking-[0.1em] text-accent hover:bg-accent/10"
+          >
+            Mail deze {Math.min(mailableIds.length, MAX_HANDOFF)}
+            {mailableIds.length > MAX_HANDOFF ? ` (van ${mailableIds.length})` : ""} →
+          </Link>
+        ) : null}
+      </div>
 
       {filtered.length === 0 ? (
         <p className="border-y border-border py-6 text-sm text-text-muted">
@@ -383,17 +529,18 @@ export function CrmCompaniesTable({ rows }: Props) {
           <table className="w-full min-w-[1080px] text-left text-sm">
             <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
               <tr>
+                <th className="px-4 py-3 font-medium">Score</th>
                 <th className="px-4 py-3 font-medium">Bedrijf</th>
                 <th className="px-4 py-3 font-medium">Contact</th>
                 <th className="px-4 py-3 font-medium">Mailkans</th>
                 <th className="px-4 py-3 font-medium">Mdw</th>
                 <th className="px-4 py-3 font-medium">Jubileum</th>
-                <th className="px-4 py-3 font-medium">Mail / open / reply</th>
-                <th className="px-4 py-3 font-medium">Laatst</th>
+                <th className="px-4 py-3 font-medium">Laatste mail</th>
+                <th className="px-4 py-3 font-medium">Open / klik / reply</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map(({ row, angle }) => (
+              {filtered.map(({ row, angle, score }) => (
                 <tr
                   key={row.id}
                   role="link"
@@ -407,6 +554,12 @@ export function CrmCompaniesTable({ rows }: Props) {
                   }}
                   className="cursor-pointer border-b border-border last:border-0 hover:bg-surface/80"
                 >
+                  <td className="px-4 py-3" title={score.reasons.join("\n")}>
+                    <StatusBadge tone={leadTierTone(score.tier)}>
+                      {score.score}
+                    </StatusBadge>
+                    <p className="mt-1 text-[10px] text-text-dim">{score.tier}</p>
+                  </td>
                   <td className="px-4 py-3">
                     <span className="font-medium text-text group-hover:text-accent">
                       {row.companyName}
@@ -419,6 +572,11 @@ export function CrmCompaniesTable({ rows }: Props) {
                         ? " · buiten regio"
                         : ""}
                       {` · ${sourceLabel(row.source)}`}
+                      {row.searchLabel ? (
+                        <span className="block text-[10px]">
+                          via {row.searchLabel}
+                        </span>
+                      ) : null}
                       {row.kvkMatchWeak ? " · KvK-match checken" : ""}
                     </p>
                   </td>
@@ -485,11 +643,23 @@ export function CrmCompaniesTable({ rows }: Props) {
                       </p>
                     ) : null}
                   </td>
-                  <td className="px-4 py-3 font-mono text-xs text-text-muted">
-                    {row.mailCount} / {row.openCount} / {row.replyCount}
-                  </td>
                   <td className="px-4 py-3 text-xs text-text-muted">
-                    {fmt(row.lastTouchAt)}
+                    {row.lastSentAt ? (
+                      <>
+                        {fmt(row.lastSentAt)}
+                        <p className="text-text-dim">
+                          {templateName(row.lastVariantKey) ?? "—"}
+                          {row.mailCount > 1 ? ` · ${row.mailCount}× gemaild` : ""}
+                        </p>
+                      </>
+                    ) : (
+                      <span className="text-text-dim">Nog niet gemaild</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs text-text-muted">
+                    {row.mailCount === 0
+                      ? "—"
+                      : `${row.openCount} / ${row.clickCount} / ${row.replyCount}`}
                   </td>
                 </tr>
               ))}

@@ -8,47 +8,97 @@ import {
   type OutreachSubjectArm,
   type OutreachVariantId,
 } from "@/lib/outreach/tone";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { leadTierTone, type LeadTier } from "@/lib/outreach/lead-score";
+import {
+  formatTemplateStat,
+  type TemplateStat,
+} from "@/lib/outreach/template-stat-label";
 
-type WorkbenchProspect = {
+export type WorkbenchProspect = {
   id: string;
-  type: "company" | "agency";
   companyName: string;
-  email: string | null;
-  status: string;
-  source?: string;
-  nonMailing?: boolean;
+  email: string;
+  contactName: string | null;
+  angleId: string;
   suggestedVariantId: OutreachVariantId | null;
   suggestedLabel: string | null;
+  score: number;
+  tier: LeadTier;
+  mailCount: number;
+  lastSentAt: string | null;
+  lastVariantKey: string | null;
+  replyCount: number;
 };
 
 type Props = {
   prospects: WorkbenchProspect[];
   defaultTestTo?: string;
+  templateStats: Record<string, TemplateStat>;
+  bestTemplate: string | null;
+  preselectIds?: string[];
 };
+
+const ANGLE_FILTERS: { id: string; label: string }[] = [
+  { id: "all", label: "Alles" },
+  { id: "jubileum", label: "Jubileum" },
+  { id: "seizoen", label: "Seizoen" },
+  { id: "algemeen", label: "Algemeen" },
+];
+
+function fmtDay(iso: string) {
+  return new Date(iso).toLocaleDateString("nl-NL", {
+    day: "numeric",
+    month: "short",
+  });
+}
 
 type Mode = "suggested" | "override";
 
 export function OutreachEmailWorkbench({
   prospects,
   defaultTestTo = "team@blablabuild.com",
+  templateStats,
+  bestTemplate,
+  preselectIds = [],
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const ready = useMemo(
-    () =>
-      prospects.filter(
-        (p) =>
-          p.type === "company" &&
-          p.source !== "bureau_import" &&
-          p.status !== "excluded" &&
-          !p.nonMailing &&
-          Boolean(p.email) &&
-          Boolean(p.suggestedVariantId),
-      ),
-    [prospects],
-  );
+  const preselected = useMemo(() => new Set(preselectIds), [preselectIds]);
+  const [showMailed, setShowMailed] = useState(false);
+  const [angleFilter, setAngleFilter] = useState("all");
+  const [q, setQ] = useState("");
+  const [onlyHandoff, setOnlyHandoff] = useState(preselectIds.length > 0);
 
-  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const ready = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return prospects
+      .filter((p) => {
+        if (onlyHandoff && !preselected.has(p.id)) return false;
+        if (!showMailed && p.mailCount > 0) return false;
+        if (angleFilter !== "all" && p.angleId !== angleFilter) return false;
+        if (
+          needle &&
+          !p.companyName.toLowerCase().includes(needle) &&
+          !p.email.toLowerCase().includes(needle)
+        ) {
+          return false;
+        }
+        return true;
+      })
+      .sort((a, b) => b.score - a.score || a.companyName.localeCompare(b.companyName, "nl"));
+  }, [prospects, q, angleFilter, showMailed, onlyHandoff, preselected]);
+
+  const mailedTotal = prospects.filter((p) => p.mailCount > 0).length;
+
+  const [selected, setSelected] = useState<Set<string>>(
+    () =>
+      new Set(
+        prospects
+          .filter((p) => preselected.has(p.id) && p.mailCount === 0)
+          .map((p) => p.id),
+      ),
+  );
   const [mode, setMode] = useState<Mode>("suggested");
   const [overrideVariant, setOverrideVariant] =
     useState<OutreachVariantId>("warm_tour");
@@ -92,6 +142,29 @@ export function OutreachEmailWorkbench({
     setSelected(new Set(ready.map((p) => p.id)));
   }
 
+  function selectTop(n: number) {
+    setSelected(
+      new Set(
+        ready
+          .filter((p) => p.mailCount === 0)
+          .slice(0, n)
+          .map((p) => p.id),
+      ),
+    );
+  }
+
+  function templateOption(v: (typeof OUTREACH_VARIANTS)[number], suggestedId?: string | null) {
+    const tags = [
+      v.id === suggestedId ? "★ voorgesteld" : null,
+      v.id === bestTemplate ? "beste reply" : null,
+    ].filter(Boolean);
+    return `${v.name}${tags.length ? ` (${tags.join(", ")})` : ""} — ${formatTemplateStat(templateStats[v.id])}`;
+  }
+
+  const selectedMailed = prospects.filter(
+    (p) => selected.has(p.id) && p.mailCount > 0,
+  ).length;
+
   function clearSelection() {
     setSelected(new Set());
   }
@@ -100,7 +173,7 @@ export function OutreachEmailWorkbench({
     setError(null);
     setMessage(null);
     setDraftPreview(null);
-    const picks = ready.filter((p) => selected.has(p.id));
+    const picks = prospects.filter((p) => selected.has(p.id));
     if (!picks.length) {
       setError("Selecteer minstens één bedrijf");
       return;
@@ -206,7 +279,7 @@ export function OutreachEmailWorkbench({
     startTransition(() => router.refresh());
   }
 
-  if (!ready.length) {
+  if (!prospects.length) {
     return (
       <p className="border-y border-border py-6 text-sm text-text-muted">
         Geen bedrijven klaar om te mailen (e-mail + mailkans). Vul aan via{" "}
@@ -269,11 +342,21 @@ export function OutreachEmailWorkbench({
           >
             {companyVariants.map((v) => (
               <option key={v.id} value={v.id}>
-                {v.name}
+                {templateOption(v)}
               </option>
             ))}
           </select>
         </label>
+      ) : null}
+
+      {bestTemplate ? (
+        <p className="text-xs text-text-dim">
+          Beste reply-ratio tot nu toe:{" "}
+          <span className="text-text">
+            {companyVariants.find((v) => v.id === bestTemplate)?.name ?? bestTemplate}
+          </span>{" "}
+          · {formatTemplateStat(templateStats[bestTemplate])}
+        </p>
       ) : null}
 
       <div className="flex flex-wrap items-end gap-3">
@@ -303,17 +386,72 @@ export function OutreachEmailWorkbench({
       </div>
 
       <div>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Zoek bedrijf of e-mail…"
+            className="w-full max-w-xs border border-border bg-bg px-3 py-1.5 text-sm text-text sm:w-56"
+          />
+          {ANGLE_FILTERS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setAngleFilter(f.id)}
+              className={
+                angleFilter === f.id
+                  ? "border border-accent bg-accent/10 px-2.5 py-1 text-xs"
+                  : "border border-border px-2.5 py-1 text-xs text-text-muted hover:border-accent"
+              }
+            >
+              {f.label}
+            </button>
+          ))}
+          <label className="ml-auto flex items-center gap-1.5 text-xs text-text-muted">
+            <input
+              type="checkbox"
+              checked={showMailed}
+              onChange={(e) => setShowMailed(e.target.checked)}
+            />
+            Toon ook al gemaild ({mailedTotal})
+          </label>
+          {preselectIds.length > 0 ? (
+            <label className="flex items-center gap-1.5 text-xs text-text-muted">
+              <input
+                type="checkbox"
+                checked={onlyHandoff}
+                onChange={(e) => setOnlyHandoff(e.target.checked)}
+              />
+              Alleen selectie uit Bedrijven ({preselectIds.length})
+            </label>
+          ) : null}
+        </div>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs uppercase tracking-wider text-text-dim">
-            Bedrijven · {selected.size} geselecteerd / {ready.length}
+            {selected.size} geselecteerd · {ready.length} in beeld · hoogste
+            score eerst
           </p>
-          <div className="flex gap-2 text-xs">
+          <div className="flex gap-3 text-xs">
+            <button
+              type="button"
+              onClick={() => selectTop(10)}
+              className="text-accent underline"
+            >
+              Top 10
+            </button>
+            <button
+              type="button"
+              onClick={() => selectTop(25)}
+              className="text-accent underline"
+            >
+              Top 25
+            </button>
             <button
               type="button"
               onClick={selectAll}
               className="text-accent underline"
             >
-              Alles
+              Alles in beeld
             </button>
             <button
               type="button"
@@ -330,8 +468,10 @@ export function OutreachEmailWorkbench({
             <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
               <tr>
                 <th className="px-3 py-2 w-10" />
+                <th className="px-3 py-2 font-medium">Score</th>
                 <th className="px-3 py-2 font-medium">Bedrijf</th>
-                <th className="px-3 py-2 font-medium">Suggested</th>
+                <th className="px-3 py-2 font-medium">Invalshoek</th>
+                <th className="px-3 py-2 font-medium">Eerder gemaild</th>
                 <th className="px-3 py-2 font-medium">Template</th>
               </tr>
             </thead>
@@ -352,11 +492,34 @@ export function OutreachEmailWorkbench({
                       />
                     </td>
                     <td className="px-3 py-2">
-                      <p className="font-medium text-text">{p.companyName}</p>
-                      <p className="text-xs text-text-dim">{p.email}</p>
+                      <StatusBadge tone={leadTierTone(p.tier)}>{p.score}</StatusBadge>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Link
+                        href={`/outreach/crm/${p.id}`}
+                        className="font-medium text-text hover:text-accent"
+                      >
+                        {p.companyName}
+                      </Link>
+                      <p className="text-xs text-text-dim">
+                        {[p.contactName, p.email].filter(Boolean).join(" · ")}
+                      </p>
                     </td>
                     <td className="px-3 py-2 text-xs text-text-muted">
                       {p.suggestedLabel ?? "—"}
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      {p.lastSentAt ? (
+                        <span className="text-warn">
+                          {fmtDay(p.lastSentAt)}
+                          {p.lastVariantKey
+                            ? ` · ${companyVariants.find((v) => v.id === p.lastVariantKey)?.name ?? p.lastVariantKey}`
+                            : ""}
+                          {p.replyCount > 0 ? " · gereageerd" : ""}
+                        </span>
+                      ) : (
+                        <span className="text-text-dim">Nee</span>
+                      )}
                     </td>
                     <td className="px-3 py-2">
                       {mode === "suggested" ? (
@@ -372,8 +535,7 @@ export function OutreachEmailWorkbench({
                         >
                           {companyVariants.map((v) => (
                             <option key={v.id} value={v.id}>
-                              {v.name}
-                              {v.id === p.suggestedVariantId ? " ★" : ""}
+                              {templateOption(v, p.suggestedVariantId)}
                             </option>
                           ))}
                         </select>
@@ -393,6 +555,13 @@ export function OutreachEmailWorkbench({
           </table>
         </div>
       </div>
+
+      {selectedMailed > 0 ? (
+        <p className="text-sm text-warn">
+          Let op: {selectedMailed} van de geselecteerde bedrijven is al eerder
+          gemaild.
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap gap-2">
         <button

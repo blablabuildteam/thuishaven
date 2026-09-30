@@ -21,6 +21,9 @@ export type IntakeDraft = {
   linkedinUrl?: string | null;
   sector?: string | null;
   apolloPage?: number | null;
+  /** Coverage slice key + human label of the search that found this company. */
+  apolloSearch?: string | null;
+  apolloSearchLabel?: string | null;
 };
 
 export type IntakeRowResult = {
@@ -207,6 +210,8 @@ export async function addProspects(input: {
           linkedinEmployeeEstimate: draft.employeeCount ?? undefined,
           apolloCity: draft.city?.trim() || undefined,
           apolloPage: draft.apolloPage ?? undefined,
+          apolloSearch: draft.apolloSearch ?? undefined,
+          apolloSearchLabel: draft.apolloSearchLabel ?? undefined,
           doelgroepFit: scored.fit,
           doelgroepReason: scored.reason,
         },

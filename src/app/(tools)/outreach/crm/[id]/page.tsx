@@ -10,6 +10,8 @@ import { RefillContactButton } from "@/components/outreach/refill-contact-button
 import { LinkedinEstimateForm } from "@/components/outreach/linkedin-estimate-form";
 import { getCrmDossier, statusLabels } from "@/lib/outreach/crm";
 import { mailAngleFor, mailAngleTone } from "@/lib/outreach/mail-angle";
+import { leadScore, leadTierTone } from "@/lib/outreach/lead-score";
+import { OUTREACH_VARIANTS } from "@/lib/outreach/tone";
 import {
   linkedinCompanySearchUrl,
   linkedinPeopleSearchUrl,
@@ -51,6 +53,19 @@ export default async function CrmDossierPage({
     doelgroepReason: dossier.doelgroepReason,
     anniversaryYears: dossier.anniversaryYears,
   });
+  const score = leadScore({
+    doelgroepFit: dossier.doelgroepFit,
+    angleId: angle.id,
+    jubileeYearsAway: angle.jubileeYearsAway,
+    hasEmail: Boolean(dossier.email),
+    hasContact: Boolean(dossier.decisionMakerName),
+    openCount: dossier.openCount,
+    clickCount: dossier.clickCount,
+    replyCount: dossier.replyCount,
+    status: dossier.status,
+  });
+  const templateName = (key: string | null) =>
+    key ? (OUTREACH_VARIANTS.find((v) => v.id === key)?.name ?? key) : "—";
 
   return (
     <div>
@@ -74,6 +89,9 @@ export default async function CrmDossierPage({
         }
         action={
           <div className="flex flex-wrap gap-2">
+            <StatusBadge tone={leadTierTone(score.tier)}>
+              Score {score.score} · {score.tier}
+            </StatusBadge>
             <StatusBadge tone={mailAngleTone(angle.id)}>
               {angle.label}
             </StatusBadge>
@@ -98,7 +116,7 @@ export default async function CrmDossierPage({
             </Link>
             {!dossier.partner && !dossier.existingCustomer ? (
               <Link
-                href="/outreach/emails"
+                href={`/outreach/emails?prospect=${dossier.id}`}
                 className="bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast"
               >
                 Mail schrijven
@@ -108,6 +126,9 @@ export default async function CrmDossierPage({
         }
       />
 
+      <p className="mb-2 text-xs text-text-dim">
+        Leadscore: {score.reasons.join(" · ") || "nog geen signalen"}
+      </p>
       <p className="mb-6 text-sm text-text-muted">
         {angle.detail}
         {angle.also && angle.also.length > 0
@@ -222,14 +243,54 @@ export default async function CrmDossierPage({
                 : dossier.source ?? "—"
           }
         />
+        <Fact label="Gevonden via" value={dossier.searchLabel ?? "—"} />
         <Fact label="Mails verstuurd" value={String(dossier.mailCount)} />
         <Fact
-          label="Opens / replies"
-          value={`${dossier.openCount} / ${dossier.replyCount}`}
+          label="Open / klik / reply"
+          value={`${dossier.openCount} / ${dossier.clickCount} / ${dossier.replyCount}`}
         />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className="space-y-6">
+        <section className="border border-border bg-surface p-4">
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="font-display text-2xl tracking-[0.06em]">Maillog</h2>
+            <p className="text-xs text-text-dim">
+              Echte verzendingen + open drafts · testmails niet
+            </p>
+          </div>
+          {dossier.mails.length === 0 ? (
+            <p className="text-sm text-text-muted">Nog nooit gemaild.</p>
+          ) : (
+            <ul className="divide-y divide-border border-y border-border">
+              {dossier.mails.map((m) => (
+                <li key={m.id} className="py-3">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-text-dim">
+                      {m.sentAt ? fmt(m.sentAt) : `Draft · ${fmt(m.createdAt)}`}
+                    </span>
+                    <StatusBadge tone="neutral">{templateName(m.variantKey)}</StatusBadge>
+                    {m.sentAt ? <StatusBadge tone="success">Verzonden</StatusBadge> : null}
+                    {m.openedAt ? <StatusBadge tone="info">Geopend</StatusBadge> : null}
+                    {m.clickedAt ? <StatusBadge tone="info">Geklikt</StatusBadge> : null}
+                    {m.repliedAt ? <StatusBadge tone="accent">Gereageerd</StatusBadge> : null}
+                    {m.status === "bounced" ? <StatusBadge tone="danger">Bounce</StatusBadge> : null}
+                  </div>
+                  <details className="mt-1.5">
+                    <summary className="cursor-pointer text-sm font-medium text-text hover:text-accent">
+                      {m.subject}
+                    </summary>
+                    <pre className="mt-2 whitespace-pre-wrap font-sans text-sm leading-relaxed text-text-muted">
+                      {m.body}
+                    </pre>
+                  </details>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
         <section className="border border-border bg-surface p-4">
           <h2 className="mb-1 font-display text-2xl tracking-[0.06em]">
             Activiteit
@@ -282,8 +343,27 @@ export default async function CrmDossierPage({
             </ol>
           )}
         </section>
+        </div>
 
         <aside className="space-y-4">
+          <section className="border border-border bg-surface p-4">
+            <h2 className="mb-3 font-display text-xl tracking-[0.06em]">
+              Notities
+            </h2>
+            <CrmNoteForm prospectId={dossier.id} />
+            {dossier.notes.length > 0 ? (
+              <ul className="mt-4 space-y-3 border-t border-border pt-3">
+                {dossier.notes.map((n) => (
+                  <li key={n.id} className="text-sm">
+                    <p className="text-xs text-text-dim">
+                      {kindLabel[n.kind] ?? n.kind} · {fmt(n.at)}
+                    </p>
+                    <p className="mt-0.5 whitespace-pre-wrap text-text">{n.body}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </section>
           {isAdmin ? (
             <section className="border border-border bg-surface p-4">
               <h2 className="mb-3 font-display text-xl tracking-[0.06em]">
@@ -326,12 +406,6 @@ export default async function CrmDossierPage({
               </p>
             </section>
           )}
-          <section className="border border-border bg-surface p-4">
-            <h2 className="mb-3 font-display text-xl tracking-[0.06em]">
-              Nieuw moment
-            </h2>
-            <CrmNoteForm prospectId={dossier.id} />
-          </section>
           <section className="border border-border bg-surface p-4 text-sm text-text-muted">
             <h2 className="mb-3 font-display text-xl tracking-[0.06em] text-text">
               Contactpersonen

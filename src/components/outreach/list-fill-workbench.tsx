@@ -7,8 +7,12 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import {
   APOLLO_EMPLOYEE_RANGES,
   DEFAULT_APOLLO_CRITERIA,
+  SEARCH_ZONES,
   criteriaSummary,
+  keywordKey,
   normalizeCriteria,
+  sliceKey,
+  slicesForCriteria,
   type ApolloSearchCriteria,
   type PlacePreset,
 } from "@/lib/integrations/apollo/criteria";
@@ -17,6 +21,7 @@ import {
   OUTREACH_RATES,
   formatEurFromCents,
 } from "@/lib/outreach/batch-costs";
+import type { SliceState } from "@/lib/outreach/search-coverage";
 
 type Props = {
   pendingKvk: number;
@@ -27,34 +32,34 @@ type Props = {
   apolloReady: boolean;
   hunterReady: boolean;
   kvkReady: boolean;
-  apolloNextPage: number;
   companyCount: number;
   withEmailCount: number;
   outOfRegionCount: number;
-  apolloUniverseTotal: number;
-  apolloUniverseCheckedAt: string | null;
-  apolloUniverseLabel: string;
   apolloOnList: number;
+  coverage: SliceState[];
   initialCriteria?: Partial<ApolloSearchCriteria> | null;
 };
 
-const PLACE_OPTIONS: { id: PlacePreset; label: string; hint: string }[] = [
-  {
-    id: "ring",
-    label: "Amsterdam + ~50 km",
-    hint: "Volledige ring (standaard)",
-  },
-  {
-    id: "kern",
-    label: "Kern",
-    hint: "Amsterdam, Amstelveen, Schiphol, Zaandam…",
-  },
-  {
-    id: "amsterdam",
-    label: "Alleen Amsterdam",
-    hint: "Strakste filter",
-  },
+const RADIUS_OPTIONS: { id: PlacePreset; label: string; hint: string }[] = [
+  { id: "amsterdam", label: "Alleen Amsterdam", hint: "Zone 1" },
+  { id: "kern", label: "Tot ~25 km", hint: "Zone 1 + 2" },
+  { id: "ring", label: "Tot ~50 km", hint: "Zone 1 + 2 + 3" },
 ];
+
+function pagesLeftFor(s: SliceState | undefined): number | null {
+  if (!s) return null;
+  if (s.done) return 0;
+  if (s.total == null) return null;
+  return Math.max(0, Math.ceil(s.total / APOLLO_PAGE_SIZE) - s.pagesFetched);
+}
+
+function fmtDate(iso: string | null | undefined) {
+  if (!iso) return null;
+  return new Date(iso).toLocaleDateString("nl-NL", {
+    day: "numeric",
+    month: "short",
+  });
+}
 
 export function ListFillWorkbench({
   pendingKvk,
@@ -65,14 +70,11 @@ export function ListFillWorkbench({
   apolloReady,
   hunterReady,
   kvkReady,
-  apolloNextPage,
   companyCount,
   withEmailCount,
   outOfRegionCount,
-  apolloUniverseTotal,
-  apolloUniverseCheckedAt,
-  apolloUniverseLabel,
   apolloOnList,
+  coverage: initialCoverage,
   initialCriteria,
 }: Props) {
   const router = useRouter();
@@ -85,47 +87,80 @@ export function ListFillWorkbench({
   const [keywords, setKeywords] = useState(
     () => (initialCriteria?.keywordTags ?? []).join(", "),
   );
-  const [universeTotal, setUniverseTotal] = useState(apolloUniverseTotal);
-  const [universeLabel, setUniverseLabel] = useState(apolloUniverseLabel);
-  const [universeCheckedAt, setUniverseCheckedAt] = useState(
-    apolloUniverseCheckedAt,
+  const [coverage, setCoverage] = useState<Record<string, SliceState>>(() =>
+    Object.fromEntries(initialCoverage.map((s) => [s.key, s])),
   );
 
+  const keywordTags = keywords
+    .split(/[,;]+/)
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+
   function criteriaBody(): ApolloSearchCriteria {
-    return {
-      ...criteria,
-      keywordTags: keywords
-        .split(/[,;]+/)
-        .map((t) => t.trim())
-        .filter(Boolean)
-        .slice(0, 8),
-    };
+    return { ...criteria, keywordTags };
   }
 
-  const activeLabel = criteriaSummary({
-    ...criteria,
-    keywordTags: keywords
-      .split(/[,;]+/)
-      .map((t) => t.trim())
-      .filter(Boolean)
-      .slice(0, 8),
-  });
-  const criteriaChanged =
-    Boolean(universeLabel) && activeLabel !== universeLabel;
+  const activeCriteria = { ...criteria, keywordTags };
+  const activeKw = keywordKey(keywordTags);
+  const selectedSlices = slicesForCriteria(activeCriteria);
+  const selectedKeys = new Set(selectedSlices.map((s) => s.key));
 
-  const remainingApprox =
-    universeTotal > 0 ? Math.max(0, universeTotal - apolloOnList) : null;
-  const pagesLeft =
-    remainingApprox != null
-      ? Math.max(1, Math.ceil(remainingApprox / APOLLO_PAGE_SIZE))
-      : universeTotal > 0
-        ? Math.max(1, Math.ceil(universeTotal / APOLLO_PAGE_SIZE) - (apolloNextPage - 1))
-        : null;
-  const fetchAllCredits = pagesLeft ?? (universeTotal > 0 ? Math.ceil(universeTotal / APOLLO_PAGE_SIZE) : null);
-  const fetchAllCents =
-    fetchAllCredits != null
-      ? fetchAllCredits * OUTREACH_RATES.apolloCreditCents
-      : null;
+  const plan = (() => {
+    let uncounted = 0;
+    let knownPages = 0;
+    let unknownSlices = 0;
+    let doneSlices = 0;
+    let total = 0;
+    let fetched = 0;
+    for (const s of selectedSlices) {
+      const st = coverage[s.key];
+      if (!st || st.total == null) uncounted += 1;
+      else total += st.total;
+      if (st) fetched += st.seen;
+      const left = pagesLeftFor(st);
+      if (left === 0) doneSlices += 1;
+      else if (left == null) unknownSlices += 1;
+      else knownPages += left;
+    }
+    return {
+      uncounted,
+      knownPages,
+      unknownSlices,
+      doneSlices,
+      total,
+      fetched,
+      allDone: doneSlices === selectedSlices.length,
+    };
+  })();
+
+  const pastSearches = useMemo(() => {
+    const byKw = new Map<string, { keywords: string[]; slices: SliceState[] }>();
+    for (const s of Object.values(coverage)) {
+      const k = keywordKey(s.keywords);
+      const entry = byKw.get(k) ?? { keywords: s.keywords, slices: [] };
+      entry.slices.push(s);
+      byKw.set(k, entry);
+    }
+    return [...byKw.entries()]
+      .map(([k, v]) => ({
+        key: k,
+        keywords: v.keywords,
+        created: v.slices.reduce((n, s) => n + s.created, 0),
+        seen: v.slices.reduce((n, s) => n + s.seen, 0),
+        done: v.slices.filter((s) => s.done).length,
+        slices: v.slices.length,
+        lastRunAt: v.slices
+          .map((s) => s.lastRunAt)
+          .filter(Boolean)
+          .sort()
+          .at(-1),
+      }))
+      .sort((a, b) => (b.lastRunAt ?? "").localeCompare(a.lastRunAt ?? ""));
+  }, [coverage]);
+
+  const fetchCents =
+    (plan.knownPages + plan.unknownSlices) * OUTREACH_RATES.apolloCreditCents;
 
   const fillCost = useMemo(() => {
     const lines: { label: string; n: number; cents: number; payer: string }[] =
@@ -174,13 +209,7 @@ export function ListFillWorkbench({
       });
     }
     const totalCents = lines.reduce((s, l) => s + l.cents, 0);
-    const ourCents = lines
-      .filter((l) => l.payer === "onze")
-      .reduce((s, l) => s + l.cents, 0);
-    const theirCents = lines
-      .filter((l) => l.payer === "hun")
-      .reduce((s, l) => s + l.cents, 0);
-    return { lines, totalCents, ourCents, theirCents };
+    return { lines, totalCents };
   }, [
     pendingHeadcount,
     pendingKvk,
@@ -207,6 +236,16 @@ export function ListFillWorkbench({
         employeeRanges:
           next.length > 0 ? next : [...DEFAULT_APOLLO_CRITERIA.employeeRanges],
       };
+    });
+  }
+
+  function mergeCoverage(d: Record<string, unknown>) {
+    if (!Array.isArray(d.coverage)) return;
+    const states = d.coverage as SliceState[];
+    setCoverage((prev) => {
+      const next = { ...prev };
+      for (const s of states) next[s.key] = s;
+      return next;
     });
   }
 
@@ -238,43 +277,36 @@ export function ListFillWorkbench({
     });
   }
 
-  function previewCount() {
+  function count(recount = false) {
     run(
       "/api/outreach/discover",
-      { countOnly: true, criteria: criteriaBody() },
+      { countOnly: true, recount, criteria: criteriaBody() },
       (d) => {
+        mergeCoverage(d);
+        const counted = Number(d.counted ?? 0);
         const total = Number(d.total ?? 0);
-        setUniverseTotal(total);
-        setUniverseCheckedAt(new Date().toISOString());
-        if (typeof d.criteriaLabel === "string") {
-          setUniverseLabel(d.criteriaLabel);
-        }
-        return `Apollo vindt ~${total.toLocaleString("nl-NL")} bedrijven binnen deze filters`;
+        return counted === 0
+          ? "Alles was al geteld — geen credits gebruikt."
+          : `${counted} segment${counted === 1 ? "" : "en"} geteld · Apollo vindt ~${total.toLocaleString("nl-NL")} binnen deze filters`;
       },
     );
   }
 
-  function fetchAll() {
+  function fetchNew() {
     run(
       "/api/outreach/discover",
       { apply: true, drain: true, criteria: criteriaBody() },
       (d) => {
-        const total = Number(d.total ?? 0);
-        if (total > 0) {
-          setUniverseTotal(total);
-          setUniverseCheckedAt(new Date().toISOString());
-        }
-        if (typeof d.criteriaLabel === "string") {
-          setUniverseLabel(d.criteriaLabel);
-        }
+        mergeCoverage(d);
         const pages = Number(d.pages ?? 0);
         const cost =
           typeof d.estimatedCostCents === "number"
-            ? formatEurFromCents(d.estimatedCostCents)
-            : null;
-        const base = `${Number(d.created ?? 0)} nieuw · ${Number(d.duplicate ?? 0)} stonden al · ${pages} Apollo-pagina’s`;
-        const done = d.done === true ? " · klaar" : " · nog niet alles (klik opnieuw)";
-        return cost ? `${base}${done} · ~${cost}` : `${base}${done}`;
+            ? ` · ~${formatEurFromCents(d.estimatedCostCents)}`
+            : "";
+        const base = `${Number(d.created ?? 0)} nieuw · ${Number(d.duplicate ?? 0)} stonden al · ${pages} Apollo-pagina’s${cost}`;
+        return d.done === true
+          ? `${base} · alles binnen voor deze filters`
+          : `${base} · nog niet alles (klik nogmaals)`;
       },
     );
   }
@@ -315,6 +347,11 @@ export function ListFillWorkbench({
     });
   }
 
+  const chip = (on: boolean) =>
+    on
+      ? "border border-accent bg-accent/10 px-2.5 py-1 text-sm text-text"
+      : "border border-border px-2.5 py-1 text-sm text-text-muted hover:border-accent";
+
   return (
     <div className="space-y-8">
       {/* Stand */}
@@ -336,169 +373,220 @@ export function ListFillWorkbench({
         ) : null}
       </div>
 
-      {/* Filters + cost preview */}
+      {/* Filters */}
       <section>
-        <h2 className="font-display text-xl tracking-[0.06em]">Filters</h2>
+        <h2 className="font-display text-xl tracking-[0.06em]">
+          1 · Wat zoeken we?
+        </h2>
+        <p className="mt-1 text-sm text-text-muted">
+          Elke combinatie van zone en grootte is een apart vakje. Wat al is
+          opgehaald, halen we nooit opnieuw op — maak je de straal groter, dan
+          komt alleen de nieuwe zone erbij.
+        </p>
 
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {APOLLO_EMPLOYEE_RANGES.map((r) => {
-            const on = criteria.employeeRanges.includes(r.id);
-            return (
-              <button
-                key={r.id}
-                type="button"
-                disabled={pending}
-                onClick={() => toggleRange(r.id)}
-                className={
-                  on
-                    ? "border border-accent bg-accent/10 px-2.5 py-1 text-sm text-text"
-                    : "border border-border px-2.5 py-1 text-sm text-text-muted hover:border-accent"
-                }
-              >
-                {r.label}
-              </button>
-            );
-          })}
+        <p className="mt-4 text-[11px] uppercase tracking-wider text-text-dim">
+          Afstand
+        </p>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {RADIUS_OPTIONS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              disabled={pending}
+              title={p.hint}
+              onClick={() => setCriteria((c) => ({ ...c, placePreset: p.id }))}
+              className={chip(criteria.placePreset === p.id)}
+            >
+              {p.label}
+            </button>
+          ))}
         </div>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {PLACE_OPTIONS.map((p) => {
-            const on = criteria.placePreset === p.id;
-            return (
-              <button
-                key={p.id}
-                type="button"
-                disabled={pending}
-                title={p.hint}
-                onClick={() =>
-                  setCriteria((c) => ({ ...c, placePreset: p.id }))
-                }
-                className={
-                  on
-                    ? "border border-accent bg-accent/10 px-2.5 py-1 text-sm text-text"
-                    : "border border-border px-2.5 py-1 text-sm text-text-muted hover:border-accent"
-                }
-              >
-                {p.label}
-              </button>
-            );
-          })}
+
+        <p className="mt-3 text-[11px] uppercase tracking-wider text-text-dim">
+          Medewerkers
+        </p>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {APOLLO_EMPLOYEE_RANGES.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              disabled={pending}
+              onClick={() => toggleRange(r.id)}
+              className={chip(criteria.employeeRanges.includes(r.id))}
+            >
+              {r.label}
+            </button>
+          ))}
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+
+        <label className="mt-3 block text-[11px] uppercase tracking-wider text-text-dim">
+          Keywords (optioneel — elke keyword-set is een eigen zoekopdracht)
           <input
             value={keywords}
             onChange={(e) => setKeywords(e.target.value)}
-            placeholder="Keywords (optioneel)"
-            className="w-full max-w-xs border border-border bg-bg px-3 py-1.5 text-sm text-text sm:w-56"
+            placeholder="bijv. software, fintech"
+            className="mt-1.5 block w-full max-w-sm border border-border bg-bg px-3 py-1.5 text-sm normal-case tracking-normal text-text"
           />
-          <button
-            type="button"
-            disabled={pending || !apolloReady}
-            onClick={previewCount}
-            className="border border-border px-3 py-1.5 text-sm hover:border-accent disabled:opacity-50"
-          >
-            {pending ? "…" : `Tel · ${formatEurFromCents(OUTREACH_RATES.apolloCreditCents)}`}
-          </button>
-        </div>
-
-        {/* Live cost / progress for these filters */}
-        <div className="mt-4 border border-border bg-bg-elevated/50 px-4 py-3 text-sm dark:bg-surface">
-          <p className="text-xs uppercase tracking-wider text-text-dim">
-            Voor deze filters
-          </p>
-          {criteriaChanged ? (
-            <p className="mt-1 text-text-muted">
-              Filters gewijzigd t.o.v. laatste telling
-              {universeLabel ? ` (“${universeLabel}”)` : ""}. Tel opnieuw om te
-              zien hoeveel bedrijven Apollo vindt en wat ophalen kost.
-            </p>
-          ) : universeTotal > 0 ? (
-            <ul className="mt-2 space-y-1 text-text-muted">
-              <li>
-                Apollo-match ≈{" "}
-                <strong className="text-text">
-                  {universeTotal.toLocaleString("nl-NL")}
-                </strong>
-                {universeCheckedAt
-                  ? ` · geteld ${new Date(universeCheckedAt).toLocaleString("nl-NL")}`
-                  : ""}
-              </li>
-              <li>
-                Al op onze lijst:{" "}
-                <strong className="text-text">{apolloOnList}</strong>
-                {remainingApprox != null ? (
-                  <>
-                    {" "}
-                    · nog ≈{" "}
-                    <strong className="text-text">
-                      {remainingApprox.toLocaleString("nl-NL")}
-                    </strong>
-                  </>
-                ) : null}
-              </li>
-              <li>
-                Pagina’s al gelopen:{" "}
-                <strong className="text-text">{Math.max(0, apolloNextPage - 1)}</strong>
-                {fetchAllCents != null ? (
-                  <>
-                    {" "}
-                    · ophalen rest ≈{" "}
-                    <strong className="text-text">
-                      {formatEurFromCents(fetchAllCents)}
-                    </strong>{" "}
-                    ({fetchAllCredits} credits)
-                  </>
-                ) : null}
-              </li>
-            </ul>
-          ) : (
-            <p className="mt-1 text-text-muted">
-              Nog geen telling. Druk op Tel (~
-              {formatEurFromCents(OUTREACH_RATES.apolloCreditCents)}) om te zien
-              wat ophalen kost.
-            </p>
-          )}
-          <p className="mt-2 text-xs text-text-dim">
-            Namen die we al hebben worden overgeslagen — geen dubbele rijen
-            onder Bedrijven. Apollo vraagt wél opnieuw credits per pagina die we
-            doorlopen.
-          </p>
-        </div>
+        </label>
       </section>
 
-      {/* Fetch */}
+      {/* Coverage grid */}
       <section className="border-t border-border pt-6">
-        <h2 className="font-display text-xl tracking-[0.06em]">
-          Bedrijven ophalen
-        </h2>
-        <p className="mt-1 text-sm text-text-muted">
-          Eén knop haalt alles binnen deze filters. Apollo max{" "}
-          {APOLLO_PAGE_SIZE}/pagina — wij lopen die door.
-        </p>
-        <button
-          type="button"
-          disabled={pending || !apolloReady || (remainingApprox === 0 && !criteriaChanged)}
-          onClick={fetchAll}
-          className="mt-4 bg-accent px-5 py-3 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
-        >
-          {pending
-            ? "Bezig…"
-            : remainingApprox === 0 && !criteriaChanged
-              ? "Alles al binnen voor deze telling"
-              : fetchAllCents != null && !criteriaChanged
-                ? `Haal rest op · ~${formatEurFromCents(fetchAllCents)}`
-                : "Haal alles op"}
-        </button>
-        {criteriaChanged ? (
-          <p className="mt-2 text-xs text-text-dim">
-            Tip: eerst tellen, dan zie je hier een €-schatting.
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="font-display text-xl tracking-[0.06em]">
+            2 · Zoekdekking
+          </h2>
+          <p className="text-xs text-text-dim">
+            {activeKw ? `Keywords: ${keywordTags.join(", ")}` : "Zonder keywords"}
           </p>
+        </div>
+
+        <div className="mt-3 overflow-x-auto border border-border">
+          <table className="w-full min-w-[640px] text-left text-sm">
+            <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
+              <tr>
+                <th className="px-3 py-2 font-medium">Medewerkers</th>
+                {SEARCH_ZONES.map((z) => (
+                  <th key={z.id} className="px-3 py-2 font-medium" title={z.hint}>
+                    {z.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {APOLLO_EMPLOYEE_RANGES.map((r) => (
+                <tr key={r.id} className="border-b border-border last:border-0">
+                  <td className="px-3 py-2 text-text-muted">{r.label}</td>
+                  {SEARCH_ZONES.map((z) => {
+                    const key = sliceKey(z.id, r.id, keywordTags);
+                    const st = coverage[key];
+                    const inSel = selectedKeys.has(key);
+                    const left = pagesLeftFor(st);
+                    return (
+                      <td
+                        key={z.id}
+                        className={`px-3 py-2 align-top text-xs ${
+                          inSel ? "bg-accent/5" : "opacity-50"
+                        }`}
+                      >
+                        {!st ? (
+                          <span className="text-text-dim">
+                            {inSel ? "Nog niet gezocht" : "—"}
+                          </span>
+                        ) : st.done ? (
+                          <span className="text-success">
+                            ✓ Klaar · {st.created} nieuw
+                            <span className="block text-text-dim">
+                              {st.total ?? st.seen} bij Apollo
+                              {st.lastRunAt ? ` · ${fmtDate(st.lastRunAt)}` : ""}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-text">
+                            ≈{(st.total ?? 0).toLocaleString("nl-NL")} bij Apollo
+                            <span className="block text-text-dim">
+                              {st.seen > 0
+                                ? `${st.seen} bekeken · ${st.created} nieuw · nog ${left ?? "?"} pag.`
+                                : `nog ${left ?? "?"} pag. te halen`}
+                            </span>
+                          </span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2 text-xs text-text-dim">
+          Gekleurde vakjes = je huidige filters. Namen die al op de lijst staan
+          worden altijd overgeslagen.
+        </p>
+
+        <div className="mt-4 border border-border bg-bg-elevated/50 px-4 py-3 text-sm dark:bg-surface">
+          <p className="text-text-muted">
+            {selectedSlices.length} vakjes geselecteerd · {plan.doneSlices} klaar
+            {plan.total > 0
+              ? ` · Apollo ≈${plan.total.toLocaleString("nl-NL")} bedrijven`
+              : ""}
+            {plan.uncounted > 0 ? ` · ${plan.uncounted} nog niet geteld` : ""}
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {plan.uncounted > 0 ? (
+              <button
+                type="button"
+                disabled={pending || !apolloReady}
+                onClick={() => count(false)}
+                className="border border-border px-3 py-2 text-sm hover:border-accent disabled:opacity-50"
+              >
+                {pending
+                  ? "…"
+                  : `Tel ${plan.uncounted} nieuwe vakje${plan.uncounted === 1 ? "" : "s"} · ${formatEurFromCents(plan.uncounted * OUTREACH_RATES.apolloCreditCents)}`}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              disabled={pending || !apolloReady || plan.allDone}
+              onClick={fetchNew}
+              className="bg-accent px-5 py-2.5 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
+            >
+              {pending
+                ? "Bezig…"
+                : plan.allDone
+                  ? "Alles al binnen voor deze filters"
+                  : plan.unknownSlices > 0
+                    ? `Haal nieuwe op · vanaf ~${formatEurFromCents(fetchCents)}`
+                    : `Haal nieuwe op · ~${formatEurFromCents(fetchCents)}`}
+            </button>
+            {plan.uncounted < selectedSlices.length ? (
+              <button
+                type="button"
+                disabled={pending || !apolloReady}
+                onClick={() => count(true)}
+                className="text-xs text-text-dim underline hover:text-text disabled:opacity-50"
+              >
+                Opnieuw tellen (Apollo groeit)
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        {pastSearches.length > 0 ? (
+          <details className="mt-4">
+            <summary className="cursor-pointer text-sm text-text-muted hover:text-text">
+              Eerdere zoekopdrachten ({pastSearches.length})
+            </summary>
+            <ul className="mt-2 divide-y divide-border border-y border-border text-sm">
+              {pastSearches.map((p) => (
+                <li
+                  key={p.key || "none"}
+                  className="flex flex-wrap items-baseline justify-between gap-2 py-2"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setKeywords(p.keywords.join(", "))}
+                    className="text-left text-text hover:text-accent"
+                  >
+                    {p.keywords.length ? p.keywords.join(", ") : "Zonder keywords"}
+                  </button>
+                  <span className="text-xs text-text-muted">
+                    {p.done}/{p.slices} vakjes klaar · {p.seen} bekeken ·{" "}
+                    {p.created} nieuw
+                    {p.lastRunAt ? ` · ${fmtDate(p.lastRunAt)}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
         ) : null}
+        <p className="sr-only">{criteriaSummary(activeCriteria)}</p>
       </section>
 
       {/* Enrich */}
       <section className="border-t border-border pt-6">
         <h2 className="font-display text-xl tracking-[0.06em]">
-          Open items aanvullen
+          3 · Gegevens aanvullen
         </h2>
         <p className="mt-1 text-sm text-text-muted">
           MdW → KvK → contacten → mail. Alleen voor wie al op de lijst staat.

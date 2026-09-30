@@ -69,8 +69,14 @@ export type CrmRecord = {
   excludedReason: string | null;
   mailCount: number;
   openCount: number;
+  clickCount: number;
   replyCount: number;
   lastTouchAt: string | null;
+  /** Latest real (non-test) send. */
+  lastSentAt: string | null;
+  lastVariantKey: string | null;
+  /** Human label of the Apollo search that found this company. */
+  searchLabel: string | null;
   linkedinUrl: string | null;
   kvkHeadcountOff: boolean;
   decisionMakerName?: string;
@@ -89,7 +95,21 @@ export type CrmRecord = {
   incomplete: boolean;
 };
 
+export type CrmMailLogItem = {
+  id: string;
+  subject: string;
+  body: string;
+  status: string;
+  variantKey: string | null;
+  createdAt: string;
+  sentAt: string | null;
+  openedAt: string | null;
+  clickedAt: string | null;
+  repliedAt: string | null;
+};
+
 export type CrmDossier = CrmRecord & {
+  mails: CrmMailLogItem[];
   notes: CrmNote[];
   timeline: CrmTimelineItem[];
   lastLead?: { summary: string | null; createdAt: string } | null;
@@ -110,8 +130,11 @@ function mapRecord(
   extras: {
     mailCount: number;
     openCount: number;
+    clickCount: number;
     replyCount: number;
     lastTouchAt: string | null;
+    lastSentAt: string | null;
+    lastVariantKey: string | null;
   },
 ): CrmRecord {
   const meta = (p.metadata ?? {}) as Record<string, unknown>;
@@ -239,8 +262,15 @@ function mapRecord(
     excludedReason: p.excludedReason,
     mailCount: extras.mailCount,
     openCount: extras.openCount,
+    clickCount: extras.clickCount,
     replyCount: extras.replyCount,
     lastTouchAt: extras.lastTouchAt,
+    lastSentAt: extras.lastSentAt,
+    lastVariantKey: extras.lastVariantKey,
+    searchLabel:
+      typeof meta.apolloSearchLabel === "string"
+        ? meta.apolloSearchLabel
+        : null,
     linkedinUrl: p.linkedinUrl,
     decisionMakerName,
     decisionMakerTitle,
@@ -278,7 +308,9 @@ export async function listCrmRecords(): Promise<{
       prospectId: outreachEmails.prospectId,
       mailCount: sql<number>`count(*) filter (where ${outreachEmails.status} <> 'draft')::int`,
       openCount: sql<number>`count(*) filter (where ${outreachEmails.openedAt} is not null)::int`,
-      lastSent: sql<Date | null>`max(${outreachEmails.sentAt})`,
+      clickCount: sql<number>`count(*) filter (where ${outreachEmails.clickedAt} is not null)::int`,
+      lastSent: sql<Date | null>`max(${outreachEmails.sentAt}) filter (where ${outreachEmails.status} <> 'draft')`,
+      lastVariantKey: sql<string | null>`(array_agg(${outreachEmails.variantKey} order by ${outreachEmails.sentAt} desc nulls last) filter (where ${outreachEmails.status} <> 'draft'))[1]`,
     })
     .from(outreachEmails)
     .groupBy(outreachEmails.prospectId);
@@ -318,8 +350,11 @@ export async function listCrmRecords(): Promise<{
     return mapRecord(p, {
       mailCount: mail?.mailCount ?? 0,
       openCount: mail?.openCount ?? 0,
+      clickCount: mail?.clickCount ?? 0,
       replyCount: reply?.replyCount ?? 0,
       lastTouchAt: last?.toISOString() ?? null,
+      lastSentAt: toDate(mail?.lastSent)?.toISOString() ?? null,
+      lastVariantKey: mail?.lastVariantKey ?? null,
     });
   });
 
@@ -521,9 +556,24 @@ export async function getCrmDossier(
       ...mapRecord(p, {
         mailCount: sentMails.length,
         openCount: sentMails.filter((m) => m.openedAt).length,
+        clickCount: sentMails.filter((m) => m.clickedAt).length,
         replyCount: replies.length,
         lastTouchAt: lastTouch,
+        lastSentAt: sentMails[0]?.sentAt?.toISOString() ?? null,
+        lastVariantKey: sentMails[0]?.variantKey ?? null,
       }),
+      mails: mails.map((m) => ({
+        id: m.id,
+        subject: m.subject,
+        body: m.body,
+        status: m.status,
+        variantKey: m.variantKey,
+        createdAt: m.createdAt.toISOString(),
+        sentAt: m.sentAt?.toISOString() ?? null,
+        openedAt: m.openedAt?.toISOString() ?? null,
+        clickedAt: m.clickedAt?.toISOString() ?? null,
+        repliedAt: m.repliedAt?.toISOString() ?? null,
+      })),
       notes,
       timeline,
       lastLead: leadRows[0]

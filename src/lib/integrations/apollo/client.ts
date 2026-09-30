@@ -39,6 +39,8 @@ export async function searchDoelgroepCompanies(options?: {
   page?: number;
   perPage?: number;
   criteria?: Partial<ApolloSearchCriteria> | null;
+  /** Overrides the preset's place list (used for per-zone coverage slices). */
+  places?: readonly string[];
 }): Promise<ApolloSearchResult> {
   const criteria = normalizeCriteria(options?.criteria ?? DEFAULT_APOLLO_CRITERIA);
   const key = process.env.APOLLO_API_KEY?.trim();
@@ -55,7 +57,7 @@ export async function searchDoelgroepCompanies(options?: {
 
   const page = options?.page ?? 1;
   const perPage = Math.min(options?.perPage ?? 100, 100);
-  const locations = placesForPreset(criteria.placePreset).map(
+  const locations = (options?.places ?? placesForPreset(criteria.placePreset)).map(
     (p) => `${p}, Netherlands`,
   );
 

@@ -68,7 +68,7 @@ export function CrmNoteForm({ prospectId }: { prospectId: string }) {
           disabled={pending}
           className="bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-60"
         >
-          {pending ? "Opslaan…" : "Contactmoment loggen"}
+          {pending ? "Opslaan…" : "Opslaan"}
         </button>
         {error ? <StatusBadge tone="danger">{error}</StatusBadge> : null}
       </div>
