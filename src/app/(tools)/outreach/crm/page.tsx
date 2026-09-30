@@ -50,9 +50,9 @@ export default async function OutreachCrmPage() {
   return (
     <div>
       <SectionHeader
-        eyebrow="Lijst"
+        eyebrow="Stap 2 van 4"
         title="Bedrijven"
-        description="Stap 2: signalen en leadscore laten zien wie nu de moeite waard is. Klik een bedrijf open voor maillog en notities."
+        description="Wie nu de moeite waard is: signalen en leadscore. Klik een bedrijf open voor maillog en notities. Daarna → Mailen."
         action={
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge tone={source === "db" ? "success" : "neutral"}>

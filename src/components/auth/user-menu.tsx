@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
 
-export function UserMenu() {
+export function UserMenu({ hideAdminLinks = false }: { hideAdminLinks?: boolean }) {
   const { data } = useSession();
   if (!data?.user) return null;
 
-  const isAdmin = data.user.role === "admin";
+  const isAdmin = data.user.role === "admin" && !hideAdminLinks;
 
   return (
     <div className="space-y-2">

@@ -20,9 +20,9 @@ export default async function OutreachTemplatesPage() {
   return (
     <div>
       <SectionHeader
-        eyebrow="Mailen"
-        title="Mailtemplates"
-        description="Bekijk, pas aan, stuur een test. In Mailen kies je daarna per batch welke template."
+        eyebrow="Bij stap 3"
+        title="Templates"
+        description="Alle teksten op één plek. Pas aan, stuur een test, en kies daarna in Mailen welke template een batch krijgt."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone="neutral">{templates.length} templates</StatusBadge>

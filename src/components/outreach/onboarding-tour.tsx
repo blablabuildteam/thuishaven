@@ -9,7 +9,7 @@ import {
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-const STORAGE_KEY = "thuishaven-outreach-tour-v3";
+const STORAGE_KEY = "thuishaven-outreach-tour-v4";
 
 type TourStep = {
   /** Matches data-tour on a real UI element */
@@ -29,23 +29,28 @@ const STEPS: TourStep[] = [
   {
     target: "nav-bedrijven",
     title: "2 · Bedrijven",
-    body: "Je werklijst. Labels: Jubileum, Seizoen, Algemeen, Onvolledig, Past niet, Niet mailen.",
+    body: "Je werklijst. Bovenaan de signalen (jubileum, gereageerd). Klik een rij open voor notities en maillog.",
   },
   {
     target: "crm-mailen",
     title: "Door naar Mailen",
-    body: "Vanaf Bedrijven ga je met één knop naar Mailen.",
+    body: "Filter wie je wilt, dan ‘Mail deze’ — die selectie staat klaar in Mailen.",
     go: "/outreach/crm",
   },
   {
     target: "nav-mailen",
     title: "3 · Mailen",
-    body: "Draft maken en testen naar team@. Live versturen staat uit.",
+    body: "Kies een batch en een template. Eerst een test naar team@. Live versturen staat uit.",
+  },
+  {
+    target: "nav-templates",
+    title: "Templates",
+    body: "Hier pas je de teksten aan en stuur je een test. In Mailen kies je welke template een batch krijgt.",
   },
   {
     target: "nav-resultaten",
     title: "4 · Resultaten",
-    body: "Opens, replies en leads komen hier terug.",
+    body: "Opens en replies. Welke template werkt, zie je hier en bij de templatekeuze.",
   },
 ];
 

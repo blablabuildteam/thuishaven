@@ -90,7 +90,7 @@ export default async function EmailsPage({
   return (
     <div>
       <SectionHeader
-        eyebrow="Outbound"
+        eyebrow="Stap 3 van 4"
         title="Mailen"
         description="Kies een batch (hoogste score eerst, al gemaild verborgen), kies template — voorgesteld of zelf — genereer drafts, stuur tests."
         action={

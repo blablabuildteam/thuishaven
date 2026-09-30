@@ -44,9 +44,9 @@ export default async function OutreachAnalyticsPage() {
   return (
     <div>
       <SectionHeader
-        eyebrow="Performance"
+        eyebrow="Stap 4 van 4"
         title="Resultaten"
-        description="Stap 4: opens via Brevo · replies log je voorlopig handmatig (evenement@)."
+        description="Welke mails worden geopend en beantwoord. Replies log je voorlopig handmatig, tot evenement@ automatisch binnenkomt."
         action={
           <Link
             href="/outreach/emails"
@@ -259,10 +259,10 @@ export default async function OutreachAnalyticsPage() {
             Inbox · replies
           </h2>
           <Link
-            href="/outreach/leads"
+            href="/outreach/crm"
             className="text-xs text-accent hover:underline"
           >
-            Warme leads →
+            Bekijk in Bedrijven →
           </Link>
         </div>
         {snap.recentReplies.length === 0 ? (

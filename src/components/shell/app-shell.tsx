@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useSession } from "next-auth/react";
 import {
   BarChart3,
@@ -11,12 +11,10 @@ import {
   CalendarDays,
   Disc3,
   Euro,
-  ClipboardList,
   Home,
   Menu,
   Plug,
   ScrollText,
-  Send,
   Ticket,
   Users,
   Sparkles,
@@ -24,7 +22,6 @@ import {
   LineChart,
   Workflow,
   Ban,
-  MessageSquare,
   Contact,
   X,
   BookOpen,
@@ -126,13 +123,12 @@ const dashboardSystemNav: NavItem[] = [
   { href: "/koppelingen", label: "Bronnen", icon: Plug, adminOnly: true },
 ];
 
-/** Simpele flow: lijst bijwerken → bedrijven → mailen → resultaten. */
+/** Dagelijkse flow: lijst → bedrijven → mailen → resultaten. */
 const outreachSections: NavSection[] = [
   {
-    id: "werken",
-    label: "Werken",
+    id: "uitleg",
+    label: "Uitleg",
     items: [
-      { href: "/outreach", label: "Overzicht", icon: Send, tourId: "nav-overzicht" },
       {
         href: "/outreach/uitleg",
         label: "Hoe het werkt",
@@ -143,18 +139,39 @@ const outreachSections: NavSection[] = [
         label: "Juridisch",
         icon: Scale,
       },
+    ],
+  },
+  {
+    id: "werken",
+    label: "Stappen",
+    items: [
       {
         href: "/outreach/lijst-bijwerken",
-        label: "Lijst bijwerken",
+        label: "1 · Lijst bijwerken",
         icon: Users,
         tourId: "nav-lijst",
       },
-      { href: "/outreach/crm", label: "Bedrijven", icon: Contact, tourId: "nav-bedrijven" },
-      { href: "/outreach/emails", label: "Mailen", icon: Mail, tourId: "nav-mailen" },
-      { href: "/outreach/templates", label: "Templates", icon: Sparkles },
+      {
+        href: "/outreach/crm",
+        label: "2 · Bedrijven",
+        icon: Contact,
+        tourId: "nav-bedrijven",
+      },
+      {
+        href: "/outreach/emails",
+        label: "3 · Mailen",
+        icon: Mail,
+        tourId: "nav-mailen",
+      },
+      {
+        href: "/outreach/templates",
+        label: "Templates",
+        icon: Sparkles,
+        tourId: "nav-templates",
+      },
       {
         href: "/outreach/analytics",
-        label: "Resultaten",
+        label: "4 · Resultaten",
         icon: LineChart,
         tourId: "nav-resultaten",
       },
@@ -162,21 +179,9 @@ const outreachSections: NavSection[] = [
   },
   {
     id: "beheer",
-    label: "Beheer",
+    label: "Alleen admin",
     adminOnly: true,
     items: [
-      {
-        href: "/outreach/beschikbaarheid",
-        label: "Agenda",
-        icon: CalendarDays,
-        adminOnly: true,
-      },
-      {
-        href: "/outreach/prospects",
-        label: "Lijst (admin)",
-        icon: Users,
-        adminOnly: true,
-      },
       {
         href: "/outreach/uitsluitingen",
         label: "Niet mailen",
@@ -184,21 +189,9 @@ const outreachSections: NavSection[] = [
         adminOnly: true,
       },
       {
-        href: "/outreach/planning",
-        label: "Wachtrij",
-        icon: ClipboardList,
-        adminOnly: true,
-      },
-      {
-        href: "/outreach/leads",
-        label: "Warme leads",
-        icon: MessageSquare,
-        adminOnly: true,
-      },
-      {
-        href: "/outreach/campaigns",
-        label: "Campagnes",
-        icon: Sparkles,
+        href: "/outreach/beschikbaarheid",
+        label: "Agenda",
+        icon: CalendarDays,
         adminOnly: true,
       },
       {
@@ -330,6 +323,8 @@ function ShellNav({
   systemNav,
   djFeesPending,
   omzetPending,
+  viewAsStaff,
+  onToggleViewAsStaff,
   onNavigate,
   onClose,
 }: {
@@ -339,6 +334,8 @@ function ShellNav({
   systemNav: NavItem[];
   djFeesPending: number | null;
   omzetPending: number | null;
+  viewAsStaff?: boolean;
+  onToggleViewAsStaff?: () => void;
   onNavigate?: () => void;
   onClose?: () => void;
 }) {
@@ -386,7 +383,7 @@ function ShellNav({
             onNavigate={onNavigate}
           />
           <ToolSwitch
-            href="/outreach"
+            href="/outreach/crm"
             active={isOutreach}
             label="Outreach"
             onNavigate={onNavigate}
@@ -448,8 +445,17 @@ function ShellNav({
       </div>
 
       <div className="space-y-3 border-t border-border px-4 py-4">
+        {onToggleViewAsStaff ? (
+          <button
+            type="button"
+            onClick={onToggleViewAsStaff}
+            className="w-full border border-border px-2 py-1.5 font-display text-xs tracking-[0.12em] text-text-muted transition-colors hover:border-accent hover:text-text"
+          >
+            {viewAsStaff ? "Terug naar admin" : "Bekijk als medewerker"}
+          </button>
+        ) : null}
         <ThemeToggle className="w-full justify-center" />
-        <UserMenu />
+        <UserMenu hideAdminLinks={viewAsStaff} />
         <Link
           href="/"
           onClick={onNavigate}
@@ -463,19 +469,41 @@ function ShellNav({
   );
 }
 
+const VIEW_AS_STAFF_KEY = "th-view-as-staff";
+const VIEW_AS_EVENT = "th-view-as-staff";
+
+function subscribeViewAsStaff(onChange: () => void) {
+  window.addEventListener(VIEW_AS_EVENT, onChange);
+  return () => window.removeEventListener(VIEW_AS_EVENT, onChange);
+}
+
+function readViewAsStaff() {
+  return window.localStorage.getItem(VIEW_AS_STAFF_KEY) === "1";
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { data } = useSession();
   const isAdmin = data?.user?.role === "admin";
+  const viewAsStaff = useSyncExternalStore(
+    subscribeViewAsStaff,
+    readViewAsStaff,
+    () => false,
+  );
+  function toggleViewAsStaff() {
+    window.localStorage.setItem(VIEW_AS_STAFF_KEY, viewAsStaff ? "0" : "1");
+    window.dispatchEvent(new Event(VIEW_AS_EVENT));
+  }
+  const showAdminNav = Boolean(isAdmin) && !viewAsStaff;
   const isOutreach = pathname.startsWith("/outreach");
   const djFeesPending = useDjFeesPendingCount(!isOutreach);
   const omzetPending = useOmzetPendingCount(!isOutreach);
   const sections = isOutreach
-    ? filterSections(outreachSections, isAdmin)
+    ? filterSections(outreachSections, showAdminNav)
     : dashboardSections;
   const systemNav = filterNav(
     isOutreach ? outreachSystemNav : dashboardSystemNav,
-    isAdmin,
+    showAdminNav,
   );
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -516,6 +544,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     systemNav,
     djFeesPending,
     omzetPending,
+    viewAsStaff: Boolean(isAdmin) && viewAsStaff,
+    onToggleViewAsStaff: isAdmin ? toggleViewAsStaff : undefined,
   };
 
   return (
@@ -572,6 +602,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
 
         <main className="min-w-0 flex-1 px-3 py-5 sm:px-6 sm:py-6 lg:px-10">
+          {isAdmin && viewAsStaff ? (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border border-accent bg-accent/10 px-3 py-2 text-sm">
+              <p>
+                Je kijkt als <strong>medewerker</strong>. Beheer en Systeem
+                zijn verborgen. Je rechten zijn niet veranderd.
+              </p>
+              <button
+                type="button"
+                onClick={toggleViewAsStaff}
+                className="border border-accent px-2 py-1 text-xs tracking-[0.08em] hover:bg-accent hover:text-accent-contrast"
+              >
+                Terug naar admin
+              </button>
+            </div>
+          ) : null}
           {children}
         </main>
       </div>

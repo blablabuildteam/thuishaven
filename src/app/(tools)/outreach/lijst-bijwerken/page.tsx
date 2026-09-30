@@ -38,9 +38,9 @@ export default async function LijstBijwerkenPage() {
   return (
     <div>
       <SectionHeader
-        eyebrow="Stap 1"
+        eyebrow="Stap 1 van 4"
         title="Lijst bijwerken"
-        description="Bedrijven ophalen en aanvullen. Flow: Lijst bijwerken → Bedrijven → Mailen → Resultaten."
+        description="Alleen ophalen wat nog niet binnen is, daarna gegevens aanvullen. Klaar? Door naar Bedrijven."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={apolloReady ? "success" : "danger"}>
