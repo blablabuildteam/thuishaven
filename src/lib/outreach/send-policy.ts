@@ -48,6 +48,36 @@ export function getOutreachTestRecipient(): string {
   );
 }
 
+/** Allowed domains for template/mail test sends (never live prospects). */
+const TEST_ALLOW_DOMAINS = ["blablabuild.com", "thuishaven.nl"];
+
+export function isAllowedOutreachTestEmail(email: string): boolean {
+  const e = email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return false;
+  if (e === getOutreachTestRecipient().toLowerCase()) return true;
+  const domain = e.split("@")[1] ?? "";
+  return TEST_ALLOW_DOMAINS.includes(domain);
+}
+
+/** Parse comma/space-separated test addresses; fall back to default. */
+export function resolveOutreachTestRecipients(
+  requested?: string[] | string | null,
+): string[] {
+  const raw = Array.isArray(requested)
+    ? requested
+    : typeof requested === "string"
+      ? requested.split(/[,;\s]+/)
+      : [];
+  const allowed = [
+    ...new Set(
+      raw
+        .map((e) => e.trim().toLowerCase())
+        .filter((e) => e && isAllowedOutreachTestEmail(e)),
+    ),
+  ];
+  return allowed.length > 0 ? allowed : [getOutreachTestRecipient()];
+}
+
 /** Block live prospect sends. */
 export function outreachLiveSendBlockReason(): string | null {
   if (!isOutreachSendEnabled()) {

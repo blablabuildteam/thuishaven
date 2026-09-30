@@ -16,6 +16,7 @@ import {
   getOutreachTestRecipient,
   outreachLiveSendBlockReason,
   outreachTestSendBlockReason,
+  resolveOutreachTestRecipients,
 } from "@/lib/outreach/send-policy";
 import {
   appendOutreachSignature,
@@ -206,6 +207,7 @@ export async function generateOutreachEmail(input: {
     subjectArm: subjectKey,
     companyName: input.companyName,
     availabilityUrl,
+    contactFirstName: input.contactName?.trim().split(/\s+/)[0],
   });
   const subject = resolved.subject;
 
@@ -310,6 +312,8 @@ export async function sendViaBrevo(input: {
   tags?: string[];
   /** Force test recipient even if live flags are on */
   forceTest?: boolean;
+  /** Override test inboxes (allowlisted domains only) */
+  testTo?: string[];
 }): Promise<{
   messageId?: string;
   error?: string;
@@ -330,7 +334,7 @@ export async function sendViaBrevo(input: {
 
   const resolved = forceTest
     ? {
-        to: [getOutreachTestRecipient()],
+        to: resolveOutreachTestRecipients(input.testTo),
         testMode: true as const,
         intended: [input.to],
       }
@@ -560,6 +564,7 @@ export async function sendStoredDraft(input: {
   emailId: string;
   /** Always true for now unless live unlock */
   forceTest?: boolean;
+  testTo?: string[];
 }): Promise<
   | {
       messageId?: string;
@@ -634,6 +639,7 @@ export async function sendStoredDraft(input: {
     text: row.body,
     tags,
     forceTest,
+    testTo: input.testTo,
   });
   if (sent.error) return { error: sent.error };
 

@@ -23,7 +23,10 @@ import { outreachEmails, prospects } from "@/lib/db/schema";
 import { getCompanyCampaignId } from "@/lib/outreach/data";
 import { eq } from "drizzle-orm";
 import { renderOutreachHtmlEmail } from "@/lib/outreach/email-html";
-import { getOutreachTestRecipient } from "@/lib/outreach/send-policy";
+import {
+  getOutreachTestRecipient,
+  resolveOutreachTestRecipients,
+} from "@/lib/outreach/send-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -118,11 +121,14 @@ export async function POST(request: Request) {
       /** Inline body/subject override (unsaved editor state) */
       subject: z.string().min(1).max(200).optional(),
       bodyTemplate: z.string().min(1).max(8000).optional(),
+      testTo: z.union([z.string(), z.array(z.string())]).optional(),
     });
     const parsed = schema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
     }
+
+    const testTo = resolveOutreachTestRecipients(parsed.data.testTo);
 
     if (parsed.data.prospectId) {
       const draft = await generateAndStoreDraft({
@@ -136,6 +142,7 @@ export async function POST(request: Request) {
       const sent = await sendStoredDraft({
         emailId: draft.emailId,
         forceTest: true,
+        testTo,
       });
       if ("error" in sent) {
         return NextResponse.json(sent, { status: 400 });
@@ -169,18 +176,18 @@ export async function POST(request: Request) {
       },
     );
     const bodyText = appendOutreachSignature(rawBody);
-    const testTo = getOutreachTestRecipient();
     const html = renderOutreachHtmlEmail({
       body: bodyText,
       testBanner: `TEMPLATE-TEST · ${parsed.data.id} · bedoeld als voorbeeldmail`,
     });
 
     const sent = await sendViaBrevo({
-      to: testTo,
+      to: testTo[0] ?? getOutreachTestRecipient(),
       subject,
       html,
       text: bodyText,
       forceTest: true,
+      testTo,
       tags: ["outreach", "template-test", parsed.data.id],
     });
     if (sent.error) {

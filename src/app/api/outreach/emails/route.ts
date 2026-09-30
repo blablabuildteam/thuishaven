@@ -7,6 +7,7 @@ import {
 } from "@/lib/integrations/outreach";
 import { OUTREACH_VARIANTS } from "@/lib/outreach/tone";
 import { logSessionActivity } from "@/lib/audit/session-log";
+import { resolveOutreachTestRecipients } from "@/lib/outreach/send-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -25,12 +26,25 @@ const generateSchema = z
   .object({
     prospectId: z.string().uuid().optional(),
     prospectIds: z.array(z.string().uuid()).min(1).max(40).optional(),
+    /** Per-company template (overrides global variantId when present) */
+    items: z
+      .array(
+        z.object({
+          prospectId: z.string().uuid(),
+          variantId: z.enum(VARIANT_IDS),
+        }),
+      )
+      .min(1)
+      .max(40)
+      .optional(),
     variantId: z.enum(VARIANT_IDS).optional(),
     subjectArm: z.enum(["a", "b"]).optional(),
   })
-  .refine((d) => Boolean(d.prospectId || d.prospectIds?.length), {
-    message: "prospectId of prospectIds verplicht",
-  });
+  .refine(
+    (d) =>
+      Boolean(d.prospectId || d.prospectIds?.length || d.items?.length),
+    { message: "prospectId, prospectIds of items verplicht" },
+  );
 
 export async function GET() {
   const session = await auth();
@@ -52,29 +66,81 @@ export async function POST(request: Request) {
   if (action === "send" || action === "send-test") {
     const sendSchema = z.object({
       action: z.enum(["send", "send-test"]),
-      emailId: z.string().uuid(),
+      emailId: z.string().uuid().optional(),
+      emailIds: z.array(z.string().uuid()).min(1).max(40).optional(),
+      testTo: z.union([z.string(), z.array(z.string())]).optional(),
     });
     const parsed = sendSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
     }
-    const result = await sendStoredDraft({
-      emailId: parsed.data.emailId,
-      forceTest: true,
-    });
-    if ("error" in result) {
-      return NextResponse.json(result, { status: 400 });
+    const ids =
+      parsed.data.emailIds ??
+      (parsed.data.emailId ? [parsed.data.emailId] : []);
+    if (!ids.length) {
+      return NextResponse.json({ error: "emailId verplicht" }, { status: 400 });
     }
+    const testTo = resolveOutreachTestRecipients(parsed.data.testTo);
+
+    if (ids.length === 1) {
+      const result = await sendStoredDraft({
+        emailId: ids[0]!,
+        forceTest: true,
+        testTo,
+      });
+      if ("error" in result) {
+        return NextResponse.json(result, { status: 400 });
+      }
+      await logSessionActivity(session, {
+        action: "email_send_test",
+        summary: `Testmail verstuurd · ${ids[0]}`,
+        path: "/api/outreach/emails",
+        method: "POST",
+        status: 200,
+        tool: "outreach",
+        meta: { emailId: ids[0], action: parsed.data.action },
+      });
+      return NextResponse.json(result);
+    }
+
+    const results: Array<{
+      emailId: string;
+      ok: boolean;
+      error?: string;
+      deliveredTo?: string[];
+    }> = [];
+    for (const emailId of ids) {
+      const result = await sendStoredDraft({
+        emailId,
+        forceTest: true,
+        testTo,
+      });
+      if ("error" in result) {
+        results.push({ emailId, ok: false, error: result.error });
+      } else {
+        results.push({
+          emailId,
+          ok: true,
+          deliveredTo: result.deliveredTo,
+        });
+      }
+    }
+    const ok = results.filter((r) => r.ok).length;
     await logSessionActivity(session, {
-      action: "email_send_test",
-      summary: `Testmail verstuurd · ${parsed.data.emailId}`,
+      action: "email_send_test_bulk",
+      summary: `Bulk test · ${ok}/${ids.length}`,
       path: "/api/outreach/emails",
       method: "POST",
       status: 200,
       tool: "outreach",
-      meta: { emailId: parsed.data.emailId, action: parsed.data.action },
+      meta: { count: ids.length, ok },
     });
-    return NextResponse.json(result);
+    return NextResponse.json({
+      ok,
+      failed: results.length - ok,
+      deliveredTo: testTo,
+      results,
+    });
   }
 
   const parsed = generateSchema.safeParse(body);
@@ -82,14 +148,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
   }
 
-  const ids =
-    parsed.data.prospectIds ??
-    (parsed.data.prospectId ? [parsed.data.prospectId] : []);
+  const jobs: Array<{
+    prospectId: string;
+    variantId?: (typeof VARIANT_IDS)[number];
+  }> = parsed.data.items
+    ? parsed.data.items.map((i) => ({
+        prospectId: i.prospectId,
+        variantId: i.variantId,
+      }))
+    : (
+        parsed.data.prospectIds ??
+        (parsed.data.prospectId ? [parsed.data.prospectId] : [])
+      ).map((prospectId) => ({
+        prospectId,
+        variantId: parsed.data.variantId,
+      }));
 
-  if (ids.length === 1) {
+  if (jobs.length === 1) {
+    const job = jobs[0]!;
     const result = await generateAndStoreDraft({
-      prospectId: ids[0]!,
-      variantId: parsed.data.variantId,
+      prospectId: job.prospectId,
+      variantId: job.variantId,
       subjectArm: parsed.data.subjectArm,
     });
     if ("error" in result) {
@@ -97,14 +176,14 @@ export async function POST(request: Request) {
     }
     await logSessionActivity(session, {
       action: "email_draft",
-      summary: `Draft gemaakt · prospect ${ids[0]}`,
+      summary: `Draft gemaakt · prospect ${job.prospectId}`,
       path: "/api/outreach/emails",
       method: "POST",
       status: 201,
       tool: "outreach",
       meta: {
-        prospectId: ids[0],
-        variantId: parsed.data.variantId,
+        prospectId: job.prospectId,
+        variantId: job.variantId,
       },
     });
     return NextResponse.json(result, { status: 201 });
@@ -114,21 +193,27 @@ export async function POST(request: Request) {
     prospectId: string;
     emailId?: string;
     subject?: string;
+    variantId?: string;
     error?: string;
   }> = [];
-  for (const prospectId of ids) {
+  for (const job of jobs) {
     const result = await generateAndStoreDraft({
-      prospectId,
-      variantId: parsed.data.variantId,
+      prospectId: job.prospectId,
+      variantId: job.variantId,
       subjectArm: parsed.data.subjectArm,
     });
     if ("error" in result) {
-      results.push({ prospectId, error: result.error });
+      results.push({
+        prospectId: job.prospectId,
+        variantId: job.variantId,
+        error: result.error,
+      });
     } else {
       results.push({
-        prospectId,
+        prospectId: job.prospectId,
         emailId: result.emailId,
         subject: result.subject,
+        variantId: result.variantId,
       });
     }
   }
@@ -136,16 +221,12 @@ export async function POST(request: Request) {
   const ok = results.filter((r) => r.emailId).length;
   await logSessionActivity(session, {
     action: "email_draft_bulk",
-    summary: `Bulk drafts · ${ok}/${ids.length} · ${parsed.data.variantId ?? "auto"}`,
+    summary: `Bulk drafts · ${ok}/${jobs.length}`,
     path: "/api/outreach/emails",
     method: "POST",
     status: 201,
     tool: "outreach",
-    meta: {
-      variantId: parsed.data.variantId,
-      count: ids.length,
-      ok,
-    },
+    meta: { count: jobs.length, ok },
   });
 
   return NextResponse.json(

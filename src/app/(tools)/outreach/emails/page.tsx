@@ -3,6 +3,12 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { OutreachEmailWorkbench } from "@/components/outreach/email-workbench";
 import { listOutreachEmails, listProspects } from "@/lib/outreach/data";
+import {
+  mailAngleFor,
+  suggestedVariantForAngle,
+} from "@/lib/outreach/mail-angle";
+import { getOutreachTestRecipient } from "@/lib/outreach/send-policy";
+import type { OutreachVariantId } from "@/lib/outreach/tone";
 
 export const metadata = { title: "Mailen" };
 export const dynamic = "force-dynamic";
@@ -13,12 +19,34 @@ export default async function EmailsPage() {
     listProspects({ type: "company" }),
   ]);
 
+  const workbenchProspects = prospects.map((p) => {
+    const angle = mailAngleFor({
+      status: p.status,
+      existingCustomer: p.status === "excluded",
+      doelgroepFit: p.doelgroepFit,
+      doelgroepReason: p.doelgroepReason,
+      anniversaryYears: p.anniversaryYears,
+    });
+    const suggested = suggestedVariantForAngle(angle.id);
+    return {
+      id: p.id,
+      type: p.type,
+      companyName: p.companyName,
+      email: p.email,
+      status: p.status,
+      source: p.source,
+      nonMailing: p.nonMailing,
+      suggestedVariantId: suggested as OutreachVariantId | null,
+      suggestedLabel: suggested ? angle.label : null,
+    };
+  });
+
   return (
     <div>
       <SectionHeader
         eyebrow="Outbound"
         title="Mailen"
-        description="Stap 3: kies bedrijven + één mailtemplate, genereer drafts, stuur test naar team@."
+        description="Selecteer bedrijven, kies template (suggested of override), genereer drafts, stuur tests."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={source === "db" ? "success" : "neutral"}>
@@ -40,7 +68,10 @@ export default async function EmailsPage() {
         }
       />
 
-      <OutreachEmailWorkbench prospects={prospects} />
+      <OutreachEmailWorkbench
+        prospects={workbenchProspects}
+        defaultTestTo={getOutreachTestRecipient()}
+      />
 
       {emails.length === 0 ? (
         <p className="border-t border-border pt-6 text-sm text-text-muted">

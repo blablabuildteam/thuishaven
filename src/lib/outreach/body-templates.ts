@@ -1,105 +1,137 @@
 import type { OutreachVariantId } from "./tone";
 
-/** Default plain-text bodies. Placeholders: {{companyName}} {{availabilityUrl}} {{brochureUrl}} */
+/** Default plain-text bodies — aligned with Thuishaven B2B Tone of Voice + voorbeeldmails. */
 export const DEFAULT_BODY_TEMPLATES: Record<OutreachVariantId, string> = {
-  open_dates: `Hoi,
+  open_dates: `Hi {{contactFirstName}},
 
 Hopelijk alles goed bij {{companyName}}. Even kort doorgeven: we hebben weer een paar doordeweekse data openstaan.
 
 {{availabilityUrl}}
 
-Handig als je ergens een pitch voor maakt. Mocht je floorplans of capacity willen, hoor ik het graag.
+Brochure met areas en sfeer: {{brochureUrl}}
+
+Mocht je floorplans of capacity willen, hoor ik het graag.
 
 Spreek je snel,`,
 
-  short_checkin: `Hoi,
+  short_checkin: `Hi {{contactFirstName}},
 
 Speelt er bij jullie binnenkort iets — borrel, teamdag, bedrijfsevent? Dan is het misschien leuk om even langs te komen op Thuishaven.
 
+Brochure: {{brochureUrl}}
 Live agenda: {{availabilityUrl}}
 
 Laat maar weten of een korte rondleiding zinvol is.
 
 Groet,`,
 
-  jubileum: `Hoi,
+  jubileum: `Hi {{contactFirstName}},
 
-Gefeliciteerd met het jubileum van {{companyName}} — mooie mijlpaal.
+Een jubileum vier je groots.
 
-Mocht je ergens over nadenken voor een avond met het team: Thuishaven is doordeweeks beschikbaar. Geen druk, gewoon even kijken of de sfeer past.
+Op Thuishaven kunnen we het terrein helemaal inzetten voor jullie jubileum: ontvangst en borrel, diner, optredens, feest, of juist een combinatie daarvan.
 
-{{availabilityUrl}}
+Met verschillende indoor en outdoor area’s kunnen we de dag of avond helemaal rondom jullie programma bouwen.
 
-Zin om een keertje langs te komen?
+Zijn jullie al bezig met de plannen voor {{companyName}}’s jubileum? Dan denk ik graag eens mee over wat er op Thuishaven mogelijk is.
 
-Groet,`,
-
-  seizoen: `Hoi,
-
-Bij veel bedrijven speelt nu weer een zomerfeest of einde-jaar / kerstborrel. Speelt dat ook bij {{companyName}}?
-
-Thuishaven is doordeweeks vaak beschikbaar — een korte rondleiding zegt meestal meer dan een lange mail.
-
-{{availabilityUrl}}
-
-Laat maar weten of dat interessant is.
+Brochure: {{brochureUrl}}
 
 Groet,`,
 
-  funding: `Hoi,
+  seizoen: `Hi {{contactFirstName}},
+
+{{seasonHook}}
+
+Op Thuishaven kunnen bedrijven hun eigen festivaldag of borrel organiseren: ontvangst, food, drinks, muziek en ruimte om daarna door te feesten.
+
+Van een informele borrel met het team tot een compleet bedrijfsfestival. We bouwen het graag rondom jullie ideeën.
+
+Zijn jullie al aan het nadenken over iets voor {{companyName}}? Dan denk ik graag met jullie mee.
+
+Brochure: {{brochureUrl}}
+
+Groet,`,
+
+  funding: `Hi {{contactFirstName}},
 
 Als jullie bij {{companyName}} iets te vieren hebben na een deal, funding of overname: soms zoeken teams daar een avondlocatie voor.
 
-Thuishaven in Amsterdam-West is doordeweeks beschikbaar. Geen pitch — gewoon kijken of de sfeer past.
+Thuishaven in Amsterdam-West is doordeweeks beschikbaar — geen pitch, gewoon kijken of de sfeer past.
 
-{{availabilityUrl}}
+Brochure: {{brochureUrl}}
 
 Zin om even langs te komen?
 
 Groet,`,
 
-  recordjaar: `Hoi,
+  recordjaar: `Hi {{contactFirstName}},
 
 Als jullie bij {{companyName}} een sterk jaar of targets vieren — kick-off, afterparty, teamavond — dan is Thuishaven misschien een idee.
 
 Doordeweeks zijn we vaak beschikbaar. Een korte rondleiding zegt meestal genoeg.
 
-{{availabilityUrl}}
+Brochure: {{brochureUrl}}
 
 Laat maar weten of dat speelt.
 
 Groet,`,
 
-  brochure: `Hoi,
+  brochure: `Hi {{contactFirstName}},
 
 Ik stuur je graag even onze brochure mee — zo zie je in één oogopslag wat Thuishaven is (areas, sfeer, capaciteit):
 
 {{brochureUrl}}
 
-Speelt er bij {{companyName}} ergens een bedrijfsfeest, teamavond of borrel? Dan plannen we graag een korte rondleiding.
-
-Live agenda: {{availabilityUrl}}
+Speelt er bij {{companyName}} ergens een bedrijfsfeest, teamavond of borrel? Dan denk ik graag mee.
 
 Groet,`,
 
-  warm_tour: `Hoi,
+  warm_tour: `Hi {{contactFirstName}},
 
-Ik dacht aan {{companyName}} — misschien speelt er ergens een bedrijfsevent of borrel?
+Ik zag dat wij bijna buren zijn en dacht: misschien is Thuishaven wel een leuke plek voor jullie volgende bedrijfsfeest.
 
-Thuishaven is een festivalterrein in Amsterdam-West met een paar areas met echt karakter (Mainstage, Circustent, Loods). Doordeweeks zijn we vaak beschikbaar; een korte rondleiding zegt meestal meer dan een lange mail.
+We organiseren op ons festivalterrein in Amsterdam-West borrels, zomerfeesten, jubileums, personeelsfeesten, productlanceringen en complete bedrijfsfestivals.
 
-{{availabilityUrl}}
+Met verschillende indoor en outdoor area’s kunnen we de locatie aanpassen aan de grootte en sfeer van jullie event. Van een informele borrel tot een avond waarbij het dak eraf gaat.
 
-Laat maar weten of dat interessant is.
+Hebben jullie toevallig al een event op de agenda waarvoor jullie een locatie zoeken?
+
+Brochure: {{brochureUrl}}
 
 Groet,`,
 };
 
+/** Public path under /public — absolute URL for mails. */
+export const BROCHURE_PUBLIC_PATH = "/brochure/thuishaven-b2b-2026.pdf";
+
+export function getAppBaseUrl(): string {
+  const fromEnv =
+    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "").trim() ||
+    process.env.AUTH_URL?.replace(/\/$/, "").trim();
+  if (fromEnv) return fromEnv;
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL.replace(/\/$/, "")}`;
+  }
+  return "http://localhost:3000";
+}
+
 export function getBrochureUrl(): string {
   return (
     process.env.OUTREACH_BROCHURE_URL?.trim() ||
-    "https://thuishavenb2b.nl/brochure"
+    `${getAppBaseUrl()}${BROCHURE_PUBLIC_PATH}`
   );
+}
+
+export function seasonHookLine(at: Date = new Date()): string {
+  const month = at.getUTCMonth() + 1;
+  if (month >= 4 && month <= 9) {
+    return "Lekker vroeg, maar de zomerfeest-agenda’s beginnen alweer aardig vol te lopen.";
+  }
+  if (month >= 10 || month <= 1) {
+    return "De kerstborrel of einde-jaar alweer aan het organiseren?";
+  }
+  return "Het nieuwe jaar verdient een goede aftrap — of plannen jullie alvast een seizoensfeest?";
 }
 
 export function fillBodyTemplate(
@@ -108,11 +140,20 @@ export function fillBodyTemplate(
     companyName: string;
     availabilityUrl: string;
     brochureUrl?: string;
+    contactFirstName?: string;
+    seasonHook?: string;
   },
 ): string {
   const brochure = vars.brochureUrl ?? getBrochureUrl();
+  const first =
+    vars.contactFirstName?.trim() ||
+    "hoi";
+  const season = vars.seasonHook ?? seasonHookLine();
   return template
     .replaceAll("{{companyName}}", vars.companyName)
     .replaceAll("{{availabilityUrl}}", vars.availabilityUrl)
-    .replaceAll("{{brochureUrl}}", brochure);
+    .replaceAll("{{brochureUrl}}", brochure)
+    .replaceAll("{{contactFirstName}}", first === "hoi" ? "hoi" : first)
+    .replaceAll("{{seasonHook}}", season)
+    .replace(/^Hi hoi,/m, "Hi,");
 }

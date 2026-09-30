@@ -22,6 +22,7 @@ export function TemplatesWorkbench({ initial, brochureUrl }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState("Voorbeeld BV");
   const [subjectArm, setSubjectArm] = useState<"a" | "b">("a");
+  const [testTo, setTestTo] = useState("team@blablabuild.com");
 
   const active = useMemo(
     () => templates.find((t) => t.id === activeId) ?? templates[0],
@@ -94,6 +95,7 @@ export function TemplatesWorkbench({ initial, brochureUrl }: Props) {
         companyName,
         subject: subjectArm === "a" ? active.subjects.a : active.subjects.b,
         bodyTemplate: active.bodyTemplate,
+        testTo,
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -118,8 +120,13 @@ export function TemplatesWorkbench({ initial, brochureUrl }: Props) {
 
   const previewBody = active.bodyTemplate
     .replaceAll("{{companyName}}", companyName)
+    .replaceAll("{{contactFirstName}}", "Sanne")
     .replaceAll("{{availabilityUrl}}", "https://…/agenda")
-    .replaceAll("{{brochureUrl}}", brochureUrl);
+    .replaceAll("{{brochureUrl}}", brochureUrl)
+    .replaceAll(
+      "{{seasonHook}}",
+      "Lekker vroeg, maar de zomerfeest-agenda’s beginnen alweer aardig vol te lopen.",
+    );
 
   return (
     <div className="grid gap-8 lg:grid-cols-[14rem_1fr]">
@@ -208,8 +215,8 @@ export function TemplatesWorkbench({ initial, brochureUrl }: Props) {
           <label className="block text-xs text-text-dim sm:col-span-2">
             Body-template
             <span className="ml-2 font-normal normal-case tracking-normal text-text-dim">
-              Placeholders: {"{{companyName}}"} {"{{availabilityUrl}}"}{" "}
-              {"{{brochureUrl}}"}
+              Placeholders: {"{{companyName}}"} {"{{contactFirstName}}"}{" "}
+              {"{{brochureUrl}}"} {"{{availabilityUrl}}"} {"{{seasonHook}}"}
             </span>
             <textarea
               rows={14}
@@ -227,6 +234,15 @@ export function TemplatesWorkbench({ initial, brochureUrl }: Props) {
               className="mt-1.5 block w-44 border border-border bg-bg px-3 py-2 text-sm text-text"
               value={companyName}
               onChange={(e) => setCompanyName(e.target.value)}
+            />
+          </label>
+          <label className="text-xs text-text-dim">
+            Test naar
+            <input
+              className="mt-1.5 block w-56 border border-border bg-bg px-3 py-2 text-sm text-text"
+              value={testTo}
+              onChange={(e) => setTestTo(e.target.value)}
+              placeholder="team@blablabuild.com"
             />
           </label>
           <label className="text-xs text-text-dim">

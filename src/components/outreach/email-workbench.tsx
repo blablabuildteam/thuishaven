@@ -17,17 +17,20 @@ type WorkbenchProspect = {
   status: string;
   source?: string;
   nonMailing?: boolean;
+  suggestedVariantId: OutreachVariantId | null;
+  suggestedLabel: string | null;
 };
 
 type Props = {
   prospects: WorkbenchProspect[];
-  /** Prefill from ?variant= or CRM */
-  initialVariantId?: OutreachVariantId;
+  defaultTestTo?: string;
 };
+
+type Mode = "suggested" | "override";
 
 export function OutreachEmailWorkbench({
   prospects,
-  initialVariantId,
+  defaultTestTo = "team@blablabuild.com",
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -39,136 +42,156 @@ export function OutreachEmailWorkbench({
           p.source !== "bureau_import" &&
           p.status !== "excluded" &&
           !p.nonMailing &&
-          Boolean(p.email),
+          Boolean(p.email) &&
+          Boolean(p.suggestedVariantId),
       ),
     [prospects],
   );
 
-  const [selected, setSelected] = useState<string[]>(() =>
-    ready[0] ? [ready[0].id] : [],
-  );
-  const [variantId, setVariantId] = useState<OutreachVariantId>(
-    initialVariantId ?? "seizoen",
-  );
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [mode, setMode] = useState<Mode>("suggested");
+  const [overrideVariant, setOverrideVariant] =
+    useState<OutreachVariantId>("warm_tour");
+  const [perRow, setPerRow] = useState<Record<string, OutreachVariantId>>({});
   const [subjectArm, setSubjectArm] = useState<OutreachSubjectArm | "auto">(
     "auto",
   );
-  const [draft, setDraft] = useState<{
+  const [testTo, setTestTo] = useState(defaultTestTo);
+  const [lastEmailIds, setLastEmailIds] = useState<string[]>([]);
+  const [draftPreview, setDraftPreview] = useState<{
     emailId: string;
     subject: string;
     body: string;
-    subjectKey?: string;
   } | null>(null);
-  const [bulkResult, setBulkResult] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const variant = OUTREACH_VARIANTS.find((v) => v.id === variantId);
   const companyVariants = OUTREACH_VARIANTS.filter(
     (v) => v.audience === "company" || v.audience === "both",
   );
 
-  function toggle(id: string) {
-    setSelected((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+  function variantFor(p: WorkbenchProspect): OutreachVariantId {
+    if (mode === "override") return overrideVariant;
+    return (
+      perRow[p.id] ??
+      p.suggestedVariantId ??
+      overrideVariant
     );
   }
 
-  function selectAllReady() {
-    setSelected(ready.map((p) => p.id));
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function selectAll() {
+    setSelected(new Set(ready.map((p) => p.id)));
   }
 
   function clearSelection() {
-    setSelected([]);
+    setSelected(new Set());
   }
 
   async function generate() {
     setError(null);
     setMessage(null);
-    setBulkResult(null);
-    setDraft(null);
-
-    if (selected.length === 0) {
+    setDraftPreview(null);
+    const picks = ready.filter((p) => selected.has(p.id));
+    if (!picks.length) {
       setError("Selecteer minstens één bedrijf");
       return;
     }
 
-    if (selected.length === 1) {
-      const res = await fetch("/api/outreach/emails", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prospectId: selected[0],
-          variantId,
-          subjectArm: subjectArm === "auto" ? undefined : subjectArm,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Genereren mislukt");
-        return;
-      }
-      setDraft({
-        emailId: data.emailId,
-        subject: data.subject,
-        body: data.body,
-        subjectKey: data.subjectKey,
-      });
-      setMessage(
-        `Draft opgeslagen · A/B-arm ${(data.subjectKey ?? "?").toUpperCase()}`,
-      );
-      startTransition(() => router.refresh());
-      return;
-    }
+    const items = picks.map((p) => ({
+      prospectId: p.id,
+      variantId: variantFor(p),
+    }));
 
     const res = await fetch("/api/outreach/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        prospectIds: selected,
-        variantId,
+        items,
         subjectArm: subjectArm === "auto" ? undefined : subjectArm,
       }),
     });
     const data = await res.json();
     if (!res.ok) {
-      setError(data.error ?? "Bulk genereren mislukt");
+      setError(data.error ?? "Genereren mislukt");
       return;
     }
-    setBulkResult(
-      `${data.ok} drafts met template “${variant?.name ?? variantId}”` +
-        (data.failed ? ` · ${data.failed} mislukt` : ""),
-    );
-    setMessage("Bulk klaar — zie eerdere drafts hieronder.");
+
+    if (data.emailId) {
+      setLastEmailIds([data.emailId]);
+      setDraftPreview({
+        emailId: data.emailId,
+        subject: data.subject,
+        body: data.body,
+      });
+      setMessage("1 draft klaar — stuur een test of selecteer meer.");
+    } else {
+      const ids = (data.results ?? [])
+        .map((r: { emailId?: string }) => r.emailId)
+        .filter(Boolean) as string[];
+      setLastEmailIds(ids);
+      setMessage(
+        `${data.ok} drafts gemaakt` +
+          (data.failed ? ` · ${data.failed} mislukt` : "") +
+          " — hieronder kun je tests sturen.",
+      );
+    }
     startTransition(() => router.refresh());
   }
 
-  async function sendTest() {
-    if (!draft) return;
+  async function sendTests() {
+    if (!lastEmailIds.length) {
+      setError("Eerst drafts genereren");
+      return;
+    }
     setError(null);
     setMessage(null);
     const res = await fetch("/api/outreach/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "send-test", emailId: draft.emailId }),
+      body: JSON.stringify({
+        action: "send-test",
+        emailIds: lastEmailIds,
+        testTo,
+      }),
     });
     const data = await res.json();
     if (!res.ok) {
       setError(data.error ?? "Testsend mislukt");
       return;
     }
-    setMessage(
-      `Test naar ${data.deliveredTo?.join(", ")} (bedoeld: ${data.intendedTo}). Check Resultaten na openen.`,
-    );
+    const delivered = Array.isArray(data.deliveredTo)
+      ? data.deliveredTo.join(", ")
+      : testTo;
+    if (typeof data.ok === "number") {
+      setMessage(
+        `${data.ok} testmails naar ${delivered}` +
+          (data.failed ? ` · ${data.failed} mislukt` : ""),
+      );
+    } else {
+      setMessage(`Test naar ${delivered}`);
+    }
     startTransition(() => router.refresh());
   }
 
   if (!ready.length) {
     return (
       <p className="border-y border-border py-6 text-sm text-text-muted">
-        Geen bedrijven met e-mail klaar. Vul eerst contactmails aan via{" "}
+        Geen bedrijven klaar om te mailen (e-mail + mailkans). Vul aan via{" "}
         <Link href="/outreach/lijst-bijwerken" className="text-accent underline">
           Lijst bijwerken
+        </Link>{" "}
+        of filter op{" "}
+        <Link href="/outreach/crm" className="text-accent underline">
+          Bedrijven
         </Link>
         .
       </p>
@@ -176,152 +199,214 @@ export function OutreachEmailWorkbench({
   }
 
   return (
-    <div className="mb-10">
-      <p className="mb-4 text-sm text-text-muted">
-        Kies één template voor alle geselecteerde bedrijven. Test alleen naar{" "}
-        <code className="text-accent">team@blablabuild.com</code> — live staat
-        uit.{" "}
+    <div className="mb-10 space-y-6">
+      <p className="text-sm text-text-muted">
+        Vink bedrijven aan, kies template (suggested of zelf), genereer drafts,
+        stuur tests. Live naar prospects blijft dicht.{" "}
         <Link href="/outreach/templates" className="text-accent underline">
           Templates bewerken
         </Link>
       </p>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_16rem]">
-        <div>
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs uppercase tracking-wider text-text-dim">
-              Bedrijven · {selected.length} geselecteerd
-            </p>
-            <div className="flex gap-2 text-xs">
-              <button
-                type="button"
-                onClick={selectAllReady}
-                className="text-accent underline"
-              >
-                Alles
-              </button>
-              <button
-                type="button"
-                onClick={clearSelection}
-                className="text-text-dim underline"
-              >
-                Niets
-              </button>
-            </div>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setMode("suggested")}
+          className={
+            mode === "suggested"
+              ? "border border-accent bg-accent/10 px-3 py-1.5 text-sm"
+              : "border border-border px-3 py-1.5 text-sm text-text-muted"
+          }
+        >
+          Suggested per bedrijf
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("override")}
+          className={
+            mode === "override"
+              ? "border border-accent bg-accent/10 px-3 py-1.5 text-sm"
+              : "border border-border px-3 py-1.5 text-sm text-text-muted"
+          }
+        >
+          Eén template voor selectie
+        </button>
+      </div>
+
+      {mode === "override" ? (
+        <label className="block max-w-sm text-xs text-text-dim">
+          Template voor alle geselecteerden
+          <select
+            className="mt-1.5 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
+            value={overrideVariant}
+            onChange={(e) =>
+              setOverrideVariant(e.target.value as OutreachVariantId)
+            }
+          >
+            {companyVariants.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="text-xs text-text-dim">
+          Onderwerp A/B
+          <select
+            className="mt-1.5 block border border-border bg-bg px-3 py-2 text-sm text-text"
+            value={subjectArm}
+            onChange={(e) =>
+              setSubjectArm(e.target.value as OutreachSubjectArm | "auto")
+            }
+          >
+            <option value="auto">Auto</option>
+            <option value="a">A</option>
+            <option value="b">B</option>
+          </select>
+        </label>
+        <label className="min-w-[14rem] flex-1 text-xs text-text-dim">
+          Test naar (alleen @blablabuild.com / @thuishaven.nl)
+          <input
+            className="mt-1.5 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
+            value={testTo}
+            onChange={(e) => setTestTo(e.target.value)}
+            placeholder="team@blablabuild.com"
+          />
+        </label>
+      </div>
+
+      <div>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs uppercase tracking-wider text-text-dim">
+            Bedrijven · {selected.size} geselecteerd / {ready.length}
+          </p>
+          <div className="flex gap-2 text-xs">
+            <button
+              type="button"
+              onClick={selectAll}
+              className="text-accent underline"
+            >
+              Alles
+            </button>
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="text-text-dim underline"
+            >
+              Niets
+            </button>
           </div>
-          <ul className="max-h-64 overflow-y-auto divide-y divide-border border border-border">
-            {ready.map((p) => {
-              const on = selected.includes(p.id);
-              return (
-                <li key={p.id}>
-                  <label className="flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-surface/60">
-                    <input
-                      type="checkbox"
-                      checked={on}
-                      onChange={() => toggle(p.id)}
-                      className="mt-1"
-                    />
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm text-text">
-                        {p.companyName}
-                      </span>
-                      <span className="block truncate text-xs text-text-dim">
-                        {p.email}
-                      </span>
-                    </span>
-                  </label>
-                </li>
-              );
-            })}
-          </ul>
         </div>
 
-        <div className="space-y-3">
-          <label className="block text-xs text-text-dim">
-            Mailtemplate
-            <select
-              className="mt-1.5 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
-              value={variantId}
-              onChange={(e) =>
-                setVariantId(e.target.value as OutreachVariantId)
-              }
-            >
-              {companyVariants.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <p className="text-xs text-text-muted">{variant?.description}</p>
-          <label className="block text-xs text-text-dim">
-            Onderwerp A/B
-            <select
-              className="mt-1.5 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
-              value={subjectArm}
-              onChange={(e) =>
-                setSubjectArm(e.target.value as OutreachSubjectArm | "auto")
-              }
-            >
-              <option value="auto">Auto (50/50)</option>
-              <option value="a">A — {variant?.subjects.a ?? "arm A"}</option>
-              <option value="b">B — {variant?.subjects.b ?? "arm B"}</option>
-            </select>
-          </label>
+        <div className="overflow-x-auto border border-border">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
+              <tr>
+                <th className="px-3 py-2 w-10" />
+                <th className="px-3 py-2 font-medium">Bedrijf</th>
+                <th className="px-3 py-2 font-medium">Suggested</th>
+                <th className="px-3 py-2 font-medium">Template</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ready.map((p) => {
+                const on = selected.has(p.id);
+                const chosen = variantFor(p);
+                return (
+                  <tr
+                    key={p.id}
+                    className="border-b border-border last:border-0 hover:bg-surface/50"
+                  >
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={() => toggle(p.id)}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <p className="font-medium text-text">{p.companyName}</p>
+                      <p className="text-xs text-text-dim">{p.email}</p>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-text-muted">
+                      {p.suggestedLabel ?? "—"}
+                    </td>
+                    <td className="px-3 py-2">
+                      {mode === "suggested" ? (
+                        <select
+                          className="w-full max-w-[12rem] border border-border bg-bg px-2 py-1.5 text-sm text-text"
+                          value={chosen}
+                          onChange={(e) =>
+                            setPerRow((prev) => ({
+                              ...prev,
+                              [p.id]: e.target.value as OutreachVariantId,
+                            }))
+                          }
+                        >
+                          {companyVariants.map((v) => (
+                            <option key={v.id} value={v.id}>
+                              {v.name}
+                              {v.id === p.suggestedVariantId ? " ★" : ""}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-xs text-text-dim">
+                          {
+                            companyVariants.find((v) => v.id === overrideVariant)
+                              ?.name
+                          }
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          disabled={selected.length === 0 || pending}
+          disabled={selected.size === 0 || pending}
           onClick={() => void generate()}
           className="bg-accent px-4 py-2.5 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
         >
-          {selected.length > 1
-            ? `Genereer ${selected.length} drafts`
-            : "Genereer draft"}
+          Genereer {selected.size || ""} draft
+          {selected.size === 1 ? "" : "s"}
         </button>
         <button
           type="button"
-          disabled={!draft || pending}
-          onClick={() => void sendTest()}
+          disabled={!lastEmailIds.length || pending}
+          onClick={() => void sendTests()}
           className="border border-border px-4 py-2.5 font-display text-sm tracking-[0.1em] hover:border-accent disabled:opacity-50"
         >
-          Stuur test (1 draft)
+          Stuur test
+          {lastEmailIds.length > 1 ? ` (${lastEmailIds.length})` : ""}
         </button>
-        <Link
-          href="/outreach/templates"
-          className="border border-border px-4 py-2.5 font-display text-sm tracking-[0.1em] hover:border-accent"
-        >
-          Templates →
-        </Link>
       </div>
 
-      {error && (
-        <p className="mt-3 text-sm text-danger" role="alert">
+      {error ? (
+        <p className="text-sm text-danger" role="alert">
           {error}
         </p>
-      )}
-      {message && <p className="mt-3 text-sm text-text-muted">{message}</p>}
-      {bulkResult && (
-        <p className="mt-2 text-sm font-medium text-text">{bulkResult}</p>
-      )}
+      ) : null}
+      {message ? <p className="text-sm text-text-muted">{message}</p> : null}
 
-      {draft && (
-        <article className="mt-6 border-t border-border pt-4">
-          <p className="text-xs text-text-dim">
-            Concept
-            {draft.subjectKey
-              ? ` · arm ${draft.subjectKey.toUpperCase()}`
-              : ""}
-          </p>
-          <h3 className="mt-1 font-medium text-text">{draft.subject}</h3>
+      {draftPreview ? (
+        <article className="border-t border-border pt-4">
+          <p className="text-xs text-text-dim">Laatste concept</p>
+          <h3 className="mt-1 font-medium text-text">{draftPreview.subject}</h3>
           <pre className="mt-3 whitespace-pre-wrap font-sans text-sm leading-relaxed text-text-muted">
-            {draft.body}
+            {draftPreview.body}
           </pre>
         </article>
-      )}
+      ) : null}
     </div>
   );
 }

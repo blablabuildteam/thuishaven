@@ -140,6 +140,7 @@ export async function resolveTemplateForSend(input: {
   subjectArm: OutreachSubjectArm;
   companyName: string;
   availabilityUrl: string;
+  contactFirstName?: string;
 }): Promise<{ subject: string; body: string; guidance: string }> {
   const t = await getEditableTemplate(input.variantId);
   const subject = t.subjects[input.subjectArm];
@@ -147,6 +148,7 @@ export async function resolveTemplateForSend(input: {
     companyName: input.companyName,
     availabilityUrl: input.availabilityUrl,
     brochureUrl: getBrochureUrl(),
+    contactFirstName: input.contactFirstName,
   });
   return { subject, body, guidance: t.guidance };
 }

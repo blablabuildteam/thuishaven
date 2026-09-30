@@ -12,6 +12,7 @@
  */
 
 import type { DoelgroepFit } from "./doelgroep";
+import type { OutreachVariantId } from "./tone";
 
 export const JUBILEE_MARKS = [5, 10, 15, 20, 25, 30, 40, 50, 75, 100] as const;
 
@@ -240,6 +241,26 @@ export function isMailableAngle(id: MailAngleId): boolean {
     id === "recordjaar" ||
     id === "algemeen"
   );
+}
+
+/** Suggested first-mail template for this company's angle. */
+export function suggestedVariantForAngle(
+  angleId: MailAngleId,
+): OutreachVariantId | null {
+  switch (angleId) {
+    case "jubileum":
+      return "jubileum";
+    case "seizoen":
+      return "seizoen";
+    case "funding":
+      return "funding";
+    case "recordjaar":
+      return "recordjaar";
+    case "algemeen":
+      return "warm_tour";
+    default:
+      return null;
+  }
 }
 
 export function mailAngleTone(
