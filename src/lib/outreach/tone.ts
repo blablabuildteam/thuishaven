@@ -41,6 +41,9 @@ export type OutreachVariantId =
   | "open_dates"
   | "jubileum"
   | "seizoen"
+  | "zomer"
+  | "kerst"
+  | "nieuwjaar"
   | "funding"
   | "recordjaar"
   | "short_checkin"
@@ -96,14 +99,50 @@ export const OUTREACH_VARIANTS: OutreachVariant[] = [
   },
   {
     id: "seizoen",
-    name: "Seizoensfeest",
+    name: "Seizoensfeest (auto)",
     audience: "company",
-    description: "Zomerfeest, kerstborrel of nieuwjaarsborrel (seizoen-hook).",
+    description: "Generieke seizoensmail — liever Zomer / Kerst / Nieuwjaar kiezen.",
     guidance:
-      "ToV: enthousiast, kort, nieuwsgierigheid. Zomer / kerst / nieuwjaar afhankelijk van seizoen. Soft meedenken.",
+      "ToV: enthousiast, kort. Soft meedenken. Liever specifieke seizoens-template gebruiken.",
+    subjects: {
+      a: "Tijd voor een seizoensfeest?",
+      b: "Idee voor jullie teamfeest",
+    },
+  },
+  {
+    id: "zomer",
+    name: "Zomerfeest",
+    audience: "company",
+    description: "ToV-voorbeeld: zomerfeest / bedrijfsfestival.",
+    guidance:
+      "Persoonlijk, enthousiast. Zomerfeest-agenda. Soft meedenken. Geen clichés.",
     subjects: {
       a: "Tijd voor een zomerfeest?",
-      b: "Jullie kerstborrel op Thuishaven?",
+      b: "Jullie zomerfeest op Thuishaven?",
+    },
+  },
+  {
+    id: "kerst",
+    name: "Kerstborrel",
+    audience: "company",
+    description: "ToV-voorbeeld: kerstborrel / einde-jaar.",
+    guidance:
+      "Persoonlijk, enthousiast. Kerstborrel. Soft meedenken. Geen clichés.",
+    subjects: {
+      a: "Jullie kerstborrel op Thuishaven?",
+      b: "Einde-jaar op locatie?",
+    },
+  },
+  {
+    id: "nieuwjaar",
+    name: "Nieuwjaarsborrel",
+    audience: "company",
+    description: "ToV-voorbeeld: nieuwjaarsborrel.",
+    guidance:
+      "Persoonlijk, enthousiast. Nieuwjaarsborrel. Soft meedenken.",
+    subjects: {
+      a: "Het nieuwe jaar goed beginnen op Thuishaven",
+      b: "Nieuwjaarsborrel · Thuishaven",
     },
   },
   {

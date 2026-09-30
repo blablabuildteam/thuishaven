@@ -202,6 +202,134 @@ export async function fillDecisionMakers(limit = 8): Promise<{
   return { ok: true, processed: rows.length, filled, withEmail, rows };
 }
 
+
+/** Forceer opnieuw zoeken voor één bedrijf (overschrijft bestaande contact). */
+export async function refillDecisionMakerForProspect(
+  prospectId: string,
+): Promise<{
+  ok: boolean;
+  error?: string;
+  filled: number;
+  withEmail: number;
+  rows: DecisionMakerRow[];
+}> {
+  if (!hasDatabase()) {
+    return { ok: false, error: "Geen database", filled: 0, withEmail: 0, rows: [] };
+  }
+  const db = getDb();
+  const [target] = await db
+    .select({
+      id: prospects.id,
+      companyName: prospects.companyName,
+      website: prospects.website,
+      email: prospects.email,
+      status: prospects.status,
+      metadata: prospects.metadata,
+    })
+    .from(prospects)
+    .where(eq(prospects.id, prospectId))
+    .limit(1);
+
+  if (!target) {
+    return { ok: false, error: "Prospect niet gevonden", filled: 0, withEmail: 0, rows: [] };
+  }
+  if (target.status === "excluded") {
+    return { ok: false, error: "Prospect uitgesloten", filled: 0, withEmail: 0, rows: [] };
+  }
+
+  const found = await searchDecisionMakers({
+    companyName: target.companyName,
+    website: target.website,
+  });
+  const meta = { ...(target.metadata ?? {}) };
+  if (!found.ok || found.people.length === 0) {
+    meta.decisionMakerFails =
+      typeof meta.decisionMakerFails === "number"
+        ? meta.decisionMakerFails + 1
+        : 1;
+    meta.decisionMakerError = found.error ?? "Geen persoon gevonden";
+    await db
+      .update(prospects)
+      .set({ metadata: meta, updatedAt: new Date() })
+      .where(eq(prospects.id, target.id));
+    return {
+      ok: false,
+      error: found.error ?? "Geen Event/Office Manager gevonden",
+      filled: 0,
+      withEmail: 0,
+      rows: [
+        {
+          id: target.id,
+          companyName: target.companyName,
+          ok: false,
+          error: found.error ?? "Geen Event/Office Manager",
+        },
+      ],
+    };
+  }
+
+  const contacts: DecisionMaker[] = [];
+  for (let i = 0; i < found.people.length; i++) {
+    const person = found.people[i]!;
+    const resolved = await resolvePersonEmail(person, target);
+    contacts.push({
+      name: person.name,
+      title: person.title,
+      email: resolved.email,
+      linkedinUrl: person.linkedinUrl,
+      source: "apollo",
+      emailSource: resolved.emailSource,
+      hunterScore: resolved.hunterScore,
+    });
+  }
+  const primary =
+    contacts.find((c) => c.email?.includes("@")) ?? contacts[0]!;
+  meta.decisionMaker = primary;
+  meta.contacts = contacts;
+  meta.decisionMakerAt = new Date().toISOString();
+  meta.peopleEnrichedAt = new Date().toISOString();
+  meta.decisionMakerRefilledAt = new Date().toISOString();
+  if (primary.emailSource === "hunter") meta.emailSource = "hunter";
+  delete meta.decisionMakerFails;
+  delete meta.decisionMakerError;
+
+  const locked = new Set([
+    "contacted",
+    "opened",
+    "replied",
+    "lead",
+    "excluded",
+  ]);
+  const nextEmail = primary.email || target.email || null;
+  await db
+    .update(prospects)
+    .set({
+      email: nextEmail,
+      status:
+        !target.email && primary.email && !locked.has(target.status)
+          ? "ready"
+          : target.status,
+      metadata: meta,
+      updatedAt: new Date(),
+    })
+    .where(eq(prospects.id, target.id));
+
+  return {
+    ok: true,
+    filled: 1,
+    withEmail: primary.email ? 1 : 0,
+    rows: [
+      {
+        id: target.id,
+        companyName: target.companyName,
+        ok: true,
+        person: primary,
+        hunterEmail: primary.emailSource === "hunter",
+      },
+    ],
+  };
+}
+
 /** Hunter-mail voor Event Managers die Apollo al vond, maar zonder e-mail. */
 export async function fillHunterEmailsForDecisionMakers(limit = 8): Promise<{
   ok: boolean;

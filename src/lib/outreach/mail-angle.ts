@@ -246,12 +246,17 @@ export function isMailableAngle(id: MailAngleId): boolean {
 /** Suggested first-mail template for this company's angle. */
 export function suggestedVariantForAngle(
   angleId: MailAngleId,
+  now: Date = new Date(),
 ): OutreachVariantId | null {
   switch (angleId) {
     case "jubileum":
       return "jubileum";
-    case "seizoen":
-      return "seizoen";
+    case "seizoen": {
+      const season = seasonalAngleNow(now).season;
+      if (season === "zomer") return "zomer";
+      if (season === "eindejaar") return "kerst";
+      return "nieuwjaar";
+    }
     case "funding":
       return "funding";
     case "recordjaar":

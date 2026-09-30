@@ -307,6 +307,56 @@ export default function OutreachUitlegPage() {
           })}
         </ul>
       </section>
+
+      {/* Runbook */}
+      <section className="mb-8 border border-border bg-surface/50 px-5 py-6 dark:bg-surface">
+        <p className="text-xs tracking-[0.16em] text-text-dim uppercase">
+          Ops
+        </p>
+        <h2 className="mt-1 font-display text-2xl tracking-[0.04em]">
+          Runbook · eerste batch
+        </h2>
+        <ol className="mt-5 list-decimal space-y-3 pl-5 text-sm leading-relaxed text-text-muted">
+          <li>
+            <span className="text-text">Lijst bijwerken</span> — filters goed,
+            ophalen, open items aanvullen (mdw → KvK → contact → mail).
+          </li>
+          <li>
+            <span className="text-text">Bedrijven</span> — filter “klaar om te
+            mailen”. Check contactrol; bij twijfel: opnieuw Event Manager
+            zoeken op het dossier.
+          </li>
+          <li>
+            <span className="text-text">Templates</span> — kies/pas aan (Zomer,
+            Kerst, Nieuwjaar, Jubileum, Algemeen, Brochure…). Stuur een
+            testmail naar team@.
+          </li>
+          <li>
+            <span className="text-text">Mailen</span> — selecteer een klein
+            setje (bijv. 5–10), suggested of override template, genereer
+            drafts, pas subject/body aan, stuur test. Live naar prospects staat
+            nog dicht.
+          </li>
+          <li>
+            <span className="text-text">Resultaten</span> — opens (Brevo
+            webhook). Replies voorlopig handmatig loggen tot evenement@
+            gekoppeld is.
+          </li>
+          <li>
+            <span className="text-text">Niet mailen</span> — bestaande
+            klanten/uitsluitingen blijven buiten de bulk.{" "}
+            <Link href="/outreach/juridisch" className="text-accent underline">
+              Juridisch
+            </Link>
+            .
+          </li>
+        </ol>
+        <p className="mt-4 text-xs text-text-dim">
+          Checklist env: Apollo · KvK · Hunter · Brevo outreach-key · webhook
+          secret · NEXT_PUBLIC_APP_URL (voor brochure-link). Live send: alleen
+          met OUTREACH_SEND_ENABLED + OUTREACH_LIVE_SEND (bewust).
+        </p>
+      </section>
     </div>
   );
 }

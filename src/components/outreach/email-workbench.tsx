@@ -147,6 +147,26 @@ export function OutreachEmailWorkbench({
     startTransition(() => router.refresh());
   }
 
+  async function saveDraftEdits() {
+    if (!draftPreview) return true;
+    const res = await fetch("/api/outreach/emails", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "update-draft",
+        emailId: draftPreview.emailId,
+        subject: draftPreview.subject,
+        body: draftPreview.body,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(data.error ?? "Opslaan draft mislukt");
+      return false;
+    }
+    return true;
+  }
+
   async function sendTests() {
     if (!lastEmailIds.length) {
       setError("Eerst drafts genereren");
@@ -154,6 +174,10 @@ export function OutreachEmailWorkbench({
     }
     setError(null);
     setMessage(null);
+    if (draftPreview && lastEmailIds.length === 1) {
+      const saved = await saveDraftEdits();
+      if (!saved) return;
+    }
     const res = await fetch("/api/outreach/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -400,11 +424,42 @@ export function OutreachEmailWorkbench({
 
       {draftPreview ? (
         <article className="border-t border-border pt-4">
-          <p className="text-xs text-text-dim">Laatste concept</p>
-          <h3 className="mt-1 font-medium text-text">{draftPreview.subject}</h3>
-          <pre className="mt-3 whitespace-pre-wrap font-sans text-sm leading-relaxed text-text-muted">
-            {draftPreview.body}
-          </pre>
+          <p className="text-xs text-text-dim">
+            Concept — pas aan vóór testsend (bij 1 draft)
+          </p>
+          <label className="mt-2 block text-xs text-text-dim">
+            Onderwerp
+            <input
+              className="mt-1.5 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
+              value={draftPreview.subject}
+              onChange={(e) =>
+                setDraftPreview({ ...draftPreview, subject: e.target.value })
+              }
+            />
+          </label>
+          <label className="mt-3 block text-xs text-text-dim">
+            Body
+            <textarea
+              rows={14}
+              className="mt-1.5 w-full border border-border bg-bg px-3 py-2 font-sans text-sm leading-relaxed text-text"
+              value={draftPreview.body}
+              onChange={(e) =>
+                setDraftPreview({ ...draftPreview, body: e.target.value })
+              }
+            />
+          </label>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              void saveDraftEdits().then((ok) => {
+                if (ok) setMessage("Draft opgeslagen.");
+              })
+            }
+            className="mt-3 border border-border px-3 py-1.5 text-xs tracking-[0.08em] hover:border-accent disabled:opacity-50"
+          >
+            Wijzigingen opslaan
+          </button>
         </article>
       ) : null}
     </div>

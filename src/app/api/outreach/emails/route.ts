@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import {
   generateAndStoreDraft,
   sendStoredDraft,
@@ -8,6 +9,8 @@ import {
 import { OUTREACH_VARIANTS } from "@/lib/outreach/tone";
 import { logSessionActivity } from "@/lib/audit/session-log";
 import { resolveOutreachTestRecipients } from "@/lib/outreach/send-policy";
+import { getDb, hasDatabase } from "@/lib/db/client";
+import { outreachEmails } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +19,9 @@ const VARIANT_IDS = [
   "open_dates",
   "jubileum",
   "seizoen",
+  "zomer",
+  "kerst",
+  "nieuwjaar",
   "funding",
   "recordjaar",
   "short_checkin",
@@ -62,6 +68,62 @@ export async function POST(request: Request) {
 
   const body = await request.json();
   const action = body?.action as string | undefined;
+
+  if (action === "update-draft") {
+    const updateSchema = z.object({
+      action: z.literal("update-draft"),
+      emailId: z.string().uuid(),
+      subject: z.string().min(1).max(200),
+      body: z.string().min(1).max(20000),
+    });
+    const parsed = updateSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
+    }
+    if (!hasDatabase()) {
+      return NextResponse.json({ error: "Geen database" }, { status: 400 });
+    }
+    const db = getDb();
+    const [row] = await db
+      .select({
+        id: outreachEmails.id,
+        status: outreachEmails.status,
+      })
+      .from(outreachEmails)
+      .where(eq(outreachEmails.id, parsed.data.emailId))
+      .limit(1);
+    if (!row) {
+      return NextResponse.json({ error: "Draft niet gevonden" }, { status: 404 });
+    }
+    if (row.status !== "draft") {
+      return NextResponse.json(
+        { error: "Alleen drafts kun je nog aanpassen" },
+        { status: 400 },
+      );
+    }
+    await db
+      .update(outreachEmails)
+      .set({
+        subject: parsed.data.subject.trim(),
+        body: parsed.data.body.trim(),
+      })
+      .where(eq(outreachEmails.id, parsed.data.emailId));
+    await logSessionActivity(session, {
+      action: "email_draft_update",
+      summary: `Draft aangepast · ${parsed.data.emailId}`,
+      path: "/api/outreach/emails",
+      method: "POST",
+      status: 200,
+      tool: "outreach",
+      meta: { emailId: parsed.data.emailId },
+    });
+    return NextResponse.json({
+      ok: true,
+      emailId: parsed.data.emailId,
+      subject: parsed.data.subject.trim(),
+      body: parsed.data.body.trim(),
+    });
+  }
 
   if (action === "send" || action === "send-test") {
     const sendSchema = z.object({

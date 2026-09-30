@@ -53,6 +53,48 @@ Brochure: {{brochureUrl}}
 
 Groet,`,
 
+  zomer: `Hi {{contactFirstName}},
+
+Lekker vroeg, maar de zomerfeest-agenda’s beginnen alweer aardig vol te lopen.
+
+Op Thuishaven kunnen bedrijven hun eigen festivaldag organiseren: ontvangst, food, drinks, muziek en natuurlijk ruimte om daarna flink door te feesten.
+
+Van een informele borrel met het team tot een compleet bedrijfsfestival voor honderden gasten. We bouwen het graag rondom jullie ideeën en wensen.
+
+Zijn jullie al aan het nadenken over het zomerfeest van {{companyName}}? Dan denk ik graag met jullie mee.
+
+Brochure: {{brochureUrl}}
+
+Groet,`,
+
+  kerst: `Hi {{contactFirstName}},
+
+De kerstborrel alweer aan het organiseren?
+
+We hebben op Thuishaven een aantal bijzondere areas waar je met je team het jaar goed kunt afsluiten. Van een borrel in onze verwarmde vintage circustent tot een compleet feest met sit-down dinner en afterparty in onze tempel en loods.
+
+Drankjes, eten, muziek en natuurlijk genoeg ruimte om met z’n allen het jaar uit te luiden.
+
+Benieuwd of Thuishaven iets voor {{companyName}} kan zijn?
+
+Brochure: {{brochureUrl}}
+
+Groet,`,
+
+  nieuwjaar: `Hi {{contactFirstName}},
+
+Een nieuw jaar verdient een goede aftrap.
+
+Op Thuishaven organiseren we nieuwjaarsborrels waar je collega’s maandag nog over praten. Verschillende area’s, goede catering, drankjes en natuurlijk alle ruimte voor muziek en feest.
+
+Ideaal voor een nieuwjaarsborrel die nét even anders mag zijn.
+
+Zijn jullie de nieuwjaarsborrel voor {{companyName}} al aan het plannen? Dan denk ik graag met jullie mee.
+
+Brochure: {{brochureUrl}}
+
+Groet,`,
+
   funding: `Hi {{contactFirstName}},
 
 Als jullie bij {{companyName}} iets te vieren hebben na een deal, funding of overname: soms zoeken teams daar een avondlocatie voor.

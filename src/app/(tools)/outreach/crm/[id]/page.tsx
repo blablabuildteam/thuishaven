@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CrmNoteForm } from "@/components/outreach/crm-note-form";
+import { RefillContactButton } from "@/components/outreach/refill-contact-button";
 import { LinkedinEstimateForm } from "@/components/outreach/linkedin-estimate-form";
 import { getCrmDossier, statusLabels } from "@/lib/outreach/crm";
 import { mailAngleFor, mailAngleTone } from "@/lib/outreach/mail-angle";
@@ -360,7 +361,7 @@ export default async function CrmDossierPage({
               </ul>
             ) : (
               <p>
-                Nog geen Event/Office Manager. Haal ze op via{" "}
+                Nog geen Event/Office Manager. Zoek hieronder opnieuw, of via{" "}
                 <Link
                   href="/outreach/lijst-bijwerken"
                   className="text-accent underline"
@@ -370,6 +371,7 @@ export default async function CrmDossierPage({
                 .
               </p>
             )}
+            <RefillContactButton prospectId={dossier.id} />
             <p className="mt-3">
               Website:{" "}
               {dossier.website ? (

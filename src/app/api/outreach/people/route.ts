@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   fillDecisionMakers,
   fillHunterEmailsForDecisionMakers,
+  refillDecisionMakerForProspect,
 } from "@/lib/outreach/decision-makers";
 import { logSessionActivity } from "@/lib/audit/session-log";
 
@@ -13,6 +14,9 @@ const schema = z.object({
   limit: z.number().int().min(1).max(15).optional(),
   /** Alleen Hunter-mail voor bestaande Event Managers zonder e-mail. */
   hunterEmails: z.boolean().optional(),
+  /** Forceer opnieuw zoeken voor één bedrijf. */
+  prospectId: z.string().uuid().optional(),
+  refilled: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {
@@ -24,6 +28,28 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
   }
+
+  if (parsed.data.prospectId) {
+    const result = await refillDecisionMakerForProspect(parsed.data.prospectId);
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+    await logSessionActivity(session, {
+      action: "apollo_people_refill",
+      summary: `Contact herzocht · ${parsed.data.prospectId}`,
+      path: "/api/outreach/people",
+      method: "POST",
+      status: 200,
+      tool: "outreach",
+      meta: {
+        prospectId: parsed.data.prospectId,
+        filled: result.filled,
+        withEmail: result.withEmail,
+      },
+    });
+    return NextResponse.json(result);
+  }
+
   const limit = parsed.data.limit ?? 8;
   const result = parsed.data.hunterEmails
     ? await fillHunterEmailsForDecisionMakers(limit)
