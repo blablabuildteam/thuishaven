@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
 import {
   generateAndStoreDraft,
   sendStoredDraft,
@@ -9,8 +8,14 @@ import {
 import { OUTREACH_VARIANTS } from "@/lib/outreach/tone";
 import { logSessionActivity } from "@/lib/audit/session-log";
 import { resolveOutreachTestRecipients } from "@/lib/outreach/send-policy";
-import { getDb, hasDatabase } from "@/lib/db/client";
-import { outreachEmails } from "@/lib/db/schema";
+import {
+  dequeueEmails,
+  enqueueEmails,
+  listOpenBatches,
+  sendBatch,
+  updateBatchMeta,
+  updateQueuedOrDraft,
+} from "@/lib/outreach/batches";
 
 export const dynamic = "force-dynamic";
 
@@ -52,10 +57,15 @@ const generateSchema = z
     { message: "prospectId, prospectIds of items verplicht" },
   );
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+  }
+  const url = new URL(request.url);
+  if (url.searchParams.get("openBatches") === "1") {
+    const batches = await listOpenBatches();
+    return NextResponse.json({ batches });
   }
   return NextResponse.json({ variants: OUTREACH_VARIANTS });
 }
@@ -80,34 +90,14 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
     }
-    if (!hasDatabase()) {
-      return NextResponse.json({ error: "Geen database" }, { status: 400 });
+    const result = await updateQueuedOrDraft({
+      emailId: parsed.data.emailId,
+      subject: parsed.data.subject,
+      body: parsed.data.body,
+    });
+    if ("error" in result) {
+      return NextResponse.json(result, { status: 400 });
     }
-    const db = getDb();
-    const [row] = await db
-      .select({
-        id: outreachEmails.id,
-        status: outreachEmails.status,
-      })
-      .from(outreachEmails)
-      .where(eq(outreachEmails.id, parsed.data.emailId))
-      .limit(1);
-    if (!row) {
-      return NextResponse.json({ error: "Draft niet gevonden" }, { status: 404 });
-    }
-    if (row.status !== "draft") {
-      return NextResponse.json(
-        { error: "Alleen drafts kun je nog aanpassen" },
-        { status: 400 },
-      );
-    }
-    await db
-      .update(outreachEmails)
-      .set({
-        subject: parsed.data.subject.trim(),
-        body: parsed.data.body.trim(),
-      })
-      .where(eq(outreachEmails.id, parsed.data.emailId));
     await logSessionActivity(session, {
       action: "email_draft_update",
       summary: `Draft aangepast · ${parsed.data.emailId}`,
@@ -123,6 +113,116 @@ export async function POST(request: Request) {
       subject: parsed.data.subject.trim(),
       body: parsed.data.body.trim(),
     });
+  }
+
+  if (action === "enqueue") {
+    const schema = z.object({
+      action: z.literal("enqueue"),
+      emailIds: z.array(z.string().uuid()).min(1).max(50),
+      batchId: z.string().uuid().optional(),
+      batchName: z.string().max(120).optional(),
+    });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
+    }
+    const result = await enqueueEmails({
+      emailIds: parsed.data.emailIds,
+      batchId: parsed.data.batchId,
+      batchName: parsed.data.batchName?.trim() || undefined,
+    });
+    if ("error" in result) {
+      return NextResponse.json(result, { status: 400 });
+    }
+    await logSessionActivity(session, {
+      action: "email_enqueue",
+      summary: `${result.enqueued} mails in bakje · ${result.batchName}`,
+      path: "/api/outreach/emails",
+      method: "POST",
+      status: 200,
+      tool: "outreach",
+      meta: {
+        batchId: result.batchId,
+        enqueued: result.enqueued,
+      },
+    });
+    return NextResponse.json(result);
+  }
+
+  if (action === "dequeue") {
+    const schema = z.object({
+      action: z.literal("dequeue"),
+      emailIds: z.array(z.string().uuid()).min(1).max(50),
+    });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
+    }
+    const result = await dequeueEmails({ emailIds: parsed.data.emailIds });
+    if ("error" in result) {
+      return NextResponse.json(result, { status: 400 });
+    }
+    await logSessionActivity(session, {
+      action: "email_dequeue",
+      summary: `${result.dequeued} mails uit bakje gehaald`,
+      path: "/api/outreach/emails",
+      method: "POST",
+      status: 200,
+      tool: "outreach",
+      meta: { dequeued: result.dequeued },
+    });
+    return NextResponse.json(result);
+  }
+
+  if (action === "update-batch") {
+    const schema = z.object({
+      action: z.literal("update-batch"),
+      batchId: z.string().uuid(),
+      name: z.string().min(1).max(120).optional(),
+      notes: z.string().max(2000).nullable().optional(),
+    });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
+    }
+    const result = await updateBatchMeta({
+      batchId: parsed.data.batchId,
+      name: parsed.data.name,
+      notes: parsed.data.notes,
+    });
+    if ("error" in result) {
+      return NextResponse.json(result, { status: 400 });
+    }
+    return NextResponse.json(result);
+  }
+
+  if (action === "send-batch") {
+    const schema = z.object({
+      action: z.literal("send-batch"),
+      batchId: z.string().uuid(),
+    });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
+    }
+    const result = await sendBatch({ batchId: parsed.data.batchId });
+    if ("error" in result) {
+      return NextResponse.json(result, { status: 400 });
+    }
+    await logSessionActivity(session, {
+      action: "email_send_batch",
+      summary: `Bakje verstuurd · ${result.ok} ok · ${result.failed} mislukt`,
+      path: "/api/outreach/emails",
+      method: "POST",
+      status: 200,
+      tool: "outreach",
+      meta: {
+        batchId: parsed.data.batchId,
+        ok: result.ok,
+        failed: result.failed,
+      },
+    });
+    return NextResponse.json(result);
   }
 
   if (action === "send" || action === "send-test") {

@@ -26,6 +26,7 @@ import {
   X,
   BookOpen,
   Scale,
+  Inbox,
   type LucideIcon,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
@@ -162,6 +163,12 @@ const outreachSections: NavSection[] = [
         label: "3 · Mailen",
         icon: Mail,
         tourId: "nav-mailen",
+      },
+      {
+        href: "/outreach/planning",
+        label: "Wachtrij",
+        icon: Inbox,
+        tourId: "nav-wachtrij",
       },
       {
         href: "/outreach/templates",

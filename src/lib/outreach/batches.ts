@@ -1,0 +1,463 @@
+/**
+ * Outreach bakjes — named batches of drafts ready for review before live send.
+ */
+
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { getDb, hasDatabase } from "@/lib/db/client";
+import {
+  outreachBatches,
+  outreachEmails,
+  prospects,
+} from "@/lib/db/schema";
+import { sendStoredDraft } from "@/lib/integrations/outreach";
+import { outreachLiveSendBlockReason } from "@/lib/outreach/send-policy";
+import { formatDayShort, amsterdamDay } from "@/lib/time/amsterdam";
+import { OUTREACH_VARIANTS } from "@/lib/outreach/tone";
+
+export type OutreachBatchStatus = "open" | "ready" | "sent";
+
+export type BatchEmailRow = {
+  emailId: string;
+  prospectId: string;
+  companyName: string;
+  email: string | null;
+  subject: string;
+  body: string;
+  variantKey: string | null;
+  variantLabel: string | null;
+  status: string;
+  createdAt: string;
+};
+
+export type OutreachBatchSummary = {
+  id: string;
+  name: string;
+  status: OutreachBatchStatus;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  mailCount: number;
+  variantKeys: string[];
+  emails: BatchEmailRow[];
+};
+
+export type UnbatchedDraft = {
+  emailId: string;
+  prospectId: string;
+  companyName: string;
+  email: string | null;
+  subject: string;
+  variantKey: string | null;
+  variantLabel: string | null;
+  createdAt: string;
+};
+
+function variantLabel(key: string | null): string | null {
+  if (!key) return null;
+  return OUTREACH_VARIANTS.find((v) => v.id === key)?.name ?? key;
+}
+
+export function defaultBatchName(mailCount: number, at = new Date()): string {
+  const day = formatDayShort(amsterdamDay(at));
+  return `Batch · ${day} · ${mailCount} mail${mailCount === 1 ? "" : "s"}`;
+}
+
+export async function listOpenBatches(): Promise<
+  Array<{ id: string; name: string; mailCount: number }>
+> {
+  if (!hasDatabase()) return [];
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: outreachBatches.id,
+      name: outreachBatches.name,
+      mailCount: sql<number>`count(${outreachEmails.id})::int`,
+    })
+    .from(outreachBatches)
+    .leftJoin(
+      outreachEmails,
+      and(
+        eq(outreachEmails.batchId, outreachBatches.id),
+        eq(outreachEmails.status, "queued"),
+      ),
+    )
+    .where(inArray(outreachBatches.status, ["open", "ready"]))
+    .groupBy(outreachBatches.id, outreachBatches.name)
+    .orderBy(desc(outreachBatches.updatedAt));
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    mailCount: Number(r.mailCount) || 0,
+  }));
+}
+
+export async function listBatchesWithEmails(): Promise<{
+  batches: OutreachBatchSummary[];
+  unbatchedDrafts: UnbatchedDraft[];
+  liveSendBlockReason: string | null;
+}> {
+  if (!hasDatabase()) {
+    return {
+      batches: [],
+      unbatchedDrafts: [],
+      liveSendBlockReason: outreachLiveSendBlockReason(),
+    };
+  }
+  const db = getDb();
+  const [batchRows, mailRows, draftRows] = await Promise.all([
+    db
+      .select()
+      .from(outreachBatches)
+      .orderBy(desc(outreachBatches.updatedAt)),
+    db
+      .select({
+        emailId: outreachEmails.id,
+        batchId: outreachEmails.batchId,
+        prospectId: outreachEmails.prospectId,
+        companyName: prospects.companyName,
+        email: prospects.email,
+        subject: outreachEmails.subject,
+        body: outreachEmails.body,
+        variantKey: outreachEmails.variantKey,
+        status: outreachEmails.status,
+        createdAt: outreachEmails.createdAt,
+      })
+      .from(outreachEmails)
+      .innerJoin(prospects, eq(prospects.id, outreachEmails.prospectId))
+      .where(
+        and(
+          eq(outreachEmails.status, "queued"),
+          sql`${outreachEmails.batchId} is not null`,
+        ),
+      )
+      .orderBy(asc(prospects.companyName)),
+    db
+      .select({
+        emailId: outreachEmails.id,
+        prospectId: outreachEmails.prospectId,
+        companyName: prospects.companyName,
+        email: prospects.email,
+        subject: outreachEmails.subject,
+        variantKey: outreachEmails.variantKey,
+        createdAt: outreachEmails.createdAt,
+      })
+      .from(outreachEmails)
+      .innerJoin(prospects, eq(prospects.id, outreachEmails.prospectId))
+      .where(
+        and(eq(outreachEmails.status, "draft"), isNull(outreachEmails.batchId)),
+      )
+      .orderBy(desc(outreachEmails.createdAt))
+      .limit(40),
+  ]);
+
+  const byBatch = new Map<string, BatchEmailRow[]>();
+  for (const row of mailRows) {
+    if (!row.batchId) continue;
+    const list = byBatch.get(row.batchId) ?? [];
+    list.push({
+      emailId: row.emailId,
+      prospectId: row.prospectId,
+      companyName: row.companyName,
+      email: row.email,
+      subject: row.subject,
+      body: row.body,
+      variantKey: row.variantKey,
+      variantLabel: variantLabel(row.variantKey),
+      status: row.status,
+      createdAt: row.createdAt.toISOString(),
+    });
+    byBatch.set(row.batchId, list);
+  }
+
+  const batches: OutreachBatchSummary[] = batchRows.map((b) => {
+    const emails = byBatch.get(b.id) ?? [];
+    const variantKeys = [
+      ...new Set(
+        emails
+          .map((e) => e.variantKey)
+          .filter((k): k is string => Boolean(k)),
+      ),
+    ];
+    return {
+      id: b.id,
+      name: b.name,
+      status: b.status as OutreachBatchStatus,
+      notes: b.notes,
+      createdAt: b.createdAt.toISOString(),
+      updatedAt: b.updatedAt.toISOString(),
+      mailCount: emails.length,
+      variantKeys,
+      emails,
+    };
+  });
+
+  return {
+    batches,
+    unbatchedDrafts: draftRows.map((d) => ({
+      emailId: d.emailId,
+      prospectId: d.prospectId,
+      companyName: d.companyName,
+      email: d.email,
+      subject: d.subject,
+      variantKey: d.variantKey,
+      variantLabel: variantLabel(d.variantKey),
+      createdAt: d.createdAt.toISOString(),
+    })),
+    liveSendBlockReason: outreachLiveSendBlockReason(),
+  };
+}
+
+export async function enqueueEmails(input: {
+  emailIds: string[];
+  batchId?: string;
+  batchName?: string;
+}): Promise<
+  | { batchId: string; batchName: string; enqueued: number }
+  | { error: string }
+> {
+  if (!hasDatabase()) return { error: "DATABASE_URL ontbreekt" };
+  const ids = [...new Set(input.emailIds.filter(Boolean))];
+  if (!ids.length) return { error: "Geen mails geselecteerd" };
+
+  const db = getDb();
+  const existing = await db
+    .select({
+      id: outreachEmails.id,
+      status: outreachEmails.status,
+    })
+    .from(outreachEmails)
+    .where(inArray(outreachEmails.id, ids));
+
+  if (existing.length !== ids.length) {
+    return { error: "Eén of meer drafts niet gevonden" };
+  }
+  const notEditable = existing.filter(
+    (r) => r.status !== "draft" && r.status !== "queued",
+  );
+  if (notEditable.length) {
+    return {
+      error: "Alleen drafts of mails in een bakje kun je in een bakje zetten",
+    };
+  }
+
+  let batchId = input.batchId?.trim() || null;
+  let batchName = input.batchName?.trim() || "";
+
+  if (batchId) {
+    const [batch] = await db
+      .select()
+      .from(outreachBatches)
+      .where(eq(outreachBatches.id, batchId))
+      .limit(1);
+    if (!batch) return { error: "Bakje niet gevonden" };
+    if (batch.status === "sent") {
+      return { error: "Dit bakje is al verstuurd" };
+    }
+    batchName = batch.name;
+  } else {
+    if (!batchName) batchName = defaultBatchName(ids.length);
+    const [created] = await db
+      .insert(outreachBatches)
+      .values({
+        name: batchName,
+        status: "open",
+      })
+      .returning();
+    if (!created) return { error: "Bakje aanmaken mislukt" };
+    batchId = created.id;
+  }
+
+  await db
+    .update(outreachEmails)
+    .set({
+      batchId,
+      status: "queued",
+    })
+    .where(inArray(outreachEmails.id, ids));
+
+  await db
+    .update(outreachBatches)
+    .set({ updatedAt: new Date(), status: "ready" })
+    .where(eq(outreachBatches.id, batchId));
+
+  return { batchId, batchName, enqueued: ids.length };
+}
+
+export async function dequeueEmails(input: {
+  emailIds: string[];
+}): Promise<{ dequeued: number } | { error: string }> {
+  if (!hasDatabase()) return { error: "DATABASE_URL ontbreekt" };
+  const ids = [...new Set(input.emailIds.filter(Boolean))];
+  if (!ids.length) return { error: "Geen mails geselecteerd" };
+
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: outreachEmails.id,
+      batchId: outreachEmails.batchId,
+      status: outreachEmails.status,
+    })
+    .from(outreachEmails)
+    .where(inArray(outreachEmails.id, ids));
+
+  const queued = rows.filter((r) => r.status === "queued");
+  if (!queued.length) return { error: "Geen mails in een bakje gevonden" };
+
+  const batchIds = [
+    ...new Set(queued.map((r) => r.batchId).filter(Boolean)),
+  ] as string[];
+
+  await db
+    .update(outreachEmails)
+    .set({ batchId: null, status: "draft" })
+    .where(
+      inArray(
+        outreachEmails.id,
+        queued.map((r) => r.id),
+      ),
+    );
+
+  for (const batchId of batchIds) {
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(outreachEmails)
+      .where(
+        and(
+          eq(outreachEmails.batchId, batchId),
+          eq(outreachEmails.status, "queued"),
+        ),
+      );
+    await db
+      .update(outreachBatches)
+      .set({
+        updatedAt: new Date(),
+        status: Number(count) > 0 ? "ready" : "open",
+      })
+      .where(eq(outreachBatches.id, batchId));
+  }
+
+  return { dequeued: queued.length };
+}
+
+export async function updateBatchMeta(input: {
+  batchId: string;
+  name?: string;
+  notes?: string | null;
+}): Promise<{ ok: true } | { error: string }> {
+  if (!hasDatabase()) return { error: "DATABASE_URL ontbreekt" };
+  const db = getDb();
+  const [batch] = await db
+    .select({ id: outreachBatches.id, status: outreachBatches.status })
+    .from(outreachBatches)
+    .where(eq(outreachBatches.id, input.batchId))
+    .limit(1);
+  if (!batch) return { error: "Bakje niet gevonden" };
+  if (batch.status === "sent") {
+    return { error: "Verstuurd bakje kun je niet meer aanpassen" };
+  }
+
+  const patch: {
+    name?: string;
+    notes?: string | null;
+    updatedAt: Date;
+  } = { updatedAt: new Date() };
+  if (typeof input.name === "string" && input.name.trim()) {
+    patch.name = input.name.trim();
+  }
+  if (input.notes !== undefined) {
+    patch.notes = input.notes?.trim() || null;
+  }
+
+  await db
+    .update(outreachBatches)
+    .set(patch)
+    .where(eq(outreachBatches.id, input.batchId));
+  return { ok: true };
+}
+
+/** Allow editing subject/body while draft or queued in a bakje. */
+export async function updateQueuedOrDraft(input: {
+  emailId: string;
+  subject: string;
+  body: string;
+}): Promise<{ ok: true } | { error: string }> {
+  if (!hasDatabase()) return { error: "DATABASE_URL ontbreekt" };
+  const db = getDb();
+  const [row] = await db
+    .select({ id: outreachEmails.id, status: outreachEmails.status })
+    .from(outreachEmails)
+    .where(eq(outreachEmails.id, input.emailId))
+    .limit(1);
+  if (!row) return { error: "Mail niet gevonden" };
+  if (row.status !== "draft" && row.status !== "queued") {
+    return { error: "Alleen drafts of bakjes-mails kun je nog aanpassen" };
+  }
+  await db
+    .update(outreachEmails)
+    .set({
+      subject: input.subject.trim(),
+      body: input.body.trim(),
+    })
+    .where(eq(outreachEmails.id, input.emailId));
+  return { ok: true };
+}
+
+export async function sendBatch(input: {
+  batchId: string;
+}): Promise<
+  | { ok: number; failed: number; results: Array<{ emailId: string; ok: boolean; error?: string }> }
+  | { error: string }
+> {
+  const blocked = outreachLiveSendBlockReason();
+  if (blocked) return { error: blocked };
+  if (!hasDatabase()) return { error: "DATABASE_URL ontbreekt" };
+
+  const db = getDb();
+  const [batch] = await db
+    .select()
+    .from(outreachBatches)
+    .where(eq(outreachBatches.id, input.batchId))
+    .limit(1);
+  if (!batch) return { error: "Bakje niet gevonden" };
+  if (batch.status === "sent") return { error: "Dit bakje is al verstuurd" };
+
+  const rows = await db
+    .select({ id: outreachEmails.id })
+    .from(outreachEmails)
+    .where(
+      and(
+        eq(outreachEmails.batchId, input.batchId),
+        eq(outreachEmails.status, "queued"),
+      ),
+    );
+
+  if (!rows.length) return { error: "Geen mails in dit bakje" };
+
+  const results: Array<{ emailId: string; ok: boolean; error?: string }> = [];
+  for (const row of rows) {
+    const sent = await sendStoredDraft({
+      emailId: row.id,
+      forceTest: false,
+    });
+    if ("error" in sent) {
+      results.push({ emailId: row.id, ok: false, error: sent.error });
+    } else {
+      results.push({ emailId: row.id, ok: true });
+    }
+  }
+
+  const ok = results.filter((r) => r.ok).length;
+  if (ok === rows.length) {
+    await db
+      .update(outreachBatches)
+      .set({ status: "sent", updatedAt: new Date() })
+      .where(eq(outreachBatches.id, input.batchId));
+  } else if (ok > 0) {
+    await db
+      .update(outreachBatches)
+      .set({ updatedAt: new Date() })
+      .where(eq(outreachBatches.id, input.batchId));
+  }
+
+  return { ok, failed: results.length - ok, results };
+}

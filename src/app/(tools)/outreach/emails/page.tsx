@@ -5,6 +5,7 @@ import {
   OutreachEmailWorkbench,
   type WorkbenchProspect,
 } from "@/components/outreach/email-workbench";
+import { listOpenBatches } from "@/lib/outreach/batches";
 import { listOutreachEmails } from "@/lib/outreach/data";
 import { listCrmRecords } from "@/lib/outreach/crm";
 import { leadScore } from "@/lib/outreach/lead-score";
@@ -25,13 +26,19 @@ export default async function EmailsPage({
 }: {
   searchParams: Promise<{ ids?: string; prospect?: string }>;
 }) {
-  const [{ rows: emails, source }, { rows: records }, templateStats, params] =
-    await Promise.all([
-      listOutreachEmails(),
-      listCrmRecords(),
-      getTemplateStats(),
-      searchParams,
-    ]);
+  const [
+    { rows: emails, source },
+    { rows: records },
+    templateStats,
+    params,
+    openBatches,
+  ] = await Promise.all([
+    listOutreachEmails(),
+    listCrmRecords(),
+    getTemplateStats(),
+    searchParams,
+    listOpenBatches(),
+  ]);
   const preselectIds = [
     ...(params.ids?.split(",") ?? []),
     ...(params.prospect ? [params.prospect] : []),
@@ -96,23 +103,23 @@ export default async function EmailsPage({
       <SectionHeader
         eyebrow="Stap 3 van 4"
         title="Mailen"
-        description="Kies een batch (hoogste score eerst, al gemaild verborgen), kies template — voorgesteld of zelf — genereer drafts, stuur tests."
+        description="Kies bedrijven, genereer drafts, stuur een test, zet ze in een bakje. Versturen later vanuit de Wachtrij."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={source === "db" ? "success" : "neutral"}>
               {emails.length} drafts
             </StatusBadge>
             <Link
+              href="/outreach/planning"
+              className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
+            >
+              Wachtrij →
+            </Link>
+            <Link
               href="/outreach/templates"
               className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
             >
               Templates
-            </Link>
-            <Link
-              href="/outreach/analytics"
-              className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
-            >
-              Resultaten →
             </Link>
           </div>
         }
@@ -125,6 +132,7 @@ export default async function EmailsPage({
         bestTemplate={bestTemplateKey(templateStats)}
         preselectIds={preselectIds}
         skippedNoEmail={skippedNoEmail}
+        openBatches={openBatches}
       />
 
       {emails.length === 0 ? (

@@ -38,6 +38,7 @@ type Props = {
   bestTemplate: string | null;
   preselectIds?: string[];
   skippedNoEmail?: number;
+  openBatches?: OpenBatchOption[];
 };
 
 type DraftEdit = {
@@ -45,6 +46,12 @@ type DraftEdit = {
   companyName: string;
   subject: string;
   body: string;
+};
+
+type OpenBatchOption = {
+  id: string;
+  name: string;
+  mailCount: number;
 };
 
 const ANGLE_FILTERS: { id: string; label: string }[] = [
@@ -70,6 +77,7 @@ export function OutreachEmailWorkbench({
   bestTemplate,
   preselectIds = [],
   skippedNoEmail = 0,
+  openBatches = [],
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -118,6 +126,8 @@ export function OutreachEmailWorkbench({
   const [testTo, setTestTo] = useState(defaultTestTo);
   const [lastEmailIds, setLastEmailIds] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<DraftEdit[]>([]);
+  const [batchTarget, setBatchTarget] = useState<"new" | string>("new");
+  const [batchName, setBatchName] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -298,6 +308,54 @@ export function OutreachEmailWorkbench({
     startTransition(() => router.refresh());
   }
 
+  async function enqueueToBatch() {
+    if (!lastEmailIds.length) {
+      setError("Eerst drafts genereren");
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    if (drafts.length) {
+      const saved = await saveDraftEdits();
+      if (!saved) return;
+    }
+    const payload: {
+      action: "enqueue";
+      emailIds: string[];
+      batchId?: string;
+      batchName?: string;
+    } = {
+      action: "enqueue",
+      emailIds: lastEmailIds,
+    };
+    if (batchTarget === "new") {
+      payload.batchName =
+        batchName.trim() ||
+        `Batch · ${new Date().toLocaleDateString("nl-NL", {
+          day: "numeric",
+          month: "short",
+        })} · ${lastEmailIds.length} mail${lastEmailIds.length === 1 ? "" : "s"}`;
+    } else {
+      payload.batchId = batchTarget;
+    }
+    const res = await fetch("/api/outreach/emails", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(data.error ?? "In bakje zetten mislukt");
+      return;
+    }
+    setMessage(
+      `${data.enqueued} mail${data.enqueued === 1 ? "" : "s"} in bakje “${data.batchName}”. Bekijk ze in de Wachtrij.`,
+    );
+    setDrafts([]);
+    setLastEmailIds([]);
+    startTransition(() => router.refresh());
+  }
+
   if (!prospects.length) {
     return (
       <p className="border-y border-border py-6 text-sm text-text-muted">
@@ -317,8 +375,13 @@ export function OutreachEmailWorkbench({
   return (
     <div className="mb-10 space-y-6">
       <p className="text-sm text-text-muted">
-        Vink bedrijven aan, kies template (suggested of zelf), genereer drafts,
-        stuur tests. Live naar prospects blijft dicht.{" "}
+        Vink bedrijven aan, kies template, genereer drafts, stuur een test, en
+        zet goedgekeurde mails in een bakje. Live naar prospects blijft dicht —
+        versturen doe je later vanuit de{" "}
+        <Link href="/outreach/planning" className="text-accent underline">
+          Wachtrij
+        </Link>
+        .{" "}
         <Link href="/outreach/templates" className="text-accent underline">
           Templates bewerken
         </Link>
@@ -602,6 +665,61 @@ export function OutreachEmailWorkbench({
           {lastEmailIds.length > 1 ? ` (${lastEmailIds.length})` : ""}
         </button>
       </div>
+
+      {lastEmailIds.length > 0 ? (
+        <div className="space-y-3 border border-border bg-surface p-4">
+          <p className="text-sm font-medium text-text">
+            Zet {lastEmailIds.length} draft
+            {lastEmailIds.length === 1 ? "" : "s"} in een bakje
+          </p>
+          <p className="text-xs text-text-muted">
+            Dan zie je in de Wachtrij precies wie welke mail krijgt — zonder te
+            versturen.
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="block text-xs text-text-dim">
+              Bakje
+              <select
+                className="mt-1.5 block min-w-[14rem] border border-border bg-bg px-3 py-2 text-sm text-text"
+                value={batchTarget}
+                onChange={(e) => setBatchTarget(e.target.value)}
+              >
+                <option value="new">Nieuw bakje…</option>
+                {openBatches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} ({b.mailCount})
+                  </option>
+                ))}
+              </select>
+            </label>
+            {batchTarget === "new" ? (
+              <label className="block min-w-[16rem] flex-1 text-xs text-text-dim">
+                Naam
+                <input
+                  className="mt-1.5 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
+                  placeholder={`Batch · ${new Date().toLocaleDateString("nl-NL", { day: "numeric", month: "short" })} · ${lastEmailIds.length} mails`}
+                  value={batchName}
+                  onChange={(e) => setBatchName(e.target.value)}
+                />
+              </label>
+            ) : null}
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => void enqueueToBatch()}
+              className="border border-accent bg-accent/10 px-4 py-2.5 font-display text-sm tracking-[0.1em] disabled:opacity-50"
+            >
+              Zet in bakje
+            </button>
+            <Link
+              href="/outreach/planning"
+              className="px-2 py-2.5 text-sm text-accent underline"
+            >
+              Naar wachtrij →
+            </Link>
+          </div>
+        </div>
+      ) : null}
 
       {error ? (
         <p className="text-sm text-danger" role="alert">

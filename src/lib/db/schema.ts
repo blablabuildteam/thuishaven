@@ -139,6 +139,22 @@ export const outreachEmailStatusEnum = pgEnum("outreach_email_status", [
   "opted_out",
 ]);
 
+/** Named bakjes: drafts klaarzetten voor review vóór live send. */
+export const outreachBatchStatusEnum = pgEnum("outreach_batch_status", [
+  "open",
+  "ready",
+  "sent",
+]);
+
+export const outreachBatches = pgTable("outreach_batches", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  status: outreachBatchStatusEnum("status").notNull().default("open"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const mailVariantStatusEnum = pgEnum("mail_variant_status", [
   "draft",
   "testing",
@@ -186,6 +202,10 @@ export const outreachEmails = pgTable("outreach_emails", {
     .references(() => prospects.id),
   variantId: uuid("variant_id").references(() => mailVariants.id),
   subjectId: uuid("subject_id").references(() => mailSubjects.id),
+  /** Bakje waarin deze mail klaarstaat voor review / later send. */
+  batchId: uuid("batch_id").references(() => outreachBatches.id, {
+    onDelete: "set null",
+  }),
   /** App-level A/B keys (warm_tour / open_dates / …) */
   variantKey: text("variant_key"),
   /** A/B subject arm: a | b */
