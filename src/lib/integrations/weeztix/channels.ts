@@ -1,4 +1,5 @@
 import type { WeeztixTicketType } from "@/lib/integrations/weeztix/client";
+import { isTicketTypeSoldOut } from "@/lib/integrations/weeztix/sold-out";
 
 export type WeeztixSalesChannel =
   | "weeztix"
@@ -55,6 +56,35 @@ function ticketStock(t: WeeztixTicketType): number | null {
 }
 
 /**
+ * Ticket types copied from the event template keep their placeholder name and
+ * their allotment until someone configures them, e.g. "[DATUM] | Regular
+ * dayticket" with 1100 stock on a night show. Counting those inflates the
+ * house (ADE Friday night read 2500 instead of 1200), so leave them out as
+ * long as nothing has been sold on them.
+ */
+export function isUnconfiguredTicketType(t: WeeztixTicketType): boolean {
+  if (ticketSold(t) > 0) return false;
+  return /\[\s*(datum|date|artist|naam|name)\s*\]|_template/i.test(
+    String(t.name ?? ""),
+  );
+}
+
+/**
+ * How many seats this ticket type really represents. A closed type keeps its
+ * original allotment in Weeztix even when only part of it went out — a
+ * pre-sale pool of 1000 that was shut at 458, a tier that never opened — and
+ * counting the untouched remainder made sold-out nights look unfinished.
+ * So a closed type counts what it sold, an open type its allotment.
+ */
+export function effectiveTicketCap(t: WeeztixTicketType): number | null {
+  const stock = ticketStock(t);
+  if (stock == null) return null;
+  const sold = ticketSold(t);
+  if (isTicketTypeSoldOut(t)) return sold;
+  return Math.max(stock, sold);
+}
+
+/**
  * Map Weeztix ticket-type names to sales channels (barcode pools, shop tiers).
  * Order matters: wingame before appic, RA before generic weeztix.
  */
@@ -82,13 +112,12 @@ function summarizeShopBucket(
   let hasStock = false;
 
   for (const t of tickets) {
-    const s = ticketSold(t);
-    const stock = ticketStock(t);
-    sold += s;
+    sold += ticketSold(t);
     scanned += ticketScanned(t);
-    if (stock != null) {
+    const cap = effectiveTicketCap(t);
+    if (cap != null) {
       hasStock = true;
-      capacitySum += Math.max(stock, s);
+      capacitySum += cap;
     }
   }
 
@@ -153,6 +182,7 @@ export function summarizeWeeztixChannels(
   };
 
   for (const t of tickets) {
+    if (isUnconfiguredTicketType(t)) continue;
     const channel = classifyWeeztixTicketChannel(String(t.name ?? ""));
     buckets[channel].push(t);
   }

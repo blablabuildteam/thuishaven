@@ -409,6 +409,8 @@ export type EventInsight = {
   tickets: {
     sold: number;
     capacity: number | null;
+    /** Tickets the shop can still sell — reserved pool barcodes excluded. */
+    available: number | null;
     fillPct: number | null;
     avgPriceEur: number | null;
     lastWeekSold: number | null;
@@ -983,18 +985,22 @@ export async function loadEventInsightsFresh(options?: {
       const raInv = raInvByEdition.get(e.id);
       const vrienden = vriendenByEdition.get(e.id);
       const raListing = raByEdition.get(e.id);
-      // Weeztix event sold includes barcodes issued into Appic/RA/vrienden
-      // pools (allotment), not tickets used from those pools.
-      const splitIssued =
-        (appic?.sold ?? 0) +
-        (raInv?.sold ?? 0) +
-        (vrienden?.sold ?? 0);
+      /**
+       * Weeztix counts a barcode as sold the moment it is issued into the
+       * Appic/RA/vrienden pool. Until the night has happened that seat is
+       * gone, so count issued. Afterwards the scans are the real turnout,
+       * per pool: a pool nobody scanned keeps its issued count instead of
+       * silently dropping out of the total.
+       */
+      const pools = [appic, raInv, vrienden];
+      const splitIssued = pools.reduce((sum, p) => sum + (p?.sold ?? 0), 0);
       const shopSold = Math.max(0, inv.sold - splitIssued);
-      const poolUsed =
-        (appic?.scanned ?? 0) +
-        (raInv?.scanned ?? 0) +
-        (vrienden?.scanned ?? 0);
-      const sold = shopSold + poolUsed;
+      const poolCounted = pools.reduce((sum, p) => {
+        const issued = p?.sold ?? 0;
+        const scanned = p?.scanned ?? 0;
+        return sum + (status === "past" && scanned > 0 ? scanned : issued);
+      }, 0);
+      const sold = shopSold + poolCounted;
       const capacity = inv.capacity;
       const fillPct =
         capacity != null && capacity > 0 ? (sold / capacity) * 100 : null;
@@ -1376,6 +1382,10 @@ export async function loadEventInsightsFresh(options?: {
         tickets: {
           sold,
           capacity,
+          available:
+            capacity != null && capacity > 0
+              ? Math.min(inv.available, Math.max(0, capacity - sold))
+              : null,
           fillPct,
           avgPriceEur:
             avgPriceEur != null && Number.isFinite(avgPriceEur)

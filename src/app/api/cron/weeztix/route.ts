@@ -7,6 +7,7 @@ import {
 import { logIntegration } from "@/lib/integrations/log";
 import {
   syncWeeztixDailySales,
+  syncWeeztixOnSaleCurves,
   syncWeeztixSaleDays,
 } from "@/lib/integrations/weeztix/daily";
 import { syncWeeztixReadOnly } from "@/lib/integrations/weeztix/sync";
@@ -17,7 +18,8 @@ export const maxDuration = 300;
 /**
  * GET /api/cron/weeztix
  * Vercel Cron: 08:00, 13:00, 19:00, 23:00 Europe/Amsterdam.
- * Events + voorraad + inventory-snapshot elke slot; referrers/demo om 08:00.
+ * Events + voorraad + inventory-snapshot + dagcurve van events in verkoop
+ * elke slot; volledige backfill met referrers/demo om 08:00.
  */
 export async function GET(request: Request) {
   if (!isCronAuthorized(request)) {
@@ -46,22 +48,30 @@ export async function GET(request: Request) {
     failed: 1,
     errors: [e instanceof Error ? e.message : "saleDays mislukt"],
   }));
+  const curveFailure = (e: unknown) => ({
+    ok: false as const,
+    attempted: 0,
+    editionsWithCurve: 0,
+    daysUpserted: 0,
+    referrersUpserted: 0,
+    demographicsUpserted: 0,
+    brevoOrders: 0,
+    failed: 1,
+    errors: [e instanceof Error ? e.message : "dailySales mislukt"],
+  });
+  /**
+   * The full backfill (all editions, referrers, demographics) stays on the
+   * morning slot. Every other slot still needs the order curve of events in
+   * sale, otherwise today's sales stay frozen on the 08:00 figure.
+   */
   const runDaily = force || hour === 8;
   const daily = runDaily
-    ? await syncWeeztixDailySales({ limit: 150, daysBack: 900 }).catch((e) => ({
-        ok: false as const,
-        attempted: 0,
-        editionsWithCurve: 0,
-        daysUpserted: 0,
-        referrersUpserted: 0,
-        demographicsUpserted: 0,
-        brevoOrders: 0,
-        failed: 1,
-        errors: [e instanceof Error ? e.message : "dailySales mislukt"],
-      }))
-    : null;
+    ? await syncWeeztixDailySales({ limit: 150, daysBack: 900 }).catch(
+        curveFailure,
+      )
+    : await syncWeeztixOnSaleCurves().catch(curveFailure);
 
-  const ok = events.ok && (daily == null || daily.ok);
+  const ok = events.ok && daily.ok;
   if (ok) {
     const { invalidateEventInsightsCache } = await import(
       "@/lib/insights/event-insights"
@@ -73,12 +83,8 @@ export async function GET(request: Request) {
     level: ok ? "info" : "error",
     event: ok ? "cron.ok" : "cron.failed",
     message: ok
-      ? `Cron Weeztix: ${events.eventsFetched} events, ${events.editionsUpserted} edities, ${events.inventoryUpserted} voorraad · ${saleDays.ticketsToday} tickets vandaag${
-          daily
-            ? ` · ${daily.editionsWithCurve} curves / ${daily.daysUpserted} dagen`
-            : ""
-        }`
-      : [events.error, ...saleDays.errors, ...(daily?.errors ?? [])]
+      ? `Cron Weeztix: ${events.eventsFetched} events, ${events.editionsUpserted} edities, ${events.inventoryUpserted} voorraad · ${saleDays.ticketsToday} tickets vandaag · ${daily.editionsWithCurve} curves / ${daily.daysUpserted} dagen`
+      : [events.error, ...saleDays.errors, ...daily.errors]
           .filter(Boolean)
           .join(" · ") || "Weeztix cron mislukt",
     detail: {
@@ -92,20 +98,19 @@ export async function GET(request: Request) {
         ticketsToday: saleDays.ticketsToday,
         failed: saleDays.failed,
       },
-      daily: daily
-        ? {
-            editionsWithCurve: daily.editionsWithCurve,
-            daysUpserted: daily.daysUpserted,
-            failed: daily.failed,
-          }
-        : null,
+      daily: {
+        full: runDaily,
+        editionsWithCurve: daily.editionsWithCurve,
+        daysUpserted: daily.daysUpserted,
+        failed: daily.failed,
+      },
     },
     throttleMs: 0,
   });
 
   if (!ok) {
     console.error(
-      `[weeztix] cron.failed: ${events.error ?? saleDays.errors.join("; ") ?? daily?.errors.join("; ")}`,
+      `[weeztix] cron.failed: ${events.error ?? saleDays.errors.join("; ") ?? daily.errors.join("; ")}`,
     );
   }
 

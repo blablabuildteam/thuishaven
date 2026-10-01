@@ -117,6 +117,11 @@ function normalizeDay(value: string | Date): string {
  * Prefer the Weeztix order histogram per event (full onsale window).
  * Snapshot / ticketCountToday rows only fill events with no histogram,
  * plus today when the histogram has not caught up yet.
+ *
+ * On today both sources are partial: the histogram is only as fresh as its
+ * last sync, the snapshot delta misses sales made before the first snapshot
+ * of the day. Taking the higher of the two keeps a manual refresh meaningful
+ * instead of freezing today on whichever number landed first.
  */
 export function mergeDailyTicketSalesRows(input: {
   endDay: string;
@@ -126,18 +131,32 @@ export function mergeDailyTicketSalesRows(input: {
   const orderEditionIds = new Set(
     input.orderRows.map((row) => row.editionId),
   );
-  const orderKeys = new Set(
-    input.orderRows.map(
-      (row) => `${row.editionId}:${normalizeDay(row.day)}`,
-    ),
-  );
-  const fallback = input.snapshotRows.filter((row) => {
+  const orderByKey = new Map<string, DailyTicketSalesRow>();
+  for (const row of input.orderRows) {
     const day = normalizeDay(row.day);
-    if (!day || orderKeys.has(`${row.editionId}:${day}`)) return false;
-    if (!orderEditionIds.has(row.editionId)) return true;
-    return day === input.endDay;
-  });
-  return [...input.orderRows, ...fallback];
+    if (day) orderByKey.set(`${row.editionId}:${day}`, row);
+  }
+
+  const outByKey = new Map(orderByKey);
+  const extra: DailyTicketSalesRow[] = [];
+
+  for (const row of input.snapshotRows) {
+    const day = normalizeDay(row.day);
+    if (!day) continue;
+    const key = `${row.editionId}:${day}`;
+    const order = orderByKey.get(key);
+    if (!order) {
+      if (!orderEditionIds.has(row.editionId) || day === input.endDay) {
+        extra.push(row);
+      }
+      continue;
+    }
+    if (day === input.endDay && row.sold > (outByKey.get(key)?.sold ?? 0)) {
+      outByKey.set(key, row);
+    }
+  }
+
+  return [...outByKey.values(), ...extra];
 }
 
 export function buildDailyTicketSales(input: {
@@ -275,23 +294,27 @@ export async function latestDailyTicketSalesRefreshAt(): Promise<string | null> 
 }
 
 /**
- * Pull live Weeztix totals for events still on sale and write today's snapshot.
- * That is the intra-day update this chart uses between the morning curve sync.
+ * Pull live Weeztix totals for events still on sale, write today's snapshot
+ * and re-pull their order curve, so both this chart and the sales curve show
+ * the stand of right now instead of the last cron slot.
  */
 export async function refreshDailyTicketSales(): Promise<{
   ok: boolean;
   refreshedAt: string | null;
   error?: string;
 }> {
-  const { listOnSaleWeeztixEditions, syncWeeztixSaleDays } = await import(
-    "@/lib/integrations/weeztix/daily"
-  );
+  const {
+    listOnSaleWeeztixEditions,
+    syncWeeztixOnSaleCurves,
+    syncWeeztixSaleDays,
+  } = await import("@/lib/integrations/weeztix/daily");
   const { syncWeeztixTicketStatsFromEditions } = await import(
     "@/lib/integrations/weeztix/sync"
   );
   const editionsOnSale = await listOnSaleWeeztixEditions();
+  const onSaleIds = editionsOnSale.map((row) => row.id);
   const inventory = await syncWeeztixTicketStatsFromEditions({
-    editionIds: editionsOnSale.map((row) => row.id),
+    editionIds: onSaleIds,
     concurrency: 4,
   });
   const saleDays = inventory.ok
@@ -300,12 +323,27 @@ export async function refreshDailyTicketSales(): Promise<{
         errors: [err instanceof Error ? err.message : "Dagverkoop ophalen mislukt"],
       }))
     : null;
+  /**
+   * The order histogram is what both this chart and the sales curve read for
+   * past days, so refreshing stats alone leaves today stuck on the last cron
+   * value. Pull the curve for the same events.
+   */
+  const curves = inventory.ok
+    ? await syncWeeztixOnSaleCurves().catch((err) => ({
+        ok: false as const,
+        errors: [
+          err instanceof Error ? err.message : "Verkoopverloop ophalen mislukt",
+        ],
+      }))
+    : null;
   const refreshedAt = await latestDailyTicketSalesRefreshAt();
   const error = !inventory.ok
     ? inventory.errors[0] ?? "Weeztix-sync mislukt"
     : saleDays && !saleDays.ok
       ? saleDays.errors[0] ?? "Dagverkoop ophalen mislukt"
-      : undefined;
+      : curves && !curves.ok
+        ? curves.errors[0] ?? "Verkoopverloop ophalen mislukt"
+        : undefined;
   return { ok: !error, refreshedAt, error };
 }
 

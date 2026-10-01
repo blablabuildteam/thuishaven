@@ -20,6 +20,12 @@ export async function POST() {
   }
 
   const result = await refreshDailyTicketSales();
+  if (result.ok) {
+    const { invalidateEventInsightsCache } = await import(
+      "@/lib/insights/event-insights"
+    );
+    await invalidateEventInsightsCache();
+  }
   return NextResponse.json(
     {
       ok: result.ok,

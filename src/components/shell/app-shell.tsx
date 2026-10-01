@@ -96,12 +96,12 @@ const dashboardSections: NavSection[] = [
     items: [
       {
         href: "/dashboard/paid/meta",
-        label: "Meta",
+        label: "Meta ads",
         brand: "instagram",
       },
       {
         href: "/dashboard/paid/tiktok",
-        label: "TikTok",
+        label: "TikTok ads",
         brand: "tiktok",
       },
       {
@@ -111,7 +111,7 @@ const dashboardSections: NavSection[] = [
       },
       {
         href: "/dashboard/paid/youtube",
-        label: "YouTube",
+        label: "YouTube ads",
         brand: "youtube",
       },
     ],

@@ -394,6 +394,8 @@ export async function syncWeeztixDailySales(options?: {
   /** Optioneel: alleen edities met startsAt in [startsFrom, startsTo] */
   startsFrom?: Date;
   startsTo?: Date;
+  /** Optioneel: exact deze edities, bv. alleen wat nu in verkoop staat. */
+  editionIds?: string[];
   concurrency?: number;
   /** Alleen order-histogram, geen referrers/demo/sale-day. */
   curvesOnly?: boolean;
@@ -442,6 +444,21 @@ export async function syncWeeztixDailySales(options?: {
       return d;
     })();
 
+  const only = [...new Set((options?.editionIds ?? []).filter(Boolean))];
+  if (options?.editionIds && only.length === 0) {
+    return {
+      ok: true,
+      attempted: 0,
+      editionsWithCurve: 0,
+      daysUpserted: 0,
+      referrersUpserted: 0,
+      demographicsUpserted: 0,
+      brevoOrders: 0,
+      failed: 0,
+      errors: [],
+    };
+  }
+
   const rows = await db
     .select({
       id: editions.id,
@@ -453,8 +470,9 @@ export async function syncWeeztixDailySales(options?: {
     .where(
       and(
         isNotNull(editions.weeztixEventId),
-        gte(editions.startsAt, from),
-        lte(editions.startsAt, to),
+        only.length > 0
+          ? inArray(editions.id, only)
+          : and(gte(editions.startsAt, from), lte(editions.startsAt, to)),
       ),
     )
     .orderBy(desc(editions.startsAt))
@@ -621,6 +639,24 @@ export async function listOnSaleWeeztixEditions(limit = 120): Promise<
     (row): row is { id: string; name: string; guid: string } =>
       Boolean(row.guid) && !/TEMPLATE/i.test(row.name),
   );
+}
+
+/**
+ * Only the order-day curve of events still selling. Light enough to run on
+ * every cron slot and on a manual refresh, where the full backfill (all
+ * editions, referrers, demographics) is too heavy.
+ */
+export async function syncWeeztixOnSaleCurves(options?: {
+  limit?: number;
+  concurrency?: number;
+}) {
+  const rows = await listOnSaleWeeztixEditions(options?.limit ?? 120);
+  return syncWeeztixDailySales({
+    editionIds: rows.map((row) => row.id),
+    curvesOnly: true,
+    limit: Math.max(1, rows.length),
+    concurrency: options?.concurrency ?? 3,
+  });
 }
 
 export async function syncWeeztixSaleDays(options?: {

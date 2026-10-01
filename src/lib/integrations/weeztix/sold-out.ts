@@ -49,6 +49,26 @@ export function isPublicSaleTicket(t: WeeztixTicketType): boolean {
   return true;
 }
 
+/**
+ * Tickets the public shop can still sell. Uses the same ticket types as the
+ * sold-out verdict, so "open" can never contradict "uitverkocht": template
+ * leftovers, vrienden/community allotments and free types are left out.
+ * Null when no public type carries an allotment — then stock is unknown.
+ */
+export function publicOpenStock(tickets: WeeztixTicketType[]): number | null {
+  let open = 0;
+  let known = false;
+  for (const t of tickets) {
+    if (!isPublicSaleTicket(t)) continue;
+    const stock = ticketStock(t);
+    if (stock <= 0) continue;
+    known = true;
+    if (isTicketTypeSoldOut(t)) continue;
+    open += Math.max(0, stock - ticketSold(t));
+  }
+  return known ? open : null;
+}
+
 export function isTicketTypeSoldOut(t: WeeztixTicketType): boolean {
   const status = String(t.status ?? "").toLowerCase();
   if (status === "sold_out") return true;

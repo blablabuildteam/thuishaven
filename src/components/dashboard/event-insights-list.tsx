@@ -628,9 +628,22 @@ function InsightChip({
   );
 }
 
-function ticketComposition(sold: number, capacity: number | null, scanned: number) {
+/**
+ * `openForSale` comes from the sync and counts only what the shop can still
+ * sell; reserved Appic/RA/vrienden barcodes sit inside capacity but are not
+ * available, so deriving capacity − sold would show open tickets on a
+ * sold-out night.
+ */
+function ticketComposition(
+  sold: number,
+  capacity: number | null,
+  scanned: number,
+  openForSale?: number | null,
+) {
   const available =
-    capacity != null && capacity > 0 ? Math.max(0, capacity - sold) : null;
+    capacity != null && capacity > 0
+      ? Math.min(openForSale ?? Infinity, Math.max(0, capacity - sold))
+      : null;
   const scannedClamped = Math.min(scanned, Math.max(sold, 0));
   const soldUnscanned = Math.max(0, sold - scannedClamped);
   const base = capacity != null && capacity > 0 ? capacity : Math.max(sold, 1);
@@ -651,17 +664,19 @@ function TicketCompositionBar({
   sold,
   capacity,
   scanned,
+  openForSale,
   animate = false,
   className,
 }: {
   sold: number;
   capacity: number | null;
   scanned: number;
+  openForSale?: number | null;
   animate?: boolean;
   className?: string;
 }) {
   const { available, scannedClamped, soldUnscanned, scannedW, soldRestW, availableW } =
-    ticketComposition(sold, capacity, scanned);
+    ticketComposition(sold, capacity, scanned, openForSale);
 
   return (
     <div
@@ -708,14 +723,16 @@ function CompactTicketMetrics({
   sold,
   capacity,
   scanned,
+  openForSale,
   animate = false,
 }: {
   sold: number;
   capacity: number | null;
   scanned: number;
+  openForSale?: number | null;
   animate?: boolean;
 }) {
-  const { available } = ticketComposition(sold, capacity, scanned);
+  const { available } = ticketComposition(sold, capacity, scanned, openForSale);
   if (sold <= 0 && (capacity == null || capacity <= 0) && scanned <= 0) {
     return null;
   }
@@ -726,6 +743,7 @@ function CompactTicketMetrics({
         sold={sold}
         capacity={capacity}
         scanned={scanned}
+        openForSale={openForSale}
         animate={animate}
         className="h-2.5"
       />
@@ -992,6 +1010,7 @@ function TicketMetricsVisual({
   sold,
   capacity,
   scanned,
+  openForSale,
   fillPct,
   scanRatePct,
   avgPriceEur,
@@ -1009,6 +1028,7 @@ function TicketMetricsVisual({
   sold: number;
   capacity: number | null;
   scanned: number;
+  openForSale: number | null;
   fillPct: number | null;
   scanRatePct: number | null;
   avgPriceEur: number | null;
@@ -1023,7 +1043,7 @@ function TicketMetricsVisual({
   emailCampaigns: EventInsightMail[];
   paidAds: EventInsightPaidAd[];
 }) {
-  const { available } = ticketComposition(sold, capacity, scanned);
+  const { available } = ticketComposition(sold, capacity, scanned, openForSale);
 
   const fillTone =
     fillPct != null
@@ -1063,7 +1083,10 @@ function TicketMetricsVisual({
     <div className="mb-4 min-w-0 border border-border px-3 py-3">
       {/* Main metrics row: Beschikbaar | Verkocht | Gescand */}
       <div className="grid grid-cols-3 gap-2 sm:gap-4">
-        <div className="min-w-0" title="Nog beschikbare tickets (capaciteit − verkocht)">
+        <div
+          className="min-w-0"
+          title="Nog te verkopen in de shop — gereserveerde Appic/RA/vriendenbarcodes tellen niet mee"
+        >
           <p className="truncate text-[9px] font-medium tracking-normal text-text-dim uppercase sm:text-[10px] sm:tracking-[0.12em]">
             Beschikbaar
           </p>
@@ -1075,7 +1098,10 @@ function TicketMetricsVisual({
           </p>
         </div>
 
-        <div title="Weeztix-shop plus gebruikt uit Appic/RA/vrienden-pools" className="min-w-0 text-center">
+        <div
+          title="Weeztix-shop plus de barcodes die naar Appic/RA/vrienden zijn gegaan; na het event de scans"
+          className="min-w-0 text-center"
+        >
           <p className="truncate text-[9px] font-medium tracking-normal text-text-dim uppercase sm:text-[10px] sm:tracking-[0.12em]">
             Verkocht
           </p>
@@ -1403,6 +1429,7 @@ function EventRow({
               sold={event.tickets.sold}
               capacity={event.tickets.capacity}
               scanned={event.tickets.scanned}
+              openForSale={event.tickets.available}
               animate={open && phase === "ready"}
             />
           </button>
@@ -1482,6 +1509,7 @@ function EventDetail({ event }: { event: EventInsight }) {
           sold={tickets.sold}
           capacity={tickets.capacity}
           scanned={tickets.scanned}
+          openForSale={tickets.available}
           fillPct={tickets.fillPct}
           scanRatePct={tickets.scanRatePct}
           avgPriceEur={tickets.avgPriceEur}

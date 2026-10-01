@@ -204,7 +204,7 @@ function DailySalesTooltip({
   return createPortal(
     <div
       ref={ref}
-      className="pointer-events-none max-h-[calc(100dvh-2rem)] max-w-[min(42rem,calc(100vw-2rem))] overflow-y-auto border px-3 py-2 text-xs shadow-sm"
+      className="pointer-events-none max-h-[calc(100dvh-2rem)] max-w-[min(58rem,calc(100vw-2rem))] overflow-y-auto border px-3 py-2 text-xs shadow-sm"
       style={{
         position: "fixed",
         left,
@@ -222,7 +222,7 @@ function DailySalesTooltip({
         <table className="mt-2 w-full border-collapse">
           <thead>
             <tr className="text-[10px] tracking-[0.08em] text-text-dim uppercase">
-              <th className="pb-1.5 pr-3 font-medium text-left">Event</th>
+              <th className="pb-1.5 pr-3 font-medium text-left">Datum · event</th>
               <th className="pb-1.5 pl-2 font-medium text-right">Betaald</th>
               <th className="pb-1.5 pl-2 font-medium text-right">Incl. btw</th>
               <th className="pb-1.5 pl-2 font-medium text-right">Excl. btw</th>
@@ -232,20 +232,17 @@ function DailySalesTooltip({
             {rows.map((row) => (
               <tr key={row.id}>
                 <td className="py-1 pr-3 align-top">
-                  <span className="flex items-start gap-2">
+                  {/* Eventdatum eerst, dan de naam op één regel — zoals Weeztix. */}
+                  <span className="flex items-baseline gap-2 whitespace-nowrap">
                     <span
-                      className="mt-0.5 size-2.5 shrink-0"
+                      className="size-2.5 shrink-0 self-center"
                       style={{ background: row.color }}
                       aria-hidden
                     />
-                    <span className="min-w-0">
-                      <span className="block leading-snug">
-                        {displayEditionName(row.name)}
-                      </span>
-                      <span className="text-[10px] text-text-dim">
-                        {formatDate(row.startsAt)}
-                      </span>
+                    <span className="shrink-0 tabular-nums text-text-dim">
+                      {formatDate(row.startsAt, { day: "2-digit" })}
                     </span>
+                    <span>{displayEditionName(row.name)}</span>
                   </span>
                 </td>
                 <td className="py-1 pl-2 text-right align-top font-mono tabular-nums">

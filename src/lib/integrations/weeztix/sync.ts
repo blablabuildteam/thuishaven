@@ -12,12 +12,17 @@ import { estimateSoldOutFromTicketTypes } from "@/lib/editions/sold-out-timing";
 import {
   channelHasTicketTypes,
   DERIVED_PLATFORM_CHANNEL,
+  effectiveTicketCap,
+  isUnconfiguredTicketType,
   summarizeWeeztixChannels,
   WEEZTIX_DERIVED_PLATFORMS,
   type ChannelInventorySummary,
   type WeeztixDerivedPlatform,
 } from "@/lib/integrations/weeztix/channels";
-import { resolveWeeztixSoldOut } from "@/lib/integrations/weeztix/sold-out";
+import {
+  publicOpenStock,
+  resolveWeeztixSoldOut,
+} from "@/lib/integrations/weeztix/sold-out";
 
 function slugify(name: string): string {
   return (
@@ -51,12 +56,11 @@ export function summarizeTicketSales(tickets: WeeztixTicketType[]): {
   let revenueCents = 0;
 
   for (const t of tickets) {
+    if (isUnconfiguredTicketType(t)) continue;
     const s = typeof t.sold_count === "number" ? t.sold_count : 0;
     const scannedCount =
       typeof t.scanned_count === "number" ? t.scanned_count : 0;
     scanned += scannedCount;
-    const stock =
-      typeof t.available_stock === "number" ? t.available_stock : null;
     const price = typeof t.min_price === "number" ? t.min_price : 0;
     sold += s;
     if (price > 0) {
@@ -68,11 +72,12 @@ export function summarizeTicketSales(tickets: WeeztixTicketType[]): {
     /**
      * Weeztix `available_stock` is de toegewezen ticketcap per type, ook als
      * status=sold_out (blijft bv. 1050 staan i.p.v. 0). Niet “nog te koop”.
-     * Cap = som van allotments; nog = cap − sold.
+     * Cap = som van allotments, inclusief de barcode-pools: dat is de zaal.
      */
-    if (stock != null) {
+    const cap = effectiveTicketCap(t);
+    if (cap != null) {
       hasStock = true;
-      capacitySum += Math.max(stock, s);
+      capacitySum += cap;
     }
   }
 
@@ -399,6 +404,12 @@ async function upsertTicketInventoryForEvents(
     const tickets = ticketsRes.tickets;
     const summary = summarizeTicketSales(tickets);
     const channels = summarizeWeeztixChannels(tickets);
+    /**
+     * Reserved Appic/RA/vrienden barcodes are never for sale, so a pool that
+     * is not fully issued is not "open" either. Count what the public shop
+     * can still sell, otherwise a sold-out night keeps showing open tickets.
+     */
+    const openForSale = publicOpenStock(tickets) ?? channels.weeztix.available;
     totalSold += summary.sold;
 
     const inv = await db
@@ -442,7 +453,7 @@ async function upsertTicketInventoryForEvents(
           freeSold: summary.freeSold,
           revenueCents: summary.revenueCents,
           capacity: summary.capacity,
-          available: summary.available,
+          available: openForSale,
           avgPriceEur:
             summary.avgPriceCents != null
               ? (summary.avgPriceCents / 100).toFixed(2)
@@ -462,7 +473,7 @@ async function upsertTicketInventoryForEvents(
         paidSold: summary.paidSold,
         freeSold: summary.freeSold,
         revenueCents: summary.revenueCents,
-        available: summary.available,
+        available: openForSale,
         avgPriceEur:
           summary.avgPriceCents != null
             ? (summary.avgPriceCents / 100).toFixed(2)
