@@ -5,12 +5,51 @@ import { ArrowRight } from "lucide-react";
 import { auth } from "@/auth";
 import { BrandLogo } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import {
+  homePathForAccess,
+  normalizeToolAccess,
+} from "@/lib/auth/tool-access";
 
 export const metadata = { title: "Kies een tool" };
 
 export default async function HubPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
+
+  const access = normalizeToolAccess(
+    session.user.toolAccess,
+    session.user.role,
+  );
+  const tools = [
+    access.dashboard
+      ? {
+          href: "/dashboard/inzichten",
+          eyebrow: "Dashboard",
+          title: "Marketing & Kaartverkoop",
+          description: "Ticketverkoop, marketingkanalen en alerts.",
+        }
+      : null,
+    access.outreach
+      ? {
+          href: "/outreach",
+          eyebrow: "Outreach",
+          title: "Bedrijfsevent Outreach",
+          description: "Bedrijven mailen en resultaten volgen.",
+        }
+      : null,
+  ].filter(Boolean) as Array<{
+    href: string;
+    eyebrow: string;
+    title: string;
+    description: string;
+  }>;
+
+  if (tools.length === 1) {
+    redirect(tools[0]!.href);
+  }
+  if (tools.length === 0) {
+    redirect(homePathForAccess(access));
+  }
 
   const name =
     session.user.name?.trim().split(/\s+/)[0] || session.user.email || "daar";
@@ -61,18 +100,9 @@ export default async function HubPage() {
         </header>
 
         <div className="stagger grid gap-3 sm:grid-cols-2">
-          <ToolCard
-            href="/dashboard/inzichten"
-            eyebrow="Dashboard"
-            title="Marketing & Kaartverkoop"
-            description="Ticketverkoop, marketingkanalen en alerts."
-          />
-          <ToolCard
-            href="/outreach"
-            eyebrow="Outreach"
-            title="Bedrijfsevent Outreach"
-            description="Bedrijven mailen en resultaten volgen."
-          />
+          {tools.map((t) => (
+            <ToolCard key={t.href} {...t} />
+          ))}
         </div>
       </div>
     </div>

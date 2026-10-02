@@ -7,8 +7,10 @@ import {
   publicUser,
   resendInvite,
   setUserActive,
+  setUserToolAccess,
   createUserWithPassword,
 } from "@/lib/auth/users";
+import { DEFAULT_TOOL_ACCESS } from "@/lib/auth/tool-access";
 
 export const dynamic = "force-dynamic";
 
@@ -38,11 +40,26 @@ export async function GET() {
   });
 }
 
+const toolAccessSchema = z.object({
+  dashboard: z.boolean(),
+  outreach: z.boolean(),
+  dashboardAreas: z.object({
+    overzicht: z.boolean(),
+    omzet: z.boolean(),
+    marketing: z.boolean(),
+  }),
+  outreachAreas: z.object({
+    stappen: z.boolean(),
+    uitleg: z.boolean(),
+  }),
+});
+
 const inviteSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1),
   role: z.enum(["admin", "member"]).default("member"),
   password: z.string().min(8).optional(),
+  toolAccess: toolAccessSchema.optional(),
 });
 
 export async function POST(request: Request) {
@@ -55,6 +72,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
   }
 
+  const toolAccess = parsed.data.toolAccess ?? DEFAULT_TOOL_ACCESS;
   const allowDevPassword =
     process.env.AUTH_ALLOW_ADMIN_PASSWORD === "true" && parsed.data.password;
 
@@ -65,12 +83,14 @@ export async function POST(request: Request) {
         password: parsed.data.password!,
         role: parsed.data.role,
         createdByEmail: gate.session!.user.email!,
+        toolAccess,
       })
     : await inviteUser({
         email: parsed.data.email,
         name: parsed.data.name,
         role: parsed.data.role,
         createdByEmail: gate.session!.user.email!,
+        toolAccess,
       });
 
   if (!result.ok) {
@@ -89,6 +109,11 @@ const patchSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("resend_invite"),
     id: z.string().uuid(),
+  }),
+  z.object({
+    action: z.literal("set_tool_access"),
+    id: z.string().uuid(),
+    toolAccess: toolAccessSchema,
   }),
 ]);
 
@@ -111,6 +136,20 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
     return NextResponse.json({ user: publicUser(result.user) });
+  }
+
+  if (parsed.data.action === "set_tool_access") {
+    const result = await setUserToolAccess(
+      parsed.data.id,
+      parsed.data.toolAccess,
+    );
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+    return NextResponse.json({
+      user: publicUser(result.user),
+      note: "Gebruiker moet opnieuw inloggen om de nieuwe toegang te zien.",
+    });
   }
 
   if (

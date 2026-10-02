@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useSession } from "next-auth/react";
 import {
@@ -40,6 +40,13 @@ import {
   type SocialBrandChannel,
 } from "@/components/ui/social-channel-icon";
 import { cn } from "@/lib/utils";
+import {
+  dashboardItemAllowed,
+  dashboardSectionAllowed,
+  normalizeToolAccess,
+  outreachSectionAllowed,
+  type ToolAccess,
+} from "@/lib/auth/tool-access";
 
 type NavItem = {
   href: string;
@@ -241,10 +248,27 @@ function filterNav(items: NavItem[], isAdmin: boolean) {
   return items.filter((item) => isAdmin || !item.adminOnly);
 }
 
-function filterSections(sections: NavSection[], isAdmin: boolean) {
+function filterSections(
+  sections: NavSection[],
+  isAdmin: boolean,
+  access: ToolAccess,
+  isOutreach: boolean,
+) {
   return sections
     .filter((s) => isAdmin || !s.adminOnly)
-    .map((s) => ({ ...s, items: filterNav(s.items, isAdmin) }))
+    .filter((s) =>
+      isOutreach
+        ? outreachSectionAllowed(s.id, access)
+        : dashboardSectionAllowed(s.id, access),
+    )
+    .map((s) => ({
+      ...s,
+      items: filterNav(s.items, isAdmin).filter((item) =>
+        isOutreach || item.adminOnly
+          ? true
+          : dashboardItemAllowed(item.href, access),
+      ),
+    }))
     .filter((s) => s.items.length > 0);
 }
 
@@ -286,6 +310,7 @@ function NavLink({
   badgeCount?: number | null;
   onNavigate?: () => void;
 }) {
+  const router = useRouter();
   const content = (
     <>
       <NavItemIcon item={item} active={active} />
@@ -313,8 +338,15 @@ function NavLink({
   return (
     <Link
       href={item.href}
+      prefetch
       data-tour={item.tourId}
       onClick={onNavigate}
+      onMouseEnter={() => {
+        void router.prefetch(item.href);
+      }}
+      onFocus={() => {
+        void router.prefetch(item.href);
+      }}
       title={item.pending ? "Nog niet gekoppeld" : undefined}
       className={cn(
         "flex items-center gap-2.5 px-2.5 py-2 text-sm transition-colors",
@@ -341,6 +373,8 @@ function ShellNav({
   onToggleViewAsStaff,
   onNavigate,
   onClose,
+  showDashboard,
+  showOutreach,
 }: {
   pathname: string;
   isOutreach: boolean;
@@ -352,6 +386,8 @@ function ShellNav({
   onToggleViewAsStaff?: () => void;
   onNavigate?: () => void;
   onClose?: () => void;
+  showDashboard: boolean;
+  showOutreach: boolean;
 }) {
   return (
     <>
@@ -389,20 +425,26 @@ function ShellNav({
       </div>
 
       <div className="border-b border-border px-3 py-3">
-        <div className="grid grid-cols-2 gap-1 bg-bg-elevated p-1">
-          <ToolSwitch
-            href="/dashboard/inzichten"
-            active={!isOutreach}
-            label="Dashboard"
-            onNavigate={onNavigate}
-          />
-          <ToolSwitch
-            href="/outreach/crm"
-            active={isOutreach}
-            label="Outreach"
-            onNavigate={onNavigate}
-          />
-        </div>
+        {showDashboard && showOutreach ? (
+          <div className="grid grid-cols-2 gap-1 bg-bg-elevated p-1">
+            <ToolSwitch
+              href="/dashboard/inzichten"
+              active={!isOutreach}
+              label="Dashboard"
+              onNavigate={onNavigate}
+            />
+            <ToolSwitch
+              href="/outreach/crm"
+              active={isOutreach}
+              label="Outreach"
+              onNavigate={onNavigate}
+            />
+          </div>
+        ) : (
+          <p className="px-1 py-1 font-display text-xs tracking-[0.12em] text-text-dim">
+            {isOutreach ? "Outreach" : "Dashboard"}
+          </p>
+        )}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 py-4">
@@ -510,11 +552,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
   const showAdminNav = Boolean(isAdmin) && !viewAsStaff;
   const isOutreach = pathname.startsWith("/outreach");
+  const toolAccess = normalizeToolAccess(
+    data?.user?.toolAccess,
+    data?.user?.role === "admin" ? "admin" : "member",
+  );
   const djFeesPending = useDjFeesPendingCount(!isOutreach);
   const omzetPending = useOmzetPendingCount(!isOutreach);
-  const sections = isOutreach
-    ? filterSections(outreachSections, showAdminNav)
-    : dashboardSections;
+  const sections = filterSections(
+    isOutreach ? outreachSections : dashboardSections,
+    showAdminNav,
+    toolAccess,
+    isOutreach,
+  );
   const systemNav = filterNav(
     isOutreach ? outreachSystemNav : dashboardSystemNav,
     showAdminNav,
@@ -560,6 +609,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     omzetPending,
     viewAsStaff: Boolean(isAdmin) && viewAsStaff,
     onToggleViewAsStaff: isAdmin ? toggleViewAsStaff : undefined,
+    showDashboard: toolAccess.dashboard,
+    showOutreach: toolAccess.outreach,
   };
 
   return (

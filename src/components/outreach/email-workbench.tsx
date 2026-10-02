@@ -76,7 +76,7 @@ export function OutreachEmailWorkbench({
   const preselected = useMemo(() => new Set(preselectIds), [preselectIds]);
   const [showMailed, setShowMailed] = useState(false);
   const [q, setQ] = useState("");
-  const [onlyHandoff, setOnlyHandoff] = useState(preselectIds.length > 0);
+  const [onlyHandoff, setOnlyHandoff] = useState(false);
 
   const ready = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -101,6 +101,7 @@ export function OutreachEmailWorkbench({
   }, [prospects, q, showMailed, onlyHandoff, preselected]);
 
   const mailedTotal = prospects.filter((p) => p.mailCount > 0).length;
+  const neverMailedTotal = prospects.filter((p) => p.mailCount === 0).length;
 
   const [selected, setSelected] = useState<Set<string>>(
     () =>
@@ -478,6 +479,21 @@ export function OutreachEmailWorkbench({
       </div>
 
       <div>
+        {preselectIds.length > 0 ? (
+          <p className="mb-3 rounded-none border border-border bg-surface px-3 py-2 text-sm text-text-muted">
+            {selected.size} meegenomen uit Bedrijven (al aangevinkt).{" "}
+            <button
+              type="button"
+              className="text-accent underline"
+              onClick={() => setOnlyHandoff((v) => !v)}
+            >
+              {onlyHandoff
+                ? "Toon alle mailklare"
+                : `Toon alleen die ${preselectIds.length}`}
+            </button>
+          </p>
+        ) : null}
+
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <input
             value={q}
@@ -500,28 +516,56 @@ export function OutreachEmailWorkbench({
                 checked={onlyHandoff}
                 onChange={(e) => setOnlyHandoff(e.target.checked)}
               />
-              Alleen selectie ({preselectIds.length})
+              Alleen selectie uit Bedrijven ({preselectIds.length})
             </label>
           ) : null}
         </div>
+
+        <p className="mb-2 max-w-2xl text-sm text-text-muted">
+          <strong className="text-text">{ready.length}</strong> in beeld
+          {!showMailed ? (
+            <>
+              {" "}
+              — alleen nog nooit gemaild ({neverMailedTotal} met e-mail +
+              mailkans)
+              {mailedTotal > 0
+                ? ` · ${mailedTotal} al gemaild staan uit (vink hierboven aan om te zien)`
+                : ""}
+            </>
+          ) : (
+            <> — inclusief al gemaild</>
+          )}
+          {skippedNoEmail > 0 ? (
+            <>
+              {" "}
+              · {skippedNoEmail} zonder e-mail staan hier niet (eerst aanvullen
+              bij Lijst bijwerken)
+            </>
+          ) : null}
+          .
+        </p>
+
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs uppercase tracking-wider text-text-dim">
-            {selected.size} geselecteerd · {ready.length} in beeld
+            {selected.size} aangevinkt · vink rijen aan of gebruik snelle
+            selectie
           </p>
-          <div className="flex gap-3 text-xs">
+          <div className="flex flex-wrap gap-3 text-xs">
             <button
               type="button"
+              title="Hoogste leadscore eerst (jubileum, compleetheid, engagement)"
               onClick={() => selectTop(10)}
               className="text-accent underline"
             >
-              Top 10
+              Top 10 leadscore
             </button>
             <button
               type="button"
+              title="Hoogste leadscore eerst (jubileum, compleetheid, engagement)"
               onClick={() => selectTop(25)}
               className="text-accent underline"
             >
-              Top 25
+              Top 25 leadscore
             </button>
             <button
               type="button"
@@ -544,7 +588,9 @@ export function OutreachEmailWorkbench({
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
               <tr>
-                <th className="px-3 py-2 w-10" />
+                <th className="w-10 px-3 py-2">
+                  <span className="sr-only">Selecteer</span>
+                </th>
                 <th className="px-3 py-2 font-medium">Bedrijf</th>
                 <th className="px-3 py-2 font-medium">Invalshoek</th>
                 <th className="px-3 py-2 font-medium">Eerder gemaild</th>
@@ -558,16 +604,23 @@ export function OutreachEmailWorkbench({
                 return (
                   <tr
                     key={p.id}
-                    className="border-b border-border last:border-0 hover:bg-surface/50"
+                    onClick={() => toggle(p.id)}
+                    className={`cursor-pointer border-b border-border last:border-0 hover:bg-surface/50 ${
+                      on ? "bg-accent/5" : ""
+                    }`}
                   >
-                    <td className="px-3 py-2">
+                    <td
+                      className="px-3 py-2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <input
                         type="checkbox"
                         checked={on}
                         onChange={() => toggle(p.id)}
+                        aria-label={`Selecteer ${p.companyName}`}
                       />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                       <Link
                         href={`/outreach/crm/${p.id}`}
                         className="font-medium text-text hover:text-accent"
@@ -580,6 +633,9 @@ export function OutreachEmailWorkbench({
                     </td>
                     <td className="px-3 py-2 text-xs text-text-muted">
                       {p.suggestedLabel ?? "—"}
+                      <span className="mt-0.5 block text-[10px] text-text-dim">
+                        score {p.score}
+                      </span>
                     </td>
                     <td className="px-3 py-2 text-xs">
                       {p.lastSentAt ? (
@@ -594,7 +650,10 @@ export function OutreachEmailWorkbench({
                         <span className="text-text-dim">Nee</span>
                       )}
                     </td>
-                    <td className="px-3 py-2">
+                    <td
+                      className="px-3 py-2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {mode === "suggested" ? (
                         <select
                           className="w-full max-w-[12rem] border border-border bg-bg px-2 py-1.5 text-sm text-text"

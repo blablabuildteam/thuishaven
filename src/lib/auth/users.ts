@@ -6,6 +6,11 @@ import { eq } from "drizzle-orm";
 import { authEmailDomainError, isAllowedAuthEmail } from "@/lib/auth/domains";
 import { createAuthToken } from "@/lib/auth/tokens";
 import { sendInviteEmail } from "@/lib/auth/mail";
+import {
+  DEFAULT_TOOL_ACCESS,
+  normalizeToolAccess,
+  type ToolAccess,
+} from "@/lib/auth/tool-access";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { appUsers } from "@/lib/db/schema";
 
@@ -32,6 +37,7 @@ export type AppUserRecord = {
   passwordHash: string;
   role: UserRole;
   active: boolean;
+  toolAccess: ToolAccess;
   emailVerifiedAt: string | null;
   inviteSentAt: string | null;
   passwordSetAt: string | null;
@@ -48,6 +54,7 @@ async function readFileStore(): Promise<AppUserRecord[]> {
     const parsed = JSON.parse(raw) as AppUserRecord[];
     return parsed.map((u) => ({
       ...u,
+      toolAccess: normalizeToolAccess(u.toolAccess, u.role),
       emailVerifiedAt: u.emailVerifiedAt ?? (u.active ? u.createdAt : null),
       inviteSentAt: u.inviteSentAt ?? null,
       passwordSetAt: u.passwordSetAt ?? null,
@@ -84,13 +91,15 @@ function allowedEmailsFromEnv(): string[] {
 
 function mapDbRow(r: typeof appUsers.$inferSelect): AppUserRecord {
   const createdAt = r.createdAt.toISOString();
+  const role = r.role;
   return {
     id: r.id,
     email: r.email,
     name: r.name,
     passwordHash: r.passwordHash,
-    role: r.role,
+    role,
     active: r.active,
+    toolAccess: normalizeToolAccess(r.toolAccess, role),
     emailVerifiedAt:
       r.emailVerifiedAt?.toISOString() ?? (r.active ? createdAt : null),
     inviteSentAt: r.inviteSentAt?.toISOString() ?? null,
@@ -137,6 +146,10 @@ function envBootstrapUsers(): AppUserRecord[] {
             role:
               u.role ?? (admins.has(email) ? ("admin" as const) : ("member" as const)),
             active: true,
+            toolAccess: normalizeToolAccess(
+              undefined,
+              u.role ?? (admins.has(email) ? "admin" : "member"),
+            ),
             emailVerifiedAt: now,
             inviteSentAt: null,
             passwordSetAt: now,
@@ -161,6 +174,10 @@ function envBootstrapUsers(): AppUserRecord[] {
     passwordHash: hash,
     role: (admins.has(email) ? "admin" : "member") as UserRole,
     active: true,
+    toolAccess: normalizeToolAccess(
+      undefined,
+      admins.has(email) ? "admin" : "member",
+    ),
     emailVerifiedAt: now,
     inviteSentAt: null,
     passwordSetAt: now,
@@ -191,6 +208,7 @@ async function seedEnvUsersToDb(): Promise<AppUserRecord[]> {
         passwordHash: user.passwordHash,
         role: user.role,
         active: true,
+        toolAccess: user.toolAccess,
         emailVerifiedAt: now,
         passwordSetAt: now,
         createdByEmail: "env-bootstrap",
@@ -287,6 +305,7 @@ async function persistUser(record: AppUserRecord): Promise<void> {
         passwordHash: record.passwordHash,
         role: record.role,
         active: record.active,
+        toolAccess: record.toolAccess,
         emailVerifiedAt: record.emailVerifiedAt
           ? new Date(record.emailVerifiedAt)
           : null,
@@ -305,6 +324,7 @@ async function persistUser(record: AppUserRecord): Promise<void> {
           passwordHash: record.passwordHash,
           role: record.role,
           active: record.active,
+          toolAccess: record.toolAccess,
           emailVerifiedAt: record.emailVerifiedAt
             ? new Date(record.emailVerifiedAt)
             : null,
@@ -332,6 +352,7 @@ export async function inviteUser(input: {
   name: string;
   role: UserRole;
   createdByEmail: string;
+  toolAccess?: ToolAccess;
 }): Promise<{ ok: true; user: AppUserRecord } | { ok: false; error: string }> {
   const email = input.email.trim().toLowerCase();
   if (!isAllowedAuthEmail(email)) {
@@ -354,6 +375,7 @@ export async function inviteUser(input: {
     passwordHash: randomPlaceholderHash(),
     role: input.role,
     active: false,
+    toolAccess: normalizeToolAccess(input.toolAccess, input.role),
     emailVerifiedAt: null,
     inviteSentAt: null,
     passwordSetAt: null,
@@ -478,6 +500,22 @@ export async function setUserActive(
   return { ok: true };
 }
 
+export async function setUserToolAccess(
+  id: string,
+  toolAccess: ToolAccess,
+): Promise<{ ok: true; user: AppUserRecord } | { ok: false; error: string }> {
+  const user = await findUserById(id);
+  if (!user) return { ok: false, error: "Gebruiker niet gevonden" };
+
+  const updated: AppUserRecord = {
+    ...user,
+    toolAccess: normalizeToolAccess(toolAccess, user.role),
+    updatedAt: new Date().toISOString(),
+  };
+  await persistUser(updated);
+  return { ok: true, user: updated };
+}
+
 export function userStatus(user: AppUserRecord): "active" | "pending" | "inactive" {
   if (!user.emailVerifiedAt) return "pending";
   if (!user.active) return "inactive";
@@ -491,6 +529,7 @@ export function publicUser(user: AppUserRecord) {
     name: user.name,
     role: user.role,
     active: user.active,
+    toolAccess: normalizeToolAccess(user.toolAccess, user.role),
     status: userStatus(user),
     emailVerifiedAt: user.emailVerifiedAt,
     inviteSentAt: user.inviteSentAt,
@@ -506,6 +545,7 @@ export async function createUserWithPassword(input: {
   password: string;
   role: UserRole;
   createdByEmail: string;
+  toolAccess?: ToolAccess;
 }): Promise<{ ok: true; user: AppUserRecord } | { ok: false; error: string }> {
   const email = input.email.trim().toLowerCase();
   if (!isAllowedAuthEmail(email)) {
@@ -525,6 +565,7 @@ export async function createUserWithPassword(input: {
     passwordHash: await bcrypt.hash(input.password, 10),
     role: input.role,
     active: true,
+    toolAccess: normalizeToolAccess(input.toolAccess, input.role),
     emailVerifiedAt: now,
     inviteSentAt: null,
     passwordSetAt: now,

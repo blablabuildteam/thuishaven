@@ -138,6 +138,7 @@ export function CrmCompaniesTable({ rows }: Props) {
     useState<CompletenessFilter>("all");
   const [sort, setSort] = useState<SortKey>("score");
   const [moreOpen, setMoreOpen] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(() => new Set());
 
   const signalCounts = useMemo(() => {
     const out = {} as Record<SignalId, number>;
@@ -304,6 +305,24 @@ export function CrmCompaniesTable({ rows }: Props) {
     )
     .map(({ row }) => row.id);
 
+  const pickedMailable = mailableIds.filter((id) => picked.has(id));
+  const handoffIds =
+    pickedMailable.length > 0 ? pickedMailable : mailableIds;
+  const handoffCount = Math.min(handoffIds.length, MAX_HANDOFF);
+
+  function togglePick(id: string) {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function pickVisibleMailable() {
+    setPicked(new Set(mailableIds.slice(0, MAX_HANDOFF)));
+  }
+
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-baseline gap-x-4 gap-y-2 border-b border-border pb-4">
@@ -383,18 +402,44 @@ export function CrmCompaniesTable({ rows }: Props) {
           </button>
         </div>
 
-        {mailableIds.length > 0 ? (
-          <Link
-            href={`/outreach/emails?ids=${mailableIds.slice(0, MAX_HANDOFF).join(",")}`}
-            title={`Met e-mail, nog nooit gemaild. Max ${MAX_HANDOFF} per keer.`}
-            className="shrink-0 bg-accent px-4 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast"
-          >
-            Mail {Math.min(mailableIds.length, MAX_HANDOFF)}
-            {mailableIds.length > MAX_HANDOFF
-              ? ` van ${mailableIds.length}`
-              : ""}{" "}
-            →
-          </Link>
+        {handoffCount > 0 ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {picked.size > 0 ? (
+              <button
+                type="button"
+                onClick={() => setPicked(new Set())}
+                className="text-xs text-text-dim underline"
+              >
+                Wis selectie
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={pickVisibleMailable}
+                className="text-xs text-text-muted underline-offset-2 hover:underline"
+                title={`Vinkt max ${MAX_HANDOFF} aan met e-mail, nog nooit gemaild`}
+              >
+                Vink mailklare aan
+              </button>
+            )}
+            <Link
+              href={`/outreach/emails?ids=${handoffIds.slice(0, MAX_HANDOFF).join(",")}`}
+              title={
+                pickedMailable.length > 0
+                  ? `Jouw selectie · max ${MAX_HANDOFF}`
+                  : `Alle mailklare in dit filter · max ${MAX_HANDOFF} per keer`
+              }
+              className="shrink-0 bg-accent px-4 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast"
+            >
+              {pickedMailable.length > 0
+                ? `Mail selectie (${handoffCount}) →`
+                : `Mail ${handoffCount}${
+                    mailableIds.length > MAX_HANDOFF
+                      ? ` van ${mailableIds.length}`
+                      : ""
+                  } →`}
+            </Link>
+          </div>
         ) : null}
       </div>
 
@@ -457,6 +502,8 @@ export function CrmCompaniesTable({ rows }: Props) {
       <p className="mb-3 text-xs text-text-dim">
         {filtered.length} van {rows.length}
         {mail === "kans" ? " · mailkans" : ""}
+        {picked.size > 0 ? ` · ${picked.size} aangevinkt` : ""}
+        {" · vink aan om te selecteren, klik naam voor dossier"}
       </p>
 
       {filtered.length === 0 ? (
@@ -472,64 +519,89 @@ export function CrmCompaniesTable({ rows }: Props) {
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="border-b border-border text-[11px] uppercase tracking-wider text-text-dim">
               <tr>
+                <th className="w-10 py-2.5 pr-2 font-medium">
+                  <span className="sr-only">Selecteer</span>
+                </th>
                 <th className="px-0 py-2.5 pr-4 font-medium">Bedrijf</th>
                 <th className="px-4 py-2.5 font-medium">Waarom nu</th>
                 <th className="px-4 py-2.5 font-medium">Laatste mail</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map(({ row, angle, score }) => (
-                <tr
-                  key={row.id}
-                  role="link"
-                  tabIndex={0}
-                  onClick={() => router.push(`/outreach/crm/${row.id}`)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      router.push(`/outreach/crm/${row.id}`);
-                    }
-                  }}
-                  className="cursor-pointer border-b border-border/70 last:border-0 hover:bg-surface/60"
-                >
-                  <td className="px-0 py-3 pr-4">
-                    <span className="font-medium text-text">
-                      {row.companyName}
-                    </span>
-                    <p className="text-xs text-text-dim">
-                      {row.apolloCity && row.inRegion
-                        ? row.apolloCity
-                        : row.city ?? row.kvkCity ?? "plaats?"}
-                      {!row.inRegion &&
-                      (row.city || row.kvkCity || row.apolloCity)
-                        ? " · buiten regio"
-                        : ""}
-                    </p>
-                  </td>
-                  <td className="px-4 py-3" title={score.reasons.join("\n")}>
-                    <StatusBadge tone={mailAngleTone(angle.id)}>
-                      {angle.label}
-                    </StatusBadge>
-                    <p className="mt-1 max-w-sm text-xs text-text-muted">
-                      {angle.detail}
-                    </p>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-text-muted">
-                    {row.lastSentAt ? (
-                      <>
-                        {fmt(row.lastSentAt)}
-                        {row.mailCount > 0 ? (
-                          <p className="text-text-dim">
-                            {row.openCount} open · {row.replyCount} reply
-                          </p>
-                        ) : null}
-                      </>
-                    ) : (
-                      <span className="text-text-dim">Nog niet</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {filtered.map(({ row, angle, score }) => {
+                const on = picked.has(row.id);
+                const canMail =
+                  isMailableAngle(angle.id) &&
+                  Boolean(row.email) &&
+                  row.mailCount === 0;
+                return (
+                  <tr
+                    key={row.id}
+                    className={`border-b border-border/70 last:border-0 hover:bg-surface/60 ${
+                      on ? "bg-accent/5" : ""
+                    }`}
+                  >
+                    <td className="py-3 pr-2 align-top">
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        disabled={!canMail && !on}
+                        title={
+                          canMail
+                            ? "Selecteer om te mailen"
+                            : row.mailCount > 0
+                              ? "Al gemaild"
+                              : !row.email
+                                ? "Geen e-mail"
+                                : "Geen mailkans"
+                        }
+                        onChange={() => togglePick(row.id)}
+                        aria-label={`Selecteer ${row.companyName}`}
+                      />
+                    </td>
+                    <td className="px-0 py-3 pr-4">
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/outreach/crm/${row.id}`)}
+                        className="text-left font-medium text-text hover:text-accent"
+                      >
+                        {row.companyName}
+                      </button>
+                      <p className="text-xs text-text-dim">
+                        {row.apolloCity && row.inRegion
+                          ? row.apolloCity
+                          : row.city ?? row.kvkCity ?? "plaats?"}
+                        {!row.inRegion &&
+                        (row.city || row.kvkCity || row.apolloCity)
+                          ? " · buiten regio"
+                          : ""}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3" title={score.reasons.join("\n")}>
+                      <StatusBadge tone={mailAngleTone(angle.id)}>
+                        {angle.label}
+                      </StatusBadge>
+                      <p className="mt-1 max-w-sm text-xs text-text-muted">
+                        {angle.detail}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-text-muted">
+                      {row.lastSentAt ? (
+                        <>
+                          {fmt(row.lastSentAt)}
+                          {row.mailCount > 0 ? (
+                            <p className="text-text-dim">
+                              {row.openCount} open · {row.replyCount} reply
+                            </p>
+                          ) : null}
+                        </>
+                      ) : (
+                        <span className="text-text-dim">Nog niet</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

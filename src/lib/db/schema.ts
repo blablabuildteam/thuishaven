@@ -24,6 +24,20 @@ export const appUsers = pgTable("app_users", {
   passwordHash: text("password_hash").notNull(),
   role: userRoleEnum("role").notNull().default("member"),
   active: boolean("active").notNull().default(true),
+  /** Which tools / areas this member may open. Admins ignore this (full access). */
+  toolAccess: jsonb("tool_access").$type<{
+    dashboard: boolean;
+    outreach: boolean;
+    dashboardAreas: {
+      overzicht: boolean;
+      omzet: boolean;
+      marketing: boolean;
+    };
+    outreachAreas: {
+      stappen: boolean;
+      uitleg: boolean;
+    };
+  }>(),
   emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
   inviteSentAt: timestamp("invite_sent_at", { withTimezone: true }),
   passwordSetAt: timestamp("password_set_at", { withTimezone: true }),

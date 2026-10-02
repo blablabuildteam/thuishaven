@@ -1,4 +1,9 @@
 import type { NextAuthConfig } from "next-auth";
+import {
+  canAccessPath,
+  homePathForAccess,
+  normalizeToolAccess,
+} from "@/lib/auth/tool-access";
 
 export const authConfig = {
   trustHost: true,
@@ -17,6 +22,10 @@ export const authConfig = {
         session.user.id = (token.sub as string) ?? "";
         session.user.role =
           (token.role as "admin" | "member" | undefined) ?? "member";
+        session.user.toolAccess = normalizeToolAccess(
+          token.toolAccess,
+          session.user.role,
+        );
       }
       session.sessionId =
         (token.jti as string) || (token.sub as string) || "";
@@ -41,14 +50,23 @@ export const authConfig = {
       if (isPublic) return true;
       if (!auth?.user) return false;
 
+      const role = auth.user.role ?? "member";
+      const access = normalizeToolAccess(auth.user.toolAccess, role);
+
       const needsAdmin =
         path === "/koppelingen" ||
         path.startsWith("/koppelingen/") ||
         path.startsWith("/dashboard/logs") ||
         path.startsWith("/admin");
-      if (needsAdmin && auth.user.role !== "admin") {
+      if (needsAdmin && role !== "admin") {
         return Response.redirect(
-          new URL("/dashboard/inzichten", request.nextUrl),
+          new URL(homePathForAccess(access), request.nextUrl),
+        );
+      }
+
+      if (!canAccessPath(path, access, role)) {
+        return Response.redirect(
+          new URL(homePathForAccess(access), request.nextUrl),
         );
       }
 

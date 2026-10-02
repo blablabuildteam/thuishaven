@@ -2,7 +2,12 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
 import { authConfig } from "@/auth.config";
-import { findUserByEmailIncludingInactive, isUserLoginReady, verifyUserPassword } from "@/lib/auth/users";
+import { normalizeToolAccess } from "@/lib/auth/tool-access";
+import {
+  findUserByEmailIncludingInactive,
+  isUserLoginReady,
+  verifyUserPassword,
+} from "@/lib/auth/users";
 import { logActivity } from "@/lib/audit/activity";
 
 const credentialsSchema = z.object({
@@ -54,6 +59,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: user.email,
           name: user.name,
           role: user.role,
+          toolAccess: normalizeToolAccess(user.toolAccess, user.role),
           remember: parsed.data.remember === "true",
         };
       },
@@ -67,6 +73,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.name = user.name;
         token.sub = user.id;
         token.role = (user as { role?: string }).role ?? "member";
+        token.toolAccess = normalizeToolAccess(
+          (user as { toolAccess?: unknown }).toolAccess,
+          (token.role as "admin" | "member") ?? "member",
+        );
         const remember =
           "remember" in user
             ? Boolean((user as { remember?: boolean }).remember)
@@ -84,6 +94,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.id = (token.sub as string) ?? "";
         session.user.role =
           (token.role as "admin" | "member" | undefined) ?? "member";
+        session.user.toolAccess = normalizeToolAccess(
+          token.toolAccess,
+          session.user.role,
+        );
       }
       session.sessionId =
         (token.jti as string) || (token.sub as string) || "";
