@@ -18,6 +18,8 @@ import {
 } from "@/lib/outreach/batches";
 
 export const dynamic = "force-dynamic";
+/** Bulk draft generation calls Gemini per company. */
+export const maxDuration = 300;
 
 const VARIANT_IDS = [
   "warm_tour",

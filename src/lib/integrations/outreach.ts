@@ -290,11 +290,24 @@ JSON output verplicht: {"subject":"${subject.replace(/"/g, '\\"')}","body":"..."
 Gebruik exact dit subject.`;
 
   const llm = await callLlmJson(prompt);
-  if (!llm.ok) return { error: llm.error };
+  if (!llm.ok) {
+    // Prefer a usable draft over a hard fail (timeout / model hiccup).
+    return {
+      subject,
+      body: appendOutreachSignature(resolved.body),
+      variantId,
+      subjectKey,
+    };
+  }
 
   const parsed = parseJsonMail(llm.text);
   if (!parsed) {
-    return { error: "AI gaf geen geldig subject/body JSON terug" };
+    return {
+      subject,
+      body: appendOutreachSignature(resolved.body),
+      variantId,
+      subjectKey,
+    };
   }
 
   try {

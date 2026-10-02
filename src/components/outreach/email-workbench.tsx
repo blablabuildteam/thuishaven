@@ -124,6 +124,7 @@ export function OutreachEmailWorkbench({
   const [batchName, setBatchName] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const companyVariants = OUTREACH_VARIANTS.filter(
     (v) => v.audience === "company" || v.audience === "both",
@@ -188,58 +189,78 @@ export function OutreachEmailWorkbench({
       return;
     }
 
-    const items = picks.map((p) => ({
-      prospectId: p.id,
-      variantId: variantFor(p),
-    }));
+    setBusy(true);
+    try {
+      const items = picks.map((p) => ({
+        prospectId: p.id,
+        variantId: variantFor(p),
+      }));
 
-    const res = await fetch("/api/outreach/emails", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        items,
-        subjectArm: subjectArm === "auto" ? undefined : subjectArm,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error ?? "Genereren mislukt");
-      return;
+      const res = await fetch("/api/outreach/emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items,
+          subjectArm: subjectArm === "auto" ? undefined : subjectArm,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? "Genereren mislukt");
+        return;
+      }
+
+      const made: DraftEdit[] = data.emailId
+        ? [
+            {
+              emailId: data.emailId,
+              companyName: picks[0]?.companyName ?? "",
+              subject: data.subject,
+              body: data.body,
+            },
+          ]
+        : (
+            (data.results ?? []) as Array<{
+              prospectId?: string;
+              emailId?: string;
+              subject?: string;
+              body?: string;
+            }>
+          )
+            .filter((r) => r.emailId && r.subject && r.body)
+            .map((r) => ({
+              emailId: r.emailId!,
+              companyName:
+                picks.find((p) => p.id === r.prospectId)?.companyName ?? "",
+              subject: r.subject!,
+              body: r.body!,
+            }));
+
+      const failed = Number(data.failed ?? 0);
+      setLastEmailIds(made.map((d) => d.emailId));
+      setDrafts(made);
+      if (!made.length) {
+        setError(
+          failed
+            ? `Geen drafts gemaakt (${failed} mislukt). Probeer opnieuw.`
+            : "Geen drafts gemaakt.",
+        );
+      } else {
+        setMessage(
+          `${made.length} draft${made.length === 1 ? "" : "s"} klaar` +
+            (failed ? ` · ${failed} mislukt` : "") +
+            " — lees na, stuur test, zet in bakje.",
+        );
+        requestAnimationFrame(() => {
+          document
+            .getElementById("outreach-drafts")
+            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      }
+      startTransition(() => router.refresh());
+    } finally {
+      setBusy(false);
     }
-
-    const made: DraftEdit[] = data.emailId
-      ? [
-          {
-            emailId: data.emailId,
-            companyName: picks[0]?.companyName ?? "",
-            subject: data.subject,
-            body: data.body,
-          },
-        ]
-      : (
-          (data.results ?? []) as Array<{
-            prospectId?: string;
-            emailId?: string;
-            subject?: string;
-            body?: string;
-          }>
-        )
-          .filter((r) => r.emailId && r.subject && r.body)
-          .map((r) => ({
-            emailId: r.emailId!,
-            companyName:
-              picks.find((p) => p.id === r.prospectId)?.companyName ?? "",
-            subject: r.subject!,
-            body: r.body!,
-          }));
-    setLastEmailIds(made.map((d) => d.emailId));
-    setDrafts(made);
-    setMessage(
-      made.length
-        ? `${made.length} draft${made.length === 1 ? "" : "s"} — lees ze na, pas aan, stuur dan de test.`
-        : "Geen drafts gemaakt.",
-    );
-    startTransition(() => router.refresh());
   }
 
   async function saveDraftEdits() {
@@ -270,6 +291,8 @@ export function OutreachEmailWorkbench({
     }
     setError(null);
     setMessage(null);
+    setBusy(true);
+    try {
     if (drafts.length) {
       const saved = await saveDraftEdits();
       if (!saved) return;
@@ -300,6 +323,9 @@ export function OutreachEmailWorkbench({
       setMessage(`Test naar ${delivered}`);
     }
     startTransition(() => router.refresh());
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function enqueueToBatch() {
@@ -309,6 +335,8 @@ export function OutreachEmailWorkbench({
     }
     setError(null);
     setMessage(null);
+    setBusy(true);
+    try {
     if (drafts.length) {
       const saved = await saveDraftEdits();
       if (!saved) return;
@@ -348,6 +376,9 @@ export function OutreachEmailWorkbench({
     setDrafts([]);
     setLastEmailIds([]);
     startTransition(() => router.refresh());
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (!prospects.length) {
@@ -367,7 +398,7 @@ export function OutreachEmailWorkbench({
   }
 
   return (
-    <div className="mb-10 space-y-6">
+    <div className={`space-y-6 ${selected.size > 0 ? "mb-28" : "mb-10"}`}>
       <p className="text-sm text-text-muted">
         Selecteer → genereer → test → bakje. Live send later via{" "}
         <Link href="/outreach/planning" className="text-accent underline">
@@ -605,82 +636,6 @@ export function OutreachEmailWorkbench({
         </p>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={selected.size === 0 || pending}
-          onClick={() => void generate()}
-          className="bg-accent px-4 py-2.5 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
-        >
-          Genereer {selected.size || ""} draft
-          {selected.size === 1 ? "" : "s"}
-        </button>
-        <button
-          type="button"
-          disabled={!lastEmailIds.length || pending}
-          onClick={() => void sendTests()}
-          className="border border-border px-4 py-2.5 font-display text-sm tracking-[0.1em] hover:border-accent disabled:opacity-50"
-        >
-          Stuur test
-          {lastEmailIds.length > 1 ? ` (${lastEmailIds.length})` : ""}
-        </button>
-      </div>
-
-      {lastEmailIds.length > 0 ? (
-        <div className="space-y-3 border border-border bg-surface p-4">
-          <p className="text-sm font-medium text-text">
-            Zet {lastEmailIds.length} draft
-            {lastEmailIds.length === 1 ? "" : "s"} in een bakje
-          </p>
-          <p className="text-xs text-text-muted">
-            Dan zie je in de Wachtrij precies wie welke mail krijgt — zonder te
-            versturen.
-          </p>
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="block text-xs text-text-dim">
-              Bakje
-              <select
-                className="mt-1.5 block min-w-[14rem] border border-border bg-bg px-3 py-2 text-sm text-text"
-                value={batchTarget}
-                onChange={(e) => setBatchTarget(e.target.value)}
-              >
-                <option value="new">Nieuw bakje…</option>
-                {openBatches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name} ({b.mailCount})
-                  </option>
-                ))}
-              </select>
-            </label>
-            {batchTarget === "new" ? (
-              <label className="block min-w-[16rem] flex-1 text-xs text-text-dim">
-                Naam
-                <input
-                  className="mt-1.5 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
-                  placeholder={`Batch · ${new Date().toLocaleDateString("nl-NL", { day: "numeric", month: "short" })} · ${lastEmailIds.length} mails`}
-                  value={batchName}
-                  onChange={(e) => setBatchName(e.target.value)}
-                />
-              </label>
-            ) : null}
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => void enqueueToBatch()}
-              className="border border-accent bg-accent/10 px-4 py-2.5 font-display text-sm tracking-[0.1em] disabled:opacity-50"
-            >
-              Zet in bakje
-            </button>
-            <Link
-              href="/outreach/planning"
-              className="px-2 py-2.5 text-sm text-accent underline"
-            >
-              Naar wachtrij →
-            </Link>
-          </div>
-        </div>
-      ) : null}
-
       {error ? (
         <p className="text-sm text-danger" role="alert">
           {error}
@@ -696,7 +651,7 @@ export function OutreachEmailWorkbench({
       ) : null}
 
       {drafts.length > 0 ? (
-        <div className="space-y-6 border-t border-border pt-4">
+        <div id="outreach-drafts" className="space-y-6 border-t border-border pt-4">
           <p className="text-xs text-text-dim">
             Lees elke draft na en pas aan vóór je de test stuurt.
           </p>
@@ -742,7 +697,7 @@ export function OutreachEmailWorkbench({
           ))}
           <button
             type="button"
-            disabled={pending}
+            disabled={busy || pending}
             onClick={() =>
               void saveDraftEdits().then((ok) => {
                 if (ok) setMessage("Drafts opgeslagen.");
@@ -752,6 +707,85 @@ export function OutreachEmailWorkbench({
           >
             Wijzigingen opslaan
           </button>
+        </div>
+      ) : null}
+
+      {selected.size > 0 ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="pointer-events-auto flex w-full max-w-3xl flex-col gap-2 border border-border bg-surface px-3 py-3 shadow-[0_-8px_30px_rgba(0,0,0,0.12)] sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+            <p className="text-sm text-text">
+              <span className="font-medium">{selected.size}</span> geselecteerd
+              {lastEmailIds.length > 0
+                ? ` · ${lastEmailIds.length} draft${lastEmailIds.length === 1 ? "" : "s"}`
+                : ""}
+            </p>
+            <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void generate()}
+                className="bg-accent px-4 py-2.5 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
+              >
+                {busy ? "Bezig…" : `Genereer ${selected.size} draft${selected.size === 1 ? "" : "s"}`}
+              </button>
+              <button
+                type="button"
+                disabled={busy || !lastEmailIds.length}
+                onClick={() => void sendTests()}
+                className="border border-border px-3 py-2.5 text-sm hover:border-accent disabled:opacity-50"
+              >
+                Test
+              </button>
+              {lastEmailIds.length > 0 ? (
+                <>
+                  <select
+                    className="max-w-[10rem] border border-border bg-bg px-2 py-2 text-sm"
+                    value={batchTarget}
+                    disabled={busy}
+                    onChange={(e) => setBatchTarget(e.target.value)}
+                    aria-label="Bakje"
+                  >
+                    <option value="new">Nieuw bakje</option>
+                    {openBatches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                  {batchTarget === "new" ? (
+                    <input
+                      className="w-28 border border-border bg-bg px-2 py-2 text-sm sm:w-36"
+                      placeholder="Naam"
+                      value={batchName}
+                      disabled={busy}
+                      onChange={(e) => setBatchName(e.target.value)}
+                    />
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void enqueueToBatch()}
+                    className="border border-accent bg-accent/10 px-3 py-2.5 text-sm disabled:opacity-50"
+                  >
+                    In bakje
+                  </button>
+                </>
+              ) : null}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={clearSelection}
+                className="px-2 py-2 text-xs text-text-dim underline"
+              >
+                Wis
+              </button>
+            </div>
+            {error ? (
+              <p className="w-full text-xs text-danger sm:basis-full" role="alert">
+                {error}
+              </p>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </div>
