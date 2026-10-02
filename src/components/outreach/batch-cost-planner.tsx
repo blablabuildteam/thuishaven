@@ -123,9 +123,7 @@ export function BatchCostPlanner() {
             {formatEurFromCents(estimate.totalCents)}
           </p>
           <p className="text-xs text-text-dim">
-            {formatEurFromCents(estimate.perCompanyCents)}/bedrijf · hun{" "}
-            {formatEurFromCents(estimate.clientCents)} · onze{" "}
-            {formatEurFromCents(estimate.studioCents)}
+            {formatEurFromCents(estimate.perCompanyCents)}/bedrijf
           </p>
         </div>
       </div>

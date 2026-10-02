@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { SectionHeader } from "@/components/ui/section-header";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { BatchCostPlanner } from "@/components/outreach/batch-cost-planner";
 import { getUsageSummary } from "@/lib/usage/store";
 import {
@@ -49,7 +48,7 @@ export default async function OutreachKostenPage() {
       <SectionHeader
         eyebrow="Outreach"
         title="Kosten"
-        description="Schatting per rits · verbruik laatste 30 dagen. KvK op hun account; Apollo/Hunter op onze stack."
+        description="Schatting per rits · verbruik laatste 30 dagen (Apollo, Hunter, KvK)."
         action={
           <Link
             href="/outreach/lijst-bijwerken"
@@ -76,10 +75,6 @@ export default async function OutreachKostenPage() {
           <strong className="text-text">
             {formatEurFromCents(summary.totalEurCents)}
           </strong>
-          <span className="ml-1 text-xs text-text-dim">
-            (hun {formatEurFromCents(summary.clientBilledEurCents)} · onze{" "}
-            {formatEurFromCents(summary.ourStackEurCents)})
-          </span>
         </p>
       </div>
 
@@ -93,26 +88,22 @@ export default async function OutreachKostenPage() {
           <Rate
             label={`Apollo · ${APOLLO_PAGE_SIZE} ophalen`}
             amount={formatEurFromCents(OUTREACH_RATES.apolloCreditCents)}
-            payer="onze"
           />
           <Rate
             label="Apollo · contactpersoon"
             amount={formatEurFromCents(OUTREACH_RATES.apolloCreditCents)}
-            payer="onze"
           />
           <Rate
             label={`KvK · ${OUTREACH_RATES.kvkCallsPerCompany} calls`}
             amount={formatEurFromCents(
               OUTREACH_RATES.kvkCallCents * OUTREACH_RATES.kvkCallsPerCompany,
             )}
-            payer="hun"
           />
           <Rate
             label="Hunter · e-mail"
             amount={formatEurFromCents(OUTREACH_RATES.hunterSearchCents)}
-            payer="onze"
           />
-          <Rate label="Website-mail" amount="€ 0,00" payer="gratis" />
+          <Rate label="Website-mail" amount="€ 0,00" />
         </ul>
       </section>
 
@@ -127,14 +118,7 @@ export default async function OutreachKostenPage() {
             {summary.byVendor.map((row) => (
               <li key={row.vendor}>
                 <div className="mb-1 flex justify-between gap-2 text-sm">
-                  <span>
-                    {vendorLabel[row.vendor] ?? row.vendor}
-                    {row.vendor === "kvk" ? (
-                      <span className="ml-2 text-[10px] uppercase text-text-dim">
-                        hun
-                      </span>
-                    ) : null}
-                  </span>
+                  <span>{vendorLabel[row.vendor] ?? row.vendor}</span>
                   <span className="font-display tracking-wide">
                     {formatEurFromCents(row.costEurCents)}
                   </span>
@@ -186,26 +170,15 @@ export default async function OutreachKostenPage() {
 function Rate({
   label,
   amount,
-  payer,
 }: {
   label: string;
   amount: string;
-  payer: string;
 }) {
   return (
     <li className="flex flex-wrap items-center justify-between gap-2 py-2">
       <span className="text-text">{label}</span>
-      <span className="flex items-center gap-2">
-        <StatusBadge
-          tone={
-            payer === "hun" ? "info" : payer === "gratis" ? "neutral" : "neutral"
-          }
-        >
-          {payer}
-        </StatusBadge>
-        <span className="w-16 text-right font-display text-xs tracking-[0.08em]">
-          {amount}
-        </span>
+      <span className="w-16 text-right font-display text-xs tracking-[0.08em]">
+        {amount}
       </span>
     </li>
   );

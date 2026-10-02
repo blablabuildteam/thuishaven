@@ -7,14 +7,18 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import {
   APOLLO_EMPLOYEE_RANGES,
   DEFAULT_APOLLO_CRITERIA,
+  DISTANCE_SLIDER_STOPS,
   SEARCH_ZONES,
+  boundsFromEmployeeRanges,
   criteriaSummary,
+  distanceIndexForPreset,
+  formatEmployeeBounds,
   keywordKey,
   normalizeCriteria,
+  presetForDistanceIndex,
   sliceKey,
   slicesForCriteria,
   type ApolloSearchCriteria,
-  type PlacePreset,
 } from "@/lib/integrations/apollo/criteria";
 import {
   APOLLO_PAGE_SIZE,
@@ -40,11 +44,20 @@ type Props = {
   initialCriteria?: Partial<ApolloSearchCriteria> | null;
 };
 
-const RADIUS_OPTIONS: { id: PlacePreset; label: string; hint: string }[] = [
-  { id: "amsterdam", label: "Alleen Amsterdam", hint: "Zone 1" },
-  { id: "kern", label: "Tot ~25 km", hint: "Zone 1 + 2" },
-  { id: "ring", label: "Tot ~50 km", hint: "Zone 1 + 2 + 3" },
-];
+/** Dual-thumb range over Apollo bucket indices (0 … n-1). */
+function employeeIndexSpan(ranges: string[]): { lo: number; hi: number } {
+  const idxs = APOLLO_EMPLOYEE_RANGES.map((r, i) =>
+    ranges.includes(r.id) ? i : -1,
+  ).filter((i) => i >= 0);
+  if (idxs.length === 0) return { lo: 1, hi: 3 };
+  return { lo: Math.min(...idxs), hi: Math.max(...idxs) };
+}
+
+function rangesFromIndexSpan(lo: number, hi: number): string[] {
+  const a = Math.max(0, Math.min(lo, hi));
+  const b = Math.min(APOLLO_EMPLOYEE_RANGES.length - 1, Math.max(lo, hi));
+  return APOLLO_EMPLOYEE_RANGES.slice(a, b + 1).map((r) => r.id);
+}
 
 function pagesLeftFor(s: SliceState | undefined): number | null {
   if (!s) return null;
@@ -163,14 +176,12 @@ export function ListFillWorkbench({
     (plan.knownPages + plan.unknownSlices) * OUTREACH_RATES.apolloCreditCents;
 
   const fillCost = useMemo(() => {
-    const lines: { label: string; n: number; cents: number; payer: string }[] =
-      [];
+    const lines: { label: string; n: number; cents: number }[] = [];
     if (pendingHeadcount > 0) {
       lines.push({
         label: "Apollo mdw",
         n: pendingHeadcount,
         cents: pendingHeadcount * OUTREACH_RATES.apolloCreditCents,
-        payer: "onze",
       });
     }
     if (pendingKvk > 0) {
@@ -181,7 +192,6 @@ export function ListFillWorkbench({
           pendingKvk *
           OUTREACH_RATES.kvkCallsPerCompany *
           OUTREACH_RATES.kvkCallCents,
-        payer: "hun",
       });
     }
     if (pendingPeople > 0) {
@@ -189,7 +199,6 @@ export function ListFillWorkbench({
         label: "Contactpersonen",
         n: pendingPeople,
         cents: pendingPeople * OUTREACH_RATES.apolloCreditCents,
-        payer: "onze",
       });
     }
     if (pendingHunter > 0) {
@@ -197,7 +206,6 @@ export function ListFillWorkbench({
         label: "Hunter-mail",
         n: pendingHunter,
         cents: pendingHunter * OUTREACH_RATES.hunterSearchCents,
-        payer: "onze",
       });
     }
     if (pendingEmail > 0) {
@@ -205,7 +213,6 @@ export function ListFillWorkbench({
         label: "Website-mail",
         n: pendingEmail,
         cents: 0,
-        payer: "gratis",
       });
     }
     const totalCents = lines.reduce((s, l) => s + l.cents, 0);
@@ -225,18 +232,15 @@ export function ListFillWorkbench({
     pendingEmail +
     pendingHeadcount;
 
-  function toggleRange(id: string) {
-    setCriteria((c) => {
-      const has = c.employeeRanges.includes(id);
-      const next = has
-        ? c.employeeRanges.filter((r) => r !== id)
-        : [...c.employeeRanges, id];
-      return {
-        ...c,
-        employeeRanges:
-          next.length > 0 ? next : [...DEFAULT_APOLLO_CRITERIA.employeeRanges],
-      };
-    });
+  const empSpan = employeeIndexSpan(criteria.employeeRanges);
+  const empBounds = boundsFromEmployeeRanges(criteria.employeeRanges);
+  const distanceIdx = distanceIndexForPreset(criteria.placePreset);
+
+  function setEmployeeSpan(lo: number, hi: number) {
+    setCriteria((c) => ({
+      ...c,
+      employeeRanges: rangesFromIndexSpan(lo, hi),
+    }));
   }
 
   function mergeCoverage(d: Record<string, unknown>) {
@@ -347,11 +351,6 @@ export function ListFillWorkbench({
     });
   }
 
-  const chip = (on: boolean) =>
-    on
-      ? "border border-accent bg-accent/10 px-2.5 py-1 text-sm text-text"
-      : "border border-border px-2.5 py-1 text-sm text-text-muted hover:border-accent";
-
   return (
     <div className="space-y-8">
       {/* Stand */}
@@ -383,42 +382,94 @@ export function ListFillWorkbench({
           alleen de extra ring.
         </p>
 
-        <p className="mt-4 text-[11px] uppercase tracking-wider text-text-dim">
-          Afstand
-        </p>
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {RADIUS_OPTIONS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              disabled={pending}
-              title={p.hint}
-              onClick={() => setCriteria((c) => ({ ...c, placePreset: p.id }))}
-              className={chip(criteria.placePreset === p.id)}
-            >
-              {p.label}
-            </button>
-          ))}
+        <div className="mt-5 max-w-md">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-[11px] uppercase tracking-wider text-text-dim">
+              Afstand vanaf Amsterdam
+            </p>
+            <p className="text-sm text-text">
+              {DISTANCE_SLIDER_STOPS[distanceIdx]?.label ?? "~50 km"}
+            </p>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={DISTANCE_SLIDER_STOPS.length - 1}
+            step={1}
+            value={distanceIdx}
+            disabled={pending}
+            onChange={(e) =>
+              setCriteria((c) => ({
+                ...c,
+                placePreset: presetForDistanceIndex(Number(e.target.value)),
+              }))
+            }
+            className="mt-2 w-full accent-accent"
+            aria-label="Afstand"
+          />
+          <div className="mt-1 flex justify-between text-[11px] text-text-dim">
+            {DISTANCE_SLIDER_STOPS.map((s) => (
+              <span key={s.preset}>{s.label}</span>
+            ))}
+          </div>
         </div>
 
-        <p className="mt-3 text-[11px] uppercase tracking-wider text-text-dim">
-          Medewerkers
-        </p>
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {APOLLO_EMPLOYEE_RANGES.map((r) => (
-            <button
-              key={r.id}
-              type="button"
+        <div className="mt-6 max-w-md">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-[11px] uppercase tracking-wider text-text-dim">
+              Medewerkers
+            </p>
+            <p className="text-sm text-text">
+              {formatEmployeeBounds(empBounds.min, empBounds.max)}
+            </p>
+          </div>
+          <div className="relative mt-3 h-6">
+            <div className="pointer-events-none absolute top-1/2 right-0 left-0 h-1 -translate-y-1/2 bg-border" />
+            <div
+              className="pointer-events-none absolute top-1/2 h-1 -translate-y-1/2 bg-accent/70"
+              style={{
+                left: `${(empSpan.lo / (APOLLO_EMPLOYEE_RANGES.length - 1)) * 100}%`,
+                right: `${((APOLLO_EMPLOYEE_RANGES.length - 1 - empSpan.hi) / (APOLLO_EMPLOYEE_RANGES.length - 1)) * 100}%`,
+              }}
+            />
+            <input
+              type="range"
+              min={0}
+              max={APOLLO_EMPLOYEE_RANGES.length - 1}
+              step={1}
+              value={empSpan.lo}
               disabled={pending}
-              onClick={() => toggleRange(r.id)}
-              className={chip(criteria.employeeRanges.includes(r.id))}
-            >
-              {r.label}
-            </button>
-          ))}
+              onChange={(e) => {
+                const lo = Number(e.target.value);
+                setEmployeeSpan(lo, Math.max(lo, empSpan.hi));
+              }}
+              className="absolute inset-0 z-20 w-full appearance-none bg-transparent accent-accent [&::-webkit-slider-thumb]:relative [&::-webkit-slider-thumb]:z-20"
+              aria-label="Minimum medewerkers"
+            />
+            <input
+              type="range"
+              min={0}
+              max={APOLLO_EMPLOYEE_RANGES.length - 1}
+              step={1}
+              value={empSpan.hi}
+              disabled={pending}
+              onChange={(e) => {
+                const hi = Number(e.target.value);
+                setEmployeeSpan(Math.min(empSpan.lo, hi), hi);
+              }}
+              className="absolute inset-0 z-10 w-full appearance-none bg-transparent accent-accent [&::-webkit-slider-thumb]:relative [&::-webkit-slider-thumb]:z-30"
+              aria-label="Maximum medewerkers"
+            />
+          </div>
+          <div className="mt-1 flex justify-between text-[11px] text-text-dim">
+            <span>{APOLLO_EMPLOYEE_RANGES[0]?.label}</span>
+            <span>
+              {APOLLO_EMPLOYEE_RANGES[APOLLO_EMPLOYEE_RANGES.length - 1]?.label}
+            </span>
+          </div>
         </div>
 
-        <label className="mt-3 block text-[11px] uppercase tracking-wider text-text-dim">
+        <label className="mt-6 block text-[11px] uppercase tracking-wider text-text-dim">
           Keywords (optioneel — elke keyword-set is een eigen zoekopdracht)
           <input
             value={keywords}
@@ -621,7 +672,7 @@ export function ListFillWorkbench({
                   <span className="text-text-muted">
                     {l.cents === 0
                       ? "gratis"
-                      : `~${formatEurFromCents(l.cents)} · ${l.payer}`}
+                      : `~${formatEurFromCents(l.cents)}`}
                   </span>
                 </li>
               ))}

@@ -199,3 +199,66 @@ export function criteriaSummary(c: ApolloSearchCriteria): string {
     : "";
   return `${placePresetLabel(c.placePreset)} · ${sizes}${tags}`;
 }
+
+/** Slider stops for distance (concentric Apollo zones). */
+export const DISTANCE_SLIDER_STOPS: {
+  km: number;
+  preset: PlacePreset;
+  label: string;
+}[] = [
+  { km: 0, preset: "amsterdam", label: "Amsterdam" },
+  { km: 25, preset: "kern", label: "~25 km" },
+  { km: 50, preset: "ring", label: "~50 km" },
+];
+
+export function distanceIndexForPreset(preset: PlacePreset): number {
+  const i = DISTANCE_SLIDER_STOPS.findIndex((s) => s.preset === preset);
+  return i >= 0 ? i : DISTANCE_SLIDER_STOPS.length - 1;
+}
+
+export function presetForDistanceIndex(index: number): PlacePreset {
+  const stop =
+    DISTANCE_SLIDER_STOPS[
+      Math.max(0, Math.min(DISTANCE_SLIDER_STOPS.length - 1, index))
+    ];
+  return stop?.preset ?? "ring";
+}
+
+/** Parsed Apollo headcount buckets for slider ↔ API mapping. */
+export const EMPLOYEE_BUCKETS = APOLLO_EMPLOYEE_RANGES.map((r) => {
+  const [min, max] = r.id.split(",").map((n) => Number(n));
+  return { id: r.id, label: r.label, min, max };
+});
+
+/** Contiguous Apollo buckets covering [minEmployees, maxEmployees]. */
+export function employeeRangesFromBounds(
+  minEmployees: number,
+  maxEmployees: number,
+): string[] {
+  const lo = Math.min(minEmployees, maxEmployees);
+  const hi = Math.max(minEmployees, maxEmployees);
+  const ids = EMPLOYEE_BUCKETS.filter((b) => b.max >= lo && b.min <= hi).map(
+    (b) => b.id,
+  );
+  return ids.length > 0 ? ids : [...DEFAULT_APOLLO_CRITERIA.employeeRanges];
+}
+
+/** Slider bounds from selected Apollo range ids (expands to full span). */
+export function boundsFromEmployeeRanges(ranges: string[]): {
+  min: number;
+  max: number;
+} {
+  const selected = EMPLOYEE_BUCKETS.filter((b) => ranges.includes(b.id));
+  if (selected.length === 0) {
+    return { min: 501, max: 5000 };
+  }
+  return {
+    min: Math.min(...selected.map((s) => s.min)),
+    max: Math.max(...selected.map((s) => s.max)),
+  };
+}
+
+export function formatEmployeeBounds(min: number, max: number): string {
+  const fmt = (n: number) => n.toLocaleString("nl-NL");
+  return `${fmt(min)}–${fmt(max)} medewerkers`;
+}
