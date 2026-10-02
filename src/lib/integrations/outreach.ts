@@ -11,12 +11,12 @@ import { getAgencyCampaignId, getCompanyCampaignId } from "@/lib/outreach/data";
 import { renderOutreachHtmlEmail } from "@/lib/outreach/email-html";
 import {
   getOutreachBrevoKey,
-  getOutreachReplyTo,
-  getOutreachSender,
-  getOutreachTestRecipient,
   outreachLiveSendBlockReason,
   outreachTestSendBlockReason,
-  resolveOutreachTestRecipients,
+  resolveOutreachReplyTo,
+  resolveOutreachSender,
+  resolveOutreachTestRecipient,
+  resolveOutreachTestRecipientsAsync,
 } from "@/lib/outreach/send-policy";
 import {
   appendOutreachSignature,
@@ -275,15 +275,15 @@ Gebruik exact dit subject.`;
   };
 }
 
-export function resolveOutreachRecipients(intended: string[]): {
+export async function resolveOutreachRecipients(intended: string[]): Promise<{
   to: string[];
   testMode: boolean;
   intended: string[];
-} {
+}> {
   const live =
     process.env.OUTREACH_LIVE_SEND?.trim() === "true" &&
     process.env.OUTREACH_SEND_ENABLED?.trim() === "true";
-  const testTo = getOutreachTestRecipient();
+  const testTo = await resolveOutreachTestRecipient();
   if (live) {
     return { to: intended, testMode: false, intended };
   }
@@ -334,7 +334,7 @@ export async function sendViaBrevo(input: {
 
   const resolved = forceTest
     ? {
-        to: resolveOutreachTestRecipients(input.testTo),
+        to: await resolveOutreachTestRecipientsAsync(input.testTo),
         testMode: true as const,
         intended: [input.to],
       }
@@ -346,8 +346,8 @@ export async function sendViaBrevo(input: {
   // HTML is pre-rendered with optional test banner by the caller.
   const html = input.html;
 
-  const sender = getOutreachSender();
-  const replyTo = getOutreachReplyTo();
+  const sender = await resolveOutreachSender();
+  const replyTo = await resolveOutreachReplyTo();
   const url = "https://api.brevo.com/v3/smtp/email";
   assertExternalReadOnly("POST", url, { allowTransactionalEmailPost: true });
 
@@ -416,7 +416,7 @@ export async function notifySalesTeam(input: {
   if (!key) return { ok: false, error: "BREVO_API_KEY ontbreekt" };
 
   const recipients = salesNotifyRecipients();
-  const resolved = resolveOutreachRecipients(recipients);
+  const resolved = await resolveOutreachRecipients(recipients);
   const subject = resolved.testMode
     ? `[TEST lead] ${input.companyName}`
     : `Nieuwe warme lead · ${input.companyName}`;
@@ -431,7 +431,7 @@ export async function notifySalesTeam(input: {
 
   const url = "https://api.brevo.com/v3/smtp/email";
   assertExternalReadOnly("POST", url, { allowTransactionalEmailPost: true });
-  const sender = getOutreachSender();
+  const sender = await resolveOutreachSender();
 
   try {
     const res = await fetch(url, {

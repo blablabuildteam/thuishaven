@@ -7,7 +7,7 @@ import {
 } from "@/lib/integrations/outreach";
 import { OUTREACH_VARIANTS } from "@/lib/outreach/tone";
 import { logSessionActivity } from "@/lib/audit/session-log";
-import { resolveOutreachTestRecipients } from "@/lib/outreach/send-policy";
+import { resolveOutreachTestRecipientsAsync } from "@/lib/outreach/send-policy";
 import {
   dequeueEmails,
   enqueueEmails,
@@ -180,6 +180,11 @@ export async function POST(request: Request) {
       batchId: z.string().uuid(),
       name: z.string().min(1).max(120).optional(),
       notes: z.string().max(2000).nullable().optional(),
+      plannedStartDay: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .optional(),
     });
     const parsed = schema.safeParse(body);
     if (!parsed.success) {
@@ -189,6 +194,7 @@ export async function POST(request: Request) {
       batchId: parsed.data.batchId,
       name: parsed.data.name,
       notes: parsed.data.notes,
+      plannedStartDay: parsed.data.plannedStartDay,
     });
     if ("error" in result) {
       return NextResponse.json(result, { status: 400 });
@@ -242,7 +248,7 @@ export async function POST(request: Request) {
     if (!ids.length) {
       return NextResponse.json({ error: "emailId verplicht" }, { status: 400 });
     }
-    const testTo = resolveOutreachTestRecipients(parsed.data.testTo);
+    const testTo = await resolveOutreachTestRecipientsAsync(parsed.data.testTo);
 
     if (ids.length === 1) {
       const result = await sendStoredDraft({

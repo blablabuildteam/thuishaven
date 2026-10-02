@@ -1,9 +1,11 @@
 /**
  * Outreach send policy — default: geen live sends naar prospects.
  * Testsend naar team@ mag aan (voor open-tracking / A/B validatie).
+ * Afzender/reply-to komen uit outreach_settings (env als fallback).
  */
 
 import { getBrevoKey } from "@/lib/integrations/brevo/client";
+import { loadOutreachSettings } from "@/lib/outreach/settings";
 
 export function isOutreachSendEnabled(): boolean {
   return process.env.OUTREACH_SEND_ENABLED?.trim() === "true";
@@ -20,6 +22,7 @@ export function getOutreachBrevoKey(): string | null {
   return process.env.BREVO_OUTREACH_API_KEY?.trim() || getBrevoKey();
 }
 
+/** Sync env-only fallback — prefer resolveOutreachSender() when sending. */
 export function getOutreachSender(): { email: string; name: string } {
   return {
     email:
@@ -48,6 +51,27 @@ export function getOutreachTestRecipient(): string {
   );
 }
 
+export async function resolveOutreachSender(): Promise<{
+  email: string;
+  name: string;
+}> {
+  const s = await loadOutreachSettings();
+  return { email: s.senderEmail, name: s.senderName };
+}
+
+export async function resolveOutreachReplyTo(): Promise<{
+  email: string;
+  name: string;
+}> {
+  const s = await loadOutreachSettings();
+  return { email: s.replyToEmail, name: s.replyToName };
+}
+
+export async function resolveOutreachTestRecipient(): Promise<string> {
+  const s = await loadOutreachSettings();
+  return s.testRecipient;
+}
+
 /** Allowed domains for template/mail test sends (never live prospects). */
 const TEST_ALLOW_DOMAINS = ["blablabuild.com", "thuishaven.nl"];
 
@@ -55,6 +79,17 @@ export function isAllowedOutreachTestEmail(email: string): boolean {
   const e = email.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return false;
   if (e === getOutreachTestRecipient().toLowerCase()) return true;
+  const domain = e.split("@")[1] ?? "";
+  return TEST_ALLOW_DOMAINS.includes(domain);
+}
+
+export async function isAllowedOutreachTestEmailAsync(
+  email: string,
+): Promise<boolean> {
+  const e = email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return false;
+  const testTo = (await resolveOutreachTestRecipient()).toLowerCase();
+  if (e === testTo) return true;
   const domain = e.split("@")[1] ?? "";
   return TEST_ALLOW_DOMAINS.includes(domain);
 }
@@ -76,6 +111,24 @@ export function resolveOutreachTestRecipients(
     ),
   ];
   return allowed.length > 0 ? allowed : [getOutreachTestRecipient()];
+}
+
+export async function resolveOutreachTestRecipientsAsync(
+  requested?: string[] | string | null,
+): Promise<string[]> {
+  const raw = Array.isArray(requested)
+    ? requested
+    : typeof requested === "string"
+      ? requested.split(/[,;\s]+/)
+      : [];
+  const allowed: string[] = [];
+  for (const part of raw) {
+    const e = part.trim().toLowerCase();
+    if (e && (await isAllowedOutreachTestEmailAsync(e))) allowed.push(e);
+  }
+  const unique = [...new Set(allowed)];
+  if (unique.length > 0) return unique;
+  return [await resolveOutreachTestRecipient()];
 }
 
 /** Block live prospect sends. */

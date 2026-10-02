@@ -24,8 +24,8 @@ import { getCompanyCampaignId } from "@/lib/outreach/data";
 import { eq } from "drizzle-orm";
 import { renderOutreachHtmlEmail } from "@/lib/outreach/email-html";
 import {
-  getOutreachTestRecipient,
-  resolveOutreachTestRecipients,
+  resolveOutreachTestRecipient,
+  resolveOutreachTestRecipientsAsync,
 } from "@/lib/outreach/send-policy";
 
 export const dynamic = "force-dynamic";
@@ -131,7 +131,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
     }
 
-    const testTo = resolveOutreachTestRecipients(parsed.data.testTo);
+    const testTo = await resolveOutreachTestRecipientsAsync(parsed.data.testTo);
 
     if (parsed.data.prospectId) {
       const draft = await generateAndStoreDraft({
@@ -185,7 +185,7 @@ export async function POST(request: Request) {
     });
 
     const sent = await sendViaBrevo({
-      to: testTo[0] ?? getOutreachTestRecipient(),
+      to: testTo[0] ?? (await resolveOutreachTestRecipient()),
       subject,
       html,
       text: bodyText,

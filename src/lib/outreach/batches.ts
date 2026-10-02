@@ -11,6 +11,12 @@ import {
 } from "@/lib/db/schema";
 import { sendStoredDraft } from "@/lib/integrations/outreach";
 import { outreachLiveSendBlockReason } from "@/lib/outreach/send-policy";
+import {
+  formatCadenceSummary,
+  loadOutreachSettings,
+  suggestSendSlots,
+  type SendSlotSuggestion,
+} from "@/lib/outreach/settings";
 import { formatDayShort, amsterdamDay } from "@/lib/time/amsterdam";
 import { OUTREACH_VARIANTS } from "@/lib/outreach/tone";
 
@@ -34,11 +40,14 @@ export type OutreachBatchSummary = {
   name: string;
   status: OutreachBatchStatus;
   notes: string | null;
+  plannedStartDay: string | null;
   createdAt: string;
   updatedAt: string;
   mailCount: number;
   variantKeys: string[];
   emails: BatchEmailRow[];
+  sendSuggestion: SendSlotSuggestion[];
+  sendSuggestionLabel: string;
 };
 
 export type UnbatchedDraft = {
@@ -95,15 +104,18 @@ export async function listBatchesWithEmails(): Promise<{
   batches: OutreachBatchSummary[];
   unbatchedDrafts: UnbatchedDraft[];
   liveSendBlockReason: string | null;
+  cadenceLabel: string;
 }> {
   if (!hasDatabase()) {
     return {
       batches: [],
       unbatchedDrafts: [],
       liveSendBlockReason: outreachLiveSendBlockReason(),
+      cadenceLabel: "",
     };
   }
   const db = getDb();
+  const settings = await loadOutreachSettings();
   const [batchRows, mailRows, draftRows] = await Promise.all([
     db
       .select()
@@ -178,16 +190,35 @@ export async function listBatchesWithEmails(): Promise<{
           .filter((k): k is string => Boolean(k)),
       ),
     ];
+    const sendSuggestion = suggestSendSlots({
+      mailCount: emails.length,
+      sendWeekdays: settings.sendWeekdays,
+      mailsPerDay: settings.mailsPerDay,
+      preferredHour: settings.preferredHour,
+      fromDay: b.plannedStartDay,
+    });
+    const sendSuggestionLabel =
+      sendSuggestion.length === 0
+        ? "Geen mails in dit bakje"
+        : sendSuggestion
+            .map(
+              (s) =>
+                `${s.weekdayLabel} ${s.label} ${s.hourLabel} (${s.count})`,
+            )
+            .join(" · ");
     return {
       id: b.id,
       name: b.name,
       status: b.status as OutreachBatchStatus,
       notes: b.notes,
+      plannedStartDay: b.plannedStartDay,
       createdAt: b.createdAt.toISOString(),
       updatedAt: b.updatedAt.toISOString(),
       mailCount: emails.length,
       variantKeys,
       emails,
+      sendSuggestion,
+      sendSuggestionLabel,
     };
   });
 
@@ -204,6 +235,7 @@ export async function listBatchesWithEmails(): Promise<{
       createdAt: d.createdAt.toISOString(),
     })),
     liveSendBlockReason: outreachLiveSendBlockReason(),
+    cadenceLabel: formatCadenceSummary(settings),
   };
 }
 
@@ -343,6 +375,7 @@ export async function updateBatchMeta(input: {
   batchId: string;
   name?: string;
   notes?: string | null;
+  plannedStartDay?: string | null;
 }): Promise<{ ok: true } | { error: string }> {
   if (!hasDatabase()) return { error: "DATABASE_URL ontbreekt" };
   const db = getDb();
@@ -359,6 +392,7 @@ export async function updateBatchMeta(input: {
   const patch: {
     name?: string;
     notes?: string | null;
+    plannedStartDay?: string | null;
     updatedAt: Date;
   } = { updatedAt: new Date() };
   if (typeof input.name === "string" && input.name.trim()) {
@@ -366,6 +400,9 @@ export async function updateBatchMeta(input: {
   }
   if (input.notes !== undefined) {
     patch.notes = input.notes?.trim() || null;
+  }
+  if (input.plannedStartDay !== undefined) {
+    patch.plannedStartDay = input.plannedStartDay || null;
   }
 
   await db

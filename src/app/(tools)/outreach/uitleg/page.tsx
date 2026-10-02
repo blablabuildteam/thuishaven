@@ -6,12 +6,10 @@ import { hasHunterConfig } from "@/lib/integrations/hunter/client";
 import { getBrevoKey } from "@/lib/integrations/brevo/client";
 import {
   getOutreachBrevoKey,
-  getOutreachReplyTo,
-  getOutreachSender,
-  getOutreachTestRecipient,
   outreachLiveSendBlockReason,
   outreachTestSendBlockReason,
 } from "@/lib/outreach/send-policy";
+import { loadOutreachSettings } from "@/lib/outreach/settings";
 import { MAIL_CAMPAIGN_ANGLES } from "@/lib/outreach/mail-angle";
 import { cn } from "@/lib/utils";
 
@@ -82,7 +80,7 @@ const CONNECTIONS = [
   },
 ] as const;
 
-export default function OutreachUitlegPage() {
+export default async function OutreachUitlegPage() {
   const status = {
     apollo: hasApolloConfig(),
     kvk: hasKvkConfig(),
@@ -97,9 +95,16 @@ export default function OutreachUitlegPage() {
   };
   const liveBlock = outreachLiveSendBlockReason();
   const testBlock = outreachTestSendBlockReason();
-  const sender = getOutreachSender();
-  const replyTo = getOutreachReplyTo();
-  const testTo = getOutreachTestRecipient();
+  const settings = await loadOutreachSettings();
+  const sender = {
+    email: settings.senderEmail,
+    name: settings.senderName,
+  };
+  const replyTo = {
+    email: settings.replyToEmail,
+    name: settings.replyToName,
+  };
+  const testTo = settings.testRecipient;
   const readyCount = Object.values(status).filter(Boolean).length;
 
   return (

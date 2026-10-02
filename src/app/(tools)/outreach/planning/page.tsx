@@ -8,7 +8,7 @@ export const metadata = { title: "Wachtrij" };
 export const dynamic = "force-dynamic";
 
 export default async function OutreachPlanningPage() {
-  const { batches, unbatchedDrafts, liveSendBlockReason } =
+  const { batches, unbatchedDrafts, liveSendBlockReason, cadenceLabel } =
     await listBatchesWithEmails();
 
   const queuedCount = batches
@@ -20,7 +20,7 @@ export default async function OutreachPlanningPage() {
       <SectionHeader
         eyebrow="Stap 3b · review"
         title="Wachtrij"
-        description="Bakjes met mails die klaarstaan: wie krijgt welke template en tekst. Live versturen blijft dicht tot jij groen licht geeft."
+        description="Bakjes met mails die klaarstaan: wie krijgt welke template en tekst. Per bakje een suggestie wanneer te versturen volgens het ritme in Instellingen."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone="danger">Live send uit</StatusBadge>
@@ -36,6 +36,15 @@ export default async function OutreachPlanningPage() {
           </div>
         }
       />
+
+      {cadenceLabel ? (
+        <p className="mb-6 text-sm text-text-muted">
+          Ritme: {cadenceLabel}.{" "}
+          <Link href="/outreach/instellingen" className="text-accent underline">
+            Aanpassen
+          </Link>
+        </p>
+      ) : null}
 
       <BatchQueue
         batches={batches}

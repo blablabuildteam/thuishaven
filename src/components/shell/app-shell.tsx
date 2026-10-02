@@ -27,6 +27,7 @@ import {
   BookOpen,
   Scale,
   Inbox,
+  Settings,
   type LucideIcon,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
@@ -193,6 +194,12 @@ const outreachSections: NavSection[] = [
         href: "/outreach/uitsluitingen",
         label: "Niet mailen",
         icon: Ban,
+        adminOnly: true,
+      },
+      {
+        href: "/outreach/instellingen",
+        label: "Instellingen",
+        icon: Settings,
         adminOnly: true,
       },
       {

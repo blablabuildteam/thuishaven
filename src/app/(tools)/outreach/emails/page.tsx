@@ -15,7 +15,7 @@ import {
   mailAngleFor,
   suggestedVariantForAngle,
 } from "@/lib/outreach/mail-angle";
-import { getOutreachTestRecipient } from "@/lib/outreach/send-policy";
+import { resolveOutreachTestRecipient } from "@/lib/outreach/send-policy";
 import type { OutreachVariantId } from "@/lib/outreach/tone";
 
 export const metadata = { title: "Mailen" };
@@ -32,12 +32,14 @@ export default async function EmailsPage({
     templateStats,
     params,
     openBatches,
+    testTo,
   ] = await Promise.all([
     listOutreachEmails(),
     listCrmRecords(),
     getTemplateStats(),
     searchParams,
     listOpenBatches(),
+    resolveOutreachTestRecipient(),
   ]);
   const preselectIds = [
     ...(params.ids?.split(",") ?? []),
@@ -127,7 +129,7 @@ export default async function EmailsPage({
 
       <OutreachEmailWorkbench
         prospects={workbenchProspects}
-        defaultTestTo={getOutreachTestRecipient()}
+        defaultTestTo={testTo}
         templateStats={templateStats}
         bestTemplate={bestTemplateKey(templateStats)}
         preselectIds={preselectIds}

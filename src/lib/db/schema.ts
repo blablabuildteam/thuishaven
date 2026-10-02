@@ -151,7 +151,35 @@ export const outreachBatches = pgTable("outreach_batches", {
   name: text("name").notNull(),
   status: outreachBatchStatusEnum("status").notNull().default("open"),
   notes: text("notes"),
+  /** Optionele startdag (YYYY-MM-DD) voor de planningsuggestie. */
+  plannedStartDay: text("planned_start_day"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+/**
+ * Singleton outreach settings (id = 'default').
+ * Afzender / reply-to / send-ritme — invulbaar door Thuishaven in de UI.
+ */
+export const outreachSettings = pgTable("outreach_settings", {
+  id: text("id").primaryKey().default("default"),
+  senderEmail: text("sender_email").notNull().default("zakelijk@thuishaven.nl"),
+  senderName: text("sender_name").notNull().default("Reijner · Thuishaven"),
+  replyToEmail: text("reply_to_email").notNull().default("evenement@thuishaven.nl"),
+  replyToName: text("reply_to_name").notNull().default("Yoram & Reijner"),
+  /** Comma-separated From-adressen die Brevo mag gebruiken. */
+  allowedSenderEmails: text("allowed_sender_emails")
+    .notNull()
+    .default("zakelijk@thuishaven.nl,evenement@thuishaven.nl"),
+  testRecipient: text("test_recipient")
+    .notNull()
+    .default("team@blablabuild.com"),
+  /** ISO weekdays 1=ma … 7=zo, JSON array e.g. [2,4]. */
+  sendWeekdays: jsonb("send_weekdays").$type<number[]>().notNull().default([2, 4]),
+  mailsPerDay: integer("mails_per_day").notNull().default(3),
+  /** Preferred send hour in Europe/Amsterdam (0–23). */
+  preferredHour: integer("preferred_hour").notNull().default(10),
+  notes: text("notes"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

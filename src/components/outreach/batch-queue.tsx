@@ -170,6 +170,33 @@ export function BatchQueue({
               />
             </label>
 
+            <div className="mt-3 flex flex-wrap items-end gap-3">
+              <label className="block text-xs text-text-dim">
+                Start plannen vanaf
+                <input
+                  type="date"
+                  className="mt-1.5 block border border-border bg-bg px-3 py-2 text-sm text-text"
+                  defaultValue={batch.plannedStartDay ?? ""}
+                  disabled={pending}
+                  onChange={(e) =>
+                    void post({
+                      action: "update-batch",
+                      batchId: batch.id,
+                      plannedStartDay: e.target.value || null,
+                    }).then((data) => {
+                      if (data) setMessage("Startdatum bijgewerkt.");
+                    })
+                  }
+                />
+              </label>
+              {batch.mailCount > 0 ? (
+                <p className="max-w-xl text-sm text-text-muted">
+                  <span className="font-medium text-text">Suggestie: </span>
+                  {batch.sendSuggestionLabel}
+                </p>
+              ) : null}
+            </div>
+
             {batch.emails.length === 0 ? (
               <p className="mt-4 text-sm text-text-muted">
                 Leeg bakje — voeg drafts toe vanuit Mailen.
