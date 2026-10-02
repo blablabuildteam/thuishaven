@@ -7,7 +7,6 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import {
   APOLLO_EMPLOYEE_RANGES,
   DEFAULT_APOLLO_CRITERIA,
-  DISTANCE_SLIDER_STOPS,
   SEARCH_ZONES,
   boundsFromEmployeeRanges,
   criteriaSummary,
@@ -15,7 +14,6 @@ import {
   formatEmployeeBounds,
   keywordKey,
   normalizeCriteria,
-  presetForDistanceIndex,
   readyDistanceStops,
   sliceKey,
   slicesForCriteria,
@@ -384,98 +382,80 @@ export function ListFillWorkbench({
         </p>
 
         <div className="mt-5 max-w-md">
-          <div className="flex items-baseline justify-between gap-2">
-            <p className="text-[11px] uppercase tracking-wider text-text-dim">
-              Afstand vanaf Amsterdam
-            </p>
-            <p className="text-sm text-text">
-              {readyDistanceStops()[distanceIdx]?.label ?? "~50 km"}
-            </p>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={readyDistanceStops().length - 1}
-            step={1}
-            value={distanceIdx}
-            disabled={pending}
-            onChange={(e) =>
-              setCriteria((c) => ({
-                ...c,
-                placePreset: presetForDistanceIndex(Number(e.target.value)),
-              }))
-            }
-            className="mt-2 w-full accent-accent"
-            aria-label="Afstand"
-          />
-          <div className="mt-1 flex justify-between text-[11px] text-text-dim">
-            {DISTANCE_SLIDER_STOPS.map((s) => (
-              <span
-                key={`${s.km}-${s.label}`}
-                className={s.ready ? undefined : "opacity-40"}
-                title={s.ready ? undefined : "Binnenkort — meer plaatsen"}
+          <p className="text-[11px] uppercase tracking-wider text-text-dim">
+            Afstand vanaf Amsterdam
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {readyDistanceStops().map((s, i) => (
+              <button
+                key={s.preset}
+                type="button"
+                disabled={pending}
+                onClick={() =>
+                  setCriteria((c) => ({
+                    ...c,
+                    placePreset: s.preset!,
+                  }))
+                }
+                className={
+                  distanceIdx === i
+                    ? "border border-accent bg-accent/10 px-3 py-1.5 text-sm"
+                    : "border border-border px-3 py-1.5 text-sm text-text-muted hover:border-accent"
+                }
               >
                 {s.label}
-              </span>
+              </button>
             ))}
           </div>
-          <p className="mt-1 text-[11px] text-text-dim">
-            Nu tot ~50 km; grotere ring volgt later beschikbaar.
+          <p className="mt-1.5 text-[11px] text-text-dim">
+            Later ook ~100 km — nu max ~50 km.
           </p>
         </div>
 
         <div className="mt-6 max-w-md">
-          <div className="flex items-baseline justify-between gap-2">
-            <p className="text-[11px] uppercase tracking-wider text-text-dim">
-              Medewerkers
-            </p>
-            <p className="text-sm text-text">
-              {formatEmployeeBounds(empBounds.min, empBounds.max)}
-            </p>
-          </div>
-          <div className="relative mt-3 h-6">
-            <div className="pointer-events-none absolute top-1/2 right-0 left-0 h-1 -translate-y-1/2 bg-border" />
-            <div
-              className="pointer-events-none absolute top-1/2 h-1 -translate-y-1/2 bg-accent/70"
-              style={{
-                left: `${(empSpan.lo / (APOLLO_EMPLOYEE_RANGES.length - 1)) * 100}%`,
-                right: `${((APOLLO_EMPLOYEE_RANGES.length - 1 - empSpan.hi) / (APOLLO_EMPLOYEE_RANGES.length - 1)) * 100}%`,
-              }}
-            />
-            <input
-              type="range"
-              min={0}
-              max={APOLLO_EMPLOYEE_RANGES.length - 1}
-              step={1}
-              value={empSpan.lo}
-              disabled={pending}
-              onChange={(e) => {
-                const lo = Number(e.target.value);
-                setEmployeeSpan(lo, Math.max(lo, empSpan.hi));
-              }}
-              className="absolute inset-0 z-20 w-full appearance-none bg-transparent accent-accent [&::-webkit-slider-thumb]:relative [&::-webkit-slider-thumb]:z-20"
-              aria-label="Minimum medewerkers"
-            />
-            <input
-              type="range"
-              min={0}
-              max={APOLLO_EMPLOYEE_RANGES.length - 1}
-              step={1}
-              value={empSpan.hi}
-              disabled={pending}
-              onChange={(e) => {
-                const hi = Number(e.target.value);
-                setEmployeeSpan(Math.min(empSpan.lo, hi), hi);
-              }}
-              className="absolute inset-0 z-10 w-full appearance-none bg-transparent accent-accent [&::-webkit-slider-thumb]:relative [&::-webkit-slider-thumb]:z-30"
-              aria-label="Maximum medewerkers"
-            />
-          </div>
-          <div className="mt-1 flex justify-between text-[11px] text-text-dim">
-            <span>{APOLLO_EMPLOYEE_RANGES[0]?.label}</span>
-            <span>
-              {APOLLO_EMPLOYEE_RANGES[APOLLO_EMPLOYEE_RANGES.length - 1]?.label}
-            </span>
+          <p className="text-[11px] uppercase tracking-wider text-text-dim">
+            Medewerkers
+          </p>
+          <p className="mt-1 text-sm text-text">
+            {formatEmployeeBounds(empBounds.min, empBounds.max)}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-3">
+            <label className="text-xs text-text-dim">
+              Van
+              <select
+                className="mt-1 block border border-border bg-bg px-3 py-2 text-sm text-text"
+                value={empSpan.lo}
+                disabled={pending}
+                onChange={(e) => {
+                  const lo = Number(e.target.value);
+                  setEmployeeSpan(lo, Math.max(lo, empSpan.hi));
+                }}
+              >
+                {APOLLO_EMPLOYEE_RANGES.map((r, i) => (
+                  <option key={r.id} value={i}>
+                    {r.label.split("–")[0]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-text-dim">
+              Tot
+              <select
+                className="mt-1 block border border-border bg-bg px-3 py-2 text-sm text-text"
+                value={empSpan.hi}
+                disabled={pending}
+                onChange={(e) => {
+                  const hi = Number(e.target.value);
+                  setEmployeeSpan(Math.min(empSpan.lo, hi), hi);
+                }}
+              >
+                {APOLLO_EMPLOYEE_RANGES.map((r, i) => (
+                  <option key={r.id} value={i}>
+                    {r.label.split("–")[1] ?? r.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </div>
 

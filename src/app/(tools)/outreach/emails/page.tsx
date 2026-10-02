@@ -103,9 +103,9 @@ export default async function EmailsPage({
   return (
     <div>
       <SectionHeader
-        eyebrow="Stap 3 van 4"
+        eyebrow="Stap 3"
         title="Mailen"
-        description="Kies bedrijven, genereer drafts, stuur een test, zet ze in een bakje. Versturen later vanuit de Wachtrij."
+        description="Drafts maken, testen, in een bakje zetten."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={source === "db" ? "success" : "neutral"}>

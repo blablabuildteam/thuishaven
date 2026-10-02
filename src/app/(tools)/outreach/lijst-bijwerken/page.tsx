@@ -38,7 +38,7 @@ export default async function LijstBijwerkenPage() {
   return (
     <div>
       <SectionHeader
-        eyebrow="Stap 1 van 4"
+        eyebrow="Stap 1"
         title="Lijst bijwerken"
         description="Alleen ophalen wat nog niet binnen is, daarna gegevens aanvullen. Klaar? Door naar Bedrijven."
         action={

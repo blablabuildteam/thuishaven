@@ -50,7 +50,7 @@ export default async function OutreachCrmPage() {
   return (
     <div>
       <SectionHeader
-        eyebrow="Stap 2 van 4"
+        eyebrow="Stap 2"
         title="Bedrijven"
         description="Wie nu de moeite waard is: signalen en leadscore. Klik een bedrijf open voor maillog en notities. Daarna → Mailen."
         action={

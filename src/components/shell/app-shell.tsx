@@ -167,21 +167,21 @@ const outreachSections: NavSection[] = [
       },
       {
         href: "/outreach/planning",
-        label: "Wachtrij",
+        label: "4 · Wachtrij",
         icon: Inbox,
         tourId: "nav-wachtrij",
+      },
+      {
+        href: "/outreach/analytics",
+        label: "5 · Resultaten",
+        icon: LineChart,
+        tourId: "nav-resultaten",
       },
       {
         href: "/outreach/templates",
         label: "Templates",
         icon: Sparkles,
         tourId: "nav-templates",
-      },
-      {
-        href: "/outreach/analytics",
-        label: "4 · Resultaten",
-        icon: LineChart,
-        tourId: "nav-resultaten",
       },
     ],
   },

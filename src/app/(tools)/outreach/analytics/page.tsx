@@ -38,7 +38,7 @@ export default async function OutreachAnalyticsPage() {
   return (
     <div className="flex flex-col">
       <SectionHeader
-        eyebrow="Stap 4 van 4"
+        eyebrow="Stap 5"
         title="Resultaten"
         description="Wat er echt verstuurd is, en of het geopend, geklikt of beantwoord is. Antwoorden komen vanzelf binnen, net als opens en kliks."
         action={

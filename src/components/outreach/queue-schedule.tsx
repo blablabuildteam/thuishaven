@@ -4,7 +4,6 @@ type Props = {
   cadenceLabel: string;
   cadenceRationale: string;
   schedule: QueueScheduleDay[];
-  unbatchedCount: number;
   senderLabel: string | null;
 };
 
@@ -12,7 +11,6 @@ export function QueueSchedule({
   cadenceLabel,
   cadenceRationale,
   schedule,
-  unbatchedCount,
   senderLabel,
 }: Props) {
   const plannedCount = schedule.reduce((n, d) => n + d.items.length, 0);
@@ -27,10 +25,7 @@ export function QueueSchedule({
             auto-send — dit is het ritme om naartoe te werken.
           </p>
         </div>
-        <p className="text-sm text-text-dim">
-          {plannedCount} gepland
-          {unbatchedCount > 0 ? ` · ${unbatchedCount} draft buiten bakje` : ""}
-        </p>
+        <p className="text-sm text-text-dim">{plannedCount} gepland</p>
       </div>
 
       <div className="mt-4 border border-border/80 bg-bg px-3 py-3">

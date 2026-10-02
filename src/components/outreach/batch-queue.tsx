@@ -6,12 +6,10 @@ import { useState, useTransition } from "react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type {
   OutreachBatchSummary,
-  UnbatchedDraft,
 } from "@/lib/outreach/batches";
 
 type Props = {
   batches: OutreachBatchSummary[];
-  unbatchedDrafts: UnbatchedDraft[];
   liveSendBlockReason: string | null;
   senderEmail: string;
   senderName: string;
@@ -19,7 +17,6 @@ type Props = {
 
 export function BatchQueue({
   batches,
-  unbatchedDrafts,
   liveSendBlockReason,
   senderEmail,
   senderName,
@@ -391,42 +388,6 @@ export function BatchQueue({
           </article>
         ))
       )}
-
-      {unbatchedDrafts.length > 0 ? (
-        <section className="border border-border p-4">
-          <h2 className="font-display text-lg tracking-[0.04em]">
-            Nog niet in een bakje
-          </h2>
-          <p className="mt-1 text-sm text-text-muted">
-            {unbatchedDrafts.length} draft
-            {unbatchedDrafts.length === 1 ? "" : "s"} zonder bakje. Open Mailen
-            om ze in een bakje te zetten.
-          </p>
-          <ul className="mt-3 divide-y divide-border border-y border-border">
-            {unbatchedDrafts.slice(0, 12).map((d) => (
-              <li
-                key={d.emailId}
-                className="flex flex-wrap items-baseline justify-between gap-2 py-2 text-sm"
-              >
-                <span>
-                  {d.companyName}
-                  <span className="text-text-dim">
-                    {" "}
-                    · {d.variantLabel ?? d.variantKey ?? "—"}
-                  </span>
-                </span>
-                <span className="truncate text-text-muted">{d.subject}</span>
-              </li>
-            ))}
-          </ul>
-          <Link
-            href="/outreach/emails"
-            className="mt-3 inline-block text-sm text-accent underline"
-          >
-            Naar Mailen →
-          </Link>
-        </section>
-      ) : null}
 
       {sent.length > 0 ? (
         <section>

@@ -8,8 +8,7 @@ import {
   type OutreachSubjectArm,
   type OutreachVariantId,
 } from "@/lib/outreach/tone";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { leadTierTone, type LeadTier } from "@/lib/outreach/lead-score";
+import type { LeadTier } from "@/lib/outreach/lead-score";
 import {
   formatTemplateStat,
   type TemplateStat,
@@ -54,13 +53,6 @@ type OpenBatchOption = {
   mailCount: number;
 };
 
-const ANGLE_FILTERS: { id: string; label: string }[] = [
-  { id: "all", label: "Alles" },
-  { id: "jubileum", label: "Jubileum" },
-  { id: "seizoen", label: "Seizoen" },
-  { id: "algemeen", label: "Algemeen" },
-];
-
 function fmtDay(iso: string) {
   return new Date(iso).toLocaleDateString("nl-NL", {
     day: "numeric",
@@ -83,7 +75,6 @@ export function OutreachEmailWorkbench({
   const [pending, startTransition] = useTransition();
   const preselected = useMemo(() => new Set(preselectIds), [preselectIds]);
   const [showMailed, setShowMailed] = useState(false);
-  const [angleFilter, setAngleFilter] = useState("all");
   const [q, setQ] = useState("");
   const [onlyHandoff, setOnlyHandoff] = useState(preselectIds.length > 0);
 
@@ -93,7 +84,6 @@ export function OutreachEmailWorkbench({
       .filter((p) => {
         if (onlyHandoff && !preselected.has(p.id)) return false;
         if (!showMailed && p.mailCount > 0) return false;
-        if (angleFilter !== "all" && p.angleId !== angleFilter) return false;
         if (
           needle &&
           !p.companyName.toLowerCase().includes(needle) &&
@@ -103,8 +93,12 @@ export function OutreachEmailWorkbench({
         }
         return true;
       })
-      .sort((a, b) => b.score - a.score || a.companyName.localeCompare(b.companyName, "nl"));
-  }, [prospects, q, angleFilter, showMailed, onlyHandoff, preselected]);
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          a.companyName.localeCompare(b.companyName, "nl"),
+      );
+  }, [prospects, q, showMailed, onlyHandoff, preselected]);
 
   const mailedTotal = prospects.filter((p) => p.mailCount > 0).length;
 
@@ -375,73 +369,58 @@ export function OutreachEmailWorkbench({
   return (
     <div className="mb-10 space-y-6">
       <p className="text-sm text-text-muted">
-        Vink bedrijven aan, kies template, genereer drafts, stuur een test, en
-        zet goedgekeurde mails in een bakje. Live naar prospects blijft dicht —
-        versturen doe je later vanuit de{" "}
+        Selecteer → genereer → test → bakje. Live send later via{" "}
         <Link href="/outreach/planning" className="text-accent underline">
           Wachtrij
         </Link>
-        .{" "}
-        <Link href="/outreach/templates" className="text-accent underline">
-          Templates bewerken
-        </Link>
+        .
       </p>
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => setMode("suggested")}
-          className={
-            mode === "suggested"
-              ? "border border-accent bg-accent/10 px-3 py-1.5 text-sm"
-              : "border border-border px-3 py-1.5 text-sm text-text-muted"
-          }
-        >
-          Suggested per bedrijf
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode("override")}
-          className={
-            mode === "override"
-              ? "border border-accent bg-accent/10 px-3 py-1.5 text-sm"
-              : "border border-border px-3 py-1.5 text-sm text-text-muted"
-          }
-        >
-          Eén template voor selectie
-        </button>
-      </div>
-
-      {mode === "override" ? (
-        <label className="block max-w-sm text-xs text-text-dim">
-          Template voor alle geselecteerden
-          <select
-            className="mt-1.5 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
-            value={overrideVariant}
-            onChange={(e) =>
-              setOverrideVariant(e.target.value as OutreachVariantId)
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => setMode("suggested")}
+            className={
+              mode === "suggested"
+                ? "border border-accent bg-accent/10 px-3 py-1.5 text-sm"
+                : "border border-border px-3 py-1.5 text-sm text-text-muted"
             }
           >
-            {companyVariants.map((v) => (
-              <option key={v.id} value={v.id}>
-                {templateOption(v)}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
+            Per bedrijf
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("override")}
+            className={
+              mode === "override"
+                ? "border border-accent bg-accent/10 px-3 py-1.5 text-sm"
+                : "border border-border px-3 py-1.5 text-sm text-text-muted"
+            }
+          >
+            Eén template
+          </button>
+        </div>
 
-      {bestTemplate ? (
-        <p className="text-xs text-text-dim">
-          Beste reply-ratio tot nu toe:{" "}
-          <span className="text-text">
-            {companyVariants.find((v) => v.id === bestTemplate)?.name ?? bestTemplate}
-          </span>{" "}
-          · {formatTemplateStat(templateStats[bestTemplate])}
-        </p>
-      ) : null}
+        {mode === "override" ? (
+          <label className="block max-w-xs text-xs text-text-dim">
+            Template
+            <select
+              className="mt-1.5 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
+              value={overrideVariant}
+              onChange={(e) =>
+                setOverrideVariant(e.target.value as OutreachVariantId)
+              }
+            >
+              {companyVariants.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {templateOption(v)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
 
-      <div className="flex flex-wrap items-end gap-3">
         <label className="text-xs text-text-dim">
           Onderwerp A/B
           <select
@@ -456,8 +435,8 @@ export function OutreachEmailWorkbench({
             <option value="b">B</option>
           </select>
         </label>
-        <label className="min-w-[14rem] flex-1 text-xs text-text-dim">
-          Test naar (alleen @blablabuild.com / @thuishaven.nl)
+        <label className="min-w-[12rem] flex-1 text-xs text-text-dim sm:max-w-xs">
+          Test naar
           <input
             className="mt-1.5 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
             value={testTo}
@@ -475,27 +454,13 @@ export function OutreachEmailWorkbench({
             placeholder="Zoek bedrijf of e-mail…"
             className="w-full max-w-xs border border-border bg-bg px-3 py-1.5 text-sm text-text sm:w-56"
           />
-          {ANGLE_FILTERS.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              onClick={() => setAngleFilter(f.id)}
-              className={
-                angleFilter === f.id
-                  ? "border border-accent bg-accent/10 px-2.5 py-1 text-xs"
-                  : "border border-border px-2.5 py-1 text-xs text-text-muted hover:border-accent"
-              }
-            >
-              {f.label}
-            </button>
-          ))}
           <label className="ml-auto flex items-center gap-1.5 text-xs text-text-muted">
             <input
               type="checkbox"
               checked={showMailed}
               onChange={(e) => setShowMailed(e.target.checked)}
             />
-            Toon ook al gemaild ({mailedTotal})
+            Ook al gemaild ({mailedTotal})
           </label>
           {preselectIds.length > 0 ? (
             <label className="flex items-center gap-1.5 text-xs text-text-muted">
@@ -504,14 +469,13 @@ export function OutreachEmailWorkbench({
                 checked={onlyHandoff}
                 onChange={(e) => setOnlyHandoff(e.target.checked)}
               />
-              Alleen selectie uit Bedrijven ({preselectIds.length})
+              Alleen selectie ({preselectIds.length})
             </label>
           ) : null}
         </div>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs uppercase tracking-wider text-text-dim">
-            {selected.size} geselecteerd · {ready.length} in beeld · hoogste
-            score eerst
+            {selected.size} geselecteerd · {ready.length} in beeld
           </p>
           <div className="flex gap-3 text-xs">
             <button
@@ -550,7 +514,6 @@ export function OutreachEmailWorkbench({
             <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
               <tr>
                 <th className="px-3 py-2 w-10" />
-                <th className="px-3 py-2 font-medium">Score</th>
                 <th className="px-3 py-2 font-medium">Bedrijf</th>
                 <th className="px-3 py-2 font-medium">Invalshoek</th>
                 <th className="px-3 py-2 font-medium">Eerder gemaild</th>
@@ -572,9 +535,6 @@ export function OutreachEmailWorkbench({
                         checked={on}
                         onChange={() => toggle(p.id)}
                       />
-                    </td>
-                    <td className="px-3 py-2">
-                      <StatusBadge tone={leadTierTone(p.tier)}>{p.score}</StatusBadge>
                     </td>
                     <td className="px-3 py-2">
                       <Link

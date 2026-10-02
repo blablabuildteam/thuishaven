@@ -11,7 +11,6 @@ export const dynamic = "force-dynamic";
 export default async function OutreachPlanningPage() {
   const {
     batches,
-    unbatchedDrafts,
     liveSendBlockReason,
     cadenceLabel,
     cadenceRationale,
@@ -27,7 +26,7 @@ export default async function OutreachPlanningPage() {
   return (
     <div>
       <SectionHeader
-        eyebrow="Stap 3b · review"
+        eyebrow="Stap 4 · review"
         title="Wachtrij"
         description="Bovenaan de planning (wanneer), daaronder de bakjes (wat + tekst). Live versturen staat nog uit."
         action={
@@ -50,7 +49,6 @@ export default async function OutreachPlanningPage() {
         cadenceLabel={cadenceLabel}
         cadenceRationale={cadenceRationale}
         schedule={schedule}
-        unbatchedCount={unbatchedDrafts.length}
         senderLabel={
           senderEmail
             ? `${senderName || senderEmail} <${senderEmail}>`
@@ -60,7 +58,6 @@ export default async function OutreachPlanningPage() {
 
       <BatchQueue
         batches={batches}
-        unbatchedDrafts={unbatchedDrafts}
         liveSendBlockReason={liveSendBlockReason}
         senderEmail={senderEmail}
         senderName={senderName}
