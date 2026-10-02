@@ -46,7 +46,7 @@ function geminiKey(): string | null {
 }
 
 function geminiModel(): string {
-  return process.env.GEMINI_MODEL?.trim() || "gemini-3.6-flash";
+  return process.env.GEMINI_MODEL?.trim() || "gemini-3.8-flash";
 }
 
 function parseJsonObject(raw: string): Record<string, unknown> | null {

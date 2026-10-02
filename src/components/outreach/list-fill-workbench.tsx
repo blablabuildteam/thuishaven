@@ -16,6 +16,7 @@ import {
   keywordKey,
   normalizeCriteria,
   presetForDistanceIndex,
+  readyDistanceStops,
   sliceKey,
   slicesForCriteria,
   type ApolloSearchCriteria,
@@ -388,13 +389,13 @@ export function ListFillWorkbench({
               Afstand vanaf Amsterdam
             </p>
             <p className="text-sm text-text">
-              {DISTANCE_SLIDER_STOPS[distanceIdx]?.label ?? "~50 km"}
+              {readyDistanceStops()[distanceIdx]?.label ?? "~50 km"}
             </p>
           </div>
           <input
             type="range"
             min={0}
-            max={DISTANCE_SLIDER_STOPS.length - 1}
+            max={readyDistanceStops().length - 1}
             step={1}
             value={distanceIdx}
             disabled={pending}
@@ -409,9 +410,18 @@ export function ListFillWorkbench({
           />
           <div className="mt-1 flex justify-between text-[11px] text-text-dim">
             {DISTANCE_SLIDER_STOPS.map((s) => (
-              <span key={s.preset}>{s.label}</span>
+              <span
+                key={`${s.km}-${s.label}`}
+                className={s.ready ? undefined : "opacity-40"}
+                title={s.ready ? undefined : "Binnenkort — meer plaatsen"}
+              >
+                {s.label}
+              </span>
             ))}
           </div>
+          <p className="mt-1 text-[11px] text-text-dim">
+            Nu tot ~50 km; grotere ring volgt later beschikbaar.
+          </p>
         </div>
 
         <div className="mt-6 max-w-md">

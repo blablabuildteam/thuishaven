@@ -219,6 +219,11 @@ Tone of voice (verplicht):
 - Commercieel model alleen als het past: huur per area + cateringpakket
 - Areas met karakter (max 2–3): Mainstage, Circustent, Romneyloods, Barhuisje, Café, Tempel
 
+Personaliseer ALTIJD per bedrijf:
+- Jubileum → noem het concrete aantal jaren / mark (bijv. 25-jarig) als dat in de prompt staat
+- Sector, plaats en type bedrijf laten meeklinken zonder clichés
+- Geen generieke mail die ook naar een ander bedrijf had gekund
+
 Voorbeeldmail (stijlanker):
 ---
 ${REIJNER_TONE_EXAMPLE}

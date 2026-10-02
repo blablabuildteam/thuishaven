@@ -27,6 +27,11 @@ import {
 } from "@/lib/outreach/tone";
 import { resolveTemplateForSend } from "@/lib/outreach/templates";
 import { getBrochureUrl } from "@/lib/outreach/body-templates";
+import {
+  MAIL_CAMPAIGN_ANGLES,
+  mailAngleFor,
+  nextJubilee,
+} from "@/lib/outreach/mail-angle";
 import { recordUsage } from "@/lib/usage/store";
 import { getPublicAvailabilityUrl } from "@/lib/mock/availability";
 
@@ -101,41 +106,61 @@ async function callLlmJson(prompt: string): Promise<
   }
 
   if (geminiKey) {
-    const model =
-      process.env.GEMINI_MODEL?.trim() || "gemini-2.0-flash";
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(geminiKey)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: {
-            parts: [{ text: buildOutreachSystemPrompt() }],
-          },
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.55,
-            responseMimeType: "application/json",
-          },
-        }),
-        cache: "no-store",
-      },
-    );
-    const text = await res.text();
-    if (!res.ok) {
-      return { ok: false, error: `Gemini HTTP ${res.status}: ${text.slice(0, 200)}` };
+    const preferred = process.env.GEMINI_MODEL?.trim();
+    const models = [
+      ...new Set(
+        [preferred, "gemini-3.8-flash", "gemini-3.6-flash", "gemini-2.5-flash"].filter(
+          (m): m is string => Boolean(m),
+        ),
+      ),
+    ];
+    let lastError = "Geen bruikbaar Gemini-model";
+    for (const model of models) {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(geminiKey)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: {
+              parts: [{ text: buildOutreachSystemPrompt() }],
+            },
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.7,
+              responseMimeType: "application/json",
+            },
+          }),
+          cache: "no-store",
+        },
+      );
+      const text = await res.text();
+      if (!res.ok) {
+        lastError = `Gemini HTTP ${res.status}: ${text.slice(0, 200)}`;
+        if (
+          res.status === 404 ||
+          /no longer available|not found|unknown model/i.test(text)
+        ) {
+          continue;
+        }
+        return { ok: false, error: lastError };
+      }
+      const data = JSON.parse(text) as {
+        candidates?: Array<{
+          content?: { parts?: Array<{ text?: string }> };
+        }>;
+      };
+      const out = data.candidates?.[0]?.content?.parts
+        ?.map((p) => p.text ?? "")
+        .join("")
+        .trim();
+      if (!out) {
+        lastError = "Leeg antwoord van Gemini";
+        continue;
+      }
+      return { ok: true, text: out, vendor: "gemini" };
     }
-    const data = JSON.parse(text) as {
-      candidates?: Array<{
-        content?: { parts?: Array<{ text?: string }> };
-      }>;
-    };
-    const out = data.candidates?.[0]?.content?.parts
-      ?.map((p) => p.text ?? "")
-      .join("")
-      .trim();
-    if (!out) return { ok: false, error: "Leeg antwoord van Gemini" };
-    return { ok: true, text: out, vendor: "gemini" };
+    return { ok: false, error: lastError };
   }
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -146,7 +171,7 @@ async function callLlmJson(prompt: string): Promise<
     },
     body: JSON.stringify({
       model: process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini",
-      temperature: 0.55,
+      temperature: 0.7,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: buildOutreachSystemPrompt() },
@@ -172,7 +197,12 @@ export async function generateOutreachEmail(input: {
   companyName: string;
   contactName?: string;
   sector?: string;
+  city?: string;
+  employeeCount?: number;
   anniversaryYears?: number;
+  jubileeMark?: number;
+  jubileeYearsAway?: number;
+  angleLabel?: string;
   availabilitySummary?: string;
   variantId?: OutreachVariantId;
   subjectArm?: OutreachSubjectArm;
@@ -190,7 +220,7 @@ export async function generateOutreachEmail(input: {
     input.variantId ??
     (input.type === "agency"
       ? "open_dates"
-      : input.anniversaryYears
+      : input.jubileeMark != null || input.anniversaryYears
         ? "jubileum"
         : "warm_tour");
 
@@ -224,16 +254,33 @@ export async function generateOutreachEmail(input: {
     };
   }
 
+  const jubileeLine =
+    input.jubileeMark != null
+      ? input.jubileeYearsAway === 0
+        ? `${input.jubileeMark}-jarig jubileum dit jaar`
+        : `${input.jubileeMark}-jarig jubileum over ~${input.jubileeYearsAway} jaar (bedrijf ~${input.anniversaryYears ?? "?"} jaar oud)`
+      : input.anniversaryYears != null
+        ? `Bedrijf ~${input.anniversaryYears} jaar oud`
+        : "geen jubileum-signaal";
+
   const prompt = `Schrijf ALLEEN de body van één outbound mail (geen subject verzinnen).
 
+BELANGRIJK — personaliseer uniek voor DIT bedrijf. Geen generieke copy-paste.
+- Noem het bedrijf natuurlijk (niet in elke zin)
+- Bij jubileum: verwerk het concrete jubileum (${jubileeLine}) — geen vaag "jullie jubileum" zonder jaren
+- Laat sector/plaats meeklinken als die bekend zijn (zonder clichés)
+- Elke mail moet anders lezen dan een mail aan een ander bedrijf
+
 Subject (vast, A/B-arm ${subjectKey.toUpperCase()}): ${subject}
-Variant: ${variantId}
+Variant / invalshoek: ${variantId}${input.angleLabel ? ` (${input.angleLabel})` : ""}
 Guidance: ${resolved.guidance}
 Audience: ${input.type === "agency" ? "eventbureau" : "bedrijf"}
 Bedrijf: ${input.companyName}
 Contactpersoon: ${input.contactName ?? "onbekend"}
 Sector: ${input.sector ?? "onbekend"}
-Jubileum-jaren: ${input.anniversaryYears ?? "n.v.t."}
+Plaats: ${input.city ?? "onbekend"}
+Medewerkers (schatting): ${input.employeeCount ?? "onbekend"}
+Jubileum: ${jubileeLine}
 Brochure-URL (alleen noemen bij brochure-variant): ${getBrochureUrl()}
 Availability summary:
 ${availability}
@@ -527,13 +574,32 @@ export async function generateAndStoreDraft(input: {
     meta.decisionMaker && typeof meta.decisionMaker === "object"
       ? (meta.decisionMaker as { name?: string })
       : null;
+
+  const angle = mailAngleFor({
+    status: prospect.status,
+    anniversaryYears: prospect.anniversaryYears,
+    doelgroepFit:
+      typeof meta.doelgroepFit === "string" ? meta.doelgroepFit : null,
+  });
+  const jubilee =
+    prospect.anniversaryYears != null
+      ? nextJubilee(prospect.anniversaryYears)
+      : null;
+  const angleVariant = MAIL_CAMPAIGN_ANGLES.find((a) => a.id === angle.id)
+    ?.variantId as OutreachVariantId | undefined;
+
   const generated = await generateOutreachEmail({
     type: prospect.type,
     companyName: prospect.companyName,
     contactName: dm?.name,
     sector: prospect.sector ?? undefined,
+    city: prospect.city ?? undefined,
+    employeeCount: prospect.employeeCount ?? undefined,
     anniversaryYears: prospect.anniversaryYears ?? undefined,
-    variantId: input.variantId,
+    jubileeMark: jubilee?.mark ?? angle.jubileeMark,
+    jubileeYearsAway: jubilee?.yearsAway ?? angle.jubileeYearsAway,
+    angleLabel: angle.label,
+    variantId: input.variantId ?? angleVariant,
     subjectArm: input.subjectArm,
   });
   if ("error" in generated) return generated;

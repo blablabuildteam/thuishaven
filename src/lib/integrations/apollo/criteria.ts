@@ -200,27 +200,36 @@ export function criteriaSummary(c: ApolloSearchCriteria): string {
   return `${placePresetLabel(c.placePreset)} · ${sizes}${tags}`;
 }
 
-/** Slider stops for distance (concentric Apollo zones). */
-export const DISTANCE_SLIDER_STOPS: {
+/** Slider stops for distance (concentric Apollo zones). Extensible later. */
+export type DistanceSliderStop = {
   km: number;
-  preset: PlacePreset;
+  /** null = coming soon (UI only; not selectable yet). */
+  preset: PlacePreset | null;
   label: string;
-}[] = [
-  { km: 0, preset: "amsterdam", label: "Amsterdam" },
-  { km: 25, preset: "kern", label: "~25 km" },
-  { km: 50, preset: "ring", label: "~50 km" },
+  ready: boolean;
+};
+
+export const DISTANCE_SLIDER_STOPS: DistanceSliderStop[] = [
+  { km: 0, preset: "amsterdam", label: "Amsterdam", ready: true },
+  { km: 25, preset: "kern", label: "~25 km", ready: true },
+  { km: 50, preset: "ring", label: "~50 km", ready: true },
+  // Later: meer plaatsen in DOELGROEP + Apollo-zone, dan ready: true.
+  { km: 100, preset: null, label: "~100 km", ready: false },
 ];
 
+export function readyDistanceStops(): DistanceSliderStop[] {
+  return DISTANCE_SLIDER_STOPS.filter((s) => s.ready && s.preset);
+}
+
 export function distanceIndexForPreset(preset: PlacePreset): number {
-  const i = DISTANCE_SLIDER_STOPS.findIndex((s) => s.preset === preset);
-  return i >= 0 ? i : DISTANCE_SLIDER_STOPS.length - 1;
+  const ready = readyDistanceStops();
+  const i = ready.findIndex((s) => s.preset === preset);
+  return i >= 0 ? i : ready.length - 1;
 }
 
 export function presetForDistanceIndex(index: number): PlacePreset {
-  const stop =
-    DISTANCE_SLIDER_STOPS[
-      Math.max(0, Math.min(DISTANCE_SLIDER_STOPS.length - 1, index))
-    ];
+  const ready = readyDistanceStops();
+  const stop = ready[Math.max(0, Math.min(ready.length - 1, index))];
   return stop?.preset ?? "ring";
 }
 

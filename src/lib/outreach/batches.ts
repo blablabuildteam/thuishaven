@@ -10,6 +10,7 @@ import {
   prospects,
 } from "@/lib/db/schema";
 import { sendStoredDraft } from "@/lib/integrations/outreach";
+import { fillBodyTemplate, getBrochureUrl } from "@/lib/outreach/body-templates";
 import { outreachLiveSendBlockReason } from "@/lib/outreach/send-policy";
 import {
   formatCadenceSummary,
@@ -17,8 +18,14 @@ import {
   suggestSendSlots,
   type SendSlotSuggestion,
 } from "@/lib/outreach/settings";
+import { listEditableTemplates } from "@/lib/outreach/templates";
 import { formatDayShort, amsterdamDay } from "@/lib/time/amsterdam";
-import { OUTREACH_VARIANTS } from "@/lib/outreach/tone";
+import { getPublicAvailabilityUrl } from "@/lib/mock/availability";
+import {
+  appendOutreachSignature,
+  OUTREACH_VARIANTS,
+  type OutreachVariantId,
+} from "@/lib/outreach/tone";
 
 export type OutreachBatchStatus = "open" | "ready" | "sent";
 
@@ -26,11 +33,14 @@ export type BatchEmailRow = {
   emailId: string;
   prospectId: string;
   companyName: string;
+  /** Recipient (prospect). */
   email: string | null;
   subject: string;
   body: string;
   variantKey: string | null;
   variantLabel: string | null;
+  /** True when body ≠ filled base template (AI rewrite or hand edit). */
+  templateAdapted: boolean;
   status: string;
   createdAt: string;
   /** Suggested Amsterdam send day (YYYY-MM-DD) from cadence. */
@@ -77,8 +87,10 @@ export type QueueScheduleItem = {
   batchName: string;
   emailId: string;
   companyName: string;
+  toEmail: string | null;
   subject: string;
   variantLabel: string | null;
+  templateAdapted: boolean;
 };
 
 export type QueueScheduleDay = {
@@ -91,6 +103,23 @@ export type QueueScheduleDay = {
 function variantLabel(key: string | null): string | null {
   if (!key) return null;
   return OUTREACH_VARIANTS.find((v) => v.id === key)?.name ?? key;
+}
+
+function normalizeMailBody(body: string): string {
+  return appendOutreachSignature(body)
+    .replace(/\r\n/g, "\n")
+    .replace(/\n+/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function isTemplateAdapted(
+  body: string,
+  baseline: string | null,
+): boolean {
+  if (!baseline) return true;
+  return normalizeMailBody(body) !== normalizeMailBody(baseline);
 }
 
 function flattenSlotTimes(slots: SendSlotSuggestion[]): Array<{
@@ -136,8 +165,10 @@ function buildQueueSchedule(batches: OutreachBatchSummary[]): QueueScheduleDay[]
         batchName: batch.name,
         emailId: mail.emailId,
         companyName: mail.companyName,
+        toEmail: mail.email,
         subject: mail.subject,
         variantLabel: mail.variantLabel,
+        templateAdapted: mail.templateAdapted,
       });
     }
   }
@@ -205,6 +236,8 @@ export async function listBatchesWithEmails(): Promise<{
   cadenceLabel: string;
   cadenceRationale: string;
   schedule: QueueScheduleDay[];
+  senderEmail: string;
+  senderName: string;
 }> {
   if (!hasDatabase()) {
     return {
@@ -214,10 +247,35 @@ export async function listBatchesWithEmails(): Promise<{
       cadenceLabel: "",
       cadenceRationale: "",
       schedule: [],
+      senderEmail: "",
+      senderName: "",
     };
   }
   const db = getDb();
-  const settings = await loadOutreachSettings();
+  const [settings, editableTemplates] = await Promise.all([
+    loadOutreachSettings(),
+    listEditableTemplates(),
+  ]);
+  const templateById = new Map(editableTemplates.map((t) => [t.id, t]));
+  const availabilityUrl = getPublicAvailabilityUrl();
+  const brochureUrl = getBrochureUrl();
+
+  function baselineBody(
+    variantKey: string | null,
+    companyName: string,
+  ): string | null {
+    if (!variantKey) return null;
+    const t = templateById.get(variantKey as OutreachVariantId);
+    if (!t) return null;
+    return appendOutreachSignature(
+      fillBodyTemplate(t.bodyTemplate, {
+        companyName,
+        availabilityUrl,
+        brochureUrl,
+      }),
+    );
+  }
+
   const [batchRows, mailRows, draftRows] = await Promise.all([
     db
       .select()
@@ -264,10 +322,14 @@ export async function listBatchesWithEmails(): Promise<{
       .limit(40),
   ]);
 
-  const byBatch = new Map<string, Omit<BatchEmailRow, "suggestedDay" | "suggestedTime" | "suggestedLabel">[]>();
+  const byBatch = new Map<
+    string,
+    Omit<BatchEmailRow, "suggestedDay" | "suggestedTime" | "suggestedLabel">[]
+  >();
   for (const row of mailRows) {
     if (!row.batchId) continue;
     const list = byBatch.get(row.batchId) ?? [];
+    const baseline = baselineBody(row.variantKey, row.companyName);
     list.push({
       emailId: row.emailId,
       prospectId: row.prospectId,
@@ -277,6 +339,7 @@ export async function listBatchesWithEmails(): Promise<{
       body: row.body,
       variantKey: row.variantKey,
       variantLabel: variantLabel(row.variantKey),
+      templateAdapted: isTemplateAdapted(row.body, baseline),
       status: row.status,
       createdAt: row.createdAt.toISOString(),
     });
@@ -354,6 +417,8 @@ export async function listBatchesWithEmails(): Promise<{
     cadenceLabel: formatCadenceSummary(settings),
     cadenceRationale: settings.cadenceRationale,
     schedule: buildQueueSchedule(batches),
+    senderEmail: settings.senderEmail,
+    senderName: settings.senderName,
   };
 }
 

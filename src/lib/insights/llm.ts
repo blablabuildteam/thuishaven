@@ -11,9 +11,9 @@ Ticketlift rond posts is correlatie (±48u), geen bewezen causaliteit — zeg da
 Als iets niet in de data zit, zeg dat eerlijk.`;
 
 const GEMINI_MODEL_FALLBACKS = [
+  "gemini-3.8-flash",
   "gemini-3.6-flash",
   "gemini-2.5-flash",
-  "gemini-2.0-flash",
 ];
 
 export async function askInsightsLlm(input: {

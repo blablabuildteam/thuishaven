@@ -13,12 +13,16 @@ type Props = {
   batches: OutreachBatchSummary[];
   unbatchedDrafts: UnbatchedDraft[];
   liveSendBlockReason: string | null;
+  senderEmail: string;
+  senderName: string;
 };
 
 export function BatchQueue({
   batches,
   unbatchedDrafts,
   liveSendBlockReason,
+  senderEmail,
+  senderName,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -111,6 +115,11 @@ export function BatchQueue({
           {liveSendBlockReason ??
             "Je kunt bakjes vullen en reviewen; versturen volgt later."}
         </p>
+        {senderEmail ? (
+          <p className="mt-2 text-xs text-text-dim">
+            Van: {senderName || senderEmail} &lt;{senderEmail}&gt;
+          </p>
+        ) : null}
       </div>
 
       {error ? (
@@ -205,11 +214,12 @@ export function BatchQueue({
               </p>
             ) : (
               <div className="mt-4 max-w-full overflow-x-auto">
-                <table className="w-full min-w-[720px] text-left text-sm">
+                <table className="w-full min-w-[880px] text-left text-sm">
                   <thead className="text-[11px] tracking-wider text-text-dim uppercase">
                     <tr>
                       <th className="pb-2 pr-3 font-medium">Gepland</th>
-                      <th className="pb-2 pr-3 font-medium">Bedrijf</th>
+                      <th className="pb-2 pr-3 font-medium">Naar</th>
+                      <th className="pb-2 pr-3 font-medium">Van</th>
                       <th className="pb-2 pr-3 font-medium">Template</th>
                       <th className="pb-2 pr-3 font-medium">Onderwerp</th>
                       <th className="pb-2 font-medium text-right">Actie</th>
@@ -235,8 +245,19 @@ export function BatchQueue({
                               {mail.email ?? "geen e-mail"}
                             </p>
                           </td>
+                          <td className="py-2.5 pr-3 text-xs text-text-muted">
+                            <p className="text-text">{senderName || "—"}</p>
+                            <p className="text-text-dim">
+                              {senderEmail || "—"}
+                            </p>
+                          </td>
                           <td className="py-2.5 pr-3 text-text-muted">
-                            {mail.variantLabel ?? mail.variantKey ?? "—"}
+                            <p>{mail.variantLabel ?? mail.variantKey ?? "—"}</p>
+                            <p className="text-xs text-text-dim">
+                              {mail.templateAdapted
+                                ? "aangepast"
+                                : "standaard template"}
+                            </p>
                           </td>
                           <td className="max-w-[18rem] py-2.5 pr-3">
                             {edit ? (

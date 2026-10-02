@@ -5,6 +5,7 @@ type Props = {
   cadenceRationale: string;
   schedule: QueueScheduleDay[];
   unbatchedCount: number;
+  senderLabel: string | null;
 };
 
 export function QueueSchedule({
@@ -12,6 +13,7 @@ export function QueueSchedule({
   cadenceRationale,
   schedule,
   unbatchedCount,
+  senderLabel,
 }: Props) {
   const plannedCount = schedule.reduce((n, d) => n + d.items.length, 0);
 
@@ -38,6 +40,9 @@ export function QueueSchedule({
         </p>
         {cadenceRationale ? (
           <p className="mt-1 text-xs text-text-dim">{cadenceRationale}</p>
+        ) : null}
+        {senderLabel ? (
+          <p className="mt-1 text-xs text-text-dim">Van: {senderLabel}</p>
         ) : null}
       </div>
 
@@ -67,10 +72,14 @@ export function QueueSchedule({
                     </span>
                     <span className="min-w-0 flex-1 text-text">
                       {item.companyName}
+                      {item.toEmail ? (
+                        <span className="text-text-dim"> · {item.toEmail}</span>
+                      ) : null}
                       {item.variantLabel ? (
                         <span className="text-text-dim">
                           {" "}
                           · {item.variantLabel}
+                          {item.templateAdapted ? " (aangepast)" : ""}
                         </span>
                       ) : null}
                     </span>

@@ -16,6 +16,8 @@ export default async function OutreachPlanningPage() {
     cadenceLabel,
     cadenceRationale,
     schedule,
+    senderEmail,
+    senderName,
   } = await listBatchesWithEmails();
 
   const queuedCount = batches
@@ -49,12 +51,19 @@ export default async function OutreachPlanningPage() {
         cadenceRationale={cadenceRationale}
         schedule={schedule}
         unbatchedCount={unbatchedDrafts.length}
+        senderLabel={
+          senderEmail
+            ? `${senderName || senderEmail} <${senderEmail}>`
+            : null
+        }
       />
 
       <BatchQueue
         batches={batches}
         unbatchedDrafts={unbatchedDrafts}
         liveSendBlockReason={liveSendBlockReason}
+        senderEmail={senderEmail}
+        senderName={senderName}
       />
     </div>
   );
