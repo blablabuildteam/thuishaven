@@ -33,7 +33,9 @@ export const maxDuration = 300;
 const criteriaSchema = z
   .object({
     employeeRanges: z.array(z.string()).max(8).optional(),
-    placePreset: z.enum(["ring", "kern", "amsterdam"]).optional(),
+    placePreset: z
+      .enum(["ring", "kern", "amsterdam", "wide", "far"])
+      .optional(),
     keywordTags: z.array(z.string()).max(8).optional(),
   })
   .optional();
@@ -125,23 +127,13 @@ export async function GET() {
     universe,
     criteria: universe.criteria,
     employeeRangeOptions: APOLLO_EMPLOYEE_RANGES,
-    placePresets: [
-      {
-        id: "ring",
-        label: placePresetLabel("ring"),
-        placeCount: placesForPreset("ring").length,
-      },
-      {
-        id: "kern",
-        label: placePresetLabel("kern"),
-        placeCount: placesForPreset("kern").length,
-      },
-      {
-        id: "amsterdam",
-        label: placePresetLabel("amsterdam"),
-        placeCount: 1,
-      },
-    ],
+    placePresets: (
+      ["amsterdam", "kern", "ring", "wide", "far"] as const
+    ).map((id) => ({
+      id,
+      label: placePresetLabel(id),
+      placeCount: placesForPreset(id).length,
+    })),
     hint: hasApolloConfig()
       ? `Apollo-universum (laatst): ${universe.total || "nog niet geteld"}. POST countOnly:true telt (1 credit); apply+drain haalt alles op.`
       : "Zet APOLLO_API_KEY in Vercel / .env.local",

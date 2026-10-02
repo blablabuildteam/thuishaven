@@ -4,14 +4,22 @@
  */
 
 import { LINKEDIN_PEOPLE_SEARCH } from "./decision-titles";
-import { AMS_REGION_PLACES, DEFAULT_MAX_EMPLOYEES, DEFAULT_MIN_EMPLOYEES } from "@/lib/integrations/kvk/discovery";
+import {
+  AMS_ALL_REGION_PLACES,
+  AMS_REGION_PLACES,
+  DEFAULT_MAX_EMPLOYEES,
+  DEFAULT_MIN_EMPLOYEES,
+} from "@/lib/integrations/kvk/discovery";
 
 export const DOELGROEP = {
   type: "company" as const,
   minEmployees: DEFAULT_MIN_EMPLOYEES,
   maxEmployees: DEFAULT_MAX_EMPLOYEES,
-  regionLabel: "Amsterdam + ~50 km",
-  places: AMS_REGION_PLACES,
+  regionLabel: "Amsterdam + ~100 km",
+  /** Classic ~50 km allowlist (ring preset). */
+  places50: AMS_REGION_PLACES,
+  /** Max ring we search — used for in-region checks. */
+  places: AMS_ALL_REGION_PLACES,
   trigger: "Jubileum (5 / 10 / 15 / 20 / 25 / 50 jaar) of intern event",
   linkedinCompanySearch:
     "Companies · Netherlands · Amsterdam Area · 501–5.000 employees",

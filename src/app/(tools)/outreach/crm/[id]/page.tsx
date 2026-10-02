@@ -235,7 +235,7 @@ export default async function CrmDossierPage({
         <Fact label="Plaats · KvK" value={dossier.kvkCity ?? "—"} />
         <Fact
           label="Regio"
-          value={dossier.inRegion ? "In ~50 km" : "Buiten / onbekend"}
+          value={dossier.inRegion ? "In regio (~100 km)" : "Buiten / onbekend"}
         />
         <Fact
           label="Bron"

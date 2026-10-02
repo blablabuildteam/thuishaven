@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   APOLLO_EMPLOYEE_RANGES,
@@ -17,6 +17,7 @@ import {
   readyDistanceStops,
   sliceKey,
   slicesForCriteria,
+  zoneSliceStats,
   type ApolloSearchCriteria,
 } from "@/lib/integrations/apollo/criteria";
 import {
@@ -117,6 +118,17 @@ export function ListFillWorkbench({
   const activeKw = keywordKey(keywordTags);
   const selectedSlices = slicesForCriteria(activeCriteria);
   const selectedKeys = new Set(selectedSlices.map((s) => s.key));
+  const distanceIdx = distanceIndexForPreset(criteria.placePreset);
+
+  function mergeCoverage(d: Record<string, unknown>) {
+    if (!Array.isArray(d.coverage)) return;
+    const states = d.coverage as SliceState[];
+    setCoverage((prev) => {
+      const next = { ...prev };
+      for (const s of states) next[s.key] = s;
+      return next;
+    });
+  }
 
   const plan = (() => {
     let uncounted = 0;
@@ -125,11 +137,19 @@ export function ListFillWorkbench({
     let doneSlices = 0;
     let total = 0;
     let fetched = 0;
+    let created = 0;
+    let remaining = 0;
     for (const s of selectedSlices) {
       const st = coverage[s.key];
       if (!st || st.total == null) uncounted += 1;
-      else total += st.total;
-      if (st) fetched += st.seen;
+      else {
+        total += st.total;
+        remaining += st.done ? 0 : Math.max(0, st.total - st.seen);
+      }
+      if (st) {
+        fetched += st.seen;
+        created += st.created;
+      }
       const left = pagesLeftFor(st);
       if (left === 0) doneSlices += 1;
       else if (left == null) unknownSlices += 1;
@@ -142,9 +162,119 @@ export function ListFillWorkbench({
       doneSlices,
       total,
       fetched,
+      created,
+      remaining: uncounted > 0 ? null : remaining,
       allDone: doneSlices === selectedSlices.length,
     };
   })();
+
+  /** Incremental Apollo totals per distance stop (current mdw + keywords). */
+  const distanceImpact = useMemo(() => {
+    const kw = keywordTags;
+    return readyDistanceStops().map((stop) => {
+      const zone = stop.outerZone;
+      if (!zone) {
+        return { stop, apollo: null as number | null, remaining: null as number | null, created: 0, uncounted: 0 };
+      }
+      const stats = zoneSliceStats(zone, criteria.employeeRanges, kw, coverage);
+      return {
+        stop,
+        apollo: stats.apolloTotal,
+        remaining: stats.remaining,
+        created: stats.created,
+        uncounted: stats.uncounted,
+      };
+    });
+  }, [criteria.employeeRanges, keywordTags, coverage]);
+
+  const selectionImpact = useMemo(() => {
+    let cumulativeApollo = 0;
+    let cumulativeKnown = true;
+    let outerExtra: number | null = 0;
+    let outerKnown = true;
+    const selectedStop = readyDistanceStops()[distanceIdx];
+    for (const row of distanceImpact) {
+      const idx = readyDistanceStops().findIndex(
+        (s) => s.preset === row.stop.preset,
+      );
+      if (idx < 0 || idx > distanceIdx) continue;
+      if (row.apollo == null) {
+        cumulativeKnown = false;
+      } else {
+        cumulativeApollo += row.apollo;
+      }
+      if (idx === distanceIdx && row.stop.preset !== "amsterdam") {
+        if (row.remaining == null && row.apollo == null) {
+          outerKnown = false;
+          outerExtra = null;
+        } else if (row.remaining != null) {
+          outerExtra = row.remaining;
+        } else if (row.apollo != null) {
+          // Counted but not drained yet — remaining unknown precisely; use apollo - created as upper bound on "new to us"
+          outerExtra = Math.max(0, row.apollo - row.created);
+        }
+      }
+    }
+    return {
+      selectedStop,
+      cumulativeApollo: cumulativeKnown ? cumulativeApollo : null,
+      alreadyNew: plan.created,
+      stillUnknown: plan.remaining,
+      outerExtra: outerKnown ? outerExtra : null,
+      uncounted: plan.uncounted,
+    };
+  }, [distanceImpact, distanceIdx, plan.created, plan.remaining, plan.uncounted]);
+
+  const countInFlight = useRef(false);
+  const [counting, setCounting] = useState(false);
+
+  // Auto-count missing slices for the full ~100 km map under the current
+  // employee/keyword filters, so every distance chip can show its +N.
+  useEffect(() => {
+    if (!apolloReady || pending) return;
+    const previewCriteria = {
+      ...criteriaBody(),
+      placePreset: "far" as const,
+    };
+    const missing = slicesForCriteria(previewCriteria).filter((s) => {
+      const st = coverage[s.key];
+      return !st || st.total == null;
+    }).length;
+    if (missing === 0) return;
+
+    const handle = window.setTimeout(() => {
+      if (countInFlight.current) return;
+      countInFlight.current = true;
+      setCounting(true);
+      void fetch("/api/outreach/discover", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ countOnly: true, criteria: previewCriteria }),
+      })
+        .then(async (res) => {
+          const data = (await res.json().catch(() => ({}))) as Record<
+            string,
+            unknown
+          >;
+          if (res.ok) mergeCoverage(data);
+        })
+        .finally(() => {
+          countInFlight.current = false;
+          setCounting(false);
+        });
+    }, 650);
+    return () => window.clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    apolloReady,
+    pending,
+    criteria.employeeRanges.join(","),
+    keywordTags.join(","),
+    // Re-run when coverage gains totals (or still has gaps for far).
+    Object.values(coverage)
+      .filter((s) => s.total != null)
+      .length,
+  ]);
 
   const pastSearches = useMemo(() => {
     const byKw = new Map<string, { keywords: string[]; slices: SliceState[] }>();
@@ -233,23 +363,12 @@ export function ListFillWorkbench({
 
   const empSpan = employeeIndexSpan(criteria.employeeRanges);
   const empBounds = boundsFromEmployeeRanges(criteria.employeeRanges);
-  const distanceIdx = distanceIndexForPreset(criteria.placePreset);
 
   function setEmployeeSpan(lo: number, hi: number) {
     setCriteria((c) => ({
       ...c,
       employeeRanges: rangesFromIndexSpan(lo, hi),
     }));
-  }
-
-  function mergeCoverage(d: Record<string, unknown>) {
-    if (!Array.isArray(d.coverage)) return;
-    const states = d.coverage as SliceState[];
-    setCoverage((prev) => {
-      const next = { ...prev };
-      for (const s of states) next[s.key] = s;
-      return next;
-    });
   }
 
   function run(
@@ -381,35 +500,103 @@ export function ListFillWorkbench({
           alleen de extra ring.
         </p>
 
-        <div className="mt-5 max-w-md">
+        <div className="mt-5 max-w-xl">
           <p className="text-[11px] uppercase tracking-wider text-text-dim">
             Afstand vanaf Amsterdam
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {readyDistanceStops().map((s, i) => (
-              <button
-                key={s.preset}
-                type="button"
-                disabled={pending}
-                onClick={() =>
-                  setCriteria((c) => ({
-                    ...c,
-                    placePreset: s.preset!,
-                  }))
-                }
-                className={
-                  distanceIdx === i
-                    ? "border border-accent bg-accent/10 px-3 py-1.5 text-sm"
-                    : "border border-border px-3 py-1.5 text-sm text-text-muted hover:border-accent"
-                }
-              >
-                {s.label}
-              </button>
-            ))}
+            {distanceImpact.map((row, i) => {
+              const delta =
+                row.apollo == null
+                  ? counting
+                    ? "…"
+                    : "?"
+                  : i === 0
+                    ? `~${row.apollo.toLocaleString("nl-NL")}`
+                    : `+${row.apollo.toLocaleString("nl-NL")}`;
+              return (
+                <button
+                  key={row.stop.preset}
+                  type="button"
+                  disabled={pending}
+                  onClick={() =>
+                    setCriteria((c) => ({
+                      ...c,
+                      placePreset: row.stop.preset,
+                    }))
+                  }
+                  className={
+                    distanceIdx === i
+                      ? "border border-accent bg-accent/10 px-3 py-1.5 text-left text-sm"
+                      : "border border-border px-3 py-1.5 text-left text-sm text-text-muted hover:border-accent"
+                  }
+                >
+                  <span className="block">{row.stop.label}</span>
+                  <span
+                    className={`mt-0.5 block text-[11px] tabular-nums ${
+                      distanceIdx === i ? "text-text" : "text-text-dim"
+                    }`}
+                  >
+                    {delta}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-          <p className="mt-1.5 text-[11px] text-text-dim">
-            Later ook ~100 km — nu max ~50 km.
-          </p>
+          <div className="mt-3 space-y-1 text-sm text-text-muted">
+            <p>
+              Selectie tot{" "}
+              <strong className="text-text">
+                {selectionImpact.selectedStop?.label ?? "—"}
+              </strong>
+              {selectionImpact.cumulativeApollo != null ? (
+                <>
+                  :{" "}
+                  <strong className="text-text">
+                    ~{selectionImpact.cumulativeApollo.toLocaleString("nl-NL")}
+                  </strong>{" "}
+                  bij Apollo
+                </>
+              ) : counting ? (
+                <> — groepen tellen…</>
+              ) : (
+                <> — nog niet geteld</>
+              )}
+            </p>
+            {selectionImpact.alreadyNew > 0 ? (
+              <p>
+                Daarvan al{" "}
+                <strong className="text-text">
+                  {selectionImpact.alreadyNew.toLocaleString("nl-NL")}
+                </strong>{" "}
+                nieuw op onze lijst gezet.
+              </p>
+            ) : null}
+            {selectionImpact.stillUnknown != null &&
+            selectionImpact.stillUnknown > 0 ? (
+              <p>
+                Nog ongeveer{" "}
+                <strong className="text-text">
+                  {selectionImpact.stillUnknown.toLocaleString("nl-NL")}
+                </strong>{" "}
+                te bekijken die we nog niet hebben opgehaald
+                {distanceIdx > 0 &&
+                selectionImpact.outerExtra != null &&
+                selectionImpact.outerExtra > 0
+                  ? ` · waarvan ~${selectionImpact.outerExtra.toLocaleString("nl-NL")} in de buitenste ring`
+                  : ""}
+                .
+              </p>
+            ) : plan.allDone && selectionImpact.cumulativeApollo != null ? (
+              <p>Alles uit deze filters staat al op de lijst (of was duplicaat).</p>
+            ) : null}
+            {counting ? (
+              <p className="text-[11px] text-text-dim">
+                Apollo telt ontbrekende zones voor deze filters (1 credit per
+                zone × grootte)…
+              </p>
+            ) : null}
+          </div>
         </div>
 
         <div className="mt-6 max-w-md">

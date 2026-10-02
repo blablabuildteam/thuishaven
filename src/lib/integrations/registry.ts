@@ -347,7 +347,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     name: "Apollo doelgroep",
     tool: "outreach",
     description:
-      "Doelgroep ophalen: 500–5.000 medewerkers, HQ Amsterdam + ~50 km. Key staat in Vercel. 1 credit per 100 bedrijven.",
+      "Doelgroep ophalen: 500–5.000 medewerkers, HQ Amsterdam + tot ~100 km. Key staat in Vercel. 1 credit per 100 bedrijven.",
     envKeys: ["APOLLO_API_KEY"],
     askFromClient: ["Apollo API-key (staat in Vercel)"],
     verifyHint: "auth/health — geen search-credits",

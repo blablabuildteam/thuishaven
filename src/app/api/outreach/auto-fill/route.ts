@@ -17,7 +17,9 @@ const schema = z.object({
   criteria: z
     .object({
       employeeRanges: z.array(z.string()).max(8).optional(),
-      placePreset: z.enum(["ring", "kern", "amsterdam"]).optional(),
+      placePreset: z
+        .enum(["ring", "kern", "amsterdam", "wide", "far"])
+        .optional(),
       keywordTags: z.array(z.string()).max(8).optional(),
     })
     .optional(),

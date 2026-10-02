@@ -67,6 +67,85 @@ export const AMS_REGION_PLACES = [
   "Aalsmeerderbrug",
 ] as const;
 
+/** Outer ring ~50–75 km (Apollo wide zone). */
+export const AMS_WIDE_PLACES = [
+  "Leiden",
+  "Oegstgeest",
+  "Voorschoten",
+  "Wassenaar",
+  "Den Haag",
+  "s-Gravenhage",
+  "Voorburg",
+  "Rijswijk",
+  "Delft",
+  "Zoetermeer",
+  "Rotterdam",
+  "Schiedam",
+  "Capelle aan den IJssel",
+  "Gouda",
+  "Bodegraven",
+  "Woerden",
+  "Amersfoort",
+  "Soest",
+  "Zeist",
+  "Bunnik",
+  "Houten",
+  "Nieuwegein",
+  "IJsselstein",
+  "Vianen",
+  "Alkmaar",
+  "Heerhugowaard",
+  "Bergen",
+  "Egmond",
+  "Lelystad",
+  "Harderwijk",
+  "Alphen aan den Rijn",
+  "Katwijk",
+  "Noordwijk",
+  "Hillegom",
+  "Lisse",
+  "Sassenheim",
+] as const;
+
+/** Outer ring ~75–100 km (Apollo far zone). */
+export const AMS_FAR_PLACES = [
+  "Apeldoorn",
+  "Deventer",
+  "Zwolle",
+  "Kampen",
+  "Arnhem",
+  "Nijmegen",
+  "Wageningen",
+  "Ede",
+  "Veenendaal",
+  "Tiel",
+  "Den Bosch",
+  "'s-Hertogenbosch",
+  "Tilburg",
+  "Breda",
+  "Dordrecht",
+  "Gorinchem",
+  "Zwijndrecht",
+  "Barendrecht",
+  "Spijkenisse",
+  "Vlaardingen",
+  "Maassluis",
+  "Hellevoetsluis",
+  "Middelburg",
+  "Goes",
+  "Enkhuizen",
+  "Hoorn",
+  "Medemblik",
+  "Den Helder",
+] as const;
+
+/** Full allowlist for in-region checks (Amsterdam → ~100 km). */
+export const AMS_ALL_REGION_PLACES = [
+  ...AMS_REGION_PLACES,
+  ...AMS_WIDE_PLACES,
+  ...AMS_FAR_PLACES,
+] as const;
+
 export const DEFAULT_MIN_EMPLOYEES = 500;
 export const DEFAULT_MAX_EMPLOYEES = 5000;
 export const JUBILEE_YEARS = [5, 10, 15, 20, 25, 50] as const;

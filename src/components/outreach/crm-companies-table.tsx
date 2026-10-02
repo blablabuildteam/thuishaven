@@ -396,7 +396,7 @@ export function CrmCompaniesTable({ rows }: Props) {
             className="mt-1.5 block w-full min-w-[9rem] border border-border bg-bg px-3 py-2 text-sm text-text"
           >
             <option value="all">Alle regio’s</option>
-            <option value="in">In ~50 km ({counts.in})</option>
+            <option value="in">In regio ({counts.in})</option>
             <option value="out">Buiten ({counts.out})</option>
             <option value="unknown">Plaats onbekend</option>
           </select>

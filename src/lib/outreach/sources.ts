@@ -34,7 +34,7 @@ export const PROSPECT_SOURCES: ProspectSource[] = [
     id: "apollo",
     name: "Apollo organisatie-zoek",
     description:
-      "Doelgroep ophalen: 500–5.000 medewerkers, HQ in Amsterdam + ~50 km. Enige watervaste intake — geen wiki, geen KvK-targeting, geen LinkedIn-scrape.",
+      "Doelgroep ophalen: 500–5.000 medewerkers, HQ in Amsterdam + tot ~100 km. Enige watervaste intake — geen wiki, geen KvK-targeting, geen LinkedIn-scrape.",
     whatYouGet: [
       "Bedrijfsnaam + website",
       "Headcount-schatting (concern, geen vestiging)",

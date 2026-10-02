@@ -3,8 +3,8 @@
  * Maps 1:1 onto mixed_companies/search filters we actually send.
  */
 
-import { AMS_REGION_PLACES } from "@/lib/integrations/kvk/discovery";
-import { DOELGROEP, isCityInRegion } from "@/lib/outreach/doelgroep";
+import { AMS_REGION_PLACES, AMS_WIDE_PLACES, AMS_FAR_PLACES } from "@/lib/integrations/kvk/discovery";
+import { isCityInRegion } from "@/lib/outreach/doelgroep";
 
 type CompanyWithCity = { city?: string | null };
 
@@ -20,7 +20,7 @@ export const APOLLO_EMPLOYEE_RANGES = [
 export type ApolloEmployeeRangeId =
   (typeof APOLLO_EMPLOYEE_RANGES)[number]["id"];
 
-export type PlacePreset = "ring" | "kern" | "amsterdam";
+export type PlacePreset = "amsterdam" | "kern" | "ring" | "wide" | "far";
 
 /** Tight core around Amsterdam (~15–25 km). */
 export const AMS_KERN_PLACES = [
@@ -54,13 +54,19 @@ export const DEFAULT_APOLLO_CRITERIA: ApolloSearchCriteria = {
 export function placesForPreset(preset: PlacePreset): readonly string[] {
   if (preset === "amsterdam") return ["Amsterdam"];
   if (preset === "kern") return AMS_KERN_PLACES;
-  return DOELGROEP.places.length ? DOELGROEP.places : AMS_REGION_PLACES;
+  if (preset === "ring") return AMS_REGION_PLACES;
+  if (preset === "wide") {
+    return [...AMS_REGION_PLACES, ...AMS_WIDE_PLACES];
+  }
+  return [...AMS_REGION_PLACES, ...AMS_WIDE_PLACES, ...AMS_FAR_PLACES];
 }
 
 export function placePresetLabel(preset: PlacePreset): string {
   if (preset === "amsterdam") return "Alleen Amsterdam";
   if (preset === "kern") return "Kern (~15–25 km)";
-  return DOELGROEP.regionLabel;
+  if (preset === "ring") return "Amsterdam + ~50 km";
+  if (preset === "wide") return "Amsterdam + ~75 km";
+  return "Amsterdam + ~100 km";
 }
 
 export function normalizeCriteria(
@@ -73,7 +79,9 @@ export function normalizeCriteria(
   const placePreset: PlacePreset =
     raw?.placePreset === "kern" ||
     raw?.placePreset === "amsterdam" ||
-    raw?.placePreset === "ring"
+    raw?.placePreset === "ring" ||
+    raw?.placePreset === "wide" ||
+    raw?.placePreset === "far"
       ? raw.placePreset
       : "ring";
   const keywordTags = (raw?.keywordTags ?? [])
@@ -88,7 +96,7 @@ export function normalizeCriteria(
   };
 }
 
-/** Drop companies whose Apollo city is known and outside the ~50 km allowlist. */
+/** Drop companies whose Apollo city is known and outside the region allowlist. */
 export function splitByRegion<T extends CompanyWithCity>(companies: T[]): {
   inRegion: T[];
   outOfRegion: T[];
@@ -118,7 +126,7 @@ export function keepForIntake<T extends CompanyWithCity>(companies: T[]): T[] {
  * Concentric search zones. A place preset is the union of zones up to that
  * distance, so widening the radius only adds the outer zone(s) to fetch.
  */
-export type SearchZone = "ams" | "kern" | "ring";
+export type SearchZone = "ams" | "kern" | "ring" | "wide" | "far";
 
 export const SEARCH_ZONES: { id: SearchZone; label: string; hint: string }[] = [
   { id: "ams", label: "Amsterdam", hint: "Alleen de stad zelf" },
@@ -132,12 +140,24 @@ export const SEARCH_ZONES: { id: SearchZone; label: string; hint: string }[] = [
     label: "Ring · 25–50 km",
     hint: "Haarlem, Almere, Hilversum, Utrecht, Purmerend…",
   },
+  {
+    id: "wide",
+    label: "Wijd · 50–75 km",
+    hint: "Leiden, Den Haag, Rotterdam, Amersfoort, Alkmaar…",
+  },
+  {
+    id: "far",
+    label: "Ver · 75–100 km",
+    hint: "Apeldoorn, Arnhem, Den Bosch, Tilburg, Zwolle…",
+  },
 ];
 
 export function zonesForPreset(preset: PlacePreset): SearchZone[] {
   if (preset === "amsterdam") return ["ams"];
   if (preset === "kern") return ["ams", "kern"];
-  return ["ams", "kern", "ring"];
+  if (preset === "ring") return ["ams", "kern", "ring"];
+  if (preset === "wide") return ["ams", "kern", "ring", "wide"];
+  return ["ams", "kern", "ring", "wide", "far"];
 }
 
 export function placesForZone(zone: SearchZone): string[] {
@@ -146,8 +166,14 @@ export function placesForZone(zone: SearchZone): string[] {
   if (zone === "kern") {
     return AMS_KERN_PLACES.filter((p) => p !== "Amsterdam");
   }
-  const inner = new Set(AMS_KERN_PLACES.map(lower));
-  return placesForPreset("ring").filter((p) => !inner.has(lower(p)));
+  if (zone === "ring") {
+    const inner = new Set(AMS_KERN_PLACES.map(lower));
+    return placesForPreset("ring").filter((p) => !inner.has(lower(p)));
+  }
+  if (zone === "wide") {
+    return [...AMS_WIDE_PLACES];
+  }
+  return [...AMS_FAR_PLACES];
 }
 
 export function zoneLabel(zone: SearchZone): string {
@@ -200,25 +226,26 @@ export function criteriaSummary(c: ApolloSearchCriteria): string {
   return `${placePresetLabel(c.placePreset)} · ${sizes}${tags}`;
 }
 
-/** Slider stops for distance (concentric Apollo zones). Extensible later. */
+/** Slider stops for distance (concentric Apollo zones). */
 export type DistanceSliderStop = {
   km: number;
-  /** null = coming soon (UI only; not selectable yet). */
-  preset: PlacePreset | null;
+  preset: PlacePreset;
   label: string;
   ready: boolean;
+  /** Outer SearchZone unlocked by this stop (null = Amsterdam only). */
+  outerZone: SearchZone | null;
 };
 
 export const DISTANCE_SLIDER_STOPS: DistanceSliderStop[] = [
-  { km: 0, preset: "amsterdam", label: "Amsterdam", ready: true },
-  { km: 25, preset: "kern", label: "~25 km", ready: true },
-  { km: 50, preset: "ring", label: "~50 km", ready: true },
-  // Later: meer plaatsen in DOELGROEP + Apollo-zone, dan ready: true.
-  { km: 100, preset: null, label: "~100 km", ready: false },
+  { km: 0, preset: "amsterdam", label: "Amsterdam", ready: true, outerZone: "ams" },
+  { km: 25, preset: "kern", label: "~25 km", ready: true, outerZone: "kern" },
+  { km: 50, preset: "ring", label: "~50 km", ready: true, outerZone: "ring" },
+  { km: 75, preset: "wide", label: "~75 km", ready: true, outerZone: "wide" },
+  { km: 100, preset: "far", label: "~100 km", ready: true, outerZone: "far" },
 ];
 
 export function readyDistanceStops(): DistanceSliderStop[] {
-  return DISTANCE_SLIDER_STOPS.filter((s) => s.ready && s.preset);
+  return DISTANCE_SLIDER_STOPS.filter((s) => s.ready);
 }
 
 export function distanceIndexForPreset(preset: PlacePreset): number {
@@ -231,6 +258,49 @@ export function presetForDistanceIndex(index: number): PlacePreset {
   const ready = readyDistanceStops();
   const stop = ready[Math.max(0, Math.min(ready.length - 1, index))];
   return stop?.preset ?? "ring";
+}
+
+/**
+ * Apollo match totals for one outer ring under the current employee/keyword
+ * filters — used to show “+N bij deze afstand” while tweaking the UI.
+ */
+export function zoneSliceStats(
+  zone: SearchZone,
+  employeeRanges: string[],
+  keywords: string[],
+  coverage: Record<string, { total: number | null; created: number; seen: number; done: boolean }>,
+): {
+  apolloTotal: number | null;
+  created: number;
+  remaining: number | null;
+  uncounted: number;
+  slices: number;
+} {
+  let apolloTotal = 0;
+  let created = 0;
+  let remaining = 0;
+  let uncounted = 0;
+  let known = 0;
+  for (const range of employeeRanges) {
+    const key = sliceKey(zone, range, keywords);
+    const st = coverage[key];
+    if (!st || st.total == null) {
+      uncounted += 1;
+      continue;
+    }
+    known += 1;
+    apolloTotal += st.total;
+    created += st.created;
+    if (st.done) continue;
+    remaining += Math.max(0, st.total - st.seen);
+  }
+  return {
+    apolloTotal: known === 0 && uncounted > 0 ? null : apolloTotal,
+    created,
+    remaining: uncounted > 0 ? null : remaining,
+    uncounted,
+    slices: employeeRanges.length,
+  };
 }
 
 /** Parsed Apollo headcount buckets for slider ↔ API mapping. */
