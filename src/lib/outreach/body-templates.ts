@@ -151,11 +151,12 @@ export function getAppBaseUrl(): string {
   const fromEnv =
     process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "").trim() ||
     process.env.AUTH_URL?.replace(/\/$/, "").trim();
-  if (fromEnv) return fromEnv;
+  // tools.thuishaven.nl wijst nog niet naar Vercel — vermijd 404 in mails.
+  if (fromEnv && !fromEnv.includes("tools.thuishaven.nl")) return fromEnv;
   if (process.env.VERCEL_URL) {
     return `https://${process.env.VERCEL_URL.replace(/\/$/, "")}`;
   }
-  return "http://localhost:3000";
+  return "https://thuishaven.vercel.app";
 }
 
 export function getBrochureUrl(): string {
