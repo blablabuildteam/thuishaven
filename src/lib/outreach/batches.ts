@@ -33,6 +33,12 @@ export type BatchEmailRow = {
   variantLabel: string | null;
   status: string;
   createdAt: string;
+  /** Suggested Amsterdam send day (YYYY-MM-DD) from cadence. */
+  suggestedDay: string | null;
+  /** Suggested Amsterdam time HH:MM. */
+  suggestedTime: string | null;
+  /** e.g. "di 6 okt · 09:34" */
+  suggestedLabel: string | null;
 };
 
 export type OutreachBatchSummary = {
@@ -61,9 +67,101 @@ export type UnbatchedDraft = {
   createdAt: string;
 };
 
+/** One suggested send moment across all bakjes (Wachtrij planning). */
+export type QueueScheduleItem = {
+  day: string;
+  dayLabel: string;
+  weekdayLabel: string;
+  time: string;
+  batchId: string;
+  batchName: string;
+  emailId: string;
+  companyName: string;
+  subject: string;
+  variantLabel: string | null;
+};
+
+export type QueueScheduleDay = {
+  day: string;
+  dayLabel: string;
+  weekdayLabel: string;
+  items: QueueScheduleItem[];
+};
+
 function variantLabel(key: string | null): string | null {
   if (!key) return null;
   return OUTREACH_VARIANTS.find((v) => v.id === key)?.name ?? key;
+}
+
+function flattenSlotTimes(slots: SendSlotSuggestion[]): Array<{
+  day: string;
+  dayLabel: string;
+  weekdayLabel: string;
+  time: string;
+}> {
+  const out: Array<{
+    day: string;
+    dayLabel: string;
+    weekdayLabel: string;
+    time: string;
+  }> = [];
+  for (const slot of slots) {
+    for (const time of slot.times) {
+      out.push({
+        day: slot.day,
+        dayLabel: slot.label,
+        weekdayLabel: slot.weekdayLabel,
+        time,
+      });
+    }
+  }
+  return out;
+}
+
+function buildQueueSchedule(batches: OutreachBatchSummary[]): QueueScheduleDay[] {
+  const items: QueueScheduleItem[] = [];
+  for (const batch of batches) {
+    if (batch.status === "sent") continue;
+    for (const mail of batch.emails) {
+      if (!mail.suggestedDay || !mail.suggestedTime) continue;
+      items.push({
+        day: mail.suggestedDay,
+        dayLabel: formatDayShort(mail.suggestedDay),
+        weekdayLabel:
+          ["zo", "ma", "di", "wo", "do", "vr", "za"][
+            new Date(`${mail.suggestedDay}T12:00:00+02:00`).getDay()
+          ] ?? "",
+        time: mail.suggestedTime,
+        batchId: batch.id,
+        batchName: batch.name,
+        emailId: mail.emailId,
+        companyName: mail.companyName,
+        subject: mail.subject,
+        variantLabel: mail.variantLabel,
+      });
+    }
+  }
+  items.sort((a, b) =>
+    a.day === b.day
+      ? a.time.localeCompare(b.time) || a.companyName.localeCompare(b.companyName)
+      : a.day.localeCompare(b.day),
+  );
+
+  const byDay = new Map<string, QueueScheduleDay>();
+  for (const item of items) {
+    let day = byDay.get(item.day);
+    if (!day) {
+      day = {
+        day: item.day,
+        dayLabel: item.dayLabel,
+        weekdayLabel: item.weekdayLabel,
+        items: [],
+      };
+      byDay.set(item.day, day);
+    }
+    day.items.push(item);
+  }
+  return [...byDay.values()];
 }
 
 export function defaultBatchName(mailCount: number, at = new Date()): string {
@@ -105,6 +203,8 @@ export async function listBatchesWithEmails(): Promise<{
   unbatchedDrafts: UnbatchedDraft[];
   liveSendBlockReason: string | null;
   cadenceLabel: string;
+  cadenceRationale: string;
+  schedule: QueueScheduleDay[];
 }> {
   if (!hasDatabase()) {
     return {
@@ -112,6 +212,8 @@ export async function listBatchesWithEmails(): Promise<{
       unbatchedDrafts: [],
       liveSendBlockReason: outreachLiveSendBlockReason(),
       cadenceLabel: "",
+      cadenceRationale: "",
+      schedule: [],
     };
   }
   const db = getDb();
@@ -162,7 +264,7 @@ export async function listBatchesWithEmails(): Promise<{
       .limit(40),
   ]);
 
-  const byBatch = new Map<string, BatchEmailRow[]>();
+  const byBatch = new Map<string, Omit<BatchEmailRow, "suggestedDay" | "suggestedTime" | "suggestedLabel">[]>();
   for (const row of mailRows) {
     if (!row.batchId) continue;
     const list = byBatch.get(row.batchId) ?? [];
@@ -182,20 +284,34 @@ export async function listBatchesWithEmails(): Promise<{
   }
 
   const batches: OutreachBatchSummary[] = batchRows.map((b) => {
-    const emails = byBatch.get(b.id) ?? [];
+    const rawEmails = byBatch.get(b.id) ?? [];
     const variantKeys = [
       ...new Set(
-        emails
+        rawEmails
           .map((e) => e.variantKey)
           .filter((k): k is string => Boolean(k)),
       ),
     ];
     const sendSuggestion = suggestSendSlots({
-      mailCount: emails.length,
+      mailCount: rawEmails.length,
       sendWeekdays: settings.sendWeekdays,
       mailsPerDay: settings.mailsPerDay,
       preferredHour: settings.preferredHour,
       fromDay: b.plannedStartDay,
+      seed: b.id,
+    });
+    const flatTimes = flattenSlotTimes(sendSuggestion);
+    const emails: BatchEmailRow[] = rawEmails.map((mail, idx) => {
+      const slot = flatTimes[idx] ?? null;
+      const suggestedLabel = slot
+        ? `${slot.weekdayLabel} ${slot.dayLabel} · ${slot.time}`
+        : null;
+      return {
+        ...mail,
+        suggestedDay: slot?.day ?? null,
+        suggestedTime: slot?.time ?? null,
+        suggestedLabel,
+      };
     });
     const sendSuggestionLabel =
       sendSuggestion.length === 0
@@ -236,6 +352,8 @@ export async function listBatchesWithEmails(): Promise<{
     })),
     liveSendBlockReason: outreachLiveSendBlockReason(),
     cadenceLabel: formatCadenceSummary(settings),
+    cadenceRationale: settings.cadenceRationale,
+    schedule: buildQueueSchedule(batches),
   };
 }
 

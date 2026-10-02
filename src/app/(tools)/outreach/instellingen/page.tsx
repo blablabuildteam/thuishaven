@@ -2,10 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { SectionHeader } from "@/components/ui/section-header";
 import { OutreachSettingsForm } from "@/components/outreach/outreach-settings-form";
-import {
-  formatCadenceSummary,
-  loadOutreachSettings,
-} from "@/lib/outreach/settings";
+import { loadOutreachSettings } from "@/lib/outreach/settings";
 
 export const metadata = { title: "Instellingen · Outreach" };
 export const dynamic = "force-dynamic";
@@ -22,11 +19,8 @@ export default async function OutreachSettingsPage() {
       <SectionHeader
         eyebrow="Alleen admin"
         title="Instellingen"
-        description="Afzender, reply-to en verzendritme. Thuishaven vult dit in vóór live send — de Wachtrij gebruikt het ritme voor planningsuggesties."
+        description="Afzender en reply-to. Het verzendritme bepalen wij op basis van data — dat staat alleen ter info."
       />
-      <p className="mb-6 text-sm text-text-muted">
-        Huidig ritme: {formatCadenceSummary(settings)}
-      </p>
       <OutreachSettingsForm initial={settings} />
     </div>
   );

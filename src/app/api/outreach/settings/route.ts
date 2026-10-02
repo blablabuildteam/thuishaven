@@ -32,9 +32,6 @@ export async function PUT(request: Request) {
     replyToName: z.string().min(1).max(120),
     allowedSenderEmails: z.string().min(3).max(500),
     testRecipient: z.string().email(),
-    sendWeekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7),
-    mailsPerDay: z.number().int().min(1).max(40),
-    preferredHour: z.number().int().min(0).max(23),
     notes: z.string().max(2000).nullable().optional(),
   });
   const parsed = schema.safeParse(body);

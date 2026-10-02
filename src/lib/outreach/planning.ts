@@ -5,6 +5,7 @@
 
 import { listExclusions, listOutreachEmails, listProspects } from "./data";
 import { openAvailabilityDaysLive } from "./availability";
+import { resolveOutreachCadence } from "./cadence";
 import { outreachSendBlockReason } from "./send-policy";
 import { OUTREACH_VARIANTS } from "./tone";
 
@@ -14,19 +15,6 @@ export type CadencePlan = {
   mailsPerDay: number;
   batchLabel: string;
   notes: string[];
-};
-
-/** Conservatief start-ritme voor bedrijf-stream (handmatig goedkeuren later). */
-export const DEFAULT_AGENCY_CADENCE: CadencePlan = {
-  sendWeekdays: [2, 4], // di + do
-  mailsPerDay: 3,
-  batchLabel: "Bedrijven · doelgroep",
-  notes: [
-    "Alleen bedrijven met e-mail, niet op uitsluitingslijst, geen KvK non-mailing.",
-    "Partnerbureaus staan hier niet — die mail je niet koud.",
-    "Geen automatische send — jij keurt batches goed in dit dashboard.",
-    "Max 3 mails/dag · di & do → ~6/week, rustig opbouwen.",
-  ],
 };
 
 export type PlannedSlot = {
@@ -94,15 +82,31 @@ function nextSendDates(
 }
 
 export async function getOutreachPlanningSnapshot(): Promise<OutreachPlanningSnapshot> {
-  const [{ rows: prospects }, { rows: exclusions }, { rows: emails }, openSlots] =
-    await Promise.all([
-      listProspects({ type: "company" }),
-      listExclusions(),
-      listOutreachEmails(100),
-      openAvailabilityDaysLive(),
-    ]);
+  const [
+    { rows: prospects },
+    { rows: exclusions },
+    { rows: emails },
+    openSlots,
+    resolved,
+  ] = await Promise.all([
+    listProspects({ type: "company" }),
+    listExclusions(),
+    listOutreachEmails(100),
+    openAvailabilityDaysLive(),
+    resolveOutreachCadence(),
+  ]);
 
-  const cadence = DEFAULT_AGENCY_CADENCE;
+  const cadence: CadencePlan = {
+    sendWeekdays: resolved.sendWeekdays,
+    mailsPerDay: resolved.mailsPerDay,
+    batchLabel: "Bedrijven · doelgroep",
+    notes: [
+      "Alleen bedrijven met e-mail, niet op uitsluitingslijst, geen KvK non-mailing.",
+      "Partnerbureaus staan hier niet — die mail je niet koud.",
+      "Geen automatische send — jij keurt batches goed in dit dashboard.",
+      resolved.rationale,
+    ],
+  };
   const block = outreachSendBlockReason();
 
   const queue = prospects.map((p) => {

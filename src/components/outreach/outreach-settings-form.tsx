@@ -4,14 +4,6 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { OutreachSettings } from "@/lib/outreach/settings";
 
-const WEEKDAY_OPTIONS: { id: number; label: string }[] = [
-  { id: 1, label: "ma" },
-  { id: 2, label: "di" },
-  { id: 3, label: "wo" },
-  { id: 4, label: "do" },
-  { id: 5, label: "vr" },
-];
-
 type Props = {
   initial: OutreachSettings;
 };
@@ -30,28 +22,25 @@ export function OutreachSettingsForm({ initial }: Props) {
     initial.allowedSenderEmails.join(", "),
   );
   const [testRecipient, setTestRecipient] = useState(initial.testRecipient);
-  const [sendWeekdays, setSendWeekdays] = useState<number[]>(
-    initial.sendWeekdays,
-  );
-  const [mailsPerDay, setMailsPerDay] = useState(initial.mailsPerDay);
-  const [preferredHour, setPreferredHour] = useState(initial.preferredHour);
   const [notes, setNotes] = useState(initial.notes ?? "");
 
-  function toggleDay(day: number) {
-    setSendWeekdays((prev) =>
-      prev.includes(day)
-        ? prev.filter((d) => d !== day)
-        : [...prev, day].sort((a, b) => a - b),
-    );
-  }
+  const dayLabel = initial.sendWeekdays
+    .map((d) => ["", "ma", "di", "wo", "do", "vr", "za", "zo"][d] ?? String(d))
+    .join(" · ");
+  const perWeek = initial.sendWeekdays.length * initial.mailsPerDay;
+  const windowStart = Math.max(8 * 60 + 20, initial.preferredHour * 60 - 25);
+  const windowEnd = Math.min(11 * 60 + 30, initial.preferredHour * 60 + 85);
+  const fmt = (m: number) =>
+    `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  const cadenceLine = `Max ${initial.mailsPerDay}/dag op ${dayLabel} (~${perWeek}/week) · venster ${fmt(windowStart)}–${fmt(windowEnd)} · ${
+    initial.cadenceSource === "opens"
+      ? `eigen data (${initial.cadenceSampleOpens} opens)`
+      : "benchmark"
+  }`;
 
   async function onSave() {
     setError(null);
     setMessage(null);
-    if (sendWeekdays.length === 0) {
-      setError("Kies minstens één verzenddag");
-      return;
-    }
     const res = await fetch("/api/outreach/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -62,9 +51,6 @@ export function OutreachSettingsForm({ initial }: Props) {
         replyToName,
         allowedSenderEmails,
         testRecipient,
-        sendWeekdays,
-        mailsPerDay,
-        preferredHour,
         notes: notes.trim() || null,
       }),
     });
@@ -73,12 +59,24 @@ export function OutreachSettingsForm({ initial }: Props) {
       setError(data.error ?? "Opslaan mislukt");
       return;
     }
-    setMessage("Opgeslagen — geldt voor nieuwe testsends en de Wachtrij-planning.");
+    setMessage("Opgeslagen — geldt voor nieuwe testsends.");
     startTransition(() => router.refresh());
   }
 
   return (
     <div className="max-w-2xl space-y-8">
+      <section className="space-y-3 border border-border bg-surface p-4">
+        <h2 className="font-display text-xl tracking-[0.04em]">
+          Verzendritme
+        </h2>
+        <p className="text-sm text-text-muted">
+          Automatisch bepaald — geen handmatige knoppen. De Wachtrij gebruikt
+          dit voor planningsuggesties (nog geen auto-send).
+        </p>
+        <p className="text-sm">{cadenceLine}</p>
+        <p className="text-xs text-text-dim">{initial.cadenceRationale}</p>
+      </section>
+
       <section className="space-y-4 border border-border bg-surface p-4">
         <h2 className="font-display text-xl tracking-[0.04em]">Afzender</h2>
         <p className="text-sm text-text-muted">
@@ -134,62 +132,6 @@ export function OutreachSettingsForm({ initial }: Props) {
             onChange={(e) => setReplyToName(e.target.value)}
           />
         </label>
-      </section>
-
-      <section className="space-y-4 border border-border bg-surface p-4">
-        <h2 className="font-display text-xl tracking-[0.04em]">
-          Verzendritme
-        </h2>
-        <p className="text-sm text-text-muted">
-          Suggesties in de Wachtrij spreiden bakjes over deze dagen — nog geen
-          auto-send.
-        </p>
-        <div>
-          <p className="text-xs text-text-dim">Dagen</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {WEEKDAY_OPTIONS.map((d) => {
-              const on = sendWeekdays.includes(d.id);
-              return (
-                <button
-                  key={d.id}
-                  type="button"
-                  onClick={() => toggleDay(d.id)}
-                  className={
-                    on
-                      ? "border border-accent bg-accent/10 px-3 py-1.5 text-sm"
-                      : "border border-border px-3 py-1.5 text-sm text-text-muted"
-                  }
-                >
-                  {d.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-4">
-          <label className="block text-xs text-text-dim">
-            Max mails per dag
-            <input
-              type="number"
-              min={1}
-              max={40}
-              className="mt-1.5 w-24 border border-border bg-bg px-3 py-2 text-sm"
-              value={mailsPerDay}
-              onChange={(e) => setMailsPerDay(Number(e.target.value) || 1)}
-            />
-          </label>
-          <label className="block text-xs text-text-dim">
-            Voorkeurstijd (Amsterdam)
-            <input
-              type="number"
-              min={0}
-              max={23}
-              className="mt-1.5 w-24 border border-border bg-bg px-3 py-2 text-sm"
-              value={preferredHour}
-              onChange={(e) => setPreferredHour(Number(e.target.value) || 0)}
-            />
-          </label>
-        </div>
       </section>
 
       <section className="space-y-4 border border-border bg-surface p-4">

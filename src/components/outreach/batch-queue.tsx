@@ -191,7 +191,9 @@ export function BatchQueue({
               </label>
               {batch.mailCount > 0 ? (
                 <p className="max-w-xl text-sm text-text-muted">
-                  <span className="font-medium text-text">Suggestie: </span>
+                  <span className="font-medium text-text">
+                    Suggestie dit bakje:{" "}
+                  </span>
                   {batch.sendSuggestionLabel}
                 </p>
               ) : null}
@@ -203,9 +205,10 @@ export function BatchQueue({
               </p>
             ) : (
               <div className="mt-4 max-w-full overflow-x-auto">
-                <table className="w-full min-w-[640px] text-left text-sm">
+                <table className="w-full min-w-[720px] text-left text-sm">
                   <thead className="text-[11px] tracking-wider text-text-dim uppercase">
                     <tr>
+                      <th className="pb-2 pr-3 font-medium">Gepland</th>
                       <th className="pb-2 pr-3 font-medium">Bedrijf</th>
                       <th className="pb-2 pr-3 font-medium">Template</th>
                       <th className="pb-2 pr-3 font-medium">Onderwerp</th>
@@ -221,6 +224,9 @@ export function BatchQueue({
                           key={mail.emailId}
                           className="border-t border-border/60 align-top"
                         >
+                          <td className="py-2.5 pr-3 whitespace-nowrap text-xs text-text-muted">
+                            {mail.suggestedLabel ?? "—"}
+                          </td>
                           <td className="py-2.5 pr-3">
                             <p className="font-medium text-text">
                               {mail.companyName}

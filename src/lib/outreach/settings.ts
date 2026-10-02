@@ -1,6 +1,6 @@
 /**
- * Outreach settings — afzender, reply-to, send-ritme.
- * Env vars blijven fallback; DB-waarden (via Instellingen) gaan voor.
+ * Outreach settings — afzender + reply-to (Instellingen).
+ * Verzendritme komt uit `resolveOutreachCadence` (data/benchmark), niet uit de UI.
  */
 
 import { eq } from "drizzle-orm";
@@ -8,6 +8,13 @@ import { cache } from "react";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { outreachSettings } from "@/lib/db/schema";
 import { amsterdamDay, formatDayShort, shiftIsoDay } from "@/lib/time/amsterdam";
+import {
+  formatMorningWindowLabel,
+  formatResolvedCadence,
+  resolveOutreachCadence,
+  staggeredSendTimes,
+  type CadenceSource,
+} from "./cadence";
 
 export type OutreachSettings = {
   senderEmail: string;
@@ -17,10 +24,13 @@ export type OutreachSettings = {
   /** Addresses Brevo may use as From (comma-separated in DB). */
   allowedSenderEmails: string[];
   testRecipient: string;
-  /** ISO weekdays: 1=ma … 5=vr */
+  /** ISO weekdays: 1=ma … 5=vr — uit cadence-engine */
   sendWeekdays: number[];
   mailsPerDay: number;
   preferredHour: number;
+  cadenceSource: CadenceSource;
+  cadenceRationale: string;
+  cadenceSampleOpens: number;
   notes: string | null;
   updatedAt: string | null;
 };
@@ -30,7 +40,10 @@ export type SendSlotSuggestion = {
   label: string;
   weekdayLabel: string;
   count: number;
+  /** Human window / list, e.g. "09:12 · 09:41 · 10:08" */
   hourLabel: string;
+  /** Individual suggested times for that day (Amsterdam). */
+  times: string[];
 };
 
 const WEEKDAY_NL = ["zo", "ma", "di", "wo", "do", "vr", "za"];
@@ -54,18 +67,14 @@ function envDefaults(): OutreachSettings {
       process.env.OUTREACH_TEST_RECIPIENT?.trim() || "team@blablabuild.com",
     sendWeekdays: [2, 4],
     mailsPerDay: 3,
-    preferredHour: 10,
+    preferredHour: 9,
+    cadenceSource: "benchmark",
+    cadenceRationale:
+      "Nog geen eigen open-data — Benelux B2B-benchmark (di/do · ochtendvenster ~08:40–10:25, tijden per mail gespreid).",
+    cadenceSampleOpens: 0,
     notes: null,
     updatedAt: null,
   };
-}
-
-function parseWeekdays(value: unknown): number[] {
-  if (!Array.isArray(value)) return [2, 4];
-  const days = value
-    .map((n) => Number(n))
-    .filter((n) => Number.isInteger(n) && n >= 1 && n <= 7);
-  return days.length > 0 ? [...new Set(days)].sort((a, b) => a - b) : [2, 4];
 }
 
 function parseAllowed(raw: string | null | undefined): string[] {
@@ -83,27 +92,41 @@ function parseAllowed(raw: string | null | undefined): string[] {
 export const loadOutreachSettings = cache(
   async (): Promise<OutreachSettings> => {
     const fallback = envDefaults();
-    if (!hasDatabase()) return fallback;
+    const cadence = await resolveOutreachCadence();
+    const withCadence = (base: OutreachSettings): OutreachSettings => ({
+      ...base,
+      sendWeekdays: cadence.sendWeekdays,
+      mailsPerDay: cadence.mailsPerDay,
+      preferredHour: cadence.preferredHour,
+      cadenceSource: cadence.source,
+      cadenceRationale: cadence.rationale,
+      cadenceSampleOpens: cadence.sampleOpens,
+    });
+
+    if (!hasDatabase()) return withCadence(fallback);
     const db = getDb();
     const [row] = await db
       .select()
       .from(outreachSettings)
       .where(eq(outreachSettings.id, "default"))
       .limit(1);
-    if (!row) return fallback;
-    return {
+    if (!row) return withCadence(fallback);
+    return withCadence({
       senderEmail: row.senderEmail || fallback.senderEmail,
       senderName: row.senderName || fallback.senderName,
       replyToEmail: row.replyToEmail || fallback.replyToEmail,
       replyToName: row.replyToName || fallback.replyToName,
       allowedSenderEmails: parseAllowed(row.allowedSenderEmails),
       testRecipient: row.testRecipient || fallback.testRecipient,
-      sendWeekdays: parseWeekdays(row.sendWeekdays),
-      mailsPerDay: Math.max(1, Math.min(40, row.mailsPerDay || 3)),
-      preferredHour: Math.max(0, Math.min(23, row.preferredHour ?? 10)),
+      sendWeekdays: cadence.sendWeekdays,
+      mailsPerDay: cadence.mailsPerDay,
+      preferredHour: cadence.preferredHour,
+      cadenceSource: cadence.source,
+      cadenceRationale: cadence.rationale,
+      cadenceSampleOpens: cadence.sampleOpens,
       notes: row.notes,
       updatedAt: row.updatedAt?.toISOString() ?? null,
-    };
+    });
   },
 );
 
@@ -114,9 +137,6 @@ export type OutreachSettingsInput = {
   replyToName: string;
   allowedSenderEmails: string;
   testRecipient: string;
-  sendWeekdays: number[];
-  mailsPerDay: number;
-  preferredHour: number;
   notes?: string | null;
 };
 
@@ -146,12 +166,7 @@ export async function saveOutreachSettings(
     };
   }
 
-  const weekdays = parseWeekdays(input.sendWeekdays);
-  const mailsPerDay = Math.max(1, Math.min(40, Math.floor(input.mailsPerDay)));
-  const preferredHour = Math.max(
-    0,
-    Math.min(23, Math.floor(input.preferredHour)),
-  );
+  const cadence = await resolveOutreachCadence();
 
   const db = getDb();
   const values = {
@@ -162,9 +177,10 @@ export async function saveOutreachSettings(
     replyToName: input.replyToName.trim() || "Yoram & Reijner",
     allowedSenderEmails: allowed.join(", "),
     testRecipient,
-    sendWeekdays: weekdays,
-    mailsPerDay,
-    preferredHour,
+    // Keep DB columns in sync with engine (audit / legacy readers).
+    sendWeekdays: cadence.sendWeekdays,
+    mailsPerDay: cadence.mailsPerDay,
+    preferredHour: cadence.preferredHour,
     notes: input.notes?.trim() || null,
     updatedAt: new Date(),
   };
@@ -194,6 +210,7 @@ export async function saveOutreachSettings(
 
 /**
  * Spread `mailCount` mails over upcoming cadence days.
+ * Per day: staggered irregular morning times (not all on the hour).
  * Starts from `fromDay` (inclusive) or tomorrow Amsterdam.
  */
 export function suggestSendSlots(input: {
@@ -202,6 +219,8 @@ export function suggestSendSlots(input: {
   mailsPerDay: number;
   preferredHour: number;
   fromDay?: string | null;
+  /** Extra seed so different bakjes get different minute patterns. */
+  seed?: string | null;
 }): SendSlotSuggestion[] {
   const mailCount = Math.max(0, input.mailCount);
   if (mailCount === 0) return [];
@@ -210,7 +229,6 @@ export function suggestSendSlots(input: {
     input.sendWeekdays.length > 0 ? input.sendWeekdays : [2, 4];
   const perDay = Math.max(1, input.mailsPerDay);
   const hour = Math.max(0, Math.min(23, input.preferredHour));
-  const hourLabel = `${String(hour).padStart(2, "0")}:00`;
 
   let cursor =
     input.fromDay && /^\d{4}-\d{2}-\d{2}$/.test(input.fromDay)
@@ -227,12 +245,18 @@ export function suggestSendSlots(input: {
     const isoDow = dow === 0 ? 7 : dow;
     if (weekdays.includes(isoDow)) {
       const count = Math.min(perDay, remaining);
+      const times = staggeredSendTimes({
+        preferredHour: hour,
+        count,
+        seed: `${input.seed ?? "batch"}|${cursor}|${count}`,
+      });
       slots.push({
         day: cursor,
         label: formatDayShort(cursor),
         weekdayLabel: WEEKDAY_NL[dow] ?? "",
         count,
-        hourLabel,
+        hourLabel: times.join(" · "),
+        times,
       });
       remaining -= count;
     }
@@ -244,9 +268,15 @@ export function suggestSendSlots(input: {
 }
 
 export function formatCadenceSummary(settings: OutreachSettings): string {
-  const days = settings.sendWeekdays
-    .map((d) => ["", "ma", "di", "wo", "do", "vr", "za", "zo"][d] ?? String(d))
-    .join(" · ");
-  const perWeek = settings.sendWeekdays.length * settings.mailsPerDay;
-  return `Max ${settings.mailsPerDay}/dag op ${days} (~${perWeek}/week) · rond ${String(settings.preferredHour).padStart(2, "0")}:00`;
+  return formatResolvedCadence({
+    sendWeekdays: settings.sendWeekdays,
+    mailsPerDay: settings.mailsPerDay,
+    preferredHour: settings.preferredHour,
+    source: settings.cadenceSource,
+    sampleOpens: settings.cadenceSampleOpens,
+    rationale: settings.cadenceRationale,
+  });
 }
+
+/** Expose window label for UI that already has preferredHour. */
+export { formatMorningWindowLabel };

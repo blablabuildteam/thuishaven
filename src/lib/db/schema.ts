@@ -159,7 +159,7 @@ export const outreachBatches = pgTable("outreach_batches", {
 
 /**
  * Singleton outreach settings (id = 'default').
- * Afzender / reply-to / send-ritme — invulbaar door Thuishaven in de UI.
+ * Afzender / reply-to via UI; send-ritme wordt door de cadence-engine gezet.
  */
 export const outreachSettings = pgTable("outreach_settings", {
   id: text("id").primaryKey().default("default"),
@@ -178,7 +178,7 @@ export const outreachSettings = pgTable("outreach_settings", {
   sendWeekdays: jsonb("send_weekdays").$type<number[]>().notNull().default([2, 4]),
   mailsPerDay: integer("mails_per_day").notNull().default(3),
   /** Preferred send hour in Europe/Amsterdam (0–23). */
-  preferredHour: integer("preferred_hour").notNull().default(10),
+  preferredHour: integer("preferred_hour").notNull().default(9),
   notes: text("notes"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

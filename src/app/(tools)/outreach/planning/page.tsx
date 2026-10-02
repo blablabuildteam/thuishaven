@@ -2,14 +2,21 @@ import Link from "next/link";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { BatchQueue } from "@/components/outreach/batch-queue";
+import { QueueSchedule } from "@/components/outreach/queue-schedule";
 import { listBatchesWithEmails } from "@/lib/outreach/batches";
 
 export const metadata = { title: "Wachtrij" };
 export const dynamic = "force-dynamic";
 
 export default async function OutreachPlanningPage() {
-  const { batches, unbatchedDrafts, liveSendBlockReason, cadenceLabel } =
-    await listBatchesWithEmails();
+  const {
+    batches,
+    unbatchedDrafts,
+    liveSendBlockReason,
+    cadenceLabel,
+    cadenceRationale,
+    schedule,
+  } = await listBatchesWithEmails();
 
   const queuedCount = batches
     .filter((b) => b.status !== "sent")
@@ -20,7 +27,7 @@ export default async function OutreachPlanningPage() {
       <SectionHeader
         eyebrow="Stap 3b · review"
         title="Wachtrij"
-        description="Bakjes met mails die klaarstaan: wie krijgt welke template en tekst. Per bakje een suggestie wanneer te versturen volgens het ritme in Instellingen."
+        description="Bovenaan de planning (wanneer), daaronder de bakjes (wat + tekst). Live versturen staat nog uit."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone="danger">Live send uit</StatusBadge>
@@ -37,14 +44,12 @@ export default async function OutreachPlanningPage() {
         }
       />
 
-      {cadenceLabel ? (
-        <p className="mb-6 text-sm text-text-muted">
-          Ritme: {cadenceLabel}.{" "}
-          <Link href="/outreach/instellingen" className="text-accent underline">
-            Aanpassen
-          </Link>
-        </p>
-      ) : null}
+      <QueueSchedule
+        cadenceLabel={cadenceLabel}
+        cadenceRationale={cadenceRationale}
+        schedule={schedule}
+        unbatchedCount={unbatchedDrafts.length}
+      />
 
       <BatchQueue
         batches={batches}
