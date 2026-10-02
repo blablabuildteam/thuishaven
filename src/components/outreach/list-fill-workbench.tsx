@@ -17,8 +17,10 @@ import {
   readyDistanceStops,
   sliceKey,
   slicesForCriteria,
+  zoneLabel,
   zoneSliceStats,
   type ApolloSearchCriteria,
+  type SearchZone,
 } from "@/lib/integrations/apollo/criteria";
 import {
   APOLLO_PAGE_SIZE,
@@ -36,9 +38,11 @@ type Props = {
   apolloReady: boolean;
   hunterReady: boolean;
   kvkReady: boolean;
+  /** Werklijst: past in doelgroep, klaar om verder te gaan. */
   companyCount: number;
   withEmailCount: number;
   outOfRegionCount: number;
+  /** Ooit via Apollo binnengekomen (kan hoger zijn dan companyCount). */
   apolloOnList: number;
   coverage: SliceState[];
   initialCriteria?: Partial<ApolloSearchCriteria> | null;
@@ -190,8 +194,7 @@ export function ListFillWorkbench({
   const selectionImpact = useMemo(() => {
     let cumulativeApollo = 0;
     let cumulativeKnown = true;
-    let outerExtra: number | null = 0;
-    let outerKnown = true;
+    let outerApollo: number | null = null;
     const selectedStop = readyDistanceStops()[distanceIdx];
     for (const row of distanceImpact) {
       const idx = readyDistanceStops().findIndex(
@@ -203,27 +206,52 @@ export function ListFillWorkbench({
       } else {
         cumulativeApollo += row.apollo;
       }
-      if (idx === distanceIdx && row.stop.preset !== "amsterdam") {
-        if (row.remaining == null && row.apollo == null) {
-          outerKnown = false;
-          outerExtra = null;
-        } else if (row.remaining != null) {
-          outerExtra = row.remaining;
-        } else if (row.apollo != null) {
-          // Counted but not drained yet — remaining unknown precisely; use apollo - created as upper bound on "new to us"
-          outerExtra = Math.max(0, row.apollo - row.created);
-        }
+      if (idx === distanceIdx) {
+        outerApollo = row.apollo;
       }
     }
     return {
       selectedStop,
       cumulativeApollo: cumulativeKnown ? cumulativeApollo : null,
-      alreadyNew: plan.created,
-      stillUnknown: plan.remaining,
-      outerExtra: outerKnown ? outerExtra : null,
-      uncounted: plan.uncounted,
+      outerApollo,
+      fetchedInSelection: plan.fetched,
+      createdInSelection: plan.created,
+      openZones: selectedSlices.length - plan.doneSlices,
     };
-  }, [distanceImpact, distanceIdx, plan.created, plan.remaining, plan.uncounted]);
+  }, [
+    distanceImpact,
+    distanceIdx,
+    plan.fetched,
+    plan.created,
+    plan.doneSlices,
+    selectedSlices.length,
+  ]);
+
+  /** Waar de huidige lijst vandaan komt (uit eerdere ophaal-runs). */
+  const listHistory = useMemo(() => {
+    const slices = Object.values(coverage).filter(
+      (s) => s.created > 0 || s.seen > 0 || s.done,
+    );
+    if (slices.length === 0) return null;
+    const lastRunAt = slices
+      .map((s) => s.lastRunAt)
+      .filter(Boolean)
+      .sort()
+      .at(-1);
+    const zoneOrder: SearchZone[] = ["ams", "kern", "ring", "wide", "far"];
+    const zones = [
+      ...new Set(slices.map((s) => s.zone)),
+    ].sort((a, b) => zoneOrder.indexOf(a) - zoneOrder.indexOf(b));
+    const created = slices.reduce((n, s) => n + s.created, 0);
+    const farthest = zones.at(-1);
+    return {
+      lastRunAt,
+      created,
+      zones,
+      farthestLabel: farthest ? zoneLabel(farthest) : null,
+      zoneLabels: zones.map((z) => zoneLabel(z)),
+    };
+  }, [coverage]);
 
   const countInFlight = useRef(false);
   const [counting, setCounting] = useState(false);
@@ -471,20 +499,50 @@ export function ListFillWorkbench({
 
   return (
     <div className="space-y-8">
-      {/* Stand */}
-      <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 border-b border-border pb-4 text-sm">
-        <p>
-          <span className="text-text-dim">Op de lijst</span>{" "}
-          <strong className="font-display text-lg text-text">{companyCount}</strong>
+      {/* Stand — één verhaal, geen losse jargon-stats */}
+      <div className="border-b border-border pb-5">
+        <p className="text-sm text-text">
+          Je werklijst:{" "}
+          <strong className="font-display text-lg">{companyCount}</strong>{" "}
+          bedrijven
+          {withEmailCount > 0 ? (
+            <>
+              {" "}
+              ·{" "}
+              <strong className="text-text">{withEmailCount}</strong> hebben al
+              een e-mail
+            </>
+          ) : null}
+          .
         </p>
-        <p>
-          <span className="text-text-dim">Met e-mail</span>{" "}
-          <strong className="text-text">{withEmailCount}</strong>
-        </p>
-        <p>
-          <span className="text-text-dim">Via Apollo</span>{" "}
-          <strong className="text-text">{apolloOnList}</strong>
-        </p>
+        {listHistory ? (
+          <p className="mt-2 text-sm text-text-muted">
+            Laatst opgehaald
+            {listHistory.lastRunAt
+              ? ` op ${fmtDate(listHistory.lastRunAt)}`
+              : ""}
+            {listHistory.farthestLabel
+              ? ` · tot ${listHistory.farthestLabel}`
+              : ""}
+            {listHistory.created > 0
+              ? ` · toen ${listHistory.created.toLocaleString("nl-NL")} nieuw gezet`
+              : ""}
+            . Exacte filters per keer staan onder Zoekdekking.
+          </p>
+        ) : (
+          <p className="mt-2 text-sm text-text-muted">
+            Nog geen Apollo-ophaling vastgelegd voor deze zoekzones — de{" "}
+            {companyCount} kunnen uit een eerdere import of andere filters
+            komen.
+          </p>
+        )}
+        {apolloOnList > companyCount ? (
+          <p className="mt-1 text-xs text-text-dim">
+            {apolloOnList} ooit via Apollo binnengekomen;{" "}
+            {apolloOnList - companyCount} vallen buiten de doelgroep (te
+            klein/groot of regio) en tellen niet mee op de werklijst.
+          </p>
+        ) : null}
         {!apolloReady ? (
           <StatusBadge tone="danger">Apollo niet gekoppeld</StatusBadge>
         ) : null}
@@ -495,9 +553,10 @@ export function ListFillWorkbench({
         <h2 className="font-display text-xl tracking-[0.06em]">
           1 · Wat zoeken we?
         </h2>
-        <p className="mt-1 text-sm text-text-muted">
-          Wat al binnen is, halen we niet opnieuw op. Een grotere afstand pakt
-          alleen de extra ring.
+        <p className="mt-1 max-w-xl text-sm text-text-muted">
+          Afstand werkt als ringen om Amsterdam. Een grotere knop voegt alleen
+          de buitenste ring toe — wat al op de lijst staat, wordt bij ophalen
+          overgeslagen.
         </p>
 
         <div className="mt-5 max-w-xl">
@@ -512,8 +571,8 @@ export function ListFillWorkbench({
                     ? "…"
                     : "?"
                   : i === 0
-                    ? `~${row.apollo.toLocaleString("nl-NL")}`
-                    : `+${row.apollo.toLocaleString("nl-NL")}`;
+                    ? `~${row.apollo.toLocaleString("nl-NL")} in de stad`
+                    : `+${row.apollo.toLocaleString("nl-NL")} in deze ring`;
               return (
                 <button
                   key={row.stop.preset}
@@ -543,57 +602,50 @@ export function ListFillWorkbench({
               );
             })}
           </div>
-          <div className="mt-3 space-y-1 text-sm text-text-muted">
-            <p>
-              Selectie tot{" "}
-              <strong className="text-text">
-                {selectionImpact.selectedStop?.label ?? "—"}
-              </strong>
-              {selectionImpact.cumulativeApollo != null ? (
-                <>
-                  :{" "}
-                  <strong className="text-text">
-                    ~{selectionImpact.cumulativeApollo.toLocaleString("nl-NL")}
-                  </strong>{" "}
-                  bij Apollo
-                </>
-              ) : counting ? (
-                <> — groepen tellen…</>
-              ) : (
-                <> — nog niet geteld</>
-              )}
-            </p>
-            {selectionImpact.alreadyNew > 0 ? (
+          <div className="mt-3 max-w-lg space-y-2 text-sm text-text-muted">
+            {selectionImpact.cumulativeApollo != null ? (
               <p>
-                Daarvan al{" "}
+                Met{" "}
                 <strong className="text-text">
-                  {selectionImpact.alreadyNew.toLocaleString("nl-NL")}
+                  {selectionImpact.selectedStop?.label ?? "—"}
                 </strong>{" "}
-                nieuw op onze lijst gezet.
-              </p>
-            ) : null}
-            {selectionImpact.stillUnknown != null &&
-            selectionImpact.stillUnknown > 0 ? (
-              <p>
-                Nog ongeveer{" "}
+                zoek je tot die ring: Apollo kent daar{" "}
                 <strong className="text-text">
-                  {selectionImpact.stillUnknown.toLocaleString("nl-NL")}
+                  ~{selectionImpact.cumulativeApollo.toLocaleString("nl-NL")}
                 </strong>{" "}
-                te bekijken die we nog niet hebben opgehaald
-                {distanceIdx > 0 &&
-                selectionImpact.outerExtra != null &&
-                selectionImpact.outerExtra > 0
-                  ? ` · waarvan ~${selectionImpact.outerExtra.toLocaleString("nl-NL")} in de buitenste ring`
-                  : ""}
+                bedrijven (jouw medewerker-filter)
+                {distanceIdx > 0 && selectionImpact.outerApollo != null ? (
+                  <>
+                    , waarvan{" "}
+                    <strong className="text-text">
+                      ~{selectionImpact.outerApollo.toLocaleString("nl-NL")}
+                    </strong>{" "}
+                    alleen in de buitenste ring
+                  </>
+                ) : null}
                 .
               </p>
-            ) : plan.allDone && selectionImpact.cumulativeApollo != null ? (
-              <p>Alles uit deze filters staat al op de lijst (of was duplicaat).</p>
+            ) : counting ? (
+              <p>Apollo telt hoeveel er per ring zijn…</p>
+            ) : (
+              <p>Nog niet geteld voor deze filters.</p>
+            )}
+            <p>
+              Dat is <em>niet</em> hetzelfde als “zoveel nieuw voor ons”. Jullie
+              hebben er al {companyCount} op de lijst — die komen (deels) uit
+              eerdere ringen/filters. Bij ophalen slaan we bekende namen over;
+              pas dan zie je hoeveel er écht bij komen.
+            </p>
+            {selectionImpact.createdInSelection > 0 ? (
+              <p className="text-xs text-text-dim">
+                In precies deze filters al{" "}
+                {selectionImpact.createdInSelection.toLocaleString("nl-NL")}{" "}
+                nieuw gezet bij eerdere runs.
+              </p>
             ) : null}
             {counting ? (
               <p className="text-[11px] text-text-dim">
-                Apollo telt ontbrekende zones voor deze filters (1 credit per
-                zone × grootte)…
+                Tellen kost 1 Apollo-credit per zone × grootte…
               </p>
             ) : null}
           </div>
@@ -647,7 +699,7 @@ export function ListFillWorkbench({
         </div>
 
         <label className="mt-6 block text-[11px] uppercase tracking-wider text-text-dim">
-          Keywords (optioneel — elke keyword-set is een eigen zoekopdracht)
+          Keywords (optioneel)
           <input
             value={keywords}
             onChange={(e) => setKeywords(e.target.value)}
@@ -655,53 +707,66 @@ export function ListFillWorkbench({
             className="mt-1.5 block w-full max-w-sm border border-border bg-bg px-3 py-1.5 text-sm normal-case tracking-normal text-text"
           />
         </label>
+        <p className="mt-1 max-w-sm text-[11px] text-text-dim">
+          Elke keyword-set is een aparte zoekactie in Apollo.
+        </p>
       </section>
 
-      {/* Coverage grid */}
+      {/* Coverage */}
       <section className="border-t border-border pt-6">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="font-display text-xl tracking-[0.06em]">
-            2 · Zoekdekking
+            2 · Ophalen
           </h2>
           <p className="text-xs text-text-dim">
             {activeKw ? `Keywords: ${keywordTags.join(", ")}` : "Zonder keywords"}
           </p>
         </div>
 
-        <ul className="mt-4 space-y-1 text-sm text-text-muted">
-          <li>
-            Al op de lijst:{" "}
-            <strong className="text-text">{companyCount}</strong>
-          </li>
-          <li>
-            Deze filters:{" "}
-            <strong className="text-text">{plan.doneSlices}</strong> van{" "}
-            {selectedSlices.length} zones binnen
-            {plan.doneSlices < selectedSlices.length ? (
-              <>
-                {" "}
-                · nog{" "}
-                <strong className="text-text">
-                  {selectedSlices.length - plan.doneSlices}
-                </strong>{" "}
-                nieuw
-              </>
-            ) : null}
-          </li>
-          {!plan.allDone ? (
-            <li>
-              Ophalen kost ongeveer{" "}
-              <strong className="text-text">
-                {formatEurFromCents(fetchCents)}
-              </strong>
-              {plan.unknownSlices > 0
-                ? " — de prijs wordt preciezer zodra een zone een keer geteld is"
-                : ""}
-            </li>
+        <div className="mt-4 max-w-xl space-y-2 text-sm text-text-muted">
+          {plan.allDone ? (
+            <p>
+              Voor deze afstand en medewerker-grootte is alles al door Apollo
+              heengelopen. Niets nieuws meer om op te halen.
+            </p>
           ) : (
-            <li>Niets nieuws voor deze afstand en grootte.</li>
+            <>
+              <p>
+                Voor jouw selectie (
+                {criteriaSummary(activeCriteria)}) hebben we{" "}
+                <strong className="text-text">{plan.doneSlices}</strong> van{" "}
+                <strong className="text-text">{selectedSlices.length}</strong>{" "}
+                zoekstukjes al volledig opgehaald
+                {selectionImpact.openZones > 0 ? (
+                  <>
+                    {" "}
+                    — nog{" "}
+                    <strong className="text-text">
+                      {selectionImpact.openZones}
+                    </strong>{" "}
+                    te doen
+                  </>
+                ) : null}
+                .
+              </p>
+              <p>
+                “Ophalen” bladert Apollo-pagina’s. Bedrijven die al op je lijst
+                van {companyCount} staan, tellen als duplicaat en komen er niet
+                dubbel bij. Exact hoeveel er nieuw zijn, zie je na de run.
+              </p>
+              <p>
+                Geschatte kosten:{" "}
+                <strong className="text-text">
+                  ~{formatEurFromCents(fetchCents)}
+                </strong>
+                {plan.unknownSlices > 0
+                  ? " (wordt preciezer na tellen)"
+                  : ""}
+                .
+              </p>
+            </>
           )}
-        </ul>
+        </div>
         <button
           type="button"
           disabled={pending || !apolloReady || plan.allDone}
@@ -712,7 +777,7 @@ export function ListFillWorkbench({
             ? "Bezig…"
             : plan.allDone
               ? "Alles al binnen"
-              : `Haal de nieuwe op · ~${formatEurFromCents(fetchCents)}`}
+              : `Haal nieuwe op · ~${formatEurFromCents(fetchCents)}`}
         </button>
 
         <details className="mt-4">

@@ -40,7 +40,7 @@ export default async function LijstBijwerkenPage() {
       <SectionHeader
         eyebrow="Stap 1"
         title="Lijst bijwerken"
-        description="Alleen ophalen wat nog niet binnen is, daarna gegevens aanvullen. Klaar? Door naar Bedrijven."
+        description="Zoekfilters kiezen, nieuwe bedrijven ophalen, daarna gegevens aanvullen."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={apolloReady ? "success" : "danger"}>
