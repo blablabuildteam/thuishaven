@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { SectionHeader } from "@/components/ui/section-header";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { CrmCompaniesTable } from "@/components/outreach/crm-companies-table";
 import { listCrmRecords } from "@/lib/outreach/crm";
 import { mailAngleFor } from "@/lib/outreach/mail-angle";
@@ -10,7 +9,7 @@ export const metadata = { title: "Bedrijven" };
 export const dynamic = "force-dynamic";
 
 export default async function OutreachCrmPage() {
-  const { rows, source } = await listCrmRecords();
+  const { rows } = await listCrmRecords();
   const existingCustomers = rows.filter(
     (r) => !r.partner && r.existingCustomer,
   );
@@ -52,24 +51,24 @@ export default async function OutreachCrmPage() {
       <SectionHeader
         eyebrow="Stap 2"
         title="Bedrijven"
-        description="Wie nu de moeite waard is: signalen en leadscore. Klik een bedrijf open voor maillog en notities. Daarna → Mailen."
+        description="Kies wie je wilt mailen. Klik een rij voor dossier."
         action={
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge tone={source === "db" ? "success" : "neutral"}>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <p className="text-sm text-text-dim">
               {companies.length} · {mailable} klaar
-            </StatusBadge>
+            </p>
             <Link
               href="/outreach/lijst-bijwerken"
-              className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
+              className="text-sm text-text-muted underline-offset-2 hover:text-text hover:underline"
             >
-              ← Lijst bijwerken
+              Lijst bijwerken
             </Link>
             <Link
               href="/outreach/emails"
               data-tour="crm-mailen"
               className="bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast"
             >
-              Volgende: Mailen →
+              Mailen →
             </Link>
           </div>
         }
@@ -93,12 +92,12 @@ export default async function OutreachCrmPage() {
       </section>
 
       {existingCustomers.length > 0 ? (
-        <section className="border-t border-border pt-8">
+        <section className="border-t border-border pt-10">
           <h2 className="font-display text-lg tracking-[0.06em]">
             Al klant / niet mailen
           </h2>
           <p className="mt-1 mb-4 text-sm text-text-muted">
-            {existingCustomers.length} namen — zichtbaar, niet in de mail-bulk.
+            {existingCustomers.length} namen — niet in de mail-bulk.
           </p>
           <ul className="columns-1 gap-x-8 text-sm sm:columns-2 lg:columns-3">
             {existingCustomers.map((row) => (
