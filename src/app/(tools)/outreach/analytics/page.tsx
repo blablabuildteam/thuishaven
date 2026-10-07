@@ -280,7 +280,8 @@ export default async function OutreachAnalyticsPage() {
                     tone={
                       reply.sentiment === "positive"
                         ? "accent"
-                        : reply.sentiment === "negative"
+                        : reply.sentiment === "negative" ||
+                            reply.sentiment === "opt_out"
                           ? "danger"
                           : "neutral"
                     }
@@ -289,7 +290,11 @@ export default async function OutreachAnalyticsPage() {
                       ? "positief"
                       : reply.sentiment === "negative"
                         ? "negatief"
-                        : "neutraal"}
+                        : reply.sentiment === "opt_out"
+                          ? "opt-out"
+                          : reply.sentiment === "ooo"
+                            ? "afwezig"
+                            : "neutraal"}
                   </StatusBadge>
                   <span className="text-xs text-text-dim">
                     {fmt(reply.receivedAt)}
