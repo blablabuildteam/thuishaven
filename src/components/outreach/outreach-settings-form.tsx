@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { OUTREACH_SENDER_PROFILES } from "@/lib/outreach/sender-profiles";
 import type { OutreachSettings } from "@/lib/outreach/settings";
 
 type Props = {
@@ -78,13 +79,29 @@ export function OutreachSettingsForm({ initial }: Props) {
       </section>
 
       <section className="space-y-4 border border-border bg-surface p-4">
-        <h2 className="font-display text-xl tracking-[0.04em]">Afzender</h2>
+        <h2 className="font-display text-xl tracking-[0.04em]">
+          Afzender-profielen
+        </h2>
         <p className="text-sm text-text-muted">
-          Het From-adres dat prospects zien. Moet in Brevo als goedgekeurde
-          afzender staan.
+          Per bakje kies je Evenementen, Reiner of Yoram. Die adressen moeten
+          in Brevo goedgekeurd zijn én hieronder op de allowlist staan.
+        </p>
+        <ul className="space-y-2 text-sm">
+          {OUTREACH_SENDER_PROFILES.map((p) => (
+            <li key={p.id} className="border border-border/70 bg-bg px-3 py-2">
+              <span className="font-medium text-text">{p.label}</span>
+              <span className="text-text-dim">
+                {" "}
+                · {p.name} &lt;{p.email}&gt;
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="text-xs text-text-dim">
+          Fallback hieronder geldt alleen voor testsends zonder bakje.
         </p>
         <label className="block text-xs text-text-dim">
-          Afzender e-mail
+          Fallback afzender e-mail
           <input
             className="mt-1.5 w-full border border-border bg-bg px-3 py-2 text-sm"
             value={senderEmail}
@@ -92,7 +109,7 @@ export function OutreachSettingsForm({ initial }: Props) {
           />
         </label>
         <label className="block text-xs text-text-dim">
-          Afzender naam
+          Fallback afzender naam
           <input
             className="mt-1.5 w-full border border-border bg-bg px-3 py-2 text-sm"
             value={senderName}
@@ -105,7 +122,7 @@ export function OutreachSettingsForm({ initial }: Props) {
             className="mt-1.5 w-full border border-border bg-bg px-3 py-2 text-sm"
             value={allowedSenderEmails}
             onChange={(e) => setAllowedSenderEmails(e.target.value)}
-            placeholder="zakelijk@thuishaven.nl, evenement@thuishaven.nl"
+            placeholder="evenementen@…, reiner@…, yoram@…"
           />
         </label>
       </section>

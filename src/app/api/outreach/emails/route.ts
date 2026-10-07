@@ -123,6 +123,9 @@ export async function POST(request: Request) {
       emailIds: z.array(z.string().uuid()).min(1).max(50),
       batchId: z.string().uuid().optional(),
       batchName: z.string().max(120).optional(),
+      senderProfileId: z
+        .enum(["evenementen", "reiner", "yoram"])
+        .optional(),
     });
     const parsed = schema.safeParse(body);
     if (!parsed.success) {
@@ -132,13 +135,14 @@ export async function POST(request: Request) {
       emailIds: parsed.data.emailIds,
       batchId: parsed.data.batchId,
       batchName: parsed.data.batchName?.trim() || undefined,
+      senderProfileId: parsed.data.senderProfileId,
     });
     if ("error" in result) {
       return NextResponse.json(result, { status: 400 });
     }
     await logSessionActivity(session, {
       action: "email_enqueue",
-      summary: `${result.enqueued} mails in bakje · ${result.batchName}`,
+      summary: `${result.enqueued} mails in bakje · ${result.batchName} · ${result.senderEmail}`,
       path: "/api/outreach/emails",
       method: "POST",
       status: 200,
@@ -146,6 +150,8 @@ export async function POST(request: Request) {
       meta: {
         batchId: result.batchId,
         enqueued: result.enqueued,
+        senderProfileId: result.senderProfileId,
+        senderEmail: result.senderEmail,
       },
     });
     return NextResponse.json(result);
@@ -187,6 +193,9 @@ export async function POST(request: Request) {
         .regex(/^\d{4}-\d{2}-\d{2}$/)
         .nullable()
         .optional(),
+      senderProfileId: z
+        .enum(["evenementen", "reiner", "yoram"])
+        .optional(),
     });
     const parsed = schema.safeParse(body);
     if (!parsed.success) {
@@ -197,6 +206,7 @@ export async function POST(request: Request) {
       name: parsed.data.name,
       notes: parsed.data.notes,
       plannedStartDay: parsed.data.plannedStartDay,
+      senderProfileId: parsed.data.senderProfileId,
     });
     if ("error" in result) {
       return NextResponse.json(result, { status: 400 });

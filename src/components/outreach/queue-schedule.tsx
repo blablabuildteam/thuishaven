@@ -4,14 +4,12 @@ type Props = {
   cadenceLabel: string;
   cadenceRationale: string;
   schedule: QueueScheduleDay[];
-  senderLabel: string | null;
 };
 
 export function QueueSchedule({
   cadenceLabel,
   cadenceRationale,
   schedule,
-  senderLabel,
 }: Props) {
   const plannedCount = schedule.reduce((n, d) => n + d.items.length, 0);
 
@@ -36,9 +34,9 @@ export function QueueSchedule({
         {cadenceRationale ? (
           <p className="mt-1 text-xs text-text-dim">{cadenceRationale}</p>
         ) : null}
-        {senderLabel ? (
-          <p className="mt-1 text-xs text-text-dim">Van: {senderLabel}</p>
-        ) : null}
+        <p className="mt-1 text-xs text-text-dim">
+          Afzender staat per bakje (Evenementen / Reiner / Yoram).
+        </p>
       </div>
 
       {schedule.length === 0 ? (
@@ -78,7 +76,10 @@ export function QueueSchedule({
                         </span>
                       ) : null}
                     </span>
-                    <span className="text-xs text-text-dim">{item.batchName}</span>
+                    <span className="text-xs text-text-dim">
+                      {item.batchName}
+                      {item.senderLabel ? ` · ${item.senderLabel}` : ""}
+                    </span>
                   </li>
                 ))}
               </ul>

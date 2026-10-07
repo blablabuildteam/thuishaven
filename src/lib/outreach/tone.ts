@@ -3,6 +3,18 @@
  * Basis: voorbeeldmail van Reijner — persoonlijk, niet salesy.
  */
 
+import {
+  applySenderSignature,
+  getSenderProfile,
+  DEFAULT_SENDER_PROFILE_ID,
+} from "@/lib/outreach/sender-profiles";
+
+export {
+  applySenderSignature,
+  getSenderProfile,
+  DEFAULT_SENDER_PROFILE_ID,
+} from "@/lib/outreach/sender-profiles";
+
 export const REIJNER_TONE_EXAMPLE = `Hi,
 
 Tof dat je aan Thuishaven denkt als mogelijke locatie voor jullie evenement!
@@ -20,20 +32,15 @@ Graag plan ik met jou een bezichtiging in om de mogelijkheden samen op locatie t
 
 Mocht je vragen hebben dan hoor ik het graag!`;
 
-/** Plain-text signature appended to every outreach mail. */
-export const OUTREACH_SIGNATURE = `Reijner
-Thuishaven
-Festival locatie voor zakelijke events
-evenement@thuishaven.nl · +31 6 83 63 37 25
-Contactweg 68, 1014 BW Amsterdam
-thuishavenb2b.nl`;
+/** Plain-text signature appended to every outreach mail (default: Reiner). */
+export const OUTREACH_SIGNATURE = getSenderProfile(DEFAULT_SENDER_PROFILE_ID)
+  .signature;
 
 export function appendOutreachSignature(body: string): string {
-  const trimmed = body.trim().replace(/\n*(Groet|Groeten|Met vriendelijke groet|Cheers)[,!]?\s*\n*Thuishaven Events\s*$/i, "");
-  if (/^Reijner\s*$/m.test(trimmed) && /Festival locatie voor zakelijke events/i.test(trimmed)) {
-    return trimmed;
-  }
-  return `${trimmed}\n\n${OUTREACH_SIGNATURE}`;
+  return applySenderSignature(
+    body,
+    getSenderProfile(DEFAULT_SENDER_PROFILE_ID),
+  );
 }
 
 export type OutreachVariantId =

@@ -4,12 +4,23 @@
 
 import { eq } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
-import { leads, outreachEmails, prospects } from "@/lib/db/schema";
+import {
+  leads,
+  outreachBatches,
+  outreachEmails,
+  prospects,
+} from "@/lib/db/schema";
 import { assertExternalReadOnly } from "@/lib/integrations/read-only";
 import { availabilitySummaryForEmail } from "@/lib/outreach/availability";
 import { getAgencyCampaignId, getCompanyCampaignId } from "@/lib/outreach/data";
 import { renderOutreachHtmlEmail } from "@/lib/outreach/email-html";
 import {
+  applySenderSignature,
+  getSenderProfile,
+  isSenderProfileId,
+} from "@/lib/outreach/sender-profiles";
+import {
+  assertAllowedOutreachSender,
   getOutreachBrevoKey,
   outreachLiveSendBlockReason,
   outreachTestSendBlockReason,
@@ -374,6 +385,10 @@ export async function sendViaBrevo(input: {
   forceTest?: boolean;
   /** Override test inboxes (allowlisted domains only) */
   testTo?: string[];
+  /** Override From (batch sender). Falls back to global settings. */
+  sender?: { email: string; name: string };
+  /** Override Reply-To. Falls back to global settings. */
+  replyTo?: { email: string; name: string };
 }): Promise<{
   messageId?: string;
   error?: string;
@@ -406,8 +421,8 @@ export async function sendViaBrevo(input: {
   // HTML is pre-rendered with optional test banner by the caller.
   const html = input.html;
 
-  const sender = await resolveOutreachSender();
-  const replyTo = await resolveOutreachReplyTo();
+  const sender = input.sender ?? (await resolveOutreachSender());
+  const replyTo = input.replyTo ?? (await resolveOutreachReplyTo());
   const url = "https://api.brevo.com/v3/smtp/email";
   assertExternalReadOnly("POST", url, { allowTransactionalEmailPost: true });
 
@@ -445,7 +460,11 @@ export async function sendViaBrevo(input: {
         operation: "send_outreach_email",
         units: 1,
         unitLabel: "email",
-        meta: { testMode: resolved.testMode, intended: input.to },
+        meta: {
+          testMode: resolved.testMode,
+          intended: input.to,
+          sender: sender.email,
+        },
       });
     } catch {
       /* optional */
@@ -667,6 +686,7 @@ export async function sendStoredDraft(input: {
       subject: outreachEmails.subject,
       body: outreachEmails.body,
       status: outreachEmails.status,
+      batchId: outreachEmails.batchId,
       email: prospects.email,
       companyName: prospects.companyName,
       prospectId: prospects.id,
@@ -698,8 +718,48 @@ export async function sendStoredDraft(input: {
     (Array.isArray(meta.contacts) ? meta.contacts[0] : undefined);
   if (!intended) return { error: "Geen e-mailadres op prospect" };
 
+  // Prefer batch snapshot (Evenementen / Reiner / Yoram); else global settings.
+  let sender = await resolveOutreachSender();
+  let replyTo = await resolveOutreachReplyTo();
+  let bodyText = row.body;
+
+  if (row.batchId) {
+    const [batch] = await db
+      .select({
+        senderProfileId: outreachBatches.senderProfileId,
+        senderEmail: outreachBatches.senderEmail,
+        senderName: outreachBatches.senderName,
+        replyToEmail: outreachBatches.replyToEmail,
+        replyToName: outreachBatches.replyToName,
+      })
+      .from(outreachBatches)
+      .where(eq(outreachBatches.id, row.batchId))
+      .limit(1);
+    if (batch) {
+      const profile = getSenderProfile(
+        isSenderProfileId(batch.senderProfileId)
+          ? batch.senderProfileId
+          : undefined,
+      );
+      sender = {
+        email: batch.senderEmail || profile.email,
+        name: batch.senderName || profile.name,
+      };
+      replyTo = {
+        email: batch.replyToEmail || profile.replyToEmail,
+        name: batch.replyToName || profile.replyToName,
+      };
+      bodyText = applySenderSignature(row.body, profile);
+    }
+  } else {
+    bodyText = appendOutreachSignature(row.body);
+  }
+
+  const allowed = await assertAllowedOutreachSender(sender.email);
+  if ("error" in allowed) return allowed;
+
   const html = renderOutreachHtmlEmail({
-    body: row.body,
+    body: bodyText,
     testBanner: forceTest
       ? `TESTMODE — bedoeld voor ${intended}, afgeleverd aan testadres. Open deze mail om open-tracking te valideren.`
       : null,
@@ -715,10 +775,12 @@ export async function sendStoredDraft(input: {
     to: intended,
     subject: row.subject,
     html,
-    text: row.body,
+    text: bodyText,
     tags,
     forceTest,
     testTo: input.testTo,
+    sender,
+    replyTo,
   });
   if (sent.error) return { error: sent.error };
 

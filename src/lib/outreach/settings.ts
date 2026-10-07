@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { cache } from "react";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { outreachSettings } from "@/lib/db/schema";
+import { DEFAULT_ALLOWED_SENDER_EMAILS } from "@/lib/outreach/sender-profiles";
 import { amsterdamDay, formatDayShort, shiftIsoDay } from "@/lib/time/amsterdam";
 import {
   formatMorningWindowLabel,
@@ -52,17 +53,15 @@ function envDefaults(): OutreachSettings {
   return {
     senderEmail:
       process.env.BREVO_OUTREACH_SENDER_EMAIL?.trim() ||
-      "zakelijk@thuishaven.nl",
+      "reiner@thuishaven.nl",
     senderName:
-      process.env.BREVO_OUTREACH_SENDER_NAME?.trim() || "Reijner · Thuishaven",
+      process.env.BREVO_OUTREACH_SENDER_NAME?.trim() || "Reiner · Thuishaven",
     replyToEmail:
-      process.env.BREVO_OUTREACH_REPLY_TO?.trim() || "evenement@thuishaven.nl",
+      process.env.BREVO_OUTREACH_REPLY_TO?.trim() || "evenementen@thuishaven.nl",
     replyToName:
-      process.env.BREVO_OUTREACH_REPLY_TO_NAME?.trim() || "Yoram & Reijner",
-    allowedSenderEmails: [
-      "zakelijk@thuishaven.nl",
-      "evenement@thuishaven.nl",
-    ],
+      process.env.BREVO_OUTREACH_REPLY_TO_NAME?.trim() ||
+      "Thuishaven Evenementen",
+    allowedSenderEmails: [...DEFAULT_ALLOWED_SENDER_EMAILS],
     testRecipient:
       process.env.OUTREACH_TEST_RECIPIENT?.trim() || "team@blablabuild.com",
     sendWeekdays: [2, 4],

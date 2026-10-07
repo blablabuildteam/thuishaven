@@ -15,8 +15,6 @@ export default async function OutreachPlanningPage() {
     cadenceLabel,
     cadenceRationale,
     schedule,
-    senderEmail,
-    senderName,
   } = await listBatchesWithEmails();
 
   const queuedCount = batches
@@ -28,7 +26,7 @@ export default async function OutreachPlanningPage() {
       <SectionHeader
         eyebrow="Stap 4 · review"
         title="Wachtrij"
-        description="Bovenaan de planning (wanneer), daaronder de bakjes (wat + tekst). Live versturen staat nog uit."
+        description="Bovenaan de planning (wanneer), daaronder de bakjes (wat + tekst + afzender). Live versturen staat nog uit."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone="danger">Live send uit</StatusBadge>
@@ -49,18 +47,11 @@ export default async function OutreachPlanningPage() {
         cadenceLabel={cadenceLabel}
         cadenceRationale={cadenceRationale}
         schedule={schedule}
-        senderLabel={
-          senderEmail
-            ? `${senderName || senderEmail} <${senderEmail}>`
-            : null
-        }
       />
 
       <BatchQueue
         batches={batches}
         liveSendBlockReason={liveSendBlockReason}
-        senderEmail={senderEmail}
-        senderName={senderName}
       />
     </div>
   );

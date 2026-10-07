@@ -4,6 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import {
+  DEFAULT_SENDER_PROFILE_ID,
+  OUTREACH_SENDER_PROFILES,
+  type OutreachSenderProfileId,
+} from "@/lib/outreach/sender-profiles";
+import {
   OUTREACH_VARIANTS,
   type OutreachSubjectArm,
   type OutreachVariantId,
@@ -51,6 +56,9 @@ type OpenBatchOption = {
   id: string;
   name: string;
   mailCount: number;
+  senderProfileId?: OutreachSenderProfileId;
+  senderProfileLabel?: string;
+  senderEmail?: string;
 };
 
 function fmtDay(iso: string) {
@@ -123,6 +131,8 @@ export function OutreachEmailWorkbench({
   const [drafts, setDrafts] = useState<DraftEdit[]>([]);
   const [batchTarget, setBatchTarget] = useState<"new" | string>("new");
   const [batchName, setBatchName] = useState("");
+  const [senderProfileId, setSenderProfileId] =
+    useState<OutreachSenderProfileId>(DEFAULT_SENDER_PROFILE_ID);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -347,6 +357,7 @@ export function OutreachEmailWorkbench({
       emailIds: string[];
       batchId?: string;
       batchName?: string;
+      senderProfileId?: OutreachSenderProfileId;
     } = {
       action: "enqueue",
       emailIds: lastEmailIds,
@@ -358,6 +369,7 @@ export function OutreachEmailWorkbench({
           day: "numeric",
           month: "short",
         })} · ${lastEmailIds.length} mail${lastEmailIds.length === 1 ? "" : "s"}`;
+      payload.senderProfileId = senderProfileId;
     } else {
       payload.batchId = batchTarget;
     }
@@ -808,17 +820,39 @@ export function OutreachEmailWorkbench({
                     {openBatches.map((b) => (
                       <option key={b.id} value={b.id}>
                         {b.name}
+                        {b.senderProfileLabel
+                          ? ` · ${b.senderProfileLabel}`
+                          : ""}
                       </option>
                     ))}
                   </select>
                   {batchTarget === "new" ? (
-                    <input
-                      className="w-28 border border-border bg-bg px-2 py-2 text-sm sm:w-36"
-                      placeholder="Naam"
-                      value={batchName}
-                      disabled={busy}
-                      onChange={(e) => setBatchName(e.target.value)}
-                    />
+                    <>
+                      <input
+                        className="w-28 border border-border bg-bg px-2 py-2 text-sm sm:w-36"
+                        placeholder="Naam"
+                        value={batchName}
+                        disabled={busy}
+                        onChange={(e) => setBatchName(e.target.value)}
+                      />
+                      <select
+                        className="max-w-[11rem] border border-border bg-bg px-2 py-2 text-sm"
+                        value={senderProfileId}
+                        disabled={busy}
+                        onChange={(e) =>
+                          setSenderProfileId(
+                            e.target.value as OutreachSenderProfileId,
+                          )
+                        }
+                        aria-label="Afzender"
+                      >
+                        {OUTREACH_SENDER_PROFILES.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+                    </>
                   ) : null}
                   <button
                     type="button"

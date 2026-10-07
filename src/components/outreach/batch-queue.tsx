@@ -7,19 +7,19 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import type {
   OutreachBatchSummary,
 } from "@/lib/outreach/batches";
+import {
+  OUTREACH_SENDER_PROFILES,
+  type OutreachSenderProfileId,
+} from "@/lib/outreach/sender-profiles";
 
 type Props = {
   batches: OutreachBatchSummary[];
   liveSendBlockReason: string | null;
-  senderEmail: string;
-  senderName: string;
 };
 
 export function BatchQueue({
   batches,
   liveSendBlockReason,
-  senderEmail,
-  senderName,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -94,6 +94,19 @@ export function BatchQueue({
     if (data) setMessage("Notitie opgeslagen.");
   }
 
+  async function changeSender(
+    batch: OutreachBatchSummary,
+    senderProfileId: OutreachSenderProfileId,
+  ) {
+    if (senderProfileId === batch.senderProfileId) return;
+    const data = await post({
+      action: "update-batch",
+      batchId: batch.id,
+      senderProfileId,
+    });
+    if (data) setMessage("Afzender bijgewerkt.");
+  }
+
   async function trySend(batchId: string) {
     const data = await post({ action: "send-batch", batchId });
     if (data) {
@@ -112,11 +125,9 @@ export function BatchQueue({
           {liveSendBlockReason ??
             "Je kunt bakjes vullen en reviewen; versturen volgt later."}
         </p>
-        {senderEmail ? (
-          <p className="mt-2 text-xs text-text-dim">
-            Van: {senderName || senderEmail} &lt;{senderEmail}&gt;
-          </p>
-        ) : null}
+        <p className="mt-2 text-xs text-text-dim">
+          Afzender kies je per bakje (Evenementen / Reiner / Yoram).
+        </p>
       </div>
 
       {error ? (
@@ -155,6 +166,7 @@ export function BatchQueue({
                   {batch.variantKeys.length
                     ? ` · ${batch.variantKeys.join(", ")}`
                     : ""}
+                  {` · ${batch.senderProfileLabel}`}
                 </p>
               </div>
               <StatusBadge
@@ -177,6 +189,26 @@ export function BatchQueue({
             </label>
 
             <div className="mt-3 flex flex-wrap items-end gap-3">
+              <label className="block text-xs text-text-dim">
+                Afzender
+                <select
+                  className="mt-1.5 block border border-border bg-bg px-3 py-2 text-sm text-text"
+                  value={batch.senderProfileId}
+                  disabled={pending}
+                  onChange={(e) =>
+                    void changeSender(
+                      batch,
+                      e.target.value as OutreachSenderProfileId,
+                    )
+                  }
+                >
+                  {OUTREACH_SENDER_PROFILES.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label} · {p.email}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="block text-xs text-text-dim">
                 Start plannen vanaf
                 <input
@@ -243,10 +275,8 @@ export function BatchQueue({
                             </p>
                           </td>
                           <td className="py-2.5 pr-3 text-xs text-text-muted">
-                            <p className="text-text">{senderName || "—"}</p>
-                            <p className="text-text-dim">
-                              {senderEmail || "—"}
-                            </p>
+                            <p className="text-text">{batch.senderName}</p>
+                            <p className="text-text-dim">{batch.senderEmail}</p>
                           </td>
                           <td className="py-2.5 pr-3 text-text-muted">
                             <p>{mail.variantLabel ?? mail.variantKey ?? "—"}</p>

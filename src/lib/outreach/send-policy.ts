@@ -72,6 +72,27 @@ export async function resolveOutreachTestRecipient(): Promise<string> {
   return s.testRecipient;
 }
 
+/** True if From-address may be used (allowlist in settings). */
+export async function isAllowedOutreachSender(
+  email: string,
+): Promise<boolean> {
+  const s = await loadOutreachSettings();
+  const e = email.trim().toLowerCase();
+  return s.allowedSenderEmails.includes(e);
+}
+
+export async function assertAllowedOutreachSender(
+  email: string,
+): Promise<{ ok: true } | { error: string }> {
+  const e = email.trim().toLowerCase();
+  if (!(await isAllowedOutreachSender(e))) {
+    return {
+      error: `Afzender ${e} staat niet in de toegestane adressen (Instellingen). Zet dit adres eerst op de allowlist én verifieer het in Brevo.`,
+    };
+  }
+  return { ok: true };
+}
+
 /** Allowed domains for template/mail test sends (never live prospects). */
 const TEST_ALLOW_DOMAINS = ["blablabuild.com", "thuishaven.nl"];
 

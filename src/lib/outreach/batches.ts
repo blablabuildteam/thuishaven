@@ -11,7 +11,18 @@ import {
 } from "@/lib/db/schema";
 import { sendStoredDraft } from "@/lib/integrations/outreach";
 import { fillBodyTemplate, getBrochureUrl } from "@/lib/outreach/body-templates";
-import { outreachLiveSendBlockReason } from "@/lib/outreach/send-policy";
+import {
+  assertAllowedOutreachSender,
+  outreachLiveSendBlockReason,
+} from "@/lib/outreach/send-policy";
+import {
+  DEFAULT_SENDER_PROFILE_ID,
+  getSenderProfile,
+  isSenderProfileId,
+  senderProfileLabel,
+  snapshotSenderProfile,
+  type OutreachSenderProfileId,
+} from "@/lib/outreach/sender-profiles";
 import {
   formatCadenceSummary,
   loadOutreachSettings,
@@ -57,6 +68,12 @@ export type OutreachBatchSummary = {
   status: OutreachBatchStatus;
   notes: string | null;
   plannedStartDay: string | null;
+  senderProfileId: OutreachSenderProfileId;
+  senderProfileLabel: string;
+  senderEmail: string;
+  senderName: string;
+  replyToEmail: string;
+  replyToName: string;
   createdAt: string;
   updatedAt: string;
   mailCount: number;
@@ -85,6 +102,7 @@ export type QueueScheduleItem = {
   time: string;
   batchId: string;
   batchName: string;
+  senderLabel: string;
   emailId: string;
   companyName: string;
   toEmail: string | null;
@@ -163,6 +181,7 @@ function buildQueueSchedule(batches: OutreachBatchSummary[]): QueueScheduleDay[]
         time: mail.suggestedTime,
         batchId: batch.id,
         batchName: batch.name,
+        senderLabel: batch.senderProfileLabel,
         emailId: mail.emailId,
         companyName: mail.companyName,
         toEmail: mail.email,
@@ -201,7 +220,14 @@ export function defaultBatchName(mailCount: number, at = new Date()): string {
 }
 
 export async function listOpenBatches(): Promise<
-  Array<{ id: string; name: string; mailCount: number }>
+  Array<{
+    id: string;
+    name: string;
+    mailCount: number;
+    senderProfileId: OutreachSenderProfileId;
+    senderProfileLabel: string;
+    senderEmail: string;
+  }>
 > {
   if (!hasDatabase()) return [];
   const db = getDb();
@@ -209,6 +235,8 @@ export async function listOpenBatches(): Promise<
     .select({
       id: outreachBatches.id,
       name: outreachBatches.name,
+      senderProfileId: outreachBatches.senderProfileId,
+      senderEmail: outreachBatches.senderEmail,
       mailCount: sql<number>`count(${outreachEmails.id})::int`,
     })
     .from(outreachBatches)
@@ -220,13 +248,26 @@ export async function listOpenBatches(): Promise<
       ),
     )
     .where(inArray(outreachBatches.status, ["open", "ready"]))
-    .groupBy(outreachBatches.id, outreachBatches.name)
+    .groupBy(
+      outreachBatches.id,
+      outreachBatches.name,
+      outreachBatches.senderProfileId,
+      outreachBatches.senderEmail,
+    )
     .orderBy(desc(outreachBatches.updatedAt));
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    mailCount: Number(r.mailCount) || 0,
-  }));
+  return rows.map((r) => {
+    const profileId = isSenderProfileId(r.senderProfileId)
+      ? r.senderProfileId
+      : DEFAULT_SENDER_PROFILE_ID;
+    return {
+      id: r.id,
+      name: r.name,
+      mailCount: Number(r.mailCount) || 0,
+      senderProfileId: profileId,
+      senderProfileLabel: senderProfileLabel(profileId),
+      senderEmail: r.senderEmail,
+    };
+  });
 }
 
 export async function listBatchesWithEmails(): Promise<{
@@ -236,8 +277,6 @@ export async function listBatchesWithEmails(): Promise<{
   cadenceLabel: string;
   cadenceRationale: string;
   schedule: QueueScheduleDay[];
-  senderEmail: string;
-  senderName: string;
 }> {
   if (!hasDatabase()) {
     return {
@@ -247,8 +286,6 @@ export async function listBatchesWithEmails(): Promise<{
       cadenceLabel: "",
       cadenceRationale: "",
       schedule: [],
-      senderEmail: "",
-      senderName: "",
     };
   }
   const db = getDb();
@@ -385,12 +422,22 @@ export async function listBatchesWithEmails(): Promise<{
                 `${s.weekdayLabel} ${s.label} ${s.hourLabel} (${s.count})`,
             )
             .join(" · ");
+    const profileId = isSenderProfileId(b.senderProfileId)
+      ? b.senderProfileId
+      : DEFAULT_SENDER_PROFILE_ID;
+    const profile = getSenderProfile(profileId);
     return {
       id: b.id,
       name: b.name,
       status: b.status as OutreachBatchStatus,
       notes: b.notes,
       plannedStartDay: b.plannedStartDay,
+      senderProfileId: profileId,
+      senderProfileLabel: profile.label,
+      senderEmail: b.senderEmail || profile.email,
+      senderName: b.senderName || profile.name,
+      replyToEmail: b.replyToEmail || profile.replyToEmail,
+      replyToName: b.replyToName || profile.replyToName,
       createdAt: b.createdAt.toISOString(),
       updatedAt: b.updatedAt.toISOString(),
       mailCount: emails.length,
@@ -417,8 +464,6 @@ export async function listBatchesWithEmails(): Promise<{
     cadenceLabel: formatCadenceSummary(settings),
     cadenceRationale: settings.cadenceRationale,
     schedule: buildQueueSchedule(batches),
-    senderEmail: settings.senderEmail,
-    senderName: settings.senderName,
   };
 }
 
@@ -426,8 +471,16 @@ export async function enqueueEmails(input: {
   emailIds: string[];
   batchId?: string;
   batchName?: string;
+  /** Required when creating a new bakje. Ignored when adding to an existing one. */
+  senderProfileId?: OutreachSenderProfileId;
 }): Promise<
-  | { batchId: string; batchName: string; enqueued: number }
+  | {
+      batchId: string;
+      batchName: string;
+      enqueued: number;
+      senderProfileId: OutreachSenderProfileId;
+      senderEmail: string;
+    }
   | { error: string }
 > {
   if (!hasDatabase()) return { error: "DATABASE_URL ontbreekt" };
@@ -457,6 +510,8 @@ export async function enqueueEmails(input: {
 
   let batchId = input.batchId?.trim() || null;
   let batchName = input.batchName?.trim() || "";
+  let senderProfileId: OutreachSenderProfileId = DEFAULT_SENDER_PROFILE_ID;
+  let senderEmail = getSenderProfile(senderProfileId).email;
 
   if (batchId) {
     const [batch] = await db
@@ -469,17 +524,36 @@ export async function enqueueEmails(input: {
       return { error: "Dit bakje is al verstuurd" };
     }
     batchName = batch.name;
+    senderProfileId = isSenderProfileId(batch.senderProfileId)
+      ? batch.senderProfileId
+      : DEFAULT_SENDER_PROFILE_ID;
+    senderEmail = batch.senderEmail || getSenderProfile(senderProfileId).email;
   } else {
+    const requested = input.senderProfileId ?? DEFAULT_SENDER_PROFILE_ID;
+    if (!isSenderProfileId(requested)) {
+      return { error: "Ongeldig afzenderprofiel" };
+    }
+    const snap = snapshotSenderProfile(requested);
+    const allowed = await assertAllowedOutreachSender(snap.senderEmail);
+    if ("error" in allowed) return allowed;
+
     if (!batchName) batchName = defaultBatchName(ids.length);
     const [created] = await db
       .insert(outreachBatches)
       .values({
         name: batchName,
         status: "open",
+        senderProfileId: snap.senderProfileId,
+        senderEmail: snap.senderEmail,
+        senderName: snap.senderName,
+        replyToEmail: snap.replyToEmail,
+        replyToName: snap.replyToName,
       })
       .returning();
     if (!created) return { error: "Bakje aanmaken mislukt" };
     batchId = created.id;
+    senderProfileId = snap.senderProfileId;
+    senderEmail = snap.senderEmail;
   }
 
   await db
@@ -495,7 +569,13 @@ export async function enqueueEmails(input: {
     .set({ updatedAt: new Date(), status: "ready" })
     .where(eq(outreachBatches.id, batchId));
 
-  return { batchId, batchName, enqueued: ids.length };
+  return {
+    batchId,
+    batchName,
+    enqueued: ids.length,
+    senderProfileId,
+    senderEmail,
+  };
 }
 
 export async function dequeueEmails(input: {
@@ -559,6 +639,7 @@ export async function updateBatchMeta(input: {
   name?: string;
   notes?: string | null;
   plannedStartDay?: string | null;
+  senderProfileId?: OutreachSenderProfileId;
 }): Promise<{ ok: true } | { error: string }> {
   if (!hasDatabase()) return { error: "DATABASE_URL ontbreekt" };
   const db = getDb();
@@ -576,6 +657,11 @@ export async function updateBatchMeta(input: {
     name?: string;
     notes?: string | null;
     plannedStartDay?: string | null;
+    senderProfileId?: string;
+    senderEmail?: string;
+    senderName?: string;
+    replyToEmail?: string;
+    replyToName?: string;
     updatedAt: Date;
   } = { updatedAt: new Date() };
   if (typeof input.name === "string" && input.name.trim()) {
@@ -586,6 +672,19 @@ export async function updateBatchMeta(input: {
   }
   if (input.plannedStartDay !== undefined) {
     patch.plannedStartDay = input.plannedStartDay || null;
+  }
+  if (input.senderProfileId !== undefined) {
+    if (!isSenderProfileId(input.senderProfileId)) {
+      return { error: "Ongeldig afzenderprofiel" };
+    }
+    const snap = snapshotSenderProfile(input.senderProfileId);
+    const allowed = await assertAllowedOutreachSender(snap.senderEmail);
+    if ("error" in allowed) return allowed;
+    patch.senderProfileId = snap.senderProfileId;
+    patch.senderEmail = snap.senderEmail;
+    patch.senderName = snap.senderName;
+    patch.replyToEmail = snap.replyToEmail;
+    patch.replyToName = snap.replyToName;
   }
 
   await db

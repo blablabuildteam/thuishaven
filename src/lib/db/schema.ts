@@ -167,6 +167,13 @@ export const outreachBatches = pgTable("outreach_batches", {
   notes: text("notes"),
   /** Optionele startdag (YYYY-MM-DD) voor de planningsuggestie. */
   plannedStartDay: text("planned_start_day"),
+  /** evenementen | reiner | yoram — UI-profiel. */
+  senderProfileId: text("sender_profile_id").notNull().default("reiner"),
+  /** Snapshot From (blijft staan als profiel later wijzigt). */
+  senderEmail: text("sender_email").notNull().default("reiner@thuishaven.nl"),
+  senderName: text("sender_name").notNull().default("Reiner · Thuishaven"),
+  replyToEmail: text("reply_to_email").notNull().default("reiner@thuishaven.nl"),
+  replyToName: text("reply_to_name").notNull().default("Reiner · Thuishaven"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -184,7 +191,9 @@ export const outreachSettings = pgTable("outreach_settings", {
   /** Comma-separated From-adressen die Brevo mag gebruiken. */
   allowedSenderEmails: text("allowed_sender_emails")
     .notNull()
-    .default("zakelijk@thuishaven.nl,evenement@thuishaven.nl"),
+    .default(
+      "evenementen@thuishaven.nl,reiner@thuishaven.nl,yoram@thuishaven.nl,zakelijk@thuishaven.nl,evenement@thuishaven.nl",
+    ),
   testRecipient: text("test_recipient")
     .notNull()
     .default("team@blablabuild.com"),
