@@ -15,6 +15,8 @@ import {
   mailAngleFor,
   suggestedVariantForAngle,
 } from "@/lib/outreach/mail-angle";
+import { ClearHandoffCookie } from "@/components/outreach/clear-handoff-cookie";
+import { peekHandoffIds } from "@/lib/outreach/handoff";
 import { resolveOutreachTestRecipient } from "@/lib/outreach/send-policy";
 import type { OutreachVariantId } from "@/lib/outreach/tone";
 
@@ -33,6 +35,7 @@ export default async function EmailsPage({
     params,
     openBatches,
     testTo,
+    handoffIds,
   ] = await Promise.all([
     listOutreachEmails(),
     listCrmRecords(),
@@ -40,10 +43,14 @@ export default async function EmailsPage({
     searchParams,
     listOpenBatches(),
     resolveOutreachTestRecipient(),
+    peekHandoffIds(),
   ]);
   const preselectIds = [
-    ...(params.ids?.split(",") ?? []),
-    ...(params.prospect ? [params.prospect] : []),
+    ...new Set([
+      ...handoffIds,
+      ...(params.ids?.split(",") ?? []),
+      ...(params.prospect ? [params.prospect] : []),
+    ]),
   ]
     .map((s) => s.trim())
     .filter(Boolean);
@@ -94,6 +101,7 @@ export default async function EmailsPage({
       score: score.score,
       tier: score.tier,
       mailCount: r.mailCount,
+      queuedCount: r.queuedCount,
       lastSentAt: r.lastSentAt,
       lastVariantKey: r.lastVariantKey,
       replyCount: r.replyCount,
@@ -126,6 +134,8 @@ export default async function EmailsPage({
           </div>
         }
       />
+
+      {handoffIds.length > 0 ? <ClearHandoffCookie /> : null}
 
       <OutreachEmailWorkbench
         prospects={workbenchProspects}

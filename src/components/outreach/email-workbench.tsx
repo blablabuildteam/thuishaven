@@ -29,7 +29,9 @@ export type WorkbenchProspect = {
   suggestedLabel: string | null;
   score: number;
   tier: LeadTier;
+  /** Truly sent (not bakje). */
   mailCount: number;
+  queuedCount: number;
   lastSentAt: string | null;
   lastVariantKey: string | null;
   replyCount: number;
@@ -519,7 +521,7 @@ export function OutreachEmailWorkbench({
               checked={showMailed}
               onChange={(e) => setShowMailed(e.target.checked)}
             />
-            Ook al gemaild ({mailedTotal})
+            Ook al verstuurd ({mailedTotal})
           </label>
           {preselectIds.length > 0 ? (
             <label className="flex items-center gap-1.5 text-xs text-text-muted">
@@ -538,14 +540,14 @@ export function OutreachEmailWorkbench({
           {!showMailed ? (
             <>
               {" "}
-              — alleen nog nooit gemaild ({neverMailedTotal} met e-mail +
-              mailkans)
+              — alleen nog nooit verstuurd ({neverMailedTotal} met e-mail +
+              mailkans; bakje telt niet als verstuurd)
               {mailedTotal > 0
-                ? ` · ${mailedTotal} al gemaild staan uit (vink hierboven aan om te zien)`
+                ? ` · ${mailedTotal} al verstuurd staan uit (vink hierboven aan om te zien)`
                 : ""}
             </>
           ) : (
-            <> — inclusief al gemaild</>
+            <> — inclusief al verstuurd</>
           )}
           {skippedNoEmail > 0 ? (
             <>
@@ -605,7 +607,7 @@ export function OutreachEmailWorkbench({
                 </th>
                 <th className="px-3 py-2 font-medium">Bedrijf</th>
                 <th className="px-3 py-2 font-medium">Invalshoek</th>
-                <th className="px-3 py-2 font-medium">Eerder gemaild</th>
+                <th className="px-3 py-2 font-medium">Verstuurd</th>
                 <th className="px-3 py-2 font-medium">Template</th>
               </tr>
             </thead>
@@ -641,12 +643,15 @@ export function OutreachEmailWorkbench({
                       </Link>
                       <p className="text-xs text-text-dim">
                         {[p.contactName, p.email].filter(Boolean).join(" · ")}
+                        {p.queuedCount > 0
+                          ? ` · ${p.queuedCount} in bakje`
+                          : ""}
                       </p>
                     </td>
                     <td className="px-3 py-2 text-xs text-text-muted">
                       {p.suggestedLabel ?? "—"}
                       <span className="mt-0.5 block text-[10px] text-text-dim">
-                        score {p.score}
+                        score {p.score} · {p.tier}
                       </span>
                     </td>
                     <td className="px-3 py-2 text-xs">
@@ -658,6 +663,8 @@ export function OutreachEmailWorkbench({
                             : ""}
                           {p.replyCount > 0 ? " · gereageerd" : ""}
                         </span>
+                      ) : p.queuedCount > 0 ? (
+                        <span className="text-text-muted">In bakje</span>
                       ) : (
                         <span className="text-text-dim">Nee</span>
                       )}

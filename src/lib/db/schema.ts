@@ -206,6 +206,21 @@ export const outreachSettings = pgTable("outreach_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/**
+ * Singleton Apollo coverage / paging state (id = 'default').
+ * Replaces the fake __apollo_cursor__ prospect row.
+ */
+export const outreachApolloState = pgTable("outreach_apollo_state", {
+  id: text("id").primaryKey().default("default"),
+  metadata: jsonb("metadata")
+    .$type<Record<string, unknown>>()
+    .notNull()
+    .default({}),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
 export const mailVariantStatusEnum = pgEnum("mail_variant_status", [
   "draft",
   "testing",

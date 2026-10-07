@@ -67,7 +67,13 @@ export type CrmRecord = {
   /** Reijner "niet mailen" / bestaande klant — in CRM, niet cold. */
   existingCustomer: boolean;
   excludedReason: string | null;
+  /**
+   * Mails that were actually sent (or progressed after send).
+   * Does NOT include drafts or bakje (queued).
+   */
   mailCount: number;
+  /** In a bakje, not yet live-sent. */
+  queuedCount: number;
   openCount: number;
   clickCount: number;
   replyCount: number;
@@ -129,6 +135,7 @@ function mapRecord(
   p: typeof prospects.$inferSelect,
   extras: {
     mailCount: number;
+    queuedCount: number;
     openCount: number;
     clickCount: number;
     replyCount: number;
@@ -261,6 +268,7 @@ function mapRecord(
         !(p.type === "agency" && meta.source === "bureau_import")),
     excludedReason: p.excludedReason,
     mailCount: extras.mailCount,
+    queuedCount: extras.queuedCount,
     openCount: extras.openCount,
     clickCount: extras.clickCount,
     replyCount: extras.replyCount,
@@ -306,11 +314,13 @@ export async function listCrmRecords(): Promise<{
   const mailStats = await db
     .select({
       prospectId: outreachEmails.prospectId,
-      mailCount: sql<number>`count(*) filter (where ${outreachEmails.status} <> 'draft')::int`,
+      // Truly sent (or later lifecycle). Queued bakje mails do NOT count as mailed.
+      mailCount: sql<number>`count(*) filter (where ${outreachEmails.status} in ('sent','opened','clicked','replied','bounced','opted_out'))::int`,
+      queuedCount: sql<number>`count(*) filter (where ${outreachEmails.status} = 'queued')::int`,
       openCount: sql<number>`count(*) filter (where ${outreachEmails.openedAt} is not null)::int`,
       clickCount: sql<number>`count(*) filter (where ${outreachEmails.clickedAt} is not null)::int`,
-      lastSent: sql<Date | null>`max(${outreachEmails.sentAt}) filter (where ${outreachEmails.status} <> 'draft')`,
-      lastVariantKey: sql<string | null>`(array_agg(${outreachEmails.variantKey} order by ${outreachEmails.sentAt} desc nulls last) filter (where ${outreachEmails.status} <> 'draft'))[1]`,
+      lastSent: sql<Date | null>`max(${outreachEmails.sentAt}) filter (where ${outreachEmails.sentAt} is not null)`,
+      lastVariantKey: sql<string | null>`(array_agg(${outreachEmails.variantKey} order by ${outreachEmails.sentAt} desc nulls last) filter (where ${outreachEmails.sentAt} is not null))[1]`,
     })
     .from(outreachEmails)
     .groupBy(outreachEmails.prospectId);
@@ -349,6 +359,7 @@ export async function listCrmRecords(): Promise<{
     const last = lastCandidates.sort((a, b) => b.getTime() - a.getTime())[0];
     return mapRecord(p, {
       mailCount: mail?.mailCount ?? 0,
+      queuedCount: mail?.queuedCount ?? 0,
       openCount: mail?.openCount ?? 0,
       clickCount: mail?.clickCount ?? 0,
       replyCount: reply?.replyCount ?? 0,
@@ -548,13 +559,23 @@ export async function getCrmDossier(
   timeline.sort((a, b) => +new Date(b.at) - +new Date(a.at));
 
   const lastTouch = timeline[0]?.at ?? p.updatedAt.toISOString();
-  const sentMails = mails.filter((m) => m.status !== "draft");
+  const SENT_STATUSES = new Set([
+    "sent",
+    "opened",
+    "clicked",
+    "replied",
+    "bounced",
+    "opted_out",
+  ]);
+  const sentMails = mails.filter((m) => SENT_STATUSES.has(m.status));
+  const queuedMails = mails.filter((m) => m.status === "queued");
 
   return {
     source: "db",
     dossier: {
       ...mapRecord(p, {
         mailCount: sentMails.length,
+        queuedCount: queuedMails.length,
         openCount: sentMails.filter((m) => m.openedAt).length,
         clickCount: sentMails.filter((m) => m.clickedAt).length,
         replyCount: replies.length,

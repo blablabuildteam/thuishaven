@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
@@ -8,11 +8,11 @@ import { nl } from "date-fns/locale";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { statusLabels } from "@/lib/mock/outreach";
 import { type MailAngleId, isMailableAngle, mailAngleTone } from "@/lib/outreach/mail-angle";
-import { type LeadScore } from "@/lib/outreach/lead-score";
+import { leadTierTone, type LeadScore } from "@/lib/outreach/lead-score";
 
 const FOLLOW_UP_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
-/** Keeps the Mailen hand-off URL a sane length; one batch at a time. */
-const MAX_HANDOFF = 50;
+/** One Mailen batch at a time (cookie handoff, not URL length). */
+const MAX_HANDOFF = 80;
 
 /** Client-safe shape — avoid importing server crm.ts (postgres) into the browser. */
 type CrmRow = {
@@ -32,6 +32,7 @@ type CrmRow = {
   lastTouchAt: string | null;
   kvkHeadcountOff: boolean;
   mailCount: number;
+  queuedCount: number;
   openCount: number;
   clickCount: number;
   replyCount: number;
@@ -131,6 +132,9 @@ function fmt(iso: string | null) {
 
 export function CrmCompaniesTable({ rows }: Props) {
   const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [handoffBusy, setHandoffBusy] = useState(false);
+  const [handoffError, setHandoffError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [mail, setMail] = useState<MailFilter>("kans");
   const [region, setRegion] = useState<RegionFilter>("all");
@@ -323,6 +327,33 @@ export function CrmCompaniesTable({ rows }: Props) {
     setPicked(new Set(mailableIds.slice(0, MAX_HANDOFF)));
   }
 
+  async function goToMailen() {
+    const ids = handoffIds.slice(0, MAX_HANDOFF);
+    if (!ids.length) return;
+    setHandoffError(null);
+    setHandoffBusy(true);
+    try {
+      const res = await fetch("/api/outreach/handoff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prospectIds: ids }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        redirectTo?: string;
+      };
+      if (!res.ok) {
+        setHandoffError(data.error ?? "Handoff mislukt");
+        return;
+      }
+      startTransition(() => {
+        router.push(data.redirectTo ?? "/outreach/emails");
+      });
+    } finally {
+      setHandoffBusy(false);
+    }
+  }
+
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-baseline gap-x-4 gap-y-2 border-b border-border pb-4">
@@ -422,26 +453,35 @@ export function CrmCompaniesTable({ rows }: Props) {
                 Vink mailklare aan
               </button>
             )}
-            <Link
-              href={`/outreach/emails?ids=${handoffIds.slice(0, MAX_HANDOFF).join(",")}`}
+            <button
+              type="button"
+              disabled={handoffBusy || pending}
+              onClick={() => void goToMailen()}
               title={
                 pickedMailable.length > 0
                   ? `Jouw selectie · max ${MAX_HANDOFF}`
                   : `Alle mailklare in dit filter · max ${MAX_HANDOFF} per keer`
               }
-              className="shrink-0 bg-accent px-4 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast"
+              className="shrink-0 bg-accent px-4 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
             >
-              {pickedMailable.length > 0
-                ? `Mail selectie (${handoffCount}) →`
-                : `Mail ${handoffCount}${
-                    mailableIds.length > MAX_HANDOFF
-                      ? ` van ${mailableIds.length}`
-                      : ""
-                  } →`}
-            </Link>
+              {handoffBusy || pending
+                ? "Bezig…"
+                : pickedMailable.length > 0
+                  ? `Mail selectie (${handoffCount}) →`
+                  : `Mail ${handoffCount}${
+                      mailableIds.length > MAX_HANDOFF
+                        ? ` van ${mailableIds.length}`
+                        : ""
+                    } →`}
+            </button>
           </div>
         ) : null}
       </div>
+      {handoffError ? (
+        <p className="mb-3 text-sm text-danger" role="alert">
+          {handoffError}
+        </p>
+      ) : null}
 
       {moreOpen ? (
         <div className="mb-4 flex flex-wrap gap-3 border-b border-border pb-4">
@@ -523,6 +563,7 @@ export function CrmCompaniesTable({ rows }: Props) {
                   <span className="sr-only">Selecteer</span>
                 </th>
                 <th className="px-0 py-2.5 pr-4 font-medium">Bedrijf</th>
+                <th className="px-4 py-2.5 font-medium">Score</th>
                 <th className="px-4 py-2.5 font-medium">Waarom nu</th>
                 <th className="px-4 py-2.5 font-medium">Laatste mail</th>
               </tr>
@@ -534,6 +575,8 @@ export function CrmCompaniesTable({ rows }: Props) {
                   isMailableAngle(angle.id) &&
                   Boolean(row.email) &&
                   row.mailCount === 0;
+                const topReason =
+                  score.reasons[0]?.replace(/^\+\d+\s*/, "") ?? null;
                 return (
                   <tr
                     key={row.id}
@@ -548,9 +591,11 @@ export function CrmCompaniesTable({ rows }: Props) {
                         disabled={!canMail && !on}
                         title={
                           canMail
-                            ? "Selecteer om te mailen"
+                            ? row.queuedCount > 0
+                              ? "Selecteer om te mailen (zit al in bakje)"
+                              : "Selecteer om te mailen"
                             : row.mailCount > 0
-                              ? "Al gemaild"
+                              ? "Al verstuurd"
                               : !row.email
                                 ? "Geen e-mail"
                                 : "Geen mailkans"
@@ -575,7 +620,28 @@ export function CrmCompaniesTable({ rows }: Props) {
                         (row.city || row.kvkCity || row.apolloCity)
                           ? " · buiten regio"
                           : ""}
+                        {row.queuedCount > 0
+                          ? ` · ${row.queuedCount} in bakje`
+                          : ""}
                       </p>
+                    </td>
+                    <td
+                      className="px-4 py-3"
+                      title={score.reasons.join("\n")}
+                    >
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-display text-sm tabular-nums tracking-wide text-text">
+                          {score.score}
+                        </span>
+                        <StatusBadge tone={leadTierTone(score.tier)}>
+                          {score.tier}
+                        </StatusBadge>
+                      </div>
+                      {topReason ? (
+                        <p className="mt-1 max-w-[10rem] text-xs text-text-dim">
+                          {topReason}
+                        </p>
+                      ) : null}
                     </td>
                     <td className="px-4 py-3" title={score.reasons.join("\n")}>
                       <StatusBadge tone={mailAngleTone(angle.id)}>
@@ -595,6 +661,8 @@ export function CrmCompaniesTable({ rows }: Props) {
                             </p>
                           ) : null}
                         </>
+                      ) : row.queuedCount > 0 ? (
+                        <span className="text-text-dim">In bakje</span>
                       ) : (
                         <span className="text-text-dim">Nog niet</span>
                       )}

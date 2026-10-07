@@ -21,15 +21,21 @@ export default async function OutreachPlanningPage() {
     .filter((b) => b.status !== "sent")
     .reduce((s, b) => s + b.mailCount, 0);
 
+  const liveUnlocked = !liveSendBlockReason;
+
   return (
     <div>
       <SectionHeader
         eyebrow="Stap 4 · review"
         title="Wachtrij"
-        description="Bovenaan de planning (wanneer), daaronder de bakjes (wat + tekst + afzender). Live versturen staat nog uit."
+        description="Bovenaan de planning (wanneer), daaronder de bakjes (wat + tekst + afzender)."
         action={
           <div className="flex flex-wrap gap-2">
-            <StatusBadge tone="danger">Live send uit</StatusBadge>
+            {liveUnlocked ? (
+              <StatusBadge tone="success">Live send aan</StatusBadge>
+            ) : (
+              <StatusBadge tone="danger">Live send uit</StatusBadge>
+            )}
             <StatusBadge tone={queuedCount > 0 ? "accent" : "neutral"}>
               {queuedCount} in bakjes
             </StatusBadge>
@@ -42,6 +48,10 @@ export default async function OutreachPlanningPage() {
           </div>
         }
       />
+
+      {!liveUnlocked && liveSendBlockReason ? (
+        <p className="mb-4 text-xs text-text-dim">{liveSendBlockReason}</p>
+      ) : null}
 
       <QueueSchedule
         cadenceLabel={cadenceLabel}

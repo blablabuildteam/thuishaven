@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
-import { prospects } from "@/lib/db/schema";
+import { outreachApolloState, prospects } from "@/lib/db/schema";
 import { normalizeCompanyKey } from "@/lib/outreach/data";
 import {
   criteriaSummary,
@@ -9,7 +9,10 @@ import {
   type ApolloSearchCriteria,
 } from "@/lib/integrations/apollo/criteria";
 
+/** Legacy name — still filtered out of CRM if the row remains. */
 export const APOLLO_CURSOR_NAME = "__apollo_cursor__";
+
+const STATE_ID = "default";
 
 export type ApolloUniverseSnapshot = {
   total: number;
@@ -26,15 +29,42 @@ export async function nextApolloDiscoverPage(): Promise<number> {
   return snap.nextPage;
 }
 
-export async function readCursorMeta(): Promise<Record<string, unknown>> {
-  if (!hasDatabase()) return {};
+async function migrateLegacyCursorIfNeeded(): Promise<void> {
+  if (!hasDatabase()) return;
   const db = getDb();
   const [existing] = await db
-    .select({ metadata: prospects.metadata })
+    .select({ id: outreachApolloState.id })
+    .from(outreachApolloState)
+    .where(eq(outreachApolloState.id, STATE_ID))
+    .limit(1);
+  if (existing) return;
+
+  const [legacy] = await db
+    .select({ metadata: prospects.metadata, updatedAt: prospects.updatedAt })
     .from(prospects)
     .where(eq(prospects.companyName, APOLLO_CURSOR_NAME))
     .limit(1);
-  return (existing?.metadata ?? {}) as Record<string, unknown>;
+
+  await db
+    .insert(outreachApolloState)
+    .values({
+      id: STATE_ID,
+      metadata: (legacy?.metadata ?? {}) as Record<string, unknown>,
+      updatedAt: legacy?.updatedAt ?? new Date(),
+    })
+    .onConflictDoNothing();
+}
+
+export async function readCursorMeta(): Promise<Record<string, unknown>> {
+  if (!hasDatabase()) return {};
+  await migrateLegacyCursorIfNeeded();
+  const db = getDb();
+  const [row] = await db
+    .select({ metadata: outreachApolloState.metadata })
+    .from(outreachApolloState)
+    .where(eq(outreachApolloState.id, STATE_ID))
+    .limit(1);
+  return (row?.metadata ?? {}) as Record<string, unknown>;
 }
 
 export async function getApolloUniverseSnapshot(): Promise<ApolloUniverseSnapshot> {
@@ -68,11 +98,12 @@ export async function upsertApolloCursor(
   patch: Record<string, unknown>,
 ): Promise<void> {
   if (!hasDatabase()) return;
+  await migrateLegacyCursorIfNeeded();
   const db = getDb();
   const [existing] = await db
-    .select({ id: prospects.id, metadata: prospects.metadata })
-    .from(prospects)
-    .where(eq(prospects.companyName, APOLLO_CURSOR_NAME))
+    .select({ metadata: outreachApolloState.metadata })
+    .from(outreachApolloState)
+    .where(eq(outreachApolloState.id, STATE_ID))
     .limit(1);
 
   const metadata = {
@@ -84,18 +115,16 @@ export async function upsertApolloCursor(
 
   if (existing) {
     await db
-      .update(prospects)
-      .set({ metadata, status: "excluded", updatedAt: now })
-      .where(eq(prospects.id, existing.id));
+      .update(outreachApolloState)
+      .set({ metadata, updatedAt: now })
+      .where(eq(outreachApolloState.id, STATE_ID));
     return;
   }
 
-  await db.insert(prospects).values({
-    type: "company",
-    companyName: APOLLO_CURSOR_NAME,
-    status: "excluded",
-    excludedReason: "Systeem · Apollo-pagina",
+  await db.insert(outreachApolloState).values({
+    id: STATE_ID,
     metadata,
+    updatedAt: now,
   });
 }
 
