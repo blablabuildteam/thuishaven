@@ -12,6 +12,7 @@ export default async function OutreachPlanningPage() {
   const {
     batches,
     liveSendBlockReason,
+    liveSendQuota,
     cadenceLabel,
     cadenceRationale,
     schedule,
@@ -22,20 +23,28 @@ export default async function OutreachPlanningPage() {
     .reduce((s, b) => s + b.mailCount, 0);
 
   const liveUnlocked = !liveSendBlockReason;
+  const bouncePaused = Boolean(liveSendQuota?.bouncePause);
 
   return (
     <div>
       <SectionHeader
         eyebrow="Stap 4 · review"
         title="Wachtrij"
-        description="Bovenaan de planning (wanneer), daaronder de bakjes (wat + tekst + afzender)."
+        description="Bovenaan de planning (wanneer), daaronder de bakjes (wat + tekst + afzender). Live send vraagt bevestiging en respecteert de daglimiet."
         action={
           <div className="flex flex-wrap gap-2">
-            {liveUnlocked ? (
+            {bouncePaused ? (
+              <StatusBadge tone="danger">Bounce-pause</StatusBadge>
+            ) : liveUnlocked ? (
               <StatusBadge tone="success">Live send aan</StatusBadge>
             ) : (
               <StatusBadge tone="danger">Live send uit</StatusBadge>
             )}
+            {liveSendQuota ? (
+              <StatusBadge tone="neutral">
+                {liveSendQuota.sentToday}/{liveSendQuota.dailyCap} vandaag
+              </StatusBadge>
+            ) : null}
             <StatusBadge tone={queuedCount > 0 ? "accent" : "neutral"}>
               {queuedCount} in bakjes
             </StatusBadge>
@@ -62,6 +71,7 @@ export default async function OutreachPlanningPage() {
       <BatchQueue
         batches={batches}
         liveSendBlockReason={liveSendBlockReason}
+        liveSendQuota={liveSendQuota}
       />
     </div>
   );

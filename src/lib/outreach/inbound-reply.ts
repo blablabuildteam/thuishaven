@@ -39,18 +39,29 @@ export type RecordInboundReplyResult =
   | { ok: true; matched: false; reason: string }
   | { ok: false; reason: string };
 
-const POSITIVE =
-  /\b(ja|graag|interesse|rondleiding|bezichtiging|afspraak|datum|data|tour|capacity|capaciteit|beschikbaar|kom langs|plannen|uitnodig)\b/i;
+const OPT_OUT =
+  /\b(uitschrijven|afmelden|unsubscribe|opt[-\s]?out|stop (met )?mailen|haal .+ (van|uit) (de )?lijst|verwijder .+ (van|uit)|niet meer (mailen|contacteren)|geen mailing)\b/i;
+const OOO =
+  /\b(out of office|afwezig|automatisch antwoord|auto[-\s]?reply|vakantie|ooo|niet bereikbaar tot)\b/i;
 const NEGATIVE =
-  /\b(geen interesse|niet geïnteresseerd|niet interess|uitschrijven|afmelden|stop|unsubscribe|haal.*uit|niet meer mailen)\b/i;
+  /\b(geen interesse|niet geïnteresseerd|niet interess|bedankt maar nee|liever niet|pas (dit|nu) niet)\b/i;
+/** Stronger positive: scheduling / visit intent, not a lone "ja". */
+const POSITIVE_STRONG =
+  /\b(rondleiding|bezichtiging|afspraak|plannen|kom langs|langskomen|uitnodig|capacity|capaciteit|beschikbaar(e)? (data|datum|dagen)|open data|site visit)\b/i;
+const POSITIVE_SOFT =
+  /\b(interesse|graag|Interessant|zou wel|kunnen we|mogelijkheden)\b/i;
 
 export function inferReplySentiment(
   text: string | null | undefined,
-): "positive" | "negative" | "neutral" {
+): "positive" | "negative" | "neutral" | "opt_out" | "ooo" {
   const raw = (text ?? "").trim();
   if (!raw) return "neutral";
+  if (OPT_OUT.test(raw)) return "opt_out";
+  if (OOO.test(raw)) return "ooo";
   if (NEGATIVE.test(raw)) return "negative";
-  if (POSITIVE.test(raw)) return "positive";
+  if (POSITIVE_STRONG.test(raw)) return "positive";
+  // Soft positive only if the message is long enough (avoids "Ja." false leads).
+  if (POSITIVE_SOFT.test(raw) && raw.length >= 40) return "positive";
   return "neutral";
 }
 
@@ -221,15 +232,32 @@ export async function recordInboundReply(
   if (!row.repliedAt) patch.repliedAt = at;
   if (!row.openedAt) patch.openedAt = at;
 
+  if (sentiment === "opt_out") {
+    patch.status = "opted_out";
+  }
+
   await db.update(outreachEmails).set(patch).where(eq(outreachEmails.id, row.id));
 
-  await db
-    .update(prospects)
-    .set({
-      status: sentiment === "positive" ? "lead" : "replied",
-      updatedAt: new Date(),
-    })
-    .where(eq(prospects.id, row.prospectId));
+  if (sentiment === "opt_out") {
+    await db
+      .update(prospects)
+      .set({
+        status: "excluded",
+        excludedReason: "Opt-out via reply",
+        updatedAt: new Date(),
+      })
+      .where(eq(prospects.id, row.prospectId));
+  } else if (sentiment === "ooo") {
+    // Leave prospect status; auto-replies should not become leads.
+  } else {
+    await db
+      .update(prospects)
+      .set({
+        status: sentiment === "positive" ? "lead" : "replied",
+        updatedAt: new Date(),
+      })
+      .where(eq(prospects.id, row.prospectId));
+  }
 
   let leadCreated = false;
   if (!input.skipLead && sentiment === "positive") {

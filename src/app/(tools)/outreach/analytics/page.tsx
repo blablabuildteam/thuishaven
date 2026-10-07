@@ -42,12 +42,20 @@ export default async function OutreachAnalyticsPage() {
         title="Resultaten"
         description="Wat er echt verstuurd is, en of het geopend, geklikt of beantwoord is. Antwoorden komen vanzelf binnen, net als opens en kliks."
         action={
-          <Link
-            href="/outreach/emails"
-            className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
-          >
-            ← Mailen
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/outreach/leads"
+              className="bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast"
+            >
+              Warme leads →
+            </Link>
+            <Link
+              href="/outreach/emails"
+              className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
+            >
+              ← Mailen
+            </Link>
+          </div>
         }
       />
 

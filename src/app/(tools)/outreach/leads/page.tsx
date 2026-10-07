@@ -15,9 +15,9 @@ export default async function LeadsPage() {
   return (
     <div>
       <SectionHeader
-        eyebrow="Sales"
+        eyebrow="Na stap 5"
         title="Warme leads"
-        description="Positieve replies (tour, datum, bezichtiging). Los van de follow-up queue op Resultaten — daar staan geopend-zonder-antwoord."
+        description="Positieve replies (rondleiding, datum, bezichtiging). Opt-outs worden uitgesloten. Follow-up (geopend, geen antwoord) blijft op Resultaten."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={source === "db" ? "success" : "neutral"}>

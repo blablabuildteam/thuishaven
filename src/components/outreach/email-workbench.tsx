@@ -250,6 +250,12 @@ export function OutreachEmailWorkbench({
             }));
 
       const failed = Number(data.failed ?? 0);
+      const templateFallback =
+        Number(data.templateFallback ?? 0) ||
+        (data.source === "template_fallback" ? 1 : 0) ||
+        (
+          (data.results ?? []) as Array<{ source?: string }>
+        ).filter((r) => r.source === "template_fallback").length;
       setLastEmailIds(made.map((d) => d.emailId));
       setDrafts(made);
       if (!made.length) {
@@ -262,6 +268,9 @@ export function OutreachEmailWorkbench({
         setMessage(
           `${made.length} draft${made.length === 1 ? "" : "s"} klaar` +
             (failed ? ` · ${failed} mislukt` : "") +
+            (templateFallback
+              ? ` · ${templateFallback} via standaardtemplate (AI faalde — check tekst)`
+              : "") +
             " — lees na, stuur test, zet in bakje.",
         );
         requestAnimationFrame(() => {

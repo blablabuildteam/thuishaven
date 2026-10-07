@@ -5,30 +5,41 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type {
+  LiveSendQuota,
   OutreachBatchSummary,
 } from "@/lib/outreach/batches";
 import {
   OUTREACH_SENDER_PROFILES,
   type OutreachSenderProfileId,
 } from "@/lib/outreach/sender-profiles";
+import { LIVE_SEND_CONFIRM_PHRASE } from "@/lib/outreach/live-send-constants";
 
 type Props = {
   batches: OutreachBatchSummary[];
   liveSendBlockReason: string | null;
+  liveSendQuota: LiveSendQuota | null;
 };
 
 export function BatchQueue({
   batches,
   liveSendBlockReason,
+  liveSendQuota,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [confirmBatchId, setConfirmBatchId] = useState<string | null>(null);
+  const [confirmText, setConfirmText] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState<Record<string, { subject: string; body: string }>>(
     {},
   );
+  const liveUnlocked = !liveSendBlockReason;
+  const bouncePaused = Boolean(liveSendQuota?.bouncePause);
+  const remainingToday = liveSendQuota?.remainingToday;
+  const dayCapHit =
+    liveSendQuota != null && liveSendQuota.remainingToday <= 0;
 
   const active = batches.filter((b) => b.status !== "sent");
   const sent = batches.filter((b) => b.status === "sent");
@@ -107,27 +118,60 @@ export function BatchQueue({
     if (data) setMessage("Afzender bijgewerkt.");
   }
 
-  async function trySend(batchId: string) {
-    const data = await post({ action: "send-batch", batchId });
+  async function trySend(batch: OutreachBatchSummary) {
+    const data = await post({
+      action: "send-batch",
+      batchId: batch.id,
+      confirmText,
+    });
     if (data) {
+      setConfirmBatchId(null);
+      setConfirmText("");
       setMessage(
         `${data.ok} verstuurd` +
-          (data.failed ? ` · ${data.failed} mislukt` : ""),
+          (data.failed ? ` · ${data.failed} mislukt` : "") +
+          (data.skippedCap
+            ? ` · ${data.skippedCap} bewaard voor morgen (daglimiet)`
+            : "") +
+          (typeof data.sentToday === "number" && data.dailyCap
+            ? ` · vandaag ${data.sentToday}/${data.dailyCap}`
+            : ""),
       );
     }
   }
 
   return (
     <div className="space-y-8">
-      <div className="border border-danger/40 bg-danger/5 px-4 py-3 text-sm text-text-muted">
-        <p className="font-medium text-text">Live versturen staat uit.</p>
+      <div
+        className={`border px-4 py-3 text-sm text-text-muted ${
+          liveUnlocked && !bouncePaused
+            ? "border-accent/40 bg-accent/5"
+            : "border-danger/40 bg-danger/5"
+        }`}
+      >
+        <p className="font-medium text-text">
+          {bouncePaused
+            ? "Live send gepauzeerd (bounces)"
+            : liveUnlocked
+              ? "Live versturen staat aan"
+              : "Live versturen staat uit"}
+        </p>
         <p className="mt-1">
-          {liveSendBlockReason ??
-            "Je kunt bakjes vullen en reviewen; versturen volgt later."}
+          {bouncePaused
+            ? `${liveSendQuota?.recentBounces ?? 0} bounces in 24u — check Brevo/lijst voor je doorgaat.`
+            : liveSendBlockReason ??
+              "Bakjes versturen gaat écht naar prospects. Bevestig met bakjenaam."}
         </p>
-        <p className="mt-2 text-xs text-text-dim">
-          Afzender kies je per bakje (Evenementen / Reiner / Yoram).
-        </p>
+        {liveSendQuota ? (
+          <p className="mt-2 text-xs text-text-dim">
+            Daglimiet: {liveSendQuota.sentToday}/{liveSendQuota.dailyCap} vandaag
+            · nog {liveSendQuota.remainingToday} · afzender per bakje
+          </p>
+        ) : (
+          <p className="mt-2 text-xs text-text-dim">
+            Afzender kies je per bakje (Evenementen / Reiner / Yoram).
+          </p>
+        )}
       </div>
 
       {error ? (
@@ -400,20 +444,95 @@ export function BatchQueue({
               </div>
             )}
 
-            <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border pt-4">
-              <button
-                type="button"
-                disabled={pending || Boolean(liveSendBlockReason) || batch.mailCount === 0}
-                title={liveSendBlockReason ?? "Verstuur alle mails in dit bakje"}
-                className="bg-accent px-4 py-2.5 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:cursor-not-allowed disabled:opacity-50"
-                onClick={() => void trySend(batch.id)}
-              >
-                Verstuur bakje ({batch.mailCount})
-              </button>
-              <p className="max-w-md text-xs text-text-dim">
-                {liveSendBlockReason ??
-                  "Live send is aan — dit stuurt écht naar de prospects."}
-              </p>
+            <div className="mt-4 space-y-3 border-t border-border pt-4">
+              {confirmBatchId === batch.id ? (
+                <div className="max-w-lg space-y-2 border border-danger/40 bg-danger/5 px-3 py-3">
+                  <p className="text-sm font-medium text-text">
+                    Bevestig live send · {batch.mailCount} mail
+                    {batch.mailCount === 1 ? "" : "s"}
+                    {remainingToday != null
+                      ? ` · max ${Math.min(batch.mailCount, remainingToday)} vandaag`
+                      : ""}
+                  </p>
+                  <p className="text-xs text-text-dim">
+                    Typ exact “{batch.name}” of “{LIVE_SEND_CONFIRM_PHRASE}”.
+                  </p>
+                  <input
+                    className="w-full border border-border bg-bg px-3 py-2 text-sm"
+                    value={confirmText}
+                    disabled={pending}
+                    autoFocus
+                    placeholder={batch.name}
+                    onChange={(e) => setConfirmText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void trySend(batch);
+                    }}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={
+                        pending ||
+                        !confirmText.trim() ||
+                        bouncePaused ||
+                        dayCapHit
+                      }
+                      className="bg-accent px-4 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
+                      onClick={() => void trySend(batch)}
+                    >
+                      {pending ? "Versturen…" : "Nu live versturen"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      className="border border-border px-3 py-2 text-sm"
+                      onClick={() => {
+                        setConfirmBatchId(null);
+                        setConfirmText("");
+                      }}
+                    >
+                      Annuleer
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={
+                      pending ||
+                      Boolean(liveSendBlockReason) ||
+                      bouncePaused ||
+                      dayCapHit ||
+                      batch.mailCount === 0
+                    }
+                    title={
+                      liveSendBlockReason ??
+                      (bouncePaused
+                        ? "Gepauzeerd door bounces"
+                        : dayCapHit
+                          ? "Daglimiet bereikt"
+                          : "Verstuur alle mails in dit bakje")
+                    }
+                    className="bg-accent px-4 py-2.5 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={() => {
+                      setConfirmBatchId(batch.id);
+                      setConfirmText("");
+                      setError(null);
+                    }}
+                  >
+                    Verstuur bakje ({batch.mailCount})
+                  </button>
+                  <p className="max-w-md text-xs text-text-dim">
+                    {liveSendBlockReason ??
+                      (bouncePaused
+                        ? "Bounces — live geblokkeerd."
+                        : dayCapHit
+                          ? "Daglimiet vol — morgen verder."
+                          : "Live send: eerst bevestigen met bakjenaam.")}
+                  </p>
+                </div>
+              )}
             </div>
           </article>
         ))

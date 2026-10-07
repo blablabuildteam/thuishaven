@@ -13,8 +13,16 @@ import { sendStoredDraft } from "@/lib/integrations/outreach";
 import { fillBodyTemplate, getBrochureUrl } from "@/lib/outreach/body-templates";
 import {
   assertAllowedOutreachSender,
+  assertLiveSendAllowed,
+  BOUNCE_PAUSE_THRESHOLD,
+  countLiveSendsToday,
+  countRecentBounces,
+  isValidLiveSendConfirm,
+  liveDailyCapFromEnvOrCadence,
   outreachLiveSendBlockReason,
 } from "@/lib/outreach/send-policy";
+import { LIVE_SEND_CONFIRM_PHRASE } from "@/lib/outreach/live-send-constants";
+import { resolveOutreachCadence } from "@/lib/outreach/cadence";
 import {
   DEFAULT_SENDER_PROFILE_ID,
   getSenderProfile,
@@ -270,10 +278,19 @@ export async function listOpenBatches(): Promise<
   });
 }
 
+export type LiveSendQuota = {
+  sentToday: number;
+  dailyCap: number;
+  remainingToday: number;
+  bouncePause: boolean;
+  recentBounces: number;
+};
+
 export async function listBatchesWithEmails(): Promise<{
   batches: OutreachBatchSummary[];
   unbatchedDrafts: UnbatchedDraft[];
   liveSendBlockReason: string | null;
+  liveSendQuota: LiveSendQuota | null;
   cadenceLabel: string;
   cadenceRationale: string;
   schedule: QueueScheduleDay[];
@@ -283,6 +300,7 @@ export async function listBatchesWithEmails(): Promise<{
       batches: [],
       unbatchedDrafts: [],
       liveSendBlockReason: outreachLiveSendBlockReason(),
+      liveSendQuota: null,
       cadenceLabel: "",
       cadenceRationale: "",
       schedule: [],
@@ -461,6 +479,19 @@ export async function listBatchesWithEmails(): Promise<{
       createdAt: d.createdAt.toISOString(),
     })),
     liveSendBlockReason: outreachLiveSendBlockReason(),
+    liveSendQuota: await (async (): Promise<LiveSendQuota> => {
+      const cadence = await resolveOutreachCadence();
+      const dailyCap = liveDailyCapFromEnvOrCadence(cadence.mailsPerDay);
+      const sentToday = await countLiveSendsToday();
+      const recentBounces = await countRecentBounces(24);
+      return {
+        sentToday,
+        dailyCap,
+        remainingToday: Math.max(0, dailyCap - sentToday),
+        bouncePause: recentBounces >= BOUNCE_PAUSE_THRESHOLD,
+        recentBounces,
+      };
+    })(),
     cadenceLabel: formatCadenceSummary(settings),
     cadenceRationale: settings.cadenceRationale,
     schedule: buildQueueSchedule(batches),
@@ -723,12 +754,19 @@ export async function updateQueuedOrDraft(input: {
 
 export async function sendBatch(input: {
   batchId: string;
+  /** Must match bakjenaam exactly, or LIVE_SEND_CONFIRM_PHRASE. */
+  confirmText: string;
 }): Promise<
-  | { ok: number; failed: number; results: Array<{ emailId: string; ok: boolean; error?: string }> }
+  | {
+      ok: number;
+      failed: number;
+      skippedCap: number;
+      sentToday: number;
+      dailyCap: number;
+      results: Array<{ emailId: string; ok: boolean; error?: string }>;
+    }
   | { error: string }
 > {
-  const blocked = outreachLiveSendBlockReason();
-  if (blocked) return { error: blocked };
   if (!hasDatabase()) return { error: "DATABASE_URL ontbreekt" };
 
   const db = getDb();
@@ -739,6 +777,12 @@ export async function sendBatch(input: {
     .limit(1);
   if (!batch) return { error: "Bakje niet gevonden" };
   if (batch.status === "sent") return { error: "Dit bakje is al verstuurd" };
+
+  if (!isValidLiveSendConfirm(input.confirmText, batch.name)) {
+    return {
+      error: `Bevestiging onjuist. Typ exact de bakjenaam “${batch.name}” of “${LIVE_SEND_CONFIRM_PHRASE}”.`,
+    };
+  }
 
   const rows = await db
     .select({ id: outreachEmails.id })
@@ -752,8 +796,22 @@ export async function sendBatch(input: {
 
   if (!rows.length) return { error: "Geen mails in dit bakje" };
 
+  const gate = await assertLiveSendAllowed(rows.length);
+  if ("error" in gate) return gate;
+
+  const toSend = rows.slice(0, gate.allowCount);
+  const skippedCap = rows.length - toSend.length;
+
   const results: Array<{ emailId: string; ok: boolean; error?: string }> = [];
-  for (const row of rows) {
+  for (const row of toSend) {
+    // Re-check bounce pause between sends (webhook can land mid-batch).
+    if (results.length > 0) {
+      const mid = await assertLiveSendAllowed(1);
+      if ("error" in mid) {
+        results.push({ emailId: row.id, ok: false, error: mid.error });
+        break;
+      }
+    }
     const sent = await sendStoredDraft({
       emailId: row.id,
       forceTest: false,
@@ -771,12 +829,19 @@ export async function sendBatch(input: {
       .update(outreachBatches)
       .set({ status: "sent", updatedAt: new Date() })
       .where(eq(outreachBatches.id, input.batchId));
-  } else if (ok > 0) {
+  } else if (ok > 0 || skippedCap > 0) {
     await db
       .update(outreachBatches)
       .set({ updatedAt: new Date() })
       .where(eq(outreachBatches.id, input.batchId));
   }
 
-  return { ok, failed: results.length - ok, results };
+  return {
+    ok,
+    failed: results.length - ok,
+    skippedCap,
+    sentToday: gate.sentToday + ok,
+    dailyCap: gate.dailyCap,
+    results,
+  };
 }

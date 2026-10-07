@@ -218,18 +218,25 @@ export async function POST(request: Request) {
     const schema = z.object({
       action: z.literal("send-batch"),
       batchId: z.string().uuid(),
+      confirmText: z.string().min(1).max(200),
     });
     const parsed = schema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Bevestiging verplicht (bakjenaam of VERSTUUR LIVE)" },
+        { status: 400 },
+      );
     }
-    const result = await sendBatch({ batchId: parsed.data.batchId });
+    const result = await sendBatch({
+      batchId: parsed.data.batchId,
+      confirmText: parsed.data.confirmText,
+    });
     if ("error" in result) {
       return NextResponse.json(result, { status: 400 });
     }
     await logSessionActivity(session, {
       action: "email_send_batch",
-      summary: `Bakje verstuurd · ${result.ok} ok · ${result.failed} mislukt`,
+      summary: `Bakje verstuurd · ${result.ok} ok · ${result.failed} mislukt · cap skip ${result.skippedCap}`,
       path: "/api/outreach/emails",
       method: "POST",
       status: 200,
@@ -238,6 +245,9 @@ export async function POST(request: Request) {
         batchId: parsed.data.batchId,
         ok: result.ok,
         failed: result.failed,
+        skippedCap: result.skippedCap,
+        sentToday: result.sentToday,
+        dailyCap: result.dailyCap,
       },
     });
     return NextResponse.json(result);
@@ -375,6 +385,8 @@ export async function POST(request: Request) {
     subject?: string;
     body?: string;
     variantId?: string;
+    source?: string;
+    fallbackReason?: string;
     error?: string;
   }> = [];
   for (const job of jobs) {
@@ -396,25 +408,33 @@ export async function POST(request: Request) {
         subject: result.subject,
         body: result.body,
         variantId: result.variantId,
+        source: result.source,
+        fallbackReason: result.fallbackReason,
       });
     }
   }
 
   const ok = results.filter((r) => r.emailId).length;
+  const templateFallback = results.filter(
+    (r) => r.source === "template_fallback",
+  ).length;
   await logSessionActivity(session, {
     action: "email_draft_bulk",
-    summary: `Bulk drafts · ${ok}/${jobs.length}`,
+    summary: `Bulk drafts · ${ok}/${jobs.length}${
+      templateFallback ? ` · ${templateFallback} template-fallback` : ""
+    }`,
     path: "/api/outreach/emails",
     method: "POST",
     status: 201,
     tool: "outreach",
-    meta: { count: jobs.length, ok },
+    meta: { count: jobs.length, ok, templateFallback },
   });
 
   return NextResponse.json(
     {
       ok,
       failed: results.length - ok,
+      templateFallback,
       results,
     },
     { status: 201 },

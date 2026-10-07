@@ -224,6 +224,9 @@ export async function generateOutreachEmail(input: {
       body: string;
       variantId: OutreachVariantId;
       subjectKey: OutreachSubjectArm;
+      /** ai = LLM rewrite; template = no AI key; template_fallback = AI failed. */
+      source: "ai" | "template" | "template_fallback";
+      fallbackReason?: string;
     }
   | { error: string }
 > {
@@ -262,6 +265,7 @@ export async function generateOutreachEmail(input: {
       body: appendOutreachSignature(resolved.body),
       variantId,
       subjectKey,
+      source: "template",
     };
   }
 
@@ -308,6 +312,8 @@ Gebruik exact dit subject.`;
       body: appendOutreachSignature(resolved.body),
       variantId,
       subjectKey,
+      source: "template_fallback",
+      fallbackReason: llm.error || "AI gaf geen bruikbaar antwoord",
     };
   }
 
@@ -318,6 +324,8 @@ Gebruik exact dit subject.`;
       body: appendOutreachSignature(resolved.body),
       variantId,
       subjectKey,
+      source: "template_fallback",
+      fallbackReason: "AI-antwoord was geen geldige JSON-mail",
     };
   }
 
@@ -343,6 +351,7 @@ Gebruik exact dit subject.`;
     body: appendOutreachSignature(parsed.body),
     variantId,
     subjectKey,
+    source: "ai",
   };
 }
 
@@ -574,6 +583,8 @@ export async function generateAndStoreDraft(input: {
       body: string;
       variantId: OutreachVariantId;
       subjectKey: OutreachSubjectArm;
+      source: "ai" | "template" | "template_fallback";
+      fallbackReason?: string;
     }
   | { error: string }
 > {
@@ -655,6 +666,8 @@ export async function generateAndStoreDraft(input: {
     body: generated.body,
     variantId: generated.variantId,
     subjectKey: generated.subjectKey,
+    source: generated.source,
+    fallbackReason: generated.fallbackReason,
   };
 }
 
