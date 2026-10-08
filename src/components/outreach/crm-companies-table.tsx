@@ -151,6 +151,16 @@ function fmt(iso: string | null) {
   return format(new Date(iso), "d MMM yyyy", { locale: nl });
 }
 
+/** Labels for title tooltip on incomplete rows. */
+function missingDataLabels(row: CrmRow): string[] {
+  const missing: string[] = [];
+  if (!row.email) missing.push("e-mail");
+  if (row.employeeCount == null) missing.push("mdw");
+  if (!row.decisionMakerName) missing.push("contact");
+  if (!(row.city || row.kvkCity || row.apolloCity)) missing.push("plaats");
+  return missing;
+}
+
 export function CrmCompaniesTable({ rows }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -190,6 +200,7 @@ export function CrmCompaniesTable({ rows }: Props) {
       past_niet: 0,
       missing_mdw: 0,
       missing_email: 0,
+      incompleteWithEmail: 0,
       in: 0,
       out: 0,
     };
@@ -215,6 +226,9 @@ export function CrmCompaniesTable({ rows }: Props) {
       }
       if (row.employeeCount == null) c.missing_mdw += 1;
       if (!row.email) c.missing_email += 1;
+      if (row.incomplete && row.email && row.mailCount === 0) {
+        c.incompleteWithEmail += 1;
+      }
       if (row.inRegion) c.in += 1;
       else if (row.city || row.kvkCity || row.apolloCity) c.out += 1;
     }
@@ -386,8 +400,56 @@ export function CrmCompaniesTable({ rows }: Props) {
     }
   }
 
+  const showMissingAlert =
+    counts.missing_email > 0 || counts.incompleteWithEmail > 0;
+
   return (
     <div>
+      {showMissingAlert ? (
+        <div
+          className="mb-4 border border-warn/50 bg-warn/10 px-3 py-2.5 text-sm"
+          role="alert"
+        >
+          <p className="font-medium text-text">
+            Gegevens ontbreken — eerst aanvullen vóór first-mail aan iedereen
+          </p>
+          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
+            {counts.missing_email > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setCompleteness("missing_email");
+                  setMoreOpen(true);
+                  setMail("all");
+                }}
+                className="text-danger underline-offset-2 hover:underline"
+              >
+                {counts.missing_email} zonder e-mail
+              </button>
+            ) : null}
+            {counts.incompleteWithEmail > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setMail("onvolledig");
+                  setCompleteness("all");
+                }}
+                className="text-warn underline-offset-2 hover:underline"
+                title="Heeft e-mail, maar mdw / contact / plaats ontbreekt"
+              >
+                {counts.incompleteWithEmail} onvolledig (heeft mail)
+              </button>
+            ) : null}
+            <Link
+              href="/outreach/lijst-bijwerken"
+              className="text-text-dim underline-offset-2 hover:text-text hover:underline"
+            >
+              Lijst bijwerken →
+            </Link>
+          </p>
+        </div>
+      ) : null}
+
       <div className="mb-5 flex flex-wrap items-baseline gap-x-4 gap-y-2 border-b border-border pb-4">
         {SIGNALS.map((s) => {
           const on = mail === s.id;
@@ -638,6 +700,9 @@ export function CrmCompaniesTable({ rows }: Props) {
                   row.mailCount === 0;
                 const topReason =
                   score.reasons[0]?.replace(/^\+\d+\s*/, "") ?? null;
+                const missing = missingDataLabels(row);
+                const showIncompleteBadge =
+                  row.incomplete && row.mailCount === 0;
                 return (
                   <tr
                     key={row.id}
@@ -666,13 +731,27 @@ export function CrmCompaniesTable({ rows }: Props) {
                       />
                     </td>
                     <td className="px-0 py-3 pr-4">
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/outreach/crm/${row.id}`)}
-                        className="text-left font-medium text-text hover:text-accent"
-                      >
-                        {row.companyName}
-                      </button>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/outreach/crm/${row.id}`)}
+                          className="text-left font-medium text-text hover:text-accent"
+                        >
+                          {row.companyName}
+                        </button>
+                        {showIncompleteBadge ? (
+                          <span
+                            title={
+                              missing.length
+                                ? `Ontbreekt: ${missing.join(" / ")}`
+                                : "Gegevens ontbreken"
+                            }
+                            className="inline-flex border border-warn/50 bg-warn/15 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-warn"
+                          >
+                            gegevens ontbreken
+                          </span>
+                        ) : null}
+                      </div>
                       <p className="text-xs text-text-dim">
                         {row.apolloCity && row.inRegion
                           ? row.apolloCity

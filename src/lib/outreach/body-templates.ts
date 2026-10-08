@@ -187,6 +187,9 @@ export function fillBodyTemplate(
     seasonHook?: string;
   },
 ): string {
+  if (!template) {
+    throw new Error("fillBodyTemplate: lege template-string");
+  }
   const brochure = vars.brochureUrl ?? getBrochureUrl();
   const first =
     vars.contactFirstName?.trim() ||

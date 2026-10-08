@@ -51,13 +51,20 @@ export async function listEditableTemplates(): Promise<EditableTemplate[]> {
     return base.map((t) => {
       const o = byKey.get(t.id);
       if (!o) return t;
+      const body =
+        typeof o.bodyTemplate === "string" && o.bodyTemplate.trim()
+          ? o.bodyTemplate
+          : t.bodyTemplate;
       return {
         ...t,
-        name: o.name,
-        description: o.description,
-        guidance: o.guidance,
-        subjects: { a: o.subjectA, b: o.subjectB },
-        bodyTemplate: o.bodyTemplate,
+        name: o.name || t.name,
+        description: o.description || t.description,
+        guidance: o.guidance || t.guidance,
+        subjects: {
+          a: o.subjectA?.trim() ? o.subjectA : t.subjects.a,
+          b: o.subjectB?.trim() ? o.subjectB : t.subjects.b,
+        },
+        bodyTemplate: body,
         overridden: true,
       };
     });
@@ -143,8 +150,14 @@ export async function resolveTemplateForSend(input: {
   contactFirstName?: string;
 }): Promise<{ subject: string; body: string; guidance: string }> {
   const t = await getEditableTemplate(input.variantId);
-  const subject = t.subjects[input.subjectArm];
-  const body = fillBodyTemplate(t.bodyTemplate, {
+  const subject =
+    t.subjects[input.subjectArm] ||
+    getOutreachVariant(input.variantId).subjects[input.subjectArm];
+  const rawBody =
+    t.bodyTemplate?.trim() ||
+    DEFAULT_BODY_TEMPLATES[input.variantId] ||
+    DEFAULT_BODY_TEMPLATES.warm_tour;
+  const body = fillBodyTemplate(rawBody, {
     companyName: input.companyName,
     availabilityUrl: input.availabilityUrl,
     brochureUrl: getBrochureUrl(),

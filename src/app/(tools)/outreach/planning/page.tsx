@@ -2,21 +2,26 @@ import Link from "next/link";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { BatchQueue } from "@/components/outreach/batch-queue";
+import { PipelineStatusBanner } from "@/components/outreach/pipeline-status-banner";
 import { QueueSchedule } from "@/components/outreach/queue-schedule";
 import { listBatchesWithEmails } from "@/lib/outreach/batches";
+import { getOutreachPipelineStatus } from "@/lib/outreach/pipeline-status";
 
 export const metadata = { title: "Wachtrij" };
 export const dynamic = "force-dynamic";
 
 export default async function OutreachPlanningPage() {
-  const {
-    batches,
-    liveSendBlockReason,
-    liveSendQuota,
-    cadenceLabel,
-    cadenceRationale,
-    schedule,
-  } = await listBatchesWithEmails();
+  const [
+    {
+      batches,
+      liveSendBlockReason,
+      liveSendQuota,
+      cadenceLabel,
+      cadenceRationale,
+      schedule,
+    },
+    pipeline,
+  ] = await Promise.all([listBatchesWithEmails(), getOutreachPipelineStatus()]);
 
   const queuedCount = batches
     .filter((b) => b.status !== "sent")
@@ -30,7 +35,7 @@ export default async function OutreachPlanningPage() {
       <SectionHeader
         eyebrow="Stap 4 · review"
         title="Wachtrij"
-        description="Bovenaan de planning (wanneer), daaronder de bakjes (wat + tekst + afzender). Live send vraagt bevestiging en respecteert de daglimiet."
+        description="Eerst beoordelen (teksten + afzender), dan Plan in / Auto-send. Bakjes met ‘Te beoordelen’ zijn nog niet live — bevestiging verplicht."
         action={
           <div className="flex flex-wrap gap-2">
             {bouncePaused ? (
@@ -57,6 +62,8 @@ export default async function OutreachPlanningPage() {
           </div>
         }
       />
+
+      <PipelineStatusBanner status={pipeline} />
 
       {!liveUnlocked && liveSendBlockReason ? (
         <p className="mb-4 text-xs text-text-dim">{liveSendBlockReason}</p>

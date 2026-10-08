@@ -1,15 +1,18 @@
 import Link from "next/link";
 import { SectionHeader } from "@/components/ui/section-header";
 import { CrmCompaniesTable } from "@/components/outreach/crm-companies-table";
+import { PipelineStatusBanner } from "@/components/outreach/pipeline-status-banner";
 import { listCrmRecords } from "@/lib/outreach/crm";
 import { mailAngleFor } from "@/lib/outreach/mail-angle";
 import { leadScore } from "@/lib/outreach/lead-score";
+import { computeOutreachPipelineStatus } from "@/lib/outreach/pipeline-status";
 
 export const metadata = { title: "Bedrijven" };
 export const dynamic = "force-dynamic";
 
 export default async function OutreachCrmPage() {
   const { rows } = await listCrmRecords();
+  const pipeline = computeOutreachPipelineStatus(rows);
   const existingCustomers = rows.filter(
     (r) => !r.partner && r.existingCustomer,
   );
@@ -40,22 +43,17 @@ export default async function OutreachCrmPage() {
       };
     });
 
-  const mailable = companies.filter((c) =>
-    ["jubileum", "seizoen", "algemeen", "funding", "recordjaar"].includes(
-      c.angle.id,
-    ),
-  ).length;
-
   return (
     <div>
       <SectionHeader
         eyebrow="Stap 2"
         title="Bedrijven"
-        description="Kies wie je wilt mailen. Klik een rij voor dossier."
+        description="Funnel: bakje → klaar om te mailen → gegevens ontbreken → al verstuurd. Doel: iedereen een eerste mail. Klik een rij voor dossier."
         action={
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <p className="text-sm text-text-dim">
-              {companies.length} · {mailable} klaar
+              {pipeline.totalCompanies} · {pipeline.readyToMail} klaar ·{" "}
+              {pipeline.missingEmail + pipeline.incompleteButHasEmail} ontbreekt
             </p>
             <Link
               href="/outreach/lijst-bijwerken"
@@ -73,6 +71,8 @@ export default async function OutreachCrmPage() {
           </div>
         }
       />
+
+      <PipelineStatusBanner status={pipeline} />
 
       <section className="mb-10">
         {companies.length === 0 ? (

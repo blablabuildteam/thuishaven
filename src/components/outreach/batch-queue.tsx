@@ -259,16 +259,30 @@ export function BatchQueue({
                 </p>
               </div>
               <div className="flex flex-wrap gap-1.5">
+                {batch.notes?.toUpperCase().includes("TE BEOORDELEN") ? (
+                  <StatusBadge tone="warn">Te beoordelen</StatusBadge>
+                ) : null}
                 {batch.autoSend ? (
                   <StatusBadge tone="success">Auto-send aan</StatusBadge>
-                ) : null}
+                ) : (
+                  <StatusBadge tone="neutral">Nog niet armed</StatusBadge>
+                )}
                 <StatusBadge
                   tone={batch.status === "ready" ? "accent" : "neutral"}
                 >
-                  {batch.status === "ready" ? "Klaar" : "Open"}
+                  {batch.status === "ready" ? "In wachtrij" : "Open"}
                 </StatusBadge>
               </div>
             </div>
+
+            {batch.notes?.toUpperCase().includes("TE BEOORDELEN") ? (
+              <p
+                className="mt-3 border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-text"
+                role="status"
+              >
+                {batch.notes}
+              </p>
+            ) : null}
 
             <label className="mt-3 block text-xs text-text-dim">
               Notitie
