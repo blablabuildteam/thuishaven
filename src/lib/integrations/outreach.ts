@@ -735,6 +735,7 @@ export async function sendStoredDraft(input: {
   let sender = await resolveOutreachSender();
   let replyTo = await resolveOutreachReplyTo();
   let bodyText = row.body;
+  let senderProfileId: string | null = null;
 
   if (row.batchId) {
     const [batch] = await db
@@ -754,6 +755,7 @@ export async function sendStoredDraft(input: {
           ? batch.senderProfileId
           : undefined,
       );
+      senderProfileId = profile.id;
       sender = {
         email: batch.senderEmail || profile.email,
         name: batch.senderName || profile.name,
@@ -810,6 +812,8 @@ export async function sendStoredDraft(input: {
         status: "sent",
         brevoMessageId: storedMessageId,
         sentAt: new Date(),
+        senderEmail: sender.email,
+        senderProfileId,
       })
       .where(eq(outreachEmails.id, row.id));
     await db

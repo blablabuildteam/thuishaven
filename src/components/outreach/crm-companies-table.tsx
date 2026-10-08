@@ -9,10 +9,31 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { statusLabels } from "@/lib/mock/outreach";
 import { type MailAngleId, isMailableAngle, mailAngleTone } from "@/lib/outreach/mail-angle";
 import { leadTierTone, type LeadScore } from "@/lib/outreach/lead-score";
+import {
+  OUTREACH_VARIANTS,
+  type OutreachVariantId,
+} from "@/lib/outreach/tone";
 
 const FOLLOW_UP_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
 /** One Mailen batch at a time (cookie handoff, not URL length). */
 const MAX_HANDOFF = 80;
+
+const HANDOFF_VARIANT_IDS = new Set(
+  OUTREACH_VARIANTS.map((v) => v.id),
+);
+
+/** Map Bedrijven-filter → default template for Mailen. */
+function variantFromMailFilter(filter: string): OutreachVariantId | null {
+  if (HANDOFF_VARIANT_IDS.has(filter as OutreachVariantId)) {
+    return filter as OutreachVariantId;
+  }
+  if (filter === "cold") return "warm_tour";
+  return null;
+}
+
+const COMPANY_HANDOFF_VARIANTS = OUTREACH_VARIANTS.filter(
+  (v) => v.audience === "company" || v.audience === "both",
+);
 
 /** Client-safe shape — avoid importing server crm.ts (postgres) into the browser. */
 type CrmRow = {
@@ -135,6 +156,10 @@ export function CrmCompaniesTable({ rows }: Props) {
   const [pending, startTransition] = useTransition();
   const [handoffBusy, setHandoffBusy] = useState(false);
   const [handoffError, setHandoffError] = useState<string | null>(null);
+  /** null = laat Mailen per bedrijf kiezen; anders één template meenemen. */
+  const [handoffVariant, setHandoffVariant] = useState<
+    OutreachVariantId | "auto"
+  >("auto");
   const [q, setQ] = useState("");
   const [mail, setMail] = useState<MailFilter>("kans");
   const [region, setRegion] = useState<RegionFilter>("all");
@@ -332,11 +357,18 @@ export function CrmCompaniesTable({ rows }: Props) {
     if (!ids.length) return;
     setHandoffError(null);
     setHandoffBusy(true);
+    const variantId =
+      handoffVariant === "auto"
+        ? variantFromMailFilter(mail)
+        : handoffVariant;
     try {
       const res = await fetch("/api/outreach/handoff", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prospectIds: ids }),
+        body: JSON.stringify({
+          prospectIds: ids,
+          ...(variantId ? { variantId } : {}),
+        }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
@@ -453,6 +485,35 @@ export function CrmCompaniesTable({ rows }: Props) {
                 Vink mailklare aan
               </button>
             )}
+            <label className="block text-[11px] uppercase tracking-wider text-text-dim">
+              Template
+              <select
+                value={handoffVariant}
+                onChange={(e) =>
+                  setHandoffVariant(
+                    e.target.value as OutreachVariantId | "auto",
+                  )
+                }
+                className="mt-1 block min-w-[10rem] border border-border bg-bg px-2 py-1.5 text-sm normal-case tracking-normal text-text"
+                title="Meenemen naar Mailen"
+              >
+                <option value="auto">
+                  Auto
+                  {variantFromMailFilter(mail)
+                    ? ` → ${
+                        COMPANY_HANDOFF_VARIANTS.find(
+                          (v) => v.id === variantFromMailFilter(mail),
+                        )?.name ?? variantFromMailFilter(mail)
+                      }`
+                    : " (per bedrijf)"}
+                </option>
+                {COMPANY_HANDOFF_VARIANTS.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button
               type="button"
               disabled={handoffBusy || pending}

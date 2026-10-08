@@ -6,8 +6,14 @@ import {
   HANDOFF_MAX_IDS,
   setHandoffCookie,
 } from "@/lib/outreach/handoff";
+import { OUTREACH_VARIANTS } from "@/lib/outreach/tone";
 
 export const dynamic = "force-dynamic";
+
+const VARIANT_IDS = OUTREACH_VARIANTS.map((v) => v.id) as [
+  string,
+  ...string[],
+];
 
 export async function DELETE() {
   const session = await auth();
@@ -28,6 +34,7 @@ export async function POST(req: Request) {
   const parsed = z
     .object({
       prospectIds: z.array(z.string()).min(1).max(HANDOFF_MAX_IDS),
+      variantId: z.enum(VARIANT_IDS).optional().nullable(),
     })
     .safeParse(body);
   if (!parsed.success) {
@@ -37,7 +44,13 @@ export async function POST(req: Request) {
     );
   }
 
-  const count = await setHandoffCookie(parsed.data.prospectIds);
+  const count = await setHandoffCookie({
+    prospectIds: parsed.data.prospectIds,
+    variantId: parsed.data.variantId as
+      | (typeof OUTREACH_VARIANTS)[number]["id"]
+      | null
+      | undefined,
+  });
   if (!count) {
     return NextResponse.json(
       { error: "Geen geldige bedrijfs-IDs" },
@@ -48,6 +61,7 @@ export async function POST(req: Request) {
   return NextResponse.json({
     ok: true,
     count,
+    variantId: parsed.data.variantId ?? null,
     redirectTo: "/outreach/emails",
   });
 }

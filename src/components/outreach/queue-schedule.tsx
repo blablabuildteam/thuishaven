@@ -19,8 +19,8 @@ export function QueueSchedule({
         <div>
           <h2 className="font-display text-xl tracking-[0.04em]">Planning</h2>
           <p className="mt-1 text-sm text-text-muted">
-            Voorgestelde verzendmomenten voor mails in bakjes. Nog geen
-            auto-send — dit is het ritme om naartoe te werken.
+            Geplande verzendmomenten. Na “Plan in” + “Auto-send aan” stuurt de
+            cron ze automatisch op die tijden (live-flags + daglimiet gelden).
           </p>
         </div>
         <p className="text-sm text-text-dim">{plannedCount} gepland</p>

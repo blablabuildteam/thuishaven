@@ -91,6 +91,57 @@ export default async function OutreachAnalyticsPage() {
         )}
       </div>
 
+      <section className="mb-10 border-t border-border pt-8">
+        <h2 className="font-display text-lg tracking-[0.06em]">
+          Per afzender
+        </h2>
+        <p className="mt-1 mb-4 text-sm text-text-muted">
+          Evenementen, Reiner en Yoram naast elkaar — open- en reply-rate op
+          echte verzendingen.
+        </p>
+        {snap.bySender.length === 0 ? (
+          <p className="text-sm text-text-muted">Nog geen verzonden mails.</p>
+        ) : (
+          <div className="max-w-full overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead className="border-b border-border text-[11px] uppercase tracking-wider text-text-dim">
+                <tr>
+                  <th className="pb-2 font-medium">Afzender</th>
+                  <th className="pb-2 font-medium">From</th>
+                  <th className="pb-2 font-medium">Verzonden</th>
+                  <th className="pb-2 font-medium">Open</th>
+                  <th className="pb-2 font-medium">Reply</th>
+                  <th className="pb-2 font-medium">Bounce</th>
+                </tr>
+              </thead>
+              <tbody>
+                {snap.bySender.map((row) => (
+                  <tr
+                    key={row.senderKey}
+                    className="border-b border-border last:border-0"
+                  >
+                    <td className="py-2.5 pr-3 font-medium text-text">
+                      {row.label}
+                    </td>
+                    <td className="py-2.5 pr-3 font-mono text-xs text-text-dim">
+                      {row.senderEmail ?? "—"}
+                    </td>
+                    <td className="py-2.5 font-mono">{row.sent}</td>
+                    <td className="py-2.5 font-mono">
+                      {row.opened} ({formatPercent(row.openRate)})
+                    </td>
+                    <td className="py-2.5 font-mono">
+                      {row.replied} ({formatPercent(row.replyRate)})
+                    </td>
+                    <td className="py-2.5 font-mono">{row.bounced}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
       <section className="order-3 mb-10 border-t border-border pt-8">
         <h2 className="font-display text-lg tracking-[0.06em]">
           Follow-up queue

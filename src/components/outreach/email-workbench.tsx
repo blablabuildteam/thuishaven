@@ -43,6 +43,8 @@ type Props = {
   templateStats: Record<string, TemplateStat>;
   bestTemplate: string | null;
   preselectIds?: string[];
+  /** Template meegenomen vanuit Bedrijven-handoff. */
+  handoffVariantId?: OutreachVariantId | null;
   skippedNoEmail?: number;
   openBatches?: OpenBatchOption[];
 };
@@ -78,6 +80,7 @@ export function OutreachEmailWorkbench({
   templateStats,
   bestTemplate,
   preselectIds = [],
+  handoffVariantId = null,
   skippedNoEmail = 0,
   openBatches = [],
 }: Props) {
@@ -87,6 +90,10 @@ export function OutreachEmailWorkbench({
   const [showMailed, setShowMailed] = useState(false);
   const [q, setQ] = useState("");
   const [onlyHandoff, setOnlyHandoff] = useState(false);
+  const handoffVariantName = handoffVariantId
+    ? OUTREACH_VARIANTS.find((v) => v.id === handoffVariantId)?.name ??
+      handoffVariantId
+    : null;
 
   const ready = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -121,9 +128,12 @@ export function OutreachEmailWorkbench({
           .map((p) => p.id),
       ),
   );
-  const [mode, setMode] = useState<Mode>("suggested");
-  const [overrideVariant, setOverrideVariant] =
-    useState<OutreachVariantId>("warm_tour");
+  const [mode, setMode] = useState<Mode>(
+    handoffVariantId ? "override" : "suggested",
+  );
+  const [overrideVariant, setOverrideVariant] = useState<OutreachVariantId>(
+    handoffVariantId ?? "warm_tour",
+  );
   const [perRow, setPerRow] = useState<Record<string, OutreachVariantId>>({});
   const [subjectArm, setSubjectArm] = useState<OutreachSubjectArm | "auto">(
     "auto",
@@ -504,7 +514,11 @@ export function OutreachEmailWorkbench({
       <div>
         {preselectIds.length > 0 ? (
           <p className="mb-3 rounded-none border border-border bg-surface px-3 py-2 text-sm text-text-muted">
-            {selected.size} meegenomen uit Bedrijven (al aangevinkt).{" "}
+            {selected.size} meegenomen uit Bedrijven (al aangevinkt)
+            {handoffVariantName
+              ? ` · template «${handoffVariantName}»`
+              : ""}
+            .{" "}
             <button
               type="button"
               className="text-accent underline"

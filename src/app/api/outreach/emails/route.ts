@@ -9,6 +9,11 @@ import { OUTREACH_VARIANTS } from "@/lib/outreach/tone";
 import { logSessionActivity } from "@/lib/audit/session-log";
 import { resolveOutreachTestRecipientsAsync } from "@/lib/outreach/send-policy";
 import {
+  armBatchAutoSend,
+  disarmBatchAutoSend,
+  scheduleBatchEmails,
+} from "@/lib/outreach/auto-send";
+import {
   dequeueEmails,
   enqueueEmails,
   listOpenBatches,
@@ -207,6 +212,81 @@ export async function POST(request: Request) {
       notes: parsed.data.notes,
       plannedStartDay: parsed.data.plannedStartDay,
       senderProfileId: parsed.data.senderProfileId,
+    });
+    if ("error" in result) {
+      return NextResponse.json(result, { status: 400 });
+    }
+    return NextResponse.json(result);
+  }
+
+  if (action === "schedule-batch") {
+    const schema = z.object({
+      action: z.literal("schedule-batch"),
+      batchId: z.string().uuid(),
+    });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
+    }
+    const result = await scheduleBatchEmails({ batchId: parsed.data.batchId });
+    if ("error" in result) {
+      return NextResponse.json(result, { status: 400 });
+    }
+    await logSessionActivity(session, {
+      action: "email_schedule_batch",
+      summary: `Bakje ingepland · ${result.scheduled} mails`,
+      path: "/api/outreach/emails",
+      method: "POST",
+      status: 200,
+      tool: "outreach",
+      meta: parsed.data,
+    });
+    return NextResponse.json(result);
+  }
+
+  if (action === "arm-batch") {
+    const schema = z.object({
+      action: z.literal("arm-batch"),
+      batchId: z.string().uuid(),
+      confirmText: z.string().min(1).max(200),
+    });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Bevestiging verplicht" },
+        { status: 400 },
+      );
+    }
+    const result = await armBatchAutoSend({
+      batchId: parsed.data.batchId,
+      confirmText: parsed.data.confirmText,
+    });
+    if ("error" in result) {
+      return NextResponse.json(result, { status: 400 });
+    }
+    await logSessionActivity(session, {
+      action: "email_arm_batch",
+      summary: `Auto-send aan · ${result.armed} mails`,
+      path: "/api/outreach/emails",
+      method: "POST",
+      status: 200,
+      tool: "outreach",
+      meta: { batchId: parsed.data.batchId, armed: result.armed },
+    });
+    return NextResponse.json(result);
+  }
+
+  if (action === "disarm-batch") {
+    const schema = z.object({
+      action: z.literal("disarm-batch"),
+      batchId: z.string().uuid(),
+    });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
+    }
+    const result = await disarmBatchAutoSend({
+      batchId: parsed.data.batchId,
     });
     if ("error" in result) {
       return NextResponse.json(result, { status: 400 });

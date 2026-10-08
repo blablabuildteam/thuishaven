@@ -167,6 +167,10 @@ export const outreachBatches = pgTable("outreach_batches", {
   notes: text("notes"),
   /** Optionele startdag (YYYY-MM-DD) voor de planningsuggestie. */
   plannedStartDay: text("planned_start_day"),
+  /** When true, cron may auto-send queued mails at their scheduled_at. */
+  autoSend: boolean("auto_send").notNull().default(false),
+  /** When auto-send was armed (confirm). */
+  armedAt: timestamp("armed_at", { withTimezone: true }),
   /** evenementen | reiner | yoram — UI-profiel. */
   senderProfileId: text("sender_profile_id").notNull().default("reiner"),
   /** Snapshot From (blijft staan als profiel later wijzigt). */
@@ -281,6 +285,11 @@ export const outreachEmails = pgTable("outreach_emails", {
   status: outreachEmailStatusEnum("status").notNull().default("draft"),
   brevoMessageId: text("brevo_message_id"),
   availabilityLinkToken: text("availability_link_token"),
+  /** Planned live send moment (UTC). Cron sends when due if bakje auto_send. */
+  scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
+  /** Snapshot of From used at send time (for Resultaten per afzender). */
+  senderEmail: text("sender_email"),
+  senderProfileId: text("sender_profile_id"),
   sentAt: timestamp("sent_at", { withTimezone: true }),
   openedAt: timestamp("opened_at", { withTimezone: true }),
   clickedAt: timestamp("clicked_at", { withTimezone: true }),

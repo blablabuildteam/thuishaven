@@ -13,6 +13,7 @@ import {
   outreachLiveSendBlockReason,
   outreachTestSendBlockReason,
 } from "./send-policy";
+import { OUTREACH_SENDER_PROFILES } from "./sender-profiles";
 import { FOLLOW_UP_READY_AFTER_DAYS } from "./sequence";
 import { getOutreachVariant, type OutreachVariantId } from "./tone";
 
@@ -48,6 +49,21 @@ export type AbRow = {
   winner?: boolean;
 };
 
+export type SenderKpiRow = {
+  senderKey: string;
+  label: string;
+  senderEmail: string | null;
+  senderProfileId: string | null;
+  sent: number;
+  opened: number;
+  clicked: number;
+  replied: number;
+  bounced: number;
+  openRate: number;
+  clickRate: number;
+  replyRate: number;
+};
+
 export type OutreachResultsSnapshot = {
   source: "db" | "empty";
   sendLocked: boolean;
@@ -65,6 +81,8 @@ export type OutreachResultsSnapshot = {
     clickRate: number;
     replyRate: number;
   };
+  /** KPIs grouped by From / sender profile (Evenementen / Reiner / Yoram). */
+  bySender: SenderKpiRow[];
   ab: AbRow[];
   rows: OutreachMailResultRow[];
   recentReplies: Array<{
@@ -88,6 +106,22 @@ export type OutreachResultsSnapshot = {
     ready: boolean;
   }>;
 };
+
+function senderLabel(
+  profileId: string | null,
+  email: string | null,
+): string {
+  if (profileId) {
+    const found = OUTREACH_SENDER_PROFILES.find((p) => p.id === profileId);
+    if (found) return found.label;
+  }
+  if (email) {
+    const byEmail = OUTREACH_SENDER_PROFILES.find((p) => p.email === email);
+    if (byEmail) return byEmail.label;
+    return email;
+  }
+  return "Onbekend / legacy";
+}
 
 function rate(part: number, whole: number): number {
   if (whole <= 0) return 0;
@@ -116,6 +150,7 @@ export async function getOutreachResultsSnapshot(): Promise<OutreachResultsSnaps
         clickRate: 0,
         replyRate: 0,
       },
+      bySender: [],
       ab: [],
       rows: [],
       recentReplies: [],
@@ -179,6 +214,8 @@ export async function getOutreachResultsSnapshot(): Promise<OutreachResultsSnaps
       repliedAt: outreachEmails.repliedAt,
       variantKey: outreachEmails.variantKey,
       subjectKey: outreachEmails.subjectKey,
+      senderEmail: outreachEmails.senderEmail,
+      senderProfileId: outreachEmails.senderProfileId,
       companyName: prospects.companyName,
       toEmail: prospects.email,
     })
@@ -186,6 +223,47 @@ export async function getOutreachResultsSnapshot(): Promise<OutreachResultsSnaps
     .innerJoin(prospects, eq(outreachEmails.prospectId, prospects.id))
     .orderBy(desc(outreachEmails.createdAt))
     .limit(100);
+
+  const senderAgg = await db
+    .select({
+      senderEmail: outreachEmails.senderEmail,
+      senderProfileId: outreachEmails.senderProfileId,
+      sent: sql<number>`count(*)::int`,
+      opened: sql<number>`count(*) filter (where ${outreachEmails.openedAt} is not null or ${outreachEmails.status} in ('opened','clicked','replied'))::int`,
+      clicked: sql<number>`count(*) filter (where ${outreachEmails.clickedAt} is not null or ${outreachEmails.status} in ('clicked','replied'))::int`,
+      replied: sql<number>`count(*) filter (where ${outreachEmails.repliedAt} is not null or ${outreachEmails.status} = 'replied')::int`,
+      bounced: sql<number>`count(*) filter (where ${outreachEmails.status} = 'bounced')::int`,
+    })
+    .from(outreachEmails)
+    .where(
+      sql`${outreachEmails.status} in ('sent','opened','clicked','replied','bounced','opted_out')
+          or ${outreachEmails.sentAt} is not null`,
+    )
+    .groupBy(outreachEmails.senderEmail, outreachEmails.senderProfileId);
+
+  const bySender: SenderKpiRow[] = senderAgg
+    .map((r) => {
+      const sentN = r.sent ?? 0;
+      const openedN = r.opened ?? 0;
+      const clickedN = r.clicked ?? 0;
+      const repliedN = r.replied ?? 0;
+      const key = r.senderProfileId ?? r.senderEmail ?? "unknown";
+      return {
+        senderKey: key,
+        label: senderLabel(r.senderProfileId, r.senderEmail),
+        senderEmail: r.senderEmail,
+        senderProfileId: r.senderProfileId,
+        sent: sentN,
+        opened: openedN,
+        clicked: clickedN,
+        replied: repliedN,
+        bounced: r.bounced ?? 0,
+        openRate: rate(openedN, sentN),
+        clickRate: rate(clickedN, sentN),
+        replyRate: rate(repliedN, sentN),
+      };
+    })
+    .sort((a, b) => b.sent - a.sent || a.label.localeCompare(b.label, "nl"));
 
   const abMap = new Map<string, AbRow>();
   for (const r of mailRows) {
@@ -281,6 +359,7 @@ export async function getOutreachResultsSnapshot(): Promise<OutreachResultsSnaps
       clickRate: rate(clickedCount, sentCount),
       replyRate: rate(repliedCount, sentCount),
     },
+    bySender,
     ab: ab.sort((a, b) => a.variantKey.localeCompare(b.variantKey)),
     rows: mailRows.map((r) => ({
       id: r.id,

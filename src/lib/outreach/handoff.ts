@@ -1,9 +1,13 @@
 /**
- * Short-lived handoff of selected prospect IDs from Bedrijven → Mailen.
- * Stored in an httpOnly cookie so we don't stuff dozens of UUIDs in the URL.
+ * Short-lived handoff of selected prospect IDs (+ optional template)
+ * from Bedrijven → Mailen. Stored in an httpOnly cookie.
  */
 
 import { cookies } from "next/headers";
+import {
+  OUTREACH_VARIANTS,
+  type OutreachVariantId,
+} from "@/lib/outreach/tone";
 
 export const HANDOFF_COOKIE = "outreach_handoff";
 export const HANDOFF_MAX_IDS = 80;
@@ -11,6 +15,13 @@ const HANDOFF_MAX_AGE_SEC = 60 * 60; // 1 hour
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const VARIANT_IDS = new Set(OUTREACH_VARIANTS.map((v) => v.id));
+
+export type HandoffPayload = {
+  prospectIds: string[];
+  variantId?: OutreachVariantId;
+};
 
 export function normalizeHandoffIds(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
@@ -27,14 +38,49 @@ export function normalizeHandoffIds(raw: unknown): string[] {
   return out;
 }
 
-export async function setHandoffCookie(ids: string[]): Promise<number> {
-  const clean = normalizeHandoffIds(ids);
+function parseVariant(raw: unknown): OutreachVariantId | undefined {
+  if (typeof raw !== "string") return undefined;
+  return VARIANT_IDS.has(raw as OutreachVariantId)
+    ? (raw as OutreachVariantId)
+    : undefined;
+}
+
+export function parseHandoffCookie(raw: string): HandoffPayload {
+  const trimmed = raw.trim();
+  if (!trimmed) return { prospectIds: [] };
+  if (trimmed.startsWith("{")) {
+    try {
+      const json = JSON.parse(trimmed) as {
+        prospectIds?: unknown;
+        variantId?: unknown;
+      };
+      return {
+        prospectIds: normalizeHandoffIds(json.prospectIds),
+        variantId: parseVariant(json.variantId),
+      };
+    } catch {
+      return { prospectIds: [] };
+    }
+  }
+  // Legacy: comma-separated UUIDs
+  return { prospectIds: normalizeHandoffIds(trimmed.split(",")) };
+}
+
+export async function setHandoffCookie(input: {
+  prospectIds: string[];
+  variantId?: OutreachVariantId | null;
+}): Promise<number> {
+  const clean = normalizeHandoffIds(input.prospectIds);
   const jar = await cookies();
   if (clean.length === 0) {
     jar.delete(HANDOFF_COOKIE);
     return 0;
   }
-  jar.set(HANDOFF_COOKIE, clean.join(","), {
+  const payload: HandoffPayload = {
+    prospectIds: clean,
+    variantId: parseVariant(input.variantId) ?? undefined,
+  };
+  jar.set(HANDOFF_COOKIE, JSON.stringify(payload), {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
@@ -44,12 +90,21 @@ export async function setHandoffCookie(ids: string[]): Promise<number> {
   return clean.length;
 }
 
-/** Read handoff IDs without clearing (legacy ?ids= can merge). */
-export async function peekHandoffIds(): Promise<string[]> {
+/** @deprecated use setHandoffCookie({ prospectIds }) */
+export async function setHandoffIds(ids: string[]): Promise<number> {
+  return setHandoffCookie({ prospectIds: ids });
+}
+
+export async function peekHandoff(): Promise<HandoffPayload> {
   const jar = await cookies();
   const raw = jar.get(HANDOFF_COOKIE)?.value ?? "";
-  if (!raw.trim()) return [];
-  return normalizeHandoffIds(raw.split(","));
+  if (!raw.trim()) return { prospectIds: [] };
+  return parseHandoffCookie(raw);
+}
+
+/** Read handoff IDs without clearing (legacy helpers). */
+export async function peekHandoffIds(): Promise<string[]> {
+  return (await peekHandoff()).prospectIds;
 }
 
 /** Clear handoff cookie (call from a Route Handler, not a Server Component). */

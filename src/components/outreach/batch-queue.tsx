@@ -30,6 +30,10 @@ export function BatchQueue({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [confirmBatchId, setConfirmBatchId] = useState<string | null>(null);
+  /** immediate = verstuur nu; arm = zet auto-send aan */
+  const [confirmMode, setConfirmMode] = useState<"immediate" | "arm">(
+    "immediate",
+  );
   const [confirmText, setConfirmText] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState<Record<string, { subject: string; body: string }>>(
@@ -116,6 +120,44 @@ export function BatchQueue({
       senderProfileId,
     });
     if (data) setMessage("Afzender bijgewerkt.");
+  }
+
+  async function planBatch(batchId: string) {
+    const data = await post({ action: "schedule-batch", batchId });
+    if (data) {
+      setMessage(
+        `${data.scheduled} mails ingepland` +
+          (data.firstAt
+            ? ` · vanaf ${new Date(data.firstAt).toLocaleString("nl-NL", {
+                timeZone: "Europe/Amsterdam",
+                day: "numeric",
+                month: "short",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}`
+            : ""),
+      );
+    }
+  }
+
+  async function tryArm(batch: OutreachBatchSummary) {
+    const data = await post({
+      action: "arm-batch",
+      batchId: batch.id,
+      confirmText,
+    });
+    if (data) {
+      setConfirmBatchId(null);
+      setConfirmText("");
+      setMessage(
+        `Auto-send aan voor ${data.armed} mail${data.armed === 1 ? "" : "s"} — cron stuurt op gepland tijdstip.`,
+      );
+    }
+  }
+
+  async function disarmBatch(batchId: string) {
+    const data = await post({ action: "disarm-batch", batchId });
+    if (data) setMessage("Auto-send uitgeschakeld voor dit bakje.");
   }
 
   async function trySend(batch: OutreachBatchSummary) {
@@ -207,17 +249,25 @@ export function BatchQueue({
                 <p className="mt-1 text-xs text-text-dim">
                   {batch.mailCount} mail
                   {batch.mailCount === 1 ? "" : "s"}
+                  {batch.scheduledCount
+                    ? ` · ${batch.scheduledCount} gepland`
+                    : ""}
                   {batch.variantKeys.length
                     ? ` · ${batch.variantKeys.join(", ")}`
                     : ""}
                   {` · ${batch.senderProfileLabel}`}
                 </p>
               </div>
-              <StatusBadge
-                tone={batch.status === "ready" ? "accent" : "neutral"}
-              >
-                {batch.status === "ready" ? "Klaar voor review" : "Open"}
-              </StatusBadge>
+              <div className="flex flex-wrap gap-1.5">
+                {batch.autoSend ? (
+                  <StatusBadge tone="success">Auto-send aan</StatusBadge>
+                ) : null}
+                <StatusBadge
+                  tone={batch.status === "ready" ? "accent" : "neutral"}
+                >
+                  {batch.status === "ready" ? "Klaar" : "Open"}
+                </StatusBadge>
+              </div>
             </div>
 
             <label className="mt-3 block text-xs text-text-dim">
@@ -448,14 +498,18 @@ export function BatchQueue({
               {confirmBatchId === batch.id ? (
                 <div className="max-w-lg space-y-2 border border-danger/40 bg-danger/5 px-3 py-3">
                   <p className="text-sm font-medium text-text">
-                    Bevestig live send · {batch.mailCount} mail
-                    {batch.mailCount === 1 ? "" : "s"}
-                    {remainingToday != null
+                    {confirmMode === "arm"
+                      ? `Auto-send aanzetten · ${batch.scheduledCount} gepland`
+                      : `Nu live versturen · ${batch.mailCount} mail${batch.mailCount === 1 ? "" : "s"}`}
+                    {remainingToday != null && confirmMode === "immediate"
                       ? ` · max ${Math.min(batch.mailCount, remainingToday)} vandaag`
                       : ""}
                   </p>
                   <p className="text-xs text-text-dim">
                     Typ exact “{batch.name}” of “{LIVE_SEND_CONFIRM_PHRASE}”.
+                    {confirmMode === "arm"
+                      ? " Cron stuurt daarna automatisch op de geplande tijden."
+                      : ""}
                   </p>
                   <input
                     className="w-full border border-border bg-bg px-3 py-2 text-sm"
@@ -465,7 +519,10 @@ export function BatchQueue({
                     placeholder={batch.name}
                     onChange={(e) => setConfirmText(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") void trySend(batch);
+                      if (e.key === "Enter") {
+                        if (confirmMode === "arm") void tryArm(batch);
+                        else void trySend(batch);
+                      }
                     }}
                   />
                   <div className="flex flex-wrap gap-2">
@@ -475,12 +532,20 @@ export function BatchQueue({
                         pending ||
                         !confirmText.trim() ||
                         bouncePaused ||
-                        dayCapHit
+                        (confirmMode === "immediate" && dayCapHit)
                       }
                       className="bg-accent px-4 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
-                      onClick={() => void trySend(batch)}
+                      onClick={() =>
+                        confirmMode === "arm"
+                          ? void tryArm(batch)
+                          : void trySend(batch)
+                      }
                     >
-                      {pending ? "Versturen…" : "Nu live versturen"}
+                      {pending
+                        ? "Bezig…"
+                        : confirmMode === "arm"
+                          ? "Auto-send bevestigen"
+                          : "Nu live versturen"}
                     </button>
                     <button
                       type="button"
@@ -496,7 +561,49 @@ export function BatchQueue({
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={pending || batch.mailCount === 0}
+                    className="border border-border px-3 py-2.5 text-sm hover:border-accent disabled:opacity-50"
+                    onClick={() => void planBatch(batch.id)}
+                  >
+                    Plan in
+                  </button>
+                  {batch.autoSend ? (
+                    <button
+                      type="button"
+                      disabled={pending}
+                      className="border border-border px-3 py-2.5 text-sm disabled:opacity-50"
+                      onClick={() => void disarmBatch(batch.id)}
+                    >
+                      Auto-send uit
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={
+                        pending ||
+                        Boolean(liveSendBlockReason) ||
+                        bouncePaused ||
+                        batch.scheduledCount === 0
+                      }
+                      title={
+                        batch.scheduledCount === 0
+                          ? "Eerst Plan in"
+                          : (liveSendBlockReason ?? "Zet automatische verzending aan")
+                      }
+                      className="bg-accent px-4 py-2.5 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
+                      onClick={() => {
+                        setConfirmMode("arm");
+                        setConfirmBatchId(batch.id);
+                        setConfirmText("");
+                        setError(null);
+                      }}
+                    >
+                      Auto-send aan
+                    </button>
+                  )}
                   <button
                     type="button"
                     disabled={
@@ -506,30 +613,21 @@ export function BatchQueue({
                       dayCapHit ||
                       batch.mailCount === 0
                     }
-                    title={
-                      liveSendBlockReason ??
-                      (bouncePaused
-                        ? "Gepauzeerd door bounces"
-                        : dayCapHit
-                          ? "Daglimiet bereikt"
-                          : "Verstuur alle mails in dit bakje")
-                    }
-                    className="bg-accent px-4 py-2.5 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:cursor-not-allowed disabled:opacity-50"
+                    className="border border-border px-3 py-2.5 text-sm disabled:opacity-50"
                     onClick={() => {
+                      setConfirmMode("immediate");
                       setConfirmBatchId(batch.id);
                       setConfirmText("");
                       setError(null);
                     }}
                   >
-                    Verstuur bakje ({batch.mailCount})
+                    Nu versturen
                   </button>
-                  <p className="max-w-md text-xs text-text-dim">
-                    {liveSendBlockReason ??
-                      (bouncePaused
-                        ? "Bounces — live geblokkeerd."
-                        : dayCapHit
-                          ? "Daglimiet vol — morgen verder."
-                          : "Live send: eerst bevestigen met bakjenaam.")}
+                  <p className="w-full max-w-lg text-xs text-text-dim">
+                    {batch.autoSend
+                      ? "Auto-send aan — mails gaan op gepland tijdstip (cron ±10 min)."
+                      : liveSendBlockReason ??
+                        "1) Plan in · 2) Auto-send aan (bevestigen) · of direct “Nu versturen”."}
                   </p>
                 </div>
               )}

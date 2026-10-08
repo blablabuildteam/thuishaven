@@ -38,7 +38,11 @@ import {
   type SendSlotSuggestion,
 } from "@/lib/outreach/settings";
 import { listEditableTemplates } from "@/lib/outreach/templates";
-import { formatDayShort, amsterdamDay } from "@/lib/time/amsterdam";
+import {
+  amsterdamClock,
+  amsterdamDay,
+  formatDayShort,
+} from "@/lib/time/amsterdam";
 import { getPublicAvailabilityUrl } from "@/lib/mock/availability";
 import {
   appendOutreachSignature,
@@ -62,6 +66,8 @@ export type BatchEmailRow = {
   templateAdapted: boolean;
   status: string;
   createdAt: string;
+  /** Persisted schedule (ISO) when planned. */
+  scheduledAt: string | null;
   /** Suggested Amsterdam send day (YYYY-MM-DD) from cadence. */
   suggestedDay: string | null;
   /** Suggested Amsterdam time HH:MM. */
@@ -76,6 +82,9 @@ export type OutreachBatchSummary = {
   status: OutreachBatchStatus;
   notes: string | null;
   plannedStartDay: string | null;
+  autoSend: boolean;
+  armedAt: string | null;
+  scheduledCount: number;
   senderProfileId: OutreachSenderProfileId;
   senderProfileLabel: string;
   senderEmail: string;
@@ -347,6 +356,7 @@ export async function listBatchesWithEmails(): Promise<{
         body: outreachEmails.body,
         variantKey: outreachEmails.variantKey,
         status: outreachEmails.status,
+        scheduledAt: outreachEmails.scheduledAt,
         createdAt: outreachEmails.createdAt,
       })
       .from(outreachEmails)
@@ -357,7 +367,10 @@ export async function listBatchesWithEmails(): Promise<{
           sql`${outreachEmails.batchId} is not null`,
         ),
       )
-      .orderBy(asc(prospects.companyName)),
+      .orderBy(
+        asc(outreachEmails.scheduledAt),
+        asc(prospects.companyName),
+      ),
     db
       .select({
         emailId: outreachEmails.id,
@@ -377,10 +390,11 @@ export async function listBatchesWithEmails(): Promise<{
       .limit(40),
   ]);
 
-  const byBatch = new Map<
-    string,
-    Omit<BatchEmailRow, "suggestedDay" | "suggestedTime" | "suggestedLabel">[]
-  >();
+  type RawMail = Omit<
+    BatchEmailRow,
+    "suggestedDay" | "suggestedTime" | "suggestedLabel"
+  >;
+  const byBatch = new Map<string, RawMail[]>();
   for (const row of mailRows) {
     if (!row.batchId) continue;
     const list = byBatch.get(row.batchId) ?? [];
@@ -397,6 +411,7 @@ export async function listBatchesWithEmails(): Promise<{
       templateAdapted: isTemplateAdapted(row.body, baseline),
       status: row.status,
       createdAt: row.createdAt.toISOString(),
+      scheduledAt: row.scheduledAt?.toISOString() ?? null,
     });
     byBatch.set(row.batchId, list);
   }
@@ -420,6 +435,19 @@ export async function listBatchesWithEmails(): Promise<{
     });
     const flatTimes = flattenSlotTimes(sendSuggestion);
     const emails: BatchEmailRow[] = rawEmails.map((mail, idx) => {
+      if (mail.scheduledAt) {
+        const at = new Date(mail.scheduledAt);
+        const day = amsterdamDay(at);
+        const time = amsterdamClock(at);
+        const weekdayLabel =
+          ["zo", "ma", "di", "wo", "do", "vr", "za"][at.getDay()] ?? "";
+        return {
+          ...mail,
+          suggestedDay: day,
+          suggestedTime: time,
+          suggestedLabel: `${weekdayLabel} ${formatDayShort(day)} · ${time}`,
+        };
+      }
       const slot = flatTimes[idx] ?? null;
       const suggestedLabel = slot
         ? `${slot.weekdayLabel} ${slot.dayLabel} · ${slot.time}`
@@ -444,12 +472,16 @@ export async function listBatchesWithEmails(): Promise<{
       ? b.senderProfileId
       : DEFAULT_SENDER_PROFILE_ID;
     const profile = getSenderProfile(profileId);
+    const scheduledCount = emails.filter((e) => e.scheduledAt).length;
     return {
       id: b.id,
       name: b.name,
       status: b.status as OutreachBatchStatus,
       notes: b.notes,
       plannedStartDay: b.plannedStartDay,
+      autoSend: Boolean(b.autoSend),
+      armedAt: b.armedAt?.toISOString() ?? null,
+      scheduledCount,
       senderProfileId: profileId,
       senderProfileLabel: profile.label,
       senderEmail: b.senderEmail || profile.email,

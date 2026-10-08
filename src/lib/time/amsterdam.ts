@@ -98,6 +98,48 @@ export function amsterdamClock(input: Date): string {
   }).format(input);
 }
 
+/**
+ * Convert an Amsterdam calendar day (YYYY-MM-DD) + HH:MM into a UTC Date.
+ * Iteratively corrects for CET/CEST so schedule slots land on the intended local time.
+ */
+export function amsterdamDateTimeToUtc(dayIso: string, timeHm: string): Date {
+  const match = /^(\d{2}):(\d{2})$/.exec(timeHm.trim());
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dayIso) || !match) {
+    return new Date(Number.NaN);
+  }
+  const hh = Number(match[1]);
+  const mm = Number(match[2]);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  let utc = Date.parse(`${dayIso}T${pad(hh)}:${pad(mm)}:00.000Z`);
+  const parseNaive = (s: string) => {
+    const [d, t] = s.split("T");
+    const [Y, M, D] = d!.split("-").map(Number);
+    const [H, Mi, S] = t!.split(":").map(Number);
+    return Date.UTC(Y!, M! - 1, D!, H!, Mi!, S || 0);
+  };
+  for (let i = 0; i < 5; i++) {
+    const parts = Object.fromEntries(
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Europe/Amsterdam",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hourCycle: "h23",
+      })
+        .formatToParts(new Date(utc))
+        .filter((p) => p.type !== "literal")
+        .map((p) => [p.type, p.value]),
+    ) as Record<string, string>;
+    const asShown = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`;
+    const want = `${dayIso}T${pad(hh)}:${pad(mm)}:00`;
+    utc += parseNaive(want) - parseNaive(asShown);
+  }
+  return new Date(utc);
+}
+
 export function formatEventClockRange(
   startsAt: Date | null | undefined,
   endsAt: Date | null | undefined,
