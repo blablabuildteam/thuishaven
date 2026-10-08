@@ -312,7 +312,7 @@ export type SalesSourceId =
 export type SalesSourceRow = {
   id: SalesSourceId;
   label: string;
-  /** Sold (shop) or used/check-ins (barcode pools). */
+  /** Issued tickets. Shop sales, or barcodes issued into a pool. */
   sold: number | null;
   /** Reserved pool size for barcode channels. */
   reserved: number | null;
@@ -987,20 +987,13 @@ export async function loadEventInsightsFresh(options?: {
       const raListing = raByEdition.get(e.id);
       /**
        * Weeztix counts a barcode as sold the moment it is issued into the
-       * Appic/RA/vrienden pool. Until the night has happened that seat is
-       * gone, so count issued. Afterwards the scans are the real turnout,
-       * per pool: a pool nobody scanned keeps its issued count instead of
-       * silently dropping out of the total.
+       * Appic/RA/vrienden pool. Door scans stay on `scanned`; swapping them
+       * in after the night made Verkocht disagree with the Weeztix total.
        */
       const pools = [appic, raInv, vrienden];
       const splitIssued = pools.reduce((sum, p) => sum + (p?.sold ?? 0), 0);
       const shopSold = Math.max(0, inv.sold - splitIssued);
-      const poolCounted = pools.reduce((sum, p) => {
-        const issued = p?.sold ?? 0;
-        const scanned = p?.scanned ?? 0;
-        return sum + (status === "past" && scanned > 0 ? scanned : issued);
-      }, 0);
-      const sold = shopSold + poolCounted;
+      const sold = inv.sold;
       const capacity = inv.capacity;
       const fillPct =
         capacity != null && capacity > 0 ? (sold / capacity) * 100 : null;
@@ -1020,14 +1013,14 @@ export async function loadEventInsightsFresh(options?: {
         {
           id: "appic",
           label: "Appic",
-          sold: appic != null ? (appic.scanned ?? 0) : null,
+          sold: appic != null ? appic.sold : null,
           reserved:
             appic != null
               ? (appic.capacity ?? appic.sold ?? 0) || null
               : null,
           available: appic != null ? (appic.available ?? 0) : null,
           status: appic != null ? "live" : "empty",
-          note: appic != null ? "Gebruikt / gereserveerd (Weeztix)" : undefined,
+          note: appic != null ? "Uitgegeven barcodes / pool" : undefined,
         },
         {
           id: "wingame",
@@ -1041,7 +1034,7 @@ export async function loadEventInsightsFresh(options?: {
         {
           id: "vrienden",
           label: "Vriendentickets",
-          sold: vrienden != null ? (vrienden.scanned ?? 0) : null,
+          sold: vrienden != null ? vrienden.sold : null,
           reserved:
             vrienden != null
               ? (vrienden.capacity ?? vrienden.sold ?? 0) || null
@@ -1050,13 +1043,13 @@ export async function loadEventInsightsFresh(options?: {
           status: vrienden != null ? "live" : "empty",
           note:
             vrienden != null
-              ? "Vrienden daytickets · gebruikt / gereserveerd"
+              ? "Vrienden daytickets · uitgegeven / pool"
               : undefined,
         },
         {
           id: "resident_advisor",
           label: "Resident Advisor",
-          sold: raInv != null ? (raInv.scanned ?? 0) : null,
+          sold: raInv != null ? raInv.sold : null,
           reserved:
             raInv != null
               ? (raInv.capacity ?? raInv.sold ?? 0) || null
@@ -1064,7 +1057,7 @@ export async function loadEventInsightsFresh(options?: {
           available: raInv != null ? (raInv.available ?? 0) : null,
           status: raInv != null ? "live" : raListing ? "empty" : "empty",
           note: raInv
-            ? "RA daytickets · gebruikt / gereserveerd"
+            ? "RA daytickets · uitgegeven / pool"
             : raListing
               ? "Geen dayticket-pool op deze editie"
               : "Geen RA-listing gekoppeld",
@@ -1682,7 +1675,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v47"],
+  ["event-insights-upcoming-v48"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1698,7 +1691,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v47"],
+  ["event-insights-past-v48"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],
@@ -1747,7 +1740,7 @@ export const loadEventInsights = cache(async (options?: {
   }
 
   return rememberTtl(
-    `event-insights:v46:${limit}:${asOfDay}`,
+    `event-insights:v48:${limit}:${asOfDay}`,
     DASHBOARD_TTL_MS,
     async () => {
       // Outside Next data cache: recover empty DB / schedule list refresh
