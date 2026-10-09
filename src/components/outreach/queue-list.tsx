@@ -818,6 +818,13 @@ export function QueueList({
                             Dossier →
                           </Link>
                         </div>
+                        {error ? (
+                          <p className="text-sm text-danger" role="alert">
+                            {error}
+                          </p>
+                        ) : message ? (
+                          <p className="text-sm text-success">{message}</p>
+                        ) : null}
                       </div>
                     ) : null}
                   </td>
