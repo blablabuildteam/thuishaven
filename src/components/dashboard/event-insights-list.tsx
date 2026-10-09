@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 /* eslint-disable @next/next/no-img-element */
 import Link from "next/link";
@@ -20,6 +21,7 @@ import {
   MapPin,
   Cake,
   ChevronDown,
+  RefreshCw,
   Music2,
   Ticket,
   ScanLine,
@@ -1006,7 +1008,58 @@ function TicketMiniStat({
   );
 }
 
+function EditionSalesRefresh({ editionId }: { editionId: string }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const spinning = busy || isPending;
+
+  async function onRefresh() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/dashboard/editions/${editionId}/weeztix-refresh`,
+        { method: "POST" },
+      );
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setError(body.error || "Verversen mislukt");
+        return;
+      }
+      startTransition(() => {
+        router.refresh();
+      });
+    } catch {
+      setError("Verversen mislukt");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      <button
+        type="button"
+        onClick={onRefresh}
+        disabled={spinning}
+        className="inline-flex items-center gap-1.5 border border-border bg-surface px-2 py-1 text-[10px] font-medium tracking-[0.08em] text-text-muted uppercase transition-colors hover:border-border-strong hover:text-text disabled:opacity-60"
+      >
+        <RefreshCw className={cn("size-3", spinning && "animate-spin")} />
+        {spinning ? "Bezig…" : "Ververs"}
+      </button>
+      {error ? (
+        <span className="text-[10px] text-warn" role="status">
+          {error}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function TicketMetricsVisual({
+  editionId,
   sold,
   capacity,
   scanned,
@@ -1025,6 +1078,7 @@ function TicketMetricsVisual({
   emailCampaigns,
   paidAds,
 }: {
+  editionId: string;
   sold: number;
   capacity: number | null;
   scanned: number;
@@ -1099,7 +1153,7 @@ function TicketMetricsVisual({
         </div>
 
         <div
-          title="Weeztix-shop plus de barcodes die naar Appic/RA/vrienden zijn gegaan; na het event de scans"
+          title="Weeztix-shop plus de barcodes die naar Appic, RA en vrienden zijn uitgegeven"
           className="min-w-0 text-center"
         >
           <p className="truncate text-[9px] font-medium tracking-normal text-text-dim uppercase sm:text-[10px] sm:tracking-[0.12em]">
@@ -1186,13 +1240,18 @@ function TicketMetricsVisual({
           posts={socialPosts}
           mails={emailCampaigns}
           ads={paidAds}
+          actions={<EditionSalesRefresh editionId={editionId} />}
         />
-      ) : salesTrackedFrom && salesCurveSource !== "orders" ? (
-        <p className="mt-3 border-t border-border pt-3 text-[10px] text-text-dim">
-          Dagelijkse verkoop vanaf {formatDayShort(salesTrackedFrom)}. Eerste
-          punt na de volgende dagelijkse snapshot.
-        </p>
-      ) : null}
+      ) : (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+          <p className="text-[10px] text-text-dim">
+            {salesTrackedFrom && salesCurveSource !== "orders"
+              ? `Dagelijkse verkoop vanaf ${formatDayShort(salesTrackedFrom)}. Eerste punt na de volgende dagelijkse snapshot.`
+              : "Nog geen dagcurve."}
+          </p>
+          <EditionSalesRefresh editionId={editionId} />
+        </div>
+      )}
     </div>
   );
 }
@@ -1506,6 +1565,7 @@ function EventDetail({ event }: { event: EventInsight }) {
 
       <div className="insight-reveal relative z-0 space-y-1">
         <TicketMetricsVisual
+          editionId={event.editionId}
           sold={tickets.sold}
           capacity={tickets.capacity}
           scanned={tickets.scanned}

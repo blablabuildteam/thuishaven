@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   CartesianGrid,
@@ -408,6 +408,7 @@ export function EventSalesCurveChart({
   posts = EMPTY_POSTS,
   mails = EMPTY_MAILS,
   ads = EMPTY_ADS,
+  actions,
 }: {
   points: SalesDayPoint[];
   eventDay: string;
@@ -426,6 +427,7 @@ export function EventSalesCurveChart({
     campaignName: string | null;
     adName: string | null;
   }>;
+  actions?: ReactNode;
 }) {
   const colors = useChartColors();
   const reactId = useId();
@@ -473,10 +475,13 @@ export function EventSalesCurveChart({
         <p className="text-[10px] font-medium tracking-[0.12em] text-text-dim uppercase">
           Verkoopverloop
         </p>
-        <p className="text-[10px] text-text-dim">
-          {first.label} – {last.label}
-          {sinceDay ? " · snapshot" : ""}
-        </p>
+        <div className="flex items-center gap-2">
+          {actions}
+          <p className="text-[10px] text-text-dim">
+            {first.label} – {last.label}
+            {sinceDay ? " · snapshot" : ""}
+          </p>
+        </div>
       </div>
       <p className="sr-only">
         {formatNumber(total)} tickets van {formatDayNl(first.day)} tot{" "}

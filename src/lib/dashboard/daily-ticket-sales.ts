@@ -347,6 +347,68 @@ export async function refreshDailyTicketSales(): Promise<{
   return { ok: !error, refreshedAt, error };
 }
 
+/**
+ * Live Weeztix totals and order curve for one edition. Used from Insights
+ * when someone wants this event's stand before the next cron slot.
+ */
+export async function refreshEditionTicketSales(editionId: string): Promise<{
+  ok: boolean;
+  refreshedAt: string | null;
+  error?: string;
+}> {
+  if (!hasDatabase()) {
+    return { ok: false, refreshedAt: null, error: "DATABASE_URL ontbreekt" };
+  }
+  const db = getDb();
+  const [edition] = await db
+    .select({
+      id: editions.id,
+      weeztixEventId: editions.weeztixEventId,
+    })
+    .from(editions)
+    .where(eq(editions.id, editionId))
+    .limit(1);
+  if (!edition?.weeztixEventId) {
+    return { ok: false, refreshedAt: null, error: "Geen Weeztix-event" };
+  }
+
+  const { snapshotWeeztixInventoryToday, syncWeeztixDailySales } = await import(
+    "@/lib/integrations/weeztix/daily"
+  );
+  const { syncWeeztixTicketStatsFromEditions } = await import(
+    "@/lib/integrations/weeztix/sync"
+  );
+
+  const inventory = await syncWeeztixTicketStatsFromEditions({
+    editionIds: [editionId],
+    concurrency: 1,
+  });
+  const curves = inventory.ok
+    ? await syncWeeztixDailySales({
+        editionIds: [editionId],
+        curvesOnly: true,
+        limit: 1,
+        concurrency: 1,
+      }).catch((err) => ({
+        ok: false as const,
+        errors: [
+          err instanceof Error ? err.message : "Verkoopverloop ophalen mislukt",
+        ],
+      }))
+    : null;
+  if (inventory.ok) {
+    await snapshotWeeztixInventoryToday([editionId]);
+  }
+
+  const refreshedAt = new Date().toISOString();
+  const error = !inventory.ok
+    ? inventory.errors[0] ?? "Weeztix-sync mislukt"
+    : curves && !curves.ok
+      ? curves.errors[0] ?? "Verkoopverloop ophalen mislukt"
+      : undefined;
+  return { ok: !error, refreshedAt: error ? null : refreshedAt, error };
+}
+
 export const loadDailyTicketSales = cache(
   async (windowDays = DAILY_TICKET_SALES_WINDOW): Promise<DailyTicketSales> => {
     const endDay = amsterdamDay(new Date());
