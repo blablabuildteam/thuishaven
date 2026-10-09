@@ -15,9 +15,6 @@ type Stat = {
 };
 
 export function PipelineStatusBanner({ status }: Props) {
-  const toComplete =
-    status.missingEmail + status.incompleteButHasEmail + status.fitUnknown;
-
   const stats: Stat[] = [
     {
       key: "ready",
@@ -36,10 +33,10 @@ export function PipelineStatusBanner({ status }: Props) {
     },
     {
       key: "complete",
-      count: toComplete,
+      count: status.toComplete,
       label: "Aan te vullen",
       href: "/outreach/lijst-bijwerken",
-      hint: `${status.missingEmail} zonder e-mail · ${status.incompleteButHasEmail} onvolledig · ${status.fitUnknown} fit onbekend`,
+      hint: "Mist e-mail, gegevens of doelgroep-check",
     },
     {
       key: "mailed",

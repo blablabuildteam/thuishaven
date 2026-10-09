@@ -29,6 +29,8 @@ export type OutreachPipelineStatus = {
   drafts: number;
   /** KvK non-mailing — nooit ongevraagd mailen */
   nonMailing: number;
+  /** Uniek: nog niet gemaild/in Wachtrij en mist e-mail, gegevens of fit. */
+  toComplete: number;
 };
 
 function eligible(rows: CrmRecord[]): CrmRecord[] {
@@ -49,6 +51,7 @@ export function computeOutreachPipelineStatus(
   let fitUnknown = 0;
   let fitNo = 0;
   let nonMailing = 0;
+  let toComplete = 0;
 
   for (const row of companies) {
     const hasMailed = row.mailCount > 0;
@@ -102,6 +105,16 @@ export function computeOutreachPipelineStatus(
       })
     ) {
       readyToMail += 1;
+    } else if (
+      !queued &&
+      !hasDraft &&
+      row.doelgroepFit !== "nee" &&
+      (!row.email ||
+        row.incomplete ||
+        !row.doelgroepFit ||
+        row.doelgroepFit === "onbekend")
+    ) {
+      toComplete += 1;
     }
   }
 
@@ -117,6 +130,7 @@ export function computeOutreachPipelineStatus(
     needsReview: inQueue + drafts,
     drafts,
     nonMailing,
+    toComplete,
   };
 }
 
