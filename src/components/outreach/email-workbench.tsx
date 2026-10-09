@@ -360,6 +360,44 @@ export function OutreachEmailWorkbench({
     }
   }
 
+  async function sendToQueue() {
+    if (!lastEmailIds.length) {
+      setError("Eerst drafts genereren");
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    setBusy(true);
+    try {
+      if (drafts.length) {
+        const saved = await saveDraftEdits();
+        if (!saved) return;
+      }
+      const res = await fetch("/api/outreach/emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "promote-queue",
+          emailIds: lastEmailIds,
+          senderProfileId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? "Naar wachtrij zetten mislukt");
+        return;
+      }
+      setMessage(
+        `${data.promoted} mail${data.promoted === 1 ? "" : "s"} in de Wachtrij — daar kun je ze checken en inplannen.`,
+      );
+      setDrafts([]);
+      setLastEmailIds([]);
+      startTransition(() => router.refresh());
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function enqueueToBatch() {
     if (!lastEmailIds.length) {
       setError("Eerst drafts genereren");
@@ -434,11 +472,11 @@ export function OutreachEmailWorkbench({
   return (
     <div className={`space-y-6 ${selected.size > 0 ? "mb-28" : "mb-10"}`}>
       <p className="text-sm text-text-muted">
-        Selecteer → genereer → test → bakje. Live send later via{" "}
+        Selecteer → genereer → test →{" "}
         <Link href="/outreach/planning" className="text-accent underline">
           Wachtrij
-        </Link>
-        .
+        </Link>{" "}
+        (daar reviewen, wijzigen, inplannen).
       </p>
 
       <div className="flex flex-wrap items-end gap-3">
@@ -840,58 +878,68 @@ export function OutreachEmailWorkbench({
               {lastEmailIds.length > 0 ? (
                 <>
                   <select
-                    className="max-w-[10rem] border border-border bg-bg px-2 py-2 text-sm"
-                    value={batchTarget}
+                    className="max-w-[11rem] border border-border bg-bg px-2 py-2 text-sm"
+                    value={senderProfileId}
                     disabled={busy}
-                    onChange={(e) => setBatchTarget(e.target.value)}
-                    aria-label="Bakje"
+                    onChange={(e) =>
+                      setSenderProfileId(
+                        e.target.value as OutreachSenderProfileId,
+                      )
+                    }
+                    aria-label="Afzender"
                   >
-                    <option value="new">Nieuw bakje</option>
-                    {openBatches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                        {b.senderProfileLabel
-                          ? ` · ${b.senderProfileLabel}`
-                          : ""}
+                    {OUTREACH_SENDER_PROFILES.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
                       </option>
                     ))}
                   </select>
-                  {batchTarget === "new" ? (
-                    <>
-                      <input
-                        className="w-28 border border-border bg-bg px-2 py-2 text-sm sm:w-36"
-                        placeholder="Naam"
-                        value={batchName}
-                        disabled={busy}
-                        onChange={(e) => setBatchName(e.target.value)}
-                      />
-                      <select
-                        className="max-w-[11rem] border border-border bg-bg px-2 py-2 text-sm"
-                        value={senderProfileId}
-                        disabled={busy}
-                        onChange={(e) =>
-                          setSenderProfileId(
-                            e.target.value as OutreachSenderProfileId,
-                          )
-                        }
-                        aria-label="Afzender"
-                      >
-                        {OUTREACH_SENDER_PROFILES.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.label}
-                          </option>
-                        ))}
-                      </select>
-                    </>
-                  ) : null}
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => void enqueueToBatch()}
+                    onClick={() => void sendToQueue()}
                     className="border border-accent bg-accent/10 px-3 py-2.5 text-sm disabled:opacity-50"
                   >
-                    In bakje
+                    Naar wachtrij
                   </button>
+                  <details className="text-xs text-text-dim">
+                    <summary className="cursor-pointer hover:text-text">
+                      Oud: bakje
+                    </summary>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      <select
+                        className="max-w-[10rem] border border-border bg-bg px-2 py-1.5 text-sm"
+                        value={batchTarget}
+                        disabled={busy}
+                        onChange={(e) => setBatchTarget(e.target.value)}
+                        aria-label="Bakje"
+                      >
+                        <option value="new">Nieuw bakje</option>
+                        {openBatches.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.name}
+                          </option>
+                        ))}
+                      </select>
+                      {batchTarget === "new" ? (
+                        <input
+                          className="w-28 border border-border bg-bg px-2 py-1.5 text-sm"
+                          placeholder="Naam"
+                          value={batchName}
+                          disabled={busy}
+                          onChange={(e) => setBatchName(e.target.value)}
+                        />
+                      ) : null}
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void enqueueToBatch()}
+                        className="border border-border px-2 py-1.5 text-sm disabled:opacity-50"
+                      >
+                        In bakje
+                      </button>
+                    </div>
+                  </details>
                 </>
               ) : null}
               <button

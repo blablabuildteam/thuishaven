@@ -2,7 +2,7 @@
  * Schedule queued bakje mails and auto-send via cron when due.
  */
 
-import { and, asc, eq, isNotNull, lte, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, lte, or, sql } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { outreachBatches, outreachEmails } from "@/lib/db/schema";
 import { sendStoredDraft } from "@/lib/integrations/outreach";
@@ -242,23 +242,29 @@ export async function processDueOutreachSends(limit = MAX_SENDS_PER_CRON): Promi
 
   const db = getDb();
   const now = new Date();
+  // Due = queued + scheduled + (per-mail armed OR bakje auto_send).
   const due = await db
     .select({
       emailId: outreachEmails.id,
       batchId: outreachEmails.batchId,
     })
     .from(outreachEmails)
-    .innerJoin(
+    .leftJoin(
       outreachBatches,
       eq(outreachEmails.batchId, outreachBatches.id),
     )
     .where(
       and(
         eq(outreachEmails.status, "queued"),
-        eq(outreachBatches.autoSend, true),
         isNotNull(outreachEmails.scheduledAt),
         lte(outreachEmails.scheduledAt, now),
-        sql`${outreachBatches.status} <> 'sent'`,
+        or(
+          isNotNull(outreachEmails.armedAt),
+          and(
+            eq(outreachBatches.autoSend, true),
+            sql`${outreachBatches.status} IS DISTINCT FROM 'sent'`,
+          ),
+        ),
       ),
     )
     .orderBy(asc(outreachEmails.scheduledAt))

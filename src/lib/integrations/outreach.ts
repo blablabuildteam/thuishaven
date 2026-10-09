@@ -700,6 +700,8 @@ export async function sendStoredDraft(input: {
       body: outreachEmails.body,
       status: outreachEmails.status,
       batchId: outreachEmails.batchId,
+      emailSenderProfileId: outreachEmails.senderProfileId,
+      emailSenderEmail: outreachEmails.senderEmail,
       email: prospects.email,
       companyName: prospects.companyName,
       prospectId: prospects.id,
@@ -731,13 +733,25 @@ export async function sendStoredDraft(input: {
     (Array.isArray(meta.contacts) ? meta.contacts[0] : undefined);
   if (!intended) return { error: "Geen e-mailadres op prospect" };
 
-  // Prefer batch snapshot (Evenementen / Reiner / Yoram); else global settings.
+  // Prefer per-mail snapshot, then bakje, then global settings.
   let sender = await resolveOutreachSender();
   let replyTo = await resolveOutreachReplyTo();
   let bodyText = row.body;
   let senderProfileId: string | null = null;
 
-  if (row.batchId) {
+  if (isSenderProfileId(row.emailSenderProfileId)) {
+    const profile = getSenderProfile(row.emailSenderProfileId);
+    senderProfileId = profile.id;
+    sender = {
+      email: row.emailSenderEmail || profile.email,
+      name: profile.name,
+    };
+    replyTo = {
+      email: profile.replyToEmail,
+      name: profile.replyToName,
+    };
+    bodyText = applySenderSignature(row.body, profile);
+  } else if (row.batchId) {
     const [batch] = await db
       .select({
         senderProfileId: outreachBatches.senderProfileId,

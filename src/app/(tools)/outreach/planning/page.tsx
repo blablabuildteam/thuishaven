@@ -3,9 +3,11 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { BatchQueue } from "@/components/outreach/batch-queue";
 import { PipelineStatusBanner } from "@/components/outreach/pipeline-status-banner";
+import { QueueList } from "@/components/outreach/queue-list";
 import { QueueSchedule } from "@/components/outreach/queue-schedule";
 import { listBatchesWithEmails } from "@/lib/outreach/batches";
 import { getOutreachPipelineStatus } from "@/lib/outreach/pipeline-status";
+import { listQueueItems } from "@/lib/outreach/queue";
 
 export const metadata = { title: "Wachtrij" };
 export const dynamic = "force-dynamic";
@@ -21,21 +23,23 @@ export default async function OutreachPlanningPage() {
       schedule,
     },
     pipeline,
-  ] = await Promise.all([listBatchesWithEmails(), getOutreachPipelineStatus()]);
-
-  const queuedCount = batches
-    .filter((b) => b.status !== "sent")
-    .reduce((s, b) => s + b.mailCount, 0);
+    queueItems,
+  ] = await Promise.all([
+    listBatchesWithEmails(),
+    getOutreachPipelineStatus(),
+    listQueueItems(),
+  ]);
 
   const liveUnlocked = !liveSendBlockReason;
   const bouncePaused = Boolean(liveSendQuota?.bouncePause);
+  const plannedCount = queueItems.filter((i) => i.scheduledAt).length;
 
   return (
     <div>
       <SectionHeader
         eyebrow="Stap 4 · review"
         title="Wachtrij"
-        description="Eerst beoordelen (teksten + afzender), dan Plan in / Auto-send. Bakjes met ‘Te beoordelen’ zijn nog niet live — bevestiging verplicht."
+        description="Alle conceptmails in één lijst. Open om te lezen of te wijzigen (tekst, onderwerp, afzender). Selecteer meerdere → Plan in → Activeer verzenden."
         action={
           <div className="flex flex-wrap gap-2">
             {bouncePaused ? (
@@ -50,9 +54,12 @@ export default async function OutreachPlanningPage() {
                 {liveSendQuota.sentToday}/{liveSendQuota.dailyCap} vandaag
               </StatusBadge>
             ) : null}
-            <StatusBadge tone={queuedCount > 0 ? "accent" : "neutral"}>
-              {queuedCount} in bakjes
+            <StatusBadge tone={queueItems.length > 0 ? "accent" : "neutral"}>
+              {queueItems.length} in lijst
             </StatusBadge>
+            {plannedCount > 0 ? (
+              <StatusBadge tone="info">{plannedCount} gepland</StatusBadge>
+            ) : null}
             <Link
               href="/outreach/emails"
               className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
@@ -75,11 +82,31 @@ export default async function OutreachPlanningPage() {
         schedule={schedule}
       />
 
-      <BatchQueue
-        batches={batches}
-        liveSendBlockReason={liveSendBlockReason}
-        liveSendQuota={liveSendQuota}
-      />
+      <section className="mb-12">
+        <h2 className="mb-4 font-display text-lg tracking-[0.06em]">
+          Alle mails
+        </h2>
+        <QueueList
+          items={queueItems}
+          liveSendBlockReason={liveSendBlockReason}
+          liveSendQuota={liveSendQuota}
+        />
+      </section>
+
+      <details className="mb-10 border-t border-border pt-8">
+        <summary className="cursor-pointer font-display text-sm tracking-[0.06em] text-text-muted hover:text-text">
+          Oude bakjes-weergave (optioneel)
+        </summary>
+        <p className="mt-2 mb-4 text-sm text-text-muted">
+          Bakjes blijven werken voor groepsverzending, maar de list hierboven is
+          de hoofdplek om te reviewen.
+        </p>
+        <BatchQueue
+          batches={batches}
+          liveSendBlockReason={liveSendBlockReason}
+          liveSendQuota={liveSendQuota}
+        />
+      </details>
     </div>
   );
 }

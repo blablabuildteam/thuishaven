@@ -21,6 +21,14 @@ import {
   updateBatchMeta,
   updateQueuedOrDraft,
 } from "@/lib/outreach/batches";
+import {
+  armQueueEmails,
+  clearQueueSchedule,
+  disarmQueueEmails,
+  promoteToQueue,
+  scheduleQueueEmails,
+  updateQueueItem,
+} from "@/lib/outreach/queue";
 
 export const dynamic = "force-dynamic";
 /** Bulk draft generation calls Gemini per company. */
@@ -120,6 +128,157 @@ export async function POST(request: Request) {
       subject: parsed.data.subject.trim(),
       body: parsed.data.body.trim(),
     });
+  }
+
+  if (action === "update-queue-item") {
+    const schema = z.object({
+      action: z.literal("update-queue-item"),
+      emailId: z.string().uuid(),
+      subject: z.string().min(1).max(200).optional(),
+      body: z.string().min(1).max(20000).optional(),
+      senderProfileId: z
+        .enum(["evenementen", "reiner", "yoram"])
+        .optional(),
+      variantKey: z.enum(VARIANT_IDS).optional().nullable(),
+    });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
+    }
+    const result = await updateQueueItem({
+      emailId: parsed.data.emailId,
+      subject: parsed.data.subject,
+      body: parsed.data.body,
+      senderProfileId: parsed.data.senderProfileId,
+      variantKey: parsed.data.variantKey,
+    });
+    if ("error" in result) {
+      return NextResponse.json(result, { status: 400 });
+    }
+    return NextResponse.json(result);
+  }
+
+  if (action === "promote-queue") {
+    const schema = z.object({
+      action: z.literal("promote-queue"),
+      emailIds: z.array(z.string().uuid()).min(1).max(80),
+      senderProfileId: z
+        .enum(["evenementen", "reiner", "yoram"])
+        .optional(),
+    });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
+    }
+    const result = await promoteToQueue({
+      emailIds: parsed.data.emailIds,
+      senderProfileId: parsed.data.senderProfileId,
+    });
+    if ("error" in result) {
+      return NextResponse.json(result, { status: 400 });
+    }
+    return NextResponse.json(result);
+  }
+
+  if (action === "schedule-queue") {
+    const schema = z.object({
+      action: z.literal("schedule-queue"),
+      emailIds: z.array(z.string().uuid()).min(1).max(80),
+      fromDay: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .optional(),
+    });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
+    }
+    const result = await scheduleQueueEmails({
+      emailIds: parsed.data.emailIds,
+      fromDay: parsed.data.fromDay,
+    });
+    if ("error" in result) {
+      return NextResponse.json(result, { status: 400 });
+    }
+    await logSessionActivity(session, {
+      action: "email_schedule_queue",
+      summary: `Wachtrij ingepland · ${result.scheduled} mails`,
+      path: "/api/outreach/emails",
+      method: "POST",
+      status: 200,
+      tool: "outreach",
+      meta: { scheduled: result.scheduled },
+    });
+    return NextResponse.json(result);
+  }
+
+  if (action === "clear-queue-schedule") {
+    const schema = z.object({
+      action: z.literal("clear-queue-schedule"),
+      emailIds: z.array(z.string().uuid()).min(1).max(80),
+    });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
+    }
+    const result = await clearQueueSchedule({
+      emailIds: parsed.data.emailIds,
+    });
+    if ("error" in result) {
+      return NextResponse.json(result, { status: 400 });
+    }
+    return NextResponse.json(result);
+  }
+
+  if (action === "arm-queue") {
+    const schema = z.object({
+      action: z.literal("arm-queue"),
+      emailIds: z.array(z.string().uuid()).min(1).max(80),
+      confirmText: z.string().min(1).max(200),
+    });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Bevestiging verplicht" },
+        { status: 400 },
+      );
+    }
+    const result = await armQueueEmails({
+      emailIds: parsed.data.emailIds,
+      confirmText: parsed.data.confirmText,
+    });
+    if ("error" in result) {
+      return NextResponse.json(result, { status: 400 });
+    }
+    await logSessionActivity(session, {
+      action: "email_arm_queue",
+      summary: `Wachtrij auto-send · ${result.armed} mails`,
+      path: "/api/outreach/emails",
+      method: "POST",
+      status: 200,
+      tool: "outreach",
+      meta: { armed: result.armed },
+    });
+    return NextResponse.json(result);
+  }
+
+  if (action === "disarm-queue") {
+    const schema = z.object({
+      action: z.literal("disarm-queue"),
+      emailIds: z.array(z.string().uuid()).min(1).max(80),
+    });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
+    }
+    const result = await disarmQueueEmails({
+      emailIds: parsed.data.emailIds,
+    });
+    if ("error" in result) {
+      return NextResponse.json(result, { status: 400 });
+    }
+    return NextResponse.json(result);
   }
 
   if (action === "enqueue") {

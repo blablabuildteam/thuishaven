@@ -285,8 +285,10 @@ export const outreachEmails = pgTable("outreach_emails", {
   status: outreachEmailStatusEnum("status").notNull().default("draft"),
   brevoMessageId: text("brevo_message_id"),
   availabilityLinkToken: text("availability_link_token"),
-  /** Planned live send moment (UTC). Cron sends when due if bakje auto_send. */
+  /** Planned live send moment (UTC). Cron sends when due if armed / bakje auto_send. */
   scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
+  /** When set, cron may send this mail at scheduled_at (list-view arm). */
+  armedAt: timestamp("armed_at", { withTimezone: true }),
   /** Snapshot of From used at send time (for Resultaten per afzender). */
   senderEmail: text("sender_email"),
   senderProfileId: text("sender_profile_id"),
