@@ -34,6 +34,12 @@ export function UserMenu({ hideAdminLinks = false }: { hideAdminLinks?: boolean 
           >
             Gebruikers
           </Link>
+          <Link
+            href="/admin/roadmap"
+            className="block w-full border border-border px-2 py-1.5 text-center font-display text-xs tracking-[0.12em] text-text-muted transition-colors hover:border-accent hover:text-text"
+          >
+            Roadmap
+          </Link>
         </>
       )}
       <button

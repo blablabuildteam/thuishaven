@@ -656,6 +656,20 @@ export function QueueList({
                           ? " · AI"
                           : ""}
                     </p>
+                    {item.emailQuality.issues.length > 0 ? (
+                      <p
+                        className={`mt-0.5 text-[11px] ${
+                          item.emailQuality.level === "block"
+                            ? "text-danger"
+                            : "text-warn"
+                        }`}
+                      >
+                        {item.emailQuality.level === "block"
+                          ? "Wordt niet verstuurd: "
+                          : ""}
+                        {item.emailQuality.issues.map((i) => i.label).join(" · ")}
+                      </p>
+                    ) : null}
 
                     {open ? (
                       <div className="mt-3 max-w-2xl space-y-3">

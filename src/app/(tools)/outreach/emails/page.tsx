@@ -6,6 +6,7 @@ import {
 } from "@/components/outreach/email-workbench";
 import { listCrmRecords } from "@/lib/outreach/crm";
 import { leadScore } from "@/lib/outreach/lead-score";
+import { checkRecipientEmail } from "@/lib/outreach/email-quality";
 import { getTemplateStats } from "@/lib/outreach/template-stats";
 import { bestTemplateKey } from "@/lib/outreach/template-stat-label";
 import {
@@ -50,6 +51,12 @@ export default async function EmailsPage({
   ]
     .map((s) => s.trim())
     .filter(Boolean);
+
+  const sharedCounts = new Map<string, number>();
+  for (const r of records) {
+    const key = r.email?.trim().toLowerCase();
+    if (key) sharedCounts.set(key, (sharedCounts.get(key) ?? 0) + 1);
+  }
 
   const workbenchProspects: WorkbenchProspect[] = [];
   let skippedNoEmail = 0;
@@ -97,6 +104,13 @@ export default async function EmailsPage({
       companyName: r.companyName,
       email: r.email,
       contactName: r.decisionMakerName ?? null,
+      quality: checkRecipientEmail({
+        email: r.email,
+        contactName: r.decisionMakerName,
+        website: r.website,
+        companyName: r.companyName,
+        sharedCount: sharedCounts.get(r.email.trim().toLowerCase()) ?? 1,
+      }),
       angleId: angle.id,
       suggestedVariantId: suggested as OutreachVariantId,
       suggestedLabel: angle.label,

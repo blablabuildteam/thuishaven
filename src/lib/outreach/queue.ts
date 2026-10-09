@@ -10,6 +10,7 @@ import {
   inArray,
   isNotNull,
   notInArray,
+  sql,
 } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { outreachBatches, outreachEmails, prospects } from "@/lib/db/schema";
@@ -29,6 +30,10 @@ import {
   type OutreachSenderProfileId,
 } from "@/lib/outreach/sender-profiles";
 import { loadOutreachSettings, suggestSendSlots } from "@/lib/outreach/settings";
+import {
+  checkRecipientEmail,
+  type EmailQuality,
+} from "@/lib/outreach/email-quality";
 import { OUTREACH_VARIANTS, type OutreachVariantId } from "@/lib/outreach/tone";
 import {
   amsterdamClock,
@@ -48,6 +53,7 @@ export type QueueItem = {
   prospectId: string;
   companyName: string;
   toEmail: string | null;
+  emailQuality: EmailQuality;
   subject: string;
   body: string;
   variantKey: string | null;
@@ -94,6 +100,8 @@ export async function listQueueItems(): Promise<QueueItem[]> {
       prospectId: outreachEmails.prospectId,
       companyName: prospects.companyName,
       toEmail: prospects.email,
+      website: prospects.website,
+      metadata: prospects.metadata,
       subject: outreachEmails.subject,
       body: outreachEmails.body,
       variantKey: outreachEmails.variantKey,
@@ -123,7 +131,27 @@ export async function listQueueItems(): Promise<QueueItem[]> {
     )
     .limit(500);
 
+  const addresses = [
+    ...new Set(
+      rows.map((r) => r.toEmail?.trim().toLowerCase()).filter(Boolean),
+    ),
+  ] as string[];
+  const shared = new Map<string, number>();
+  if (addresses.length > 0) {
+    const counts = await db
+      .select({
+        email: sql<string>`lower(${prospects.email})`,
+        n: sql<number>`count(*)::int`,
+      })
+      .from(prospects)
+      .where(inArray(sql`lower(${prospects.email})`, addresses))
+      .groupBy(sql`lower(${prospects.email})`);
+    for (const c of counts) shared.set(c.email, c.n);
+  }
+
   return rows.map((r) => {
+    const dm = (r.metadata as { decisionMaker?: { name?: string } } | null)
+      ?.decisionMaker;
     const profileId = isSenderProfileId(r.senderProfileId)
       ? r.senderProfileId
       : isSenderProfileId(r.batchSenderProfileId)
@@ -144,6 +172,16 @@ export async function listQueueItems(): Promise<QueueItem[]> {
       prospectId: r.prospectId,
       companyName: r.companyName,
       toEmail: r.toEmail,
+      emailQuality: checkRecipientEmail({
+        email: r.toEmail,
+        contactName:
+          dm?.name && r.body.includes(dm.name.trim().split(/\s+/)[0] ?? "")
+            ? dm.name
+            : null,
+        website: r.website,
+        companyName: r.companyName,
+        sharedCount: shared.get(r.toEmail?.trim().toLowerCase() ?? "") ?? 1,
+      }),
       subject: r.subject,
       body: r.body,
       variantKey: r.variantKey,

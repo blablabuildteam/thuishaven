@@ -14,6 +14,7 @@ import {
   type OutreachVariantId,
 } from "@/lib/outreach/tone";
 import type { LeadTier } from "@/lib/outreach/lead-score";
+import type { EmailQuality } from "@/lib/outreach/email-quality";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   formatTemplateStat,
@@ -25,6 +26,7 @@ export type WorkbenchProspect = {
   companyName: string;
   email: string;
   contactName: string | null;
+  quality: EmailQuality;
   angleId: string;
   suggestedVariantId: OutreachVariantId | null;
   suggestedLabel: string | null;
@@ -119,7 +121,12 @@ export function OutreachEmailWorkbench({
     () =>
       new Set(
         prospects
-          .filter((p) => preselected.has(p.id) && p.mailCount === 0)
+          .filter(
+            (p) =>
+              preselected.has(p.id) &&
+              p.mailCount === 0 &&
+              p.quality.level !== "block",
+          )
           .map((p) => p.id),
       ),
   );
@@ -150,7 +157,16 @@ export function OutreachEmailWorkbench({
     return p.suggestedVariantId ?? overrideVariant;
   }
 
+  const blockedIds = useMemo(
+    () =>
+      new Set(
+        prospects.filter((p) => p.quality.level === "block").map((p) => p.id),
+      ),
+    [prospects],
+  );
+
   function toggle(id: string) {
+    if (blockedIds.has(id)) return;
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -161,7 +177,11 @@ export function OutreachEmailWorkbench({
 
   function selectAll() {
     setSelected(
-      new Set(ready.filter((p) => p.queuedCount === 0).map((p) => p.id)),
+      new Set(
+        ready
+          .filter((p) => p.queuedCount === 0 && !blockedIds.has(p.id))
+          .map((p) => p.id),
+      ),
     );
   }
 
@@ -169,7 +189,10 @@ export function OutreachEmailWorkbench({
     setSelected(
       new Set(
         ready
-          .filter((p) => p.mailCount === 0 && p.queuedCount === 0)
+          .filter(
+            (p) =>
+              p.mailCount === 0 && p.queuedCount === 0 && !blockedIds.has(p.id),
+          )
           .slice(0, n)
           .map((p) => p.id),
       ),
@@ -612,13 +635,16 @@ export function OutreachEmailWorkbench({
               {ready.map((p) => {
                 const on = selected.has(p.id);
                 const chosen = variantFor(p);
+                const blocked = p.quality.level === "block";
                 return (
                   <tr
                     key={p.id}
                     onClick={() => toggle(p.id)}
-                    className={`cursor-pointer border-b border-border last:border-0 hover:bg-surface/50 ${
-                      on ? "bg-accent/5" : ""
-                    }`}
+                    className={`border-b border-border last:border-0 ${
+                      blocked
+                        ? "opacity-60"
+                        : "cursor-pointer hover:bg-surface/50"
+                    } ${on ? "bg-accent/5" : ""}`}
                   >
                     <td
                       className="px-3 py-2"
@@ -627,6 +653,7 @@ export function OutreachEmailWorkbench({
                       <input
                         type="checkbox"
                         checked={on}
+                        disabled={blocked}
                         onChange={() => toggle(p.id)}
                         aria-label={`Selecteer ${p.companyName}`}
                       />
@@ -644,6 +671,14 @@ export function OutreachEmailWorkbench({
                           ? ` · ${p.queuedCount} in wachtrij`
                           : ""}
                       </p>
+                      {p.quality.issues.length > 0 ? (
+                        <p
+                          className={`mt-0.5 text-[11px] ${blocked ? "text-danger" : "text-warn"}`}
+                        >
+                          {blocked ? "Niet mailen: " : ""}
+                          {p.quality.issues.map((i) => i.label).join(" · ")}
+                        </p>
+                      ) : null}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2">
                       <StatusBadge tone={chosen === "jubileum" ? "accent" : "neutral"}>
@@ -681,6 +716,12 @@ export function OutreachEmailWorkbench({
       ) : null}
       {message ? <p className="text-sm text-text-muted">{message}</p> : null}
 
+      {blockedIds.size > 0 ? (
+        <p className="text-sm text-text-muted">
+          {blockedIds.size} bedrijven niet te selecteren: nep- of dubbel
+          e-mailadres. Corrigeer het adres bij het bedrijf.
+        </p>
+      ) : null}
       {skippedNoEmail > 0 ? (
         <p className="text-sm text-text-muted">
           {skippedNoEmail} bedrijven niet meegenomen: geen e-mail. Vul die aan

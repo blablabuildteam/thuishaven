@@ -2,7 +2,7 @@
  * Outreach integrations — KvK (later), AI generation, Brevo send, sales notify.
  */
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import {
   leads,
@@ -14,6 +14,11 @@ import { assertExternalReadOnly } from "@/lib/integrations/read-only";
 import { availabilitySummaryForEmail } from "@/lib/outreach/availability";
 import { getAgencyCampaignId, getCompanyCampaignId } from "@/lib/outreach/data";
 import { renderOutreachHtmlEmail } from "@/lib/outreach/email-html";
+import {
+  blockedEmailReason,
+  checkRecipientEmail,
+  greetingContactName,
+} from "@/lib/outreach/email-quality";
 import {
   applySenderSignature,
   DEFAULT_SENDER_PROFILE_ID,
@@ -572,6 +577,9 @@ export async function sendViaBrevo(input: {
         subject,
         htmlContent: html,
         textContent: input.text,
+        headers: {
+          "List-Unsubscribe": `<mailto:${replyTo.email}?subject=Afmelden>`,
+        },
         tags: input.tags ?? ["outreach", "thuishaven-b2b"],
       }),
       cache: "no-store",
@@ -702,6 +710,23 @@ export function hasOutreachAiConfigured(): boolean {
   );
 }
 
+/** Address check for one prospect, incl. how many prospects share the address. */
+async function prospectEmailQuality(
+  email: string | null | undefined,
+  contactName: string | null | undefined,
+  website: string | null | undefined,
+) {
+  let sharedCount = 1;
+  if (email && hasDatabase()) {
+    const [r] = await getDb()
+      .select({ n: sql<number>`count(*)::int` })
+      .from(prospects)
+      .where(sql`lower(${prospects.email}) = ${email.trim().toLowerCase()}`);
+    sharedCount = Math.max(1, r?.n ?? 1);
+  }
+  return checkRecipientEmail({ email, contactName, website, sharedCount });
+}
+
 export async function generateAndStoreDraft(input: {
   prospectId: string;
   variantId?: OutreachVariantId;
@@ -771,6 +796,15 @@ export async function generateAndStoreDraft(input: {
     meta.decisionMaker && typeof meta.decisionMaker === "object"
       ? (meta.decisionMaker as { name?: string })
       : null;
+  const quality = await prospectEmailQuality(
+    prospect.email,
+    dm?.name,
+    prospect.website,
+  );
+  const blockedAddress = blockedEmailReason(quality);
+  if (blockedAddress) {
+    return { error: `${prospect.companyName}: ${blockedAddress}` };
+  }
 
   const angle = mailAngleFor({
     status: prospect.status,
@@ -788,7 +822,7 @@ export async function generateAndStoreDraft(input: {
   const generated = await generateOutreachEmail({
     type: prospect.type,
     companyName: prospect.companyName,
-    contactName: dm?.name,
+    contactName: greetingContactName(prospect.email, dm?.name),
     sector: prospect.sector ?? undefined,
     city: prospect.city ?? undefined,
     employeeCount: prospect.employeeCount ?? undefined,
@@ -903,7 +937,7 @@ export async function regenerateStoredDraft(input: {
   const generated = await generateOutreachEmail({
     type: prospect.type,
     companyName: prospect.companyName,
-    contactName: dm?.name,
+    contactName: greetingContactName(prospect.email, dm?.name),
     sector: prospect.sector ?? undefined,
     city: prospect.city ?? undefined,
     employeeCount: prospect.employeeCount ?? undefined,
@@ -1012,6 +1046,12 @@ export async function sendStoredDraft(input: {
     row.email ??
     (Array.isArray(meta.contacts) ? meta.contacts[0] : undefined);
   if (!intended) return { error: "Geen e-mailadres op prospect" };
+  if (!forceTest) {
+    const blockedAddress = blockedEmailReason(
+      await prospectEmailQuality(intended, null, null),
+    );
+    if (blockedAddress) return { error: blockedAddress };
+  }
 
   // Prefer per-mail snapshot, then bakje, then global settings.
   let sender = await resolveOutreachSender();
