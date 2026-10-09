@@ -49,13 +49,9 @@ export default async function OutreachCrmPage() {
       <SectionHeader
         eyebrow="Stap 2"
         title="Bedrijven"
-        description="Funnel: klaar om te mailen → gegevens ontbreken → al verstuurd. Doel: iedereen een eerste mail. Klik een rij voor dossier."
+        description="Alle bedrijven in de doelgroep. Klik een naam voor het dossier, of vink aan en ga naar Mailen."
         action={
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <p className="text-sm text-text-dim">
-              {pipeline.totalCompanies} · {pipeline.readyToMail} klaar ·{" "}
-              {pipeline.missingEmail + pipeline.incompleteButHasEmail} ontbreekt
-            </p>
             <Link
               href="/outreach/lijst-bijwerken"
               className="text-sm text-text-muted underline-offset-2 hover:text-text hover:underline"

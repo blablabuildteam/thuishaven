@@ -14,6 +14,7 @@ import {
   type OutreachVariantId,
 } from "@/lib/outreach/tone";
 import type { LeadTier } from "@/lib/outreach/lead-score";
+import { StatusBadge } from "@/components/ui/status-badge";
 import {
   formatTemplateStat,
   type TemplateStat,
@@ -128,7 +129,6 @@ export function OutreachEmailWorkbench({
   const [overrideVariant, setOverrideVariant] = useState<OutreachVariantId>(
     handoffVariantId ?? "warm_tour",
   );
-  const [perRow, setPerRow] = useState<Record<string, OutreachVariantId>>({});
   const [subjectArm, setSubjectArm] = useState<OutreachSubjectArm | "auto">(
     "auto",
   );
@@ -147,11 +147,7 @@ export function OutreachEmailWorkbench({
 
   function variantFor(p: WorkbenchProspect): OutreachVariantId {
     if (mode === "override") return overrideVariant;
-    return (
-      perRow[p.id] ??
-      p.suggestedVariantId ??
-      overrideVariant
-    );
+    return p.suggestedVariantId ?? overrideVariant;
   }
 
   function toggle(id: string) {
@@ -416,15 +412,6 @@ export function OutreachEmailWorkbench({
 
   return (
     <div className={`space-y-6 ${selected.size > 0 ? "mb-28" : "mb-10"}`}>
-      <p className="text-sm text-text-muted">
-        Elke mail wordt persoonlijk door AI geschreven. De invalshoek
-        (jubileum, seizoen, …) die we per bedrijf achterhaalden blijft de
-        haak. Selecteer → genereer → test →{" "}
-        <Link href="/outreach/planning" className="text-accent underline">
-          Wachtrij
-        </Link>
-        .
-      </p>
       {!aiConfigured ? (
         <p
           className="border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-text"
@@ -436,7 +423,7 @@ export function OutreachEmailWorkbench({
         </p>
       ) : null}
 
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="flex flex-wrap items-end gap-3 border-b border-border pb-4">
         <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
@@ -447,7 +434,7 @@ export function OutreachEmailWorkbench({
                 : "border border-border px-3 py-1.5 text-sm text-text-muted"
             }
           >
-            Invalshoek per bedrijf (aanbevolen)
+            Invalshoek per bedrijf
           </button>
           <button
             type="button"
@@ -464,7 +451,7 @@ export function OutreachEmailWorkbench({
 
         {mode === "override" ? (
           <label className="block max-w-xs text-xs text-text-dim">
-            Invalshoek (AI schrijft persoonlijk)
+            <span className="sr-only">Invalshoek</span>
             <select
               className="mt-1.5 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
               value={overrideVariant}
@@ -481,6 +468,11 @@ export function OutreachEmailWorkbench({
           </label>
         ) : null}
 
+        <details className="ml-auto text-xs text-text-dim">
+          <summary className="cursor-pointer py-2 hover:text-text">
+            Onderwerp &amp; testadres
+          </summary>
+          <div className="mt-2 flex flex-wrap items-end gap-3">
         <label className="text-xs text-text-dim">
           Onderwerp A/B
           <select
@@ -504,6 +496,8 @@ export function OutreachEmailWorkbench({
             placeholder="team@blablabuild.com"
           />
         </label>
+          </div>
+        </details>
       </div>
 
       <div>
@@ -553,7 +547,8 @@ export function OutreachEmailWorkbench({
           ) : null}
         </div>
 
-        <p className="mb-2 max-w-2xl text-sm text-text-muted">
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-sm text-text-muted">
           <strong className="text-text">{neverMailedTotal}</strong> klaar om
           te mailen
           {showMailed ? <> · inclusief {mailedTotal} al verstuurd</> : null}
@@ -567,21 +562,7 @@ export function OutreachEmailWorkbench({
               </Link>
             </>
           ) : null}
-          {skippedNoEmail > 0 ? (
-            <>
-              {" "}
-              · {skippedNoEmail} zonder e-mail staan hier niet (eerst aanvullen
-              bij Lijst bijwerken)
-            </>
-          ) : null}
-          .
         </p>
-
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs uppercase tracking-wider text-text-dim">
-            {selected.size} aangevinkt · vink rijen aan of gebruik snelle
-            selectie
-          </p>
           <div className="flex flex-wrap gap-3 text-xs">
             <button
               type="button"
@@ -589,7 +570,7 @@ export function OutreachEmailWorkbench({
               onClick={() => selectTop(10)}
               className="text-accent underline"
             >
-              Top 10 leadscore
+              Top 10
             </button>
             <button
               type="button"
@@ -597,7 +578,7 @@ export function OutreachEmailWorkbench({
               onClick={() => selectTop(25)}
               className="text-accent underline"
             >
-              Top 25 leadscore
+              Top 25
             </button>
             <button
               type="button"
@@ -617,7 +598,7 @@ export function OutreachEmailWorkbench({
         </div>
 
         <div className="overflow-x-auto border border-border">
-          <table className="w-full min-w-[720px] text-left text-sm">
+          <table className="w-full min-w-[560px] text-left text-sm">
             <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
               <tr>
                 <th className="w-10 px-3 py-2">
@@ -625,8 +606,7 @@ export function OutreachEmailWorkbench({
                 </th>
                 <th className="px-3 py-2 font-medium">Bedrijf</th>
                 <th className="px-3 py-2 font-medium">Invalshoek</th>
-                <th className="px-3 py-2 font-medium">Verstuurd</th>
-                <th className="px-3 py-2 font-medium">Template</th>
+                <th className="px-3 py-2 text-right font-medium">Score</th>
               </tr>
             </thead>
             <tbody>
@@ -666,56 +646,22 @@ export function OutreachEmailWorkbench({
                           : ""}
                       </p>
                     </td>
-                    <td className="px-3 py-2 text-xs text-text-muted">
-                      {p.suggestedLabel ?? "—"}
-                      <span className="mt-0.5 block text-[10px] text-text-dim">
-                        score {p.score} · {p.tier}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-xs">
+                    <td className="px-3 py-2">
+                      <StatusBadge tone={chosen === "jubileum" ? "accent" : "neutral"}>
+                        {mode === "override"
+                          ? companyVariants.find((v) => v.id === overrideVariant)?.name
+                          : p.suggestedLabel ??
+                            companyVariants.find((v) => v.id === chosen)?.name}
+                      </StatusBadge>
                       {p.lastSentAt ? (
-                        <span className="text-warn">
-                          {fmtDay(p.lastSentAt)}
-                          {p.lastVariantKey
-                            ? ` · ${companyVariants.find((v) => v.id === p.lastVariantKey)?.name ?? p.lastVariantKey}`
-                            : ""}
+                        <span className="mt-1 block text-[11px] text-warn">
+                          Verstuurd {fmtDay(p.lastSentAt)}
                           {p.replyCount > 0 ? " · gereageerd" : ""}
                         </span>
-                      ) : p.queuedCount > 0 ? (
-                        <span className="text-text-muted">Wachtrij</span>
-                      ) : (
-                        <span className="text-text-dim">Nee</span>
-                      )}
+                      ) : null}
                     </td>
-                    <td
-                      className="px-3 py-2"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {mode === "suggested" ? (
-                        <select
-                          className="w-full max-w-[12rem] border border-border bg-bg px-2 py-1.5 text-sm text-text"
-                          value={chosen}
-                          onChange={(e) =>
-                            setPerRow((prev) => ({
-                              ...prev,
-                              [p.id]: e.target.value as OutreachVariantId,
-                            }))
-                          }
-                        >
-                          {companyVariants.map((v) => (
-                            <option key={v.id} value={v.id}>
-                              {templateOption(v, p.suggestedVariantId)}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-xs text-text-dim">
-                          {
-                            companyVariants.find((v) => v.id === overrideVariant)
-                              ?.name
-                          }
-                        </span>
-                      )}
+                    <td className="px-3 py-2 text-right font-mono text-xs text-text-dim">
+                      {p.score}
                     </td>
                   </tr>
                 );

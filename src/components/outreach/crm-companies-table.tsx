@@ -151,7 +151,6 @@ const SIGNALS: { id: SignalId; label: string; hint: string }[] = [
   { id: "sig_jub_soon", label: "Jubileum binnenkort", hint: "≤16 mnd · nog niet gemaild" },
   { id: "sig_replied", label: "Gereageerd", hint: "Opvolgen — nog geen lead" },
   { id: "sig_followup", label: "Geopend, geen reply", hint: "≥3 dagen · herinnering?" },
-  { id: "sig_fresh", label: "Klaar om te mailen", hint: "Nog niet gemaild of in de Wachtrij" },
 ];
 
 type RegionFilter = "all" | "in" | "out" | "unknown";
@@ -417,57 +416,9 @@ export function CrmCompaniesTable({ rows }: Props) {
     }
   }
 
-  const showMissingAlert =
-    counts.missing_email > 0 || counts.incompleteWithEmail > 0;
-
   return (
     <div>
-      {showMissingAlert ? (
-        <div
-          className="mb-4 border border-warn/50 bg-warn/10 px-3 py-2.5 text-sm"
-          role="alert"
-        >
-          <p className="font-medium text-text">
-            Gegevens ontbreken — eerst aanvullen vóór first-mail aan iedereen
-          </p>
-          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
-            {counts.missing_email > 0 ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setCompleteness("missing_email");
-                  setMoreOpen(true);
-                  setMail("all");
-                }}
-                className="text-danger underline-offset-2 hover:underline"
-              >
-                {counts.missing_email} zonder e-mail
-              </button>
-            ) : null}
-            {counts.incompleteWithEmail > 0 ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setMail("onvolledig");
-                  setCompleteness("all");
-                }}
-                className="text-warn underline-offset-2 hover:underline"
-                title="Heeft e-mail, maar mdw / contact / plaats ontbreekt"
-              >
-                {counts.incompleteWithEmail} onvolledig (heeft mail)
-              </button>
-            ) : null}
-            <Link
-              href="/outreach/lijst-bijwerken"
-              className="text-text-dim underline-offset-2 hover:text-text hover:underline"
-            >
-              Lijst bijwerken →
-            </Link>
-          </p>
-        </div>
-      ) : null}
-
-      <div className="mb-5 flex flex-wrap items-baseline gap-x-4 gap-y-2 border-b border-border pb-4">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         {SIGNALS.map((s) => {
           const on = mail === s.id;
           const n = signalCounts[s.id];
@@ -478,10 +429,10 @@ export function CrmCompaniesTable({ rows }: Props) {
               type="button"
               title={s.hint}
               onClick={() => setMail(on ? "kans" : s.id)}
-              className={`text-sm transition-colors ${
+              className={`border px-2.5 py-1 text-xs transition-colors ${
                 on
-                  ? "text-text"
-                  : "text-text-muted hover:text-text"
+                  ? "border-accent bg-accent/10 text-text"
+                  : "border-border text-text-muted hover:border-text-dim hover:text-text"
               }`}
             >
               <span className="font-display tabular-nums tracking-wide">
@@ -564,8 +515,8 @@ export function CrmCompaniesTable({ rows }: Props) {
                 Vink mailklare aan
               </button>
             )}
-            <label className="block text-[11px] uppercase tracking-wider text-text-dim">
-              Template
+            <label className="block">
+              <span className="sr-only">Invalshoek</span>
               <select
                 value={handoffVariant}
                 onChange={(e) =>
@@ -573,7 +524,7 @@ export function CrmCompaniesTable({ rows }: Props) {
                     e.target.value as OutreachVariantId | "auto",
                   )
                 }
-                className="mt-1 block min-w-[10rem] border border-border bg-bg px-2 py-1.5 text-sm normal-case tracking-normal text-text"
+                className="block min-w-[10rem] border border-border bg-bg px-3 py-2 text-sm text-text"
                 title="Meenemen naar Mailen"
               >
                 <option value="auto">
@@ -584,7 +535,7 @@ export function CrmCompaniesTable({ rows }: Props) {
                           (v) => v.id === variantFromMailFilter(mail),
                         )?.name ?? variantFromMailFilter(mail)
                       }`
-                    : " (per bedrijf)"}
+                    : " — invalshoek per bedrijf"}
                 </option>
                 {COMPANY_HANDOFF_VARIANTS.map((v) => (
                   <option key={v.id} value={v.id}>
