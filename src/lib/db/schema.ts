@@ -175,9 +175,9 @@ export const outreachBatches = pgTable("outreach_batches", {
   senderProfileId: text("sender_profile_id").notNull().default("reiner"),
   /** Snapshot From (blijft staan als profiel later wijzigt). */
   senderEmail: text("sender_email").notNull().default("reiner@thuishaven.nl"),
-  senderName: text("sender_name").notNull().default("Reiner · Thuishaven"),
+  senderName: text("sender_name").notNull().default("Reijner · Thuishaven"),
   replyToEmail: text("reply_to_email").notNull().default("reiner@thuishaven.nl"),
-  replyToName: text("reply_to_name").notNull().default("Reiner · Thuishaven"),
+  replyToName: text("reply_to_name").notNull().default("Reijner · Thuishaven"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

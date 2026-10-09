@@ -155,7 +155,7 @@ export default async function OutreachAnalyticsPage() {
           Per afzender
         </h2>
         <p className="mt-1 mb-4 text-sm text-text-muted">
-          Evenementen, Reiner en Yoram naast elkaar — open- en reply-rate op
+          Evenementen, Reijner en Yoram naast elkaar — open- en reply-rate op
           echte verzendingen.
         </p>
         {snap.bySender.length === 0 ? (

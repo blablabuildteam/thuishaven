@@ -32,7 +32,7 @@ Graag plan ik met jou een bezichtiging in om de mogelijkheden samen op locatie t
 
 Mocht je vragen hebben dan hoor ik het graag!`;
 
-/** Plain-text signature appended to every outreach mail (default: Reiner). */
+/** Plain-text signature appended to every outreach mail (default: Reijner). */
 export const OUTREACH_SIGNATURE = getSenderProfile(DEFAULT_SENDER_PROFILE_ID)
   .signature;
 
@@ -217,7 +217,7 @@ export function pickSubjectArm(seed?: string): OutreachSubjectArm {
 }
 
 export function buildOutreachSystemPrompt(): string {
-  return `Je schrijft outbound e-mails namens Thuishaven (Amsterdam-West) — toon alsof Reiner of Yoram zelf typt.
+  return `Je schrijft outbound e-mails namens Thuishaven (Amsterdam-West) — toon alsof Reijner of Yoram zelf typt.
 
 Tone of voice (verplicht):
 - Persoonlijk, rustig, licht nieuwsgierig — geen pitch

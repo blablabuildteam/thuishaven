@@ -83,7 +83,7 @@ export function OutreachSettingsForm({ initial }: Props) {
           Afzender-profielen
         </h2>
         <p className="text-sm text-text-muted">
-          Per mail kies je Evenementen, Reiner of Yoram. Die adressen moeten
+          Per mail kies je Evenementen, Reijner of Yoram. Die adressen moeten
           in Brevo goedgekeurd zijn én hieronder op de allowlist staan.
         </p>
         <ul className="space-y-2 text-sm">

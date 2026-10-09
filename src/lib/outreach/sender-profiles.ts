@@ -39,12 +39,12 @@ thuishavenb2b.nl`,
   },
   {
     id: "reiner",
-    label: "Via Reiner",
+    label: "Via Reijner",
     email: "reiner@thuishaven.nl",
-    name: "Reiner · Thuishaven",
+    name: "Reijner · Thuishaven",
     replyToEmail: "reiner@thuishaven.nl",
-    replyToName: "Reiner · Thuishaven",
-    signature: `Reiner
+    replyToName: "Reijner · Thuishaven",
+    signature: `Reijner
 Thuishaven
 Festival locatie voor zakelijke events
 reiner@thuishaven.nl · +31 6 83 63 37 25
@@ -151,8 +151,8 @@ export function applySenderSignature(
     }
   }
 
-  // Legacy Reijner spelling in old drafts
-  const legacyIdx = trimmed.lastIndexOf("\n\nReijner\n");
+  // Legacy "Reiner" spelling in older drafts (display name is Reijner)
+  const legacyIdx = trimmed.lastIndexOf("\n\nReiner\n");
   if (
     legacyIdx >= 0 &&
     /Festival locatie voor zakelijke events/i.test(trimmed.slice(legacyIdx))

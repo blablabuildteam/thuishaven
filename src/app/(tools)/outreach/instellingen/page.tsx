@@ -19,7 +19,7 @@ export default async function OutreachSettingsPage() {
       <SectionHeader
         eyebrow="Alleen admin"
         title="Instellingen"
-        description="Allowlist en fallback-afzender. Per mail kies je Evenementen / Reiner / Yoram. Verzendritme staat ter info."
+        description="Allowlist en fallback-afzender. Per mail kies je Evenementen / Reijner / Yoram. Verzendritme staat ter info."
       />
       <OutreachSettingsForm initial={settings} />
     </div>

@@ -54,7 +54,12 @@ export function renderOutreachHtmlEmail(input: {
   let body = input.body.trim();
   let signature = "";
 
-  const sigIdx = body.lastIndexOf("\nReijner\n");
+  const sigMarkers = ["\nReijner\n", "\nReiner\n", "\nYoram\n", "\nThuishaven Evenementen\n"];
+  let sigIdx = -1;
+  for (const marker of sigMarkers) {
+    const idx = body.lastIndexOf(marker);
+    if (idx > sigIdx) sigIdx = idx;
+  }
   if (sigIdx >= 0) {
     signature = body.slice(sigIdx).trim();
     body = body.slice(0, sigIdx).trim();

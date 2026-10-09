@@ -211,7 +211,7 @@ export function BatchQueue({
           </p>
         ) : (
           <p className="mt-2 text-xs text-text-dim">
-            Afzender kies je per bakje (Evenementen / Reiner / Yoram).
+            Afzender kies je per bakje (Evenementen / Reijner / Yoram).
           </p>
         )}
       </div>

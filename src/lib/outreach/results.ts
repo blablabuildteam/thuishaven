@@ -94,7 +94,7 @@ export type OutreachResultsSnapshot = {
     clickRate: number;
     replyRate: number;
   };
-  /** KPIs grouped by From / sender profile (Evenementen / Reiner / Yoram). */
+  /** KPIs grouped by From / sender profile (Evenementen / Reijner / Yoram). */
   bySender: SenderKpiRow[];
   /** Per invalshoek / template (jubileum, seizoen, …) over alle verzendingen. */
   byAngle: AngleKpiRow[];
