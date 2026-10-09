@@ -47,6 +47,7 @@ type Props = {
   handoffVariantId?: OutreachVariantId | null;
   skippedNoEmail?: number;
   openBatches?: OpenBatchOption[];
+  aiConfigured?: boolean;
 };
 
 type DraftEdit = {
@@ -83,6 +84,7 @@ export function OutreachEmailWorkbench({
   handoffVariantId = null,
   skippedNoEmail = 0,
   openBatches = [],
+  aiConfigured = true,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -260,12 +262,15 @@ export function OutreachEmailWorkbench({
             }));
 
       const failed = Number(data.failed ?? 0);
+      const sources = (
+        (data.results ?? []) as Array<{ source?: string }>
+      ).map((r) => r.source);
+      if (data.source && !sources.length) sources.push(data.source);
       const templateFallback =
         Number(data.templateFallback ?? 0) ||
-        (data.source === "template_fallback" ? 1 : 0) ||
-        (
-          (data.results ?? []) as Array<{ source?: string }>
-        ).filter((r) => r.source === "template_fallback").length;
+        sources.filter((s) => s === "template_fallback").length;
+      const templateOnly = sources.filter((s) => s === "template").length;
+      const aiOk = sources.filter((s) => s === "ai").length;
       setLastEmailIds(made.map((d) => d.emailId));
       setDrafts(made);
       if (!made.length) {
@@ -277,11 +282,15 @@ export function OutreachEmailWorkbench({
       } else {
         setMessage(
           `${made.length} draft${made.length === 1 ? "" : "s"} klaar` +
+            (aiOk ? ` · ${aiOk} AI` : "") +
             (failed ? ` · ${failed} mislukt` : "") +
             (templateFallback
               ? ` · ${templateFallback} via standaardtemplate (AI faalde — check tekst)`
               : "") +
-            " — lees na, stuur test, zet in bakje.",
+            (templateOnly && !aiOk
+              ? ` · ${templateOnly} template (geen AI-key)`
+              : "") +
+            " — staan als concept in de Wachtrij. Test, daarna “Naar wachtrij”.",
         );
         requestAnimationFrame(() => {
           document
@@ -472,12 +481,21 @@ export function OutreachEmailWorkbench({
   return (
     <div className={`space-y-6 ${selected.size > 0 ? "mb-28" : "mb-10"}`}>
       <p className="text-sm text-text-muted">
-        Selecteer → genereer → test →{" "}
+        Selecteer → genereer (AI per bedrijf) → test →{" "}
         <Link href="/outreach/planning" className="text-accent underline">
           Wachtrij
         </Link>{" "}
         (daar reviewen, wijzigen, inplannen).
       </p>
+      {!aiConfigured ? (
+        <p
+          className="border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-text"
+          role="status"
+        >
+          Geen AI-key op deze omgeving — je krijgt standaardtemplates i.p.v.
+          persoonlijke mails. Zet OPENAI_API_KEY of GEMINI_API_KEY op Vercel.
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-wrap gap-1.5">

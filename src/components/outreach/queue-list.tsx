@@ -17,6 +17,7 @@ type Props = {
   items: QueueItem[];
   liveSendBlockReason: string | null;
   liveSendQuota: LiveSendQuota | null;
+  aiConfigured?: boolean;
 };
 
 const STATUS_TONE: Record<
@@ -40,6 +41,7 @@ export function QueueList({
   items,
   liveSendBlockReason,
   liveSendQuota,
+  aiConfigured = true,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -201,6 +203,38 @@ export function QueueList({
     if (data) setMessage(`Auto-send uit voor ${data.disarmed} mails`);
   }
 
+  async function regenerateItem(item: QueueItem) {
+    setError(null);
+    setMessage(null);
+    const e = editFor(item);
+    const data = await post({
+      action: "regenerate-queue",
+      emailId: item.emailId,
+      variantId: e.variantKey,
+    });
+    if (data) {
+      setEdits((prev) => ({
+        ...prev,
+        [item.emailId]: {
+          subject: data.subject ?? e.subject,
+          body: data.body ?? e.body,
+          senderProfileId: e.senderProfileId,
+          variantKey: data.variantId ?? e.variantKey,
+        },
+      }));
+      const src =
+        data.source === "ai"
+          ? "AI"
+          : data.source === "template_fallback"
+            ? "template (AI faalde)"
+            : "template";
+      setMessage(
+        `Opnieuw gegenereerd · ${src}` +
+          (data.fallbackReason ? ` — ${data.fallbackReason}` : ""),
+      );
+    }
+  }
+
   if (!items.length) {
     return (
       <p className="border-y border-border py-6 text-sm text-text-muted">
@@ -247,6 +281,17 @@ export function QueueList({
         Klik een rij om te lezen en te wijzigen. Selecteer meerdere voor bulk:
         inplannen of activeren. Afzender is per mail.
       </p>
+
+      {!aiConfigured ? (
+        <p
+          className="border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-text"
+          role="status"
+        >
+          Geen AI-key gezet (OPENAI/GEMINI) — drafts komen uit vaste templates.
+          Zet een key op Vercel voor persoonlijke mails. Je kunt hier wel
+          herschrijven of later “Regenereer met AI” gebruiken.
+        </p>
+      ) : null}
 
       {error ? (
         <p className="text-sm text-danger" role="alert">
@@ -488,7 +533,7 @@ export function QueueList({
                             </select>
                           </label>
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <button
                             type="button"
                             disabled={pending}
@@ -497,6 +542,34 @@ export function QueueList({
                           >
                             Opslaan
                           </button>
+                          <button
+                            type="button"
+                            disabled={pending}
+                            className="border border-border px-3 py-1.5 text-sm hover:border-accent disabled:opacity-50"
+                            onClick={() => void regenerateItem(item)}
+                            title={
+                              aiConfigured
+                                ? "Nieuwe persoonlijke AI-draft"
+                                : "Zonder AI-key wordt de standaardtemplate opnieuw gevuld"
+                            }
+                          >
+                            Regenereer met AI
+                          </button>
+                          {item.generationSource ? (
+                            <StatusBadge
+                              tone={
+                                item.generationSource === "ai"
+                                  ? "success"
+                                  : "warn"
+                              }
+                            >
+                              {item.generationSource === "ai"
+                                ? "AI"
+                                : item.generationSource === "template_fallback"
+                                  ? "Template fallback"
+                                  : "Template"}
+                            </StatusBadge>
+                          ) : null}
                           <button
                             type="button"
                             className="text-sm text-text-dim underline"

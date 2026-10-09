@@ -5,6 +5,7 @@ import { BatchQueue } from "@/components/outreach/batch-queue";
 import { PipelineStatusBanner } from "@/components/outreach/pipeline-status-banner";
 import { QueueList } from "@/components/outreach/queue-list";
 import { QueueSchedule } from "@/components/outreach/queue-schedule";
+import { hasOutreachAiConfigured } from "@/lib/integrations/outreach";
 import { listBatchesWithEmails } from "@/lib/outreach/batches";
 import { getOutreachPipelineStatus } from "@/lib/outreach/pipeline-status";
 import { listQueueItems } from "@/lib/outreach/queue";
@@ -90,6 +91,7 @@ export default async function OutreachPlanningPage() {
           items={queueItems}
           liveSendBlockReason={liveSendBlockReason}
           liveSendQuota={liveSendQuota}
+          aiConfigured={hasOutreachAiConfigured()}
         />
       </section>
 

@@ -17,6 +17,7 @@ import {
 } from "@/lib/outreach/mail-angle";
 import { ClearHandoffCookie } from "@/components/outreach/clear-handoff-cookie";
 import { peekHandoff } from "@/lib/outreach/handoff";
+import { hasOutreachAiConfigured } from "@/lib/integrations/outreach";
 import { resolveOutreachTestRecipient } from "@/lib/outreach/send-policy";
 import type { OutreachVariantId } from "@/lib/outreach/tone";
 
@@ -115,7 +116,7 @@ export default async function EmailsPage({
       <SectionHeader
         eyebrow="Stap 3"
         title="Mailen"
-        description="Drafts maken, testen, in een bakje zetten."
+        description="Persoonlijke drafts genereren, testen, daarna in de Wachtrij reviewen en inplannen."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={source === "db" ? "success" : "neutral"}>
@@ -148,6 +149,7 @@ export default async function EmailsPage({
         handoffVariantId={handoffVariantId}
         skippedNoEmail={skippedNoEmail}
         openBatches={openBatches}
+        aiConfigured={hasOutreachAiConfigured()}
       />
 
       {emails.length === 0 ? (

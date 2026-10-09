@@ -138,7 +138,7 @@ async function callLlmJson(prompt: string): Promise<
             },
             contents: [{ role: "user", parts: [{ text: prompt }] }],
             generationConfig: {
-              temperature: 0.7,
+              temperature: 0.9,
               responseMimeType: "application/json",
             },
           }),
@@ -182,7 +182,7 @@ async function callLlmJson(prompt: string): Promise<
     },
     body: JSON.stringify({
       model: process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini",
-      temperature: 0.7,
+      temperature: 0.9,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: buildOutreachSystemPrompt() },
@@ -278,31 +278,34 @@ export async function generateOutreachEmail(input: {
         ? `Bedrijf ~${input.anniversaryYears} jaar oud`
         : "geen jubileum-signaal";
 
-  const prompt = `Schrijf ALLEEN de body van één outbound mail (geen subject verzinnen).
+  const seedHint = `${input.companyName}:${variantId}:${subjectKey}:${Date.now() % 97}`;
+  const prompt = `Schrijf één outbound mail-body voor precies dit bedrijf. Uniek. Geen template-gevoel.
 
-BELANGRIJK — personaliseer uniek voor DIT bedrijf. Geen generieke copy-paste.
-- Noem het bedrijf natuurlijk (niet in elke zin)
-- Bij jubileum: verwerk het concrete jubileum (${jubileeLine}) — geen vaag "jullie jubileum" zonder jaren
-- Laat sector/plaats meeklinken als die bekend zijn (zonder clichés)
-- Elke mail moet anders lezen dan een mail aan een ander bedrijf
+Invalshoek (lichte tip, niet forceren): ${variantId}${input.angleLabel ? ` — ${input.angleLabel}` : ""}
+Guidance bij die tip: ${resolved.guidance}
 
-Subject (vast, A/B-arm ${subjectKey.toUpperCase()}): ${subject}
-Variant / invalshoek: ${variantId}${input.angleLabel ? ` (${input.angleLabel})` : ""}
-Guidance: ${resolved.guidance}
-Audience: ${input.type === "agency" ? "eventbureau" : "bedrijf"}
-Bedrijf: ${input.companyName}
-Contactpersoon: ${input.contactName ?? "onbekend"}
-Sector: ${input.sector ?? "onbekend"}
-Plaats: ${input.city ?? "onbekend"}
-Medewerkers (schatting): ${input.employeeCount ?? "onbekend"}
-Jubileum: ${jubileeLine}
+Feiten:
+- Bedrijf: ${input.companyName}
+- Contact: ${input.contactName ?? "onbekend (begin met Hi,)"}
+- Sector: ${input.sector ?? "onbekend"}
+- Plaats: ${input.city ?? "onbekend"}
+- Medewerkers (schatting): ${input.employeeCount ?? "onbekend"}
+- Jubileum-signaal: ${jubileeLine}
+- Audience: ${input.type === "agency" ? "eventbureau" : "bedrijf"}
+
+Subject (vast, arm ${subjectKey.toUpperCase()} — NIET wijzigen): ${subject}
 Brochure-URL (alleen noemen bij brochure-variant): ${getBrochureUrl()}
-Availability summary:
-${availability}
+Availability (optioneel, kort): ${availability}
 Availability URL: ${availabilityUrl}
 
-JSON output verplicht: {"subject":"${subject.replace(/"/g, '\\"')}","body":"..."}
-Gebruik exact dit subject.`;
+Eisen:
+1. Opening en tweede zin mogen niet generiek zijn — maak ze specifiek voor ${input.companyName}
+2. Bij jubileum: noem concrete jaren/mark als bekend; anders geen geforceerd jubileum
+3. Max één zachte vraag / CTA
+4. ~80–140 woorden, plain text, Nederlands
+5. Variatie-seed (negeer inhoudelijk, gebruik om anders te schrijven): ${seedHint}
+
+JSON verplicht: {"subject":"${subject.replace(/"/g, '\\"')}","body":"..."}`;
 
   const llm = await callLlmJson(prompt);
   if (!llm.ok) {
@@ -572,6 +575,13 @@ export async function notifySalesTeam(input: {
   return { ok: true, testMode: resolved.testMode };
 }
 
+export function hasOutreachAiConfigured(): boolean {
+  return (
+    Boolean(process.env.OPENAI_API_KEY?.trim()) ||
+    Boolean(process.env.GEMINI_API_KEY?.trim())
+  );
+}
+
 export async function generateAndStoreDraft(input: {
   prospectId: string;
   variantId?: OutreachVariantId;
@@ -657,11 +667,121 @@ export async function generateAndStoreDraft(input: {
       status: "draft",
       variantKey: generated.variantId,
       subjectKey: generated.subjectKey,
+      generationSource: generated.source,
     })
     .returning();
 
   return {
     emailId: row!.id,
+    subject: generated.subject,
+    body: generated.body,
+    variantId: generated.variantId,
+    subjectKey: generated.subjectKey,
+    source: generated.source,
+    fallbackReason: generated.fallbackReason,
+  };
+}
+
+/** Re-run AI (or template) for an existing draft/queued mail. */
+export async function regenerateStoredDraft(input: {
+  emailId: string;
+  variantId?: OutreachVariantId;
+  subjectArm?: OutreachSubjectArm;
+}): Promise<
+  | {
+      emailId: string;
+      subject: string;
+      body: string;
+      variantId: OutreachVariantId;
+      subjectKey: OutreachSubjectArm;
+      source: "ai" | "template" | "template_fallback";
+      fallbackReason?: string;
+    }
+  | { error: string }
+> {
+  if (!hasDatabase()) return { error: "DATABASE_URL ontbreekt" };
+  const db = getDb();
+  const [row] = await db
+    .select({
+      id: outreachEmails.id,
+      status: outreachEmails.status,
+      prospectId: outreachEmails.prospectId,
+      variantKey: outreachEmails.variantKey,
+      subjectKey: outreachEmails.subjectKey,
+    })
+    .from(outreachEmails)
+    .where(eq(outreachEmails.id, input.emailId))
+    .limit(1);
+  if (!row) return { error: "Mail niet gevonden" };
+  if (row.status !== "draft" && row.status !== "queued") {
+    return { error: "Alleen concepten of wachtrij-mails kun je hergenereren" };
+  }
+
+  const [prospect] = await db
+    .select()
+    .from(prospects)
+    .where(eq(prospects.id, row.prospectId))
+    .limit(1);
+  if (!prospect) return { error: "Prospect niet gevonden" };
+
+  const meta = (prospect.metadata ?? {}) as Record<string, unknown>;
+  const dm =
+    meta.decisionMaker && typeof meta.decisionMaker === "object"
+      ? (meta.decisionMaker as { name?: string })
+      : null;
+  const angle = mailAngleFor({
+    status: prospect.status,
+    anniversaryYears: prospect.anniversaryYears,
+    doelgroepFit:
+      typeof meta.doelgroepFit === "string" ? meta.doelgroepFit : null,
+  });
+  const jubilee =
+    prospect.anniversaryYears != null
+      ? nextJubilee(prospect.anniversaryYears)
+      : null;
+  const angleVariant = MAIL_CAMPAIGN_ANGLES.find((a) => a.id === angle.id)
+    ?.variantId as OutreachVariantId | undefined;
+
+  const variantId =
+    input.variantId ??
+    (row.variantKey as OutreachVariantId | null) ??
+    angleVariant;
+  const subjectArm =
+    input.subjectArm ??
+    (row.subjectKey === "a" || row.subjectKey === "b"
+      ? (row.subjectKey as OutreachSubjectArm)
+      : undefined);
+
+  const generated = await generateOutreachEmail({
+    type: prospect.type,
+    companyName: prospect.companyName,
+    contactName: dm?.name,
+    sector: prospect.sector ?? undefined,
+    city: prospect.city ?? undefined,
+    employeeCount: prospect.employeeCount ?? undefined,
+    anniversaryYears: prospect.anniversaryYears ?? undefined,
+    jubileeMark: jubilee?.mark ?? angle.jubileeMark,
+    jubileeYearsAway: jubilee?.yearsAway ?? angle.jubileeYearsAway,
+    angleLabel: angle.label,
+    variantId,
+    subjectArm,
+  });
+  if ("error" in generated) return generated;
+
+  await db
+    .update(outreachEmails)
+    .set({
+      subject: generated.subject,
+      body: generated.body,
+      variantKey: generated.variantId,
+      subjectKey: generated.subjectKey,
+      generationSource: generated.source,
+      armedAt: null,
+    })
+    .where(eq(outreachEmails.id, row.id));
+
+  return {
+    emailId: row.id,
     subject: generated.subject,
     body: generated.body,
     variantId: generated.variantId,

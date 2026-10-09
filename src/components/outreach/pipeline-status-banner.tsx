@@ -21,9 +21,12 @@ export function PipelineStatusBanner({ status }: Props) {
     {
       key: "review",
       count: status.needsReview,
-      label: "In bakje",
+      label: "Te checken",
       href: "/outreach/planning",
-      hint: "Te beoordelen — draft staat klaar",
+      hint:
+        status.drafts > 0
+          ? `${status.inQueue} in wachtrij · ${status.drafts} concept`
+          : "In wachtrij of als concept — reviewen",
       tone: status.needsReview > 0 ? "accent" : "neutral",
     },
     {

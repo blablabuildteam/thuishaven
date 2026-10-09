@@ -3,6 +3,8 @@ import { auth } from "@/auth";
 import { z } from "zod";
 import {
   generateAndStoreDraft,
+  hasOutreachAiConfigured,
+  regenerateStoredDraft,
   sendStoredDraft,
 } from "@/lib/integrations/outreach";
 import { OUTREACH_VARIANTS } from "@/lib/outreach/tone";
@@ -82,7 +84,10 @@ export async function GET(request: Request) {
     const batches = await listOpenBatches();
     return NextResponse.json({ batches });
   }
-  return NextResponse.json({ variants: OUTREACH_VARIANTS });
+  return NextResponse.json({
+    variants: OUTREACH_VARIANTS,
+    aiConfigured: hasOutreachAiConfigured(),
+  });
 }
 
 export async function POST(request: Request) {
@@ -278,6 +283,41 @@ export async function POST(request: Request) {
     if ("error" in result) {
       return NextResponse.json(result, { status: 400 });
     }
+    return NextResponse.json(result);
+  }
+
+  if (action === "regenerate-queue") {
+    const schema = z.object({
+      action: z.literal("regenerate-queue"),
+      emailId: z.string().uuid(),
+      variantId: z.enum(VARIANT_IDS).optional(),
+      subjectArm: z.enum(["a", "b"]).optional(),
+    });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
+    }
+    const result = await regenerateStoredDraft({
+      emailId: parsed.data.emailId,
+      variantId: parsed.data.variantId,
+      subjectArm: parsed.data.subjectArm,
+    });
+    if ("error" in result) {
+      return NextResponse.json(result, { status: 400 });
+    }
+    await logSessionActivity(session, {
+      action: "email_regenerate",
+      summary: `Mail hergegenereerd · ${result.source} · ${result.emailId}`,
+      path: "/api/outreach/emails",
+      method: "POST",
+      status: 200,
+      tool: "outreach",
+      meta: {
+        emailId: result.emailId,
+        source: result.source,
+        variantId: result.variantId,
+      },
+    });
     return NextResponse.json(result);
   }
 

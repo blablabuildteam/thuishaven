@@ -23,8 +23,10 @@ export type OutreachPipelineStatus = {
   fitUnknown: number;
   /** doelgroepFit = nee — niet mailen tot herbeoordeeld */
   fitNo: number;
-  /** Drafts waiting in bakjes (same as inQueue) */
+  /** In wachtrij of als concept-draft (te beoordelen) */
   needsReview: number;
+  /** Concept drafts (nog niet promoted) */
+  drafts: number;
 };
 
 function eligible(rows: CrmRecord[]): CrmRecord[] {
@@ -38,6 +40,7 @@ export function computeOutreachPipelineStatus(
 
   let mailed = 0;
   let inQueue = 0;
+  let drafts = 0;
   let readyToMail = 0;
   let missingEmail = 0;
   let incompleteButHasEmail = 0;
@@ -47,6 +50,7 @@ export function computeOutreachPipelineStatus(
   for (const row of companies) {
     const hasMailed = row.mailCount > 0;
     const queued = row.queuedCount > 0;
+    const hasDraft = row.draftCount > 0;
 
     if (hasMailed) {
       mailed += 1;
@@ -55,6 +59,9 @@ export function computeOutreachPipelineStatus(
 
     if (queued) {
       inQueue += 1;
+    }
+    if (hasDraft && !queued) {
+      drafts += 1;
     }
 
     if (!row.email) {
@@ -70,7 +77,7 @@ export function computeOutreachPipelineStatus(
       }
     }
 
-    if (!queued && row.email) {
+    if (!queued && !hasDraft && row.email) {
       const angle = mailAngleFor({
         status: row.status,
         existingCustomer: row.existingCustomer,
@@ -93,7 +100,8 @@ export function computeOutreachPipelineStatus(
     incompleteButHasEmail,
     fitUnknown,
     fitNo,
-    needsReview: inQueue,
+    needsReview: inQueue + drafts,
+    drafts,
   };
 }
 

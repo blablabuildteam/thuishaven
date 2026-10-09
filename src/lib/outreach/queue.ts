@@ -43,6 +43,7 @@ export type QueueItem = {
   body: string;
   variantKey: string | null;
   variantLabel: string | null;
+  generationSource: "ai" | "template" | "template_fallback" | null;
   status: string;
   statusLabel: QueueItemStatusLabel;
   scheduledAt: string | null;
@@ -87,6 +88,7 @@ export async function listQueueItems(): Promise<QueueItem[]> {
       subject: outreachEmails.subject,
       body: outreachEmails.body,
       variantKey: outreachEmails.variantKey,
+      generationSource: outreachEmails.generationSource,
       status: outreachEmails.status,
       scheduledAt: outreachEmails.scheduledAt,
       armedAt: outreachEmails.armedAt,
@@ -137,6 +139,12 @@ export async function listQueueItems(): Promise<QueueItem[]> {
       body: r.body,
       variantKey: r.variantKey,
       variantLabel: variantLabel(r.variantKey),
+      generationSource:
+        r.generationSource === "ai" ||
+        r.generationSource === "template" ||
+        r.generationSource === "template_fallback"
+          ? r.generationSource
+          : null,
       status: r.status,
       statusLabel: statusLabel({
         status: r.status,

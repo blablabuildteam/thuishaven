@@ -282,6 +282,8 @@ export const outreachEmails = pgTable("outreach_emails", {
   subjectKey: text("subject_key"),
   subject: text("subject").notNull(),
   body: text("body").notNull(),
+  /** ai | template | template_fallback — how the body was produced. */
+  generationSource: text("generation_source"),
   status: outreachEmailStatusEnum("status").notNull().default("draft"),
   brevoMessageId: text("brevo_message_id"),
   availabilityLinkToken: text("availability_link_token"),

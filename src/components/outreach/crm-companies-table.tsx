@@ -54,6 +54,7 @@ type CrmRow = {
   kvkHeadcountOff: boolean;
   mailCount: number;
   queuedCount: number;
+  draftCount: number;
   openCount: number;
   clickCount: number;
   replyCount: number;
@@ -761,8 +762,10 @@ export function CrmCompaniesTable({ rows }: Props) {
                           ? " · buiten regio"
                           : ""}
                         {row.queuedCount > 0
-                          ? ` · ${row.queuedCount} in bakje`
-                          : ""}
+                          ? ` · ${row.queuedCount} in wachtrij`
+                          : row.draftCount > 0
+                            ? ` · ${row.draftCount} concept`
+                            : ""}
                       </p>
                     </td>
                     <td
@@ -802,7 +805,9 @@ export function CrmCompaniesTable({ rows }: Props) {
                           ) : null}
                         </>
                       ) : row.queuedCount > 0 ? (
-                        <span className="text-text-dim">In bakje</span>
+                        <span className="text-text-dim">In wachtrij</span>
+                      ) : row.draftCount > 0 ? (
+                        <span className="text-text-dim">Concept</span>
                       ) : (
                         <span className="text-text-dim">Nog niet</span>
                       )}

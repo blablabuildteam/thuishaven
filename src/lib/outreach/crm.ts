@@ -72,8 +72,10 @@ export type CrmRecord = {
    * Does NOT include drafts or bakje (queued).
    */
   mailCount: number;
-  /** In a bakje, not yet live-sent. */
+  /** In a bakje / wachtrij, not yet live-sent. */
   queuedCount: number;
+  /** Concept drafts (not yet promoted / queued). */
+  draftCount: number;
   openCount: number;
   clickCount: number;
   replyCount: number;
@@ -136,6 +138,7 @@ function mapRecord(
   extras: {
     mailCount: number;
     queuedCount: number;
+    draftCount: number;
     openCount: number;
     clickCount: number;
     replyCount: number;
@@ -269,6 +272,7 @@ function mapRecord(
     excludedReason: p.excludedReason,
     mailCount: extras.mailCount,
     queuedCount: extras.queuedCount,
+    draftCount: extras.draftCount,
     openCount: extras.openCount,
     clickCount: extras.clickCount,
     replyCount: extras.replyCount,
@@ -317,6 +321,7 @@ export async function listCrmRecords(): Promise<{
       // Truly sent (or later lifecycle). Queued bakje mails do NOT count as mailed.
       mailCount: sql<number>`count(*) filter (where ${outreachEmails.status} in ('sent','opened','clicked','replied','bounced','opted_out'))::int`,
       queuedCount: sql<number>`count(*) filter (where ${outreachEmails.status} = 'queued')::int`,
+      draftCount: sql<number>`count(*) filter (where ${outreachEmails.status} = 'draft')::int`,
       openCount: sql<number>`count(*) filter (where ${outreachEmails.openedAt} is not null)::int`,
       clickCount: sql<number>`count(*) filter (where ${outreachEmails.clickedAt} is not null)::int`,
       lastSent: sql<Date | null>`max(${outreachEmails.sentAt}) filter (where ${outreachEmails.sentAt} is not null)`,
@@ -360,6 +365,7 @@ export async function listCrmRecords(): Promise<{
     return mapRecord(p, {
       mailCount: mail?.mailCount ?? 0,
       queuedCount: mail?.queuedCount ?? 0,
+      draftCount: mail?.draftCount ?? 0,
       openCount: mail?.openCount ?? 0,
       clickCount: mail?.clickCount ?? 0,
       replyCount: reply?.replyCount ?? 0,
@@ -569,6 +575,7 @@ export async function getCrmDossier(
   ]);
   const sentMails = mails.filter((m) => SENT_STATUSES.has(m.status));
   const queuedMails = mails.filter((m) => m.status === "queued");
+  const draftMails = mails.filter((m) => m.status === "draft");
 
   return {
     source: "db",
@@ -576,6 +583,7 @@ export async function getCrmDossier(
       ...mapRecord(p, {
         mailCount: sentMails.length,
         queuedCount: queuedMails.length,
+        draftCount: draftMails.length,
         openCount: sentMails.filter((m) => m.openedAt).length,
         clickCount: sentMails.filter((m) => m.clickedAt).length,
         replyCount: replies.length,
