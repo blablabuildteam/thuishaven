@@ -646,7 +646,7 @@ export function OutreachEmailWorkbench({
                           : ""}
                       </p>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="whitespace-nowrap px-3 py-2">
                       <StatusBadge tone={chosen === "jubileum" ? "accent" : "neutral"}>
                         {mode === "override"
                           ? companyVariants.find((v) => v.id === overrideVariant)?.name
