@@ -414,11 +414,13 @@ export function OutreachEmailWorkbench({
   return (
     <div className={`space-y-6 ${selected.size > 0 ? "mb-28" : "mb-10"}`}>
       <p className="text-sm text-text-muted">
-        Selecteer → genereer (AI per bedrijf) → test →{" "}
+        Elke mail wordt persoonlijk door AI geschreven. De invalshoek
+        (jubileum, seizoen, …) die we per bedrijf achterhaalden blijft de
+        haak. Selecteer → genereer → test →{" "}
         <Link href="/outreach/planning" className="text-accent underline">
           Wachtrij
-        </Link>{" "}
-        (daar reviewen, wijzigen, inplannen).
+        </Link>
+        .
       </p>
       {!aiConfigured ? (
         <p
@@ -426,7 +428,8 @@ export function OutreachEmailWorkbench({
           role="status"
         >
           Geen AI-key op deze omgeving — je krijgt standaardtemplates i.p.v.
-          persoonlijke mails. Zet OPENAI_API_KEY of GEMINI_API_KEY op Vercel.
+          persoonlijke mails. Zet OPENAI_API_KEY of GEMINI_API_KEY op Vercel /
+          in .env.local.
         </p>
       ) : null}
 
@@ -441,7 +444,7 @@ export function OutreachEmailWorkbench({
                 : "border border-border px-3 py-1.5 text-sm text-text-muted"
             }
           >
-            Per bedrijf
+            Per bedrijf (achterhaald)
           </button>
           <button
             type="button"
@@ -452,13 +455,13 @@ export function OutreachEmailWorkbench({
                 : "border border-border px-3 py-1.5 text-sm text-text-muted"
             }
           >
-            Eén template
+            Zelfde invalshoek
           </button>
         </div>
 
         {mode === "override" ? (
           <label className="block max-w-xs text-xs text-text-dim">
-            Template
+            Invalshoek (AI schrijft persoonlijk)
             <select
               className="mt-1.5 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
               value={overrideVariant}

@@ -351,9 +351,9 @@ export function QueueList({
           className="border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-text"
           role="status"
         >
-          Geen AI-key gezet (OPENAI/GEMINI) — drafts komen uit vaste templates.
-          Zet een key op Vercel voor persoonlijke mails. Je kunt hier wel
-          herschrijven of later “Regenereer met AI” gebruiken.
+          Geen AI-key gezet (OPENAI/GEMINI) — mails komen uit vaste templates.
+          Zet een key voor persoonlijke AI-mails (invalshoek blijft
+          behouden). Of herschrijf handmatig / “Regenereer met AI” later.
         </p>
       ) : null}
 

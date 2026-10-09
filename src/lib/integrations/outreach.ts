@@ -35,6 +35,7 @@ import {
 import {
   appendOutreachSignature,
   buildOutreachSystemPrompt,
+  getOutreachVariant,
   pickSubjectArm,
   type OutreachSubjectArm,
   type OutreachVariantId,
@@ -216,7 +217,10 @@ export async function generateOutreachEmail(input: {
   anniversaryYears?: number;
   jubileeMark?: number;
   jubileeYearsAway?: number;
+  /** Chip label we achterhaalden (bijv. "Jubileum 10 jr"). */
   angleLabel?: string;
+  /** Uitleg bij die label (waarom deze haak). */
+  angleDetail?: string;
   availabilitySummary?: string;
   variantId?: OutreachVariantId;
   subjectArm?: OutreachSubjectArm;
@@ -241,6 +245,7 @@ export async function generateOutreachEmail(input: {
         ? "jubileum"
         : "warm_tour");
 
+  const variant = getOutreachVariant(variantId);
   const subjectKey =
     input.subjectArm ??
     pickSubjectArm(`${input.companyName}:${variantId}:${Date.now()}`);
@@ -257,6 +262,9 @@ export async function generateOutreachEmail(input: {
     contactFirstName: input.contactName?.trim().split(/\s+/)[0],
   });
   const subject = resolved.subject;
+  const angleLabel = input.angleLabel?.trim() || variant.name;
+  const angleDetail =
+    input.angleDetail?.trim() || variant.description || resolved.guidance;
 
   const hasAi =
     Boolean(process.env.OPENAI_API_KEY?.trim()) ||
@@ -269,6 +277,8 @@ export async function generateOutreachEmail(input: {
       variantId,
       subjectKey,
       source: "template",
+      fallbackReason:
+        "Geen AI-key — standaardtemplate (geen persoonlijke AI-mail)",
     };
   }
 
@@ -282,10 +292,18 @@ export async function generateOutreachEmail(input: {
         : "geen jubileum-signaal";
 
   const seedHint = `${input.companyName}:${variantId}:${subjectKey}:${Date.now() % 97}`;
-  const prompt = `Schrijf één outbound mail-body voor precies dit bedrijf. Uniek. Geen template-gevoel.
+  const prompt = `Schrijf één persoonlijke outbound mail voor precies dit bedrijf. Altijd AI-origineel — geen template-gevoel.
 
-Invalshoek (lichte tip, niet forceren): ${variantId}${input.angleLabel ? ` — ${input.angleLabel}` : ""}
-Guidance bij die tip: ${resolved.guidance}
+GEKOZEN INVALSHOEK (aanhouden — dit hebben we voor dit bedrijf achterhaald):
+- Label: ${angleLabel}
+- Template/variant: ${variant.name} (${variantId})
+- Waarom deze haak: ${angleDetail}
+- Schrijfstijl-guidance: ${resolved.guidance}
+
+Template-body hieronder = alleen referentie voor structuur/onderwerpen. Herschrijf VOLLEDIG in eigen woorden voor ${input.companyName}. Kopieer geen zinnen 1-op-1.
+---
+${resolved.body}
+---
 
 Feiten:
 - Bedrijf: ${input.companyName}
@@ -302,17 +320,21 @@ Availability (optioneel, kort): ${availability}
 Availability URL: ${availabilityUrl}
 
 Eisen:
-1. Opening en tweede zin mogen niet generiek zijn — maak ze specifiek voor ${input.companyName}
-2. Bij jubileum: noem concrete jaren/mark als bekend; anders geen geforceerd jubileum
-3. Max één zachte vraag / CTA
-4. ~80–140 woorden, plain text, Nederlands
-5. Variatie-seed (negeer inhoudelijk, gebruik om anders te schrijven): ${seedHint}
+1. Opening en tweede zin specifiek voor ${input.companyName}
+2. De gekozen invalshoek (${angleLabel}) merkt de lezer — natuurlijk, niet geforceerd
+3. Bij jubileum: noem concrete jaren/mark als bekend; anders geen verzonnen jubileum
+4. Max één zachte vraag / CTA
+5. ~80–140 woorden, plain text, Nederlands
+6. Variatie-seed (negeer inhoudelijk, gebruik om anders te schrijven): ${seedHint}
 
 JSON verplicht: {"subject":"${subject.replace(/"/g, '\\"')}","body":"..."}`;
 
-  const llm = await callLlmJson(prompt);
+  // One retry — we want AI-personal mails, not silent template copies.
+  let llm = await callLlmJson(prompt);
   if (!llm.ok) {
-    // Prefer a usable draft over a hard fail (timeout / model hiccup).
+    llm = await callLlmJson(prompt);
+  }
+  if (!llm.ok) {
     return {
       subject,
       body: appendOutreachSignature(resolved.body),
@@ -323,8 +345,12 @@ JSON verplicht: {"subject":"${subject.replace(/"/g, '\\"')}","body":"..."}`;
     };
   }
 
-  const parsed = parseJsonMail(llm.text);
+  let parsed = parseJsonMail(llm.text);
   if (!parsed) {
+    llm = await callLlmJson(prompt);
+    parsed = llm.ok ? parseJsonMail(llm.text) : null;
+  }
+  if (!parsed || !llm.ok) {
     return {
       subject,
       body: appendOutreachSignature(resolved.body),
@@ -346,6 +372,7 @@ JSON verplicht: {"subject":"${subject.replace(/"/g, '\\"')}","body":"..."}`;
         variant: variantId,
         subjectKey,
         company: input.companyName,
+        angleLabel,
       },
     });
   } catch {
@@ -665,6 +692,7 @@ export async function generateAndStoreDraft(input: {
     jubileeMark: jubilee?.mark ?? angle.jubileeMark,
     jubileeYearsAway: jubilee?.yearsAway ?? angle.jubileeYearsAway,
     angleLabel: angle.label,
+    angleDetail: angle.detail,
     variantId: input.variantId ?? angleVariant,
     subjectArm: input.subjectArm,
   });
@@ -779,6 +807,7 @@ export async function regenerateStoredDraft(input: {
     jubileeMark: jubilee?.mark ?? angle.jubileeMark,
     jubileeYearsAway: jubilee?.yearsAway ?? angle.jubileeYearsAway,
     angleLabel: angle.label,
+    angleDetail: angle.detail,
     variantId,
     subjectArm,
   });

@@ -113,7 +113,7 @@ export default async function EmailsPage({
       <SectionHeader
         eyebrow="Stap 3"
         title="Mailen"
-        description="Persoonlijke drafts genereren, testen, daarna in de Wachtrij reviewen en inplannen."
+        description="AI schrijft elke mail persoonlijk, met de invalshoek die we per bedrijf achterhaalden. Daarna testen en in de Wachtrij reviewen."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={source === "db" ? "success" : "neutral"}>
