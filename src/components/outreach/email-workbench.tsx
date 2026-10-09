@@ -46,7 +46,6 @@ type Props = {
   /** Template meegenomen vanuit Bedrijven-handoff. */
   handoffVariantId?: OutreachVariantId | null;
   skippedNoEmail?: number;
-  openBatches?: OpenBatchOption[];
   aiConfigured?: boolean;
 };
 
@@ -55,15 +54,6 @@ type DraftEdit = {
   companyName: string;
   subject: string;
   body: string;
-};
-
-type OpenBatchOption = {
-  id: string;
-  name: string;
-  mailCount: number;
-  senderProfileId?: OutreachSenderProfileId;
-  senderProfileLabel?: string;
-  senderEmail?: string;
 };
 
 function fmtDay(iso: string) {
@@ -83,7 +73,6 @@ export function OutreachEmailWorkbench({
   preselectIds = [],
   handoffVariantId = null,
   skippedNoEmail = 0,
-  openBatches = [],
   aiConfigured = true,
 }: Props) {
   const router = useRouter();
@@ -143,8 +132,6 @@ export function OutreachEmailWorkbench({
   const [testTo, setTestTo] = useState(defaultTestTo);
   const [lastEmailIds, setLastEmailIds] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<DraftEdit[]>([]);
-  const [batchTarget, setBatchTarget] = useState<"new" | string>("new");
-  const [batchName, setBatchName] = useState("");
   const [senderProfileId, setSenderProfileId] =
     useState<OutreachSenderProfileId>(DEFAULT_SENDER_PROFILE_ID);
   const [message, setMessage] = useState<string | null>(null);
@@ -408,61 +395,6 @@ export function OutreachEmailWorkbench({
     }
   }
 
-  async function enqueueToBatch() {
-    if (!lastEmailIds.length) {
-      setError("Eerst drafts genereren");
-      return;
-    }
-    setError(null);
-    setMessage(null);
-    setBusy(true);
-    try {
-    if (drafts.length) {
-      const saved = await saveDraftEdits();
-      if (!saved) return;
-    }
-    const payload: {
-      action: "enqueue";
-      emailIds: string[];
-      batchId?: string;
-      batchName?: string;
-      senderProfileId?: OutreachSenderProfileId;
-    } = {
-      action: "enqueue",
-      emailIds: lastEmailIds,
-    };
-    if (batchTarget === "new") {
-      payload.batchName =
-        batchName.trim() ||
-        `Batch · ${new Date().toLocaleDateString("nl-NL", {
-          day: "numeric",
-          month: "short",
-        })} · ${lastEmailIds.length} mail${lastEmailIds.length === 1 ? "" : "s"}`;
-      payload.senderProfileId = senderProfileId;
-    } else {
-      payload.batchId = batchTarget;
-    }
-    const res = await fetch("/api/outreach/emails", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setError(data.error ?? "In bakje zetten mislukt");
-      return;
-    }
-    setMessage(
-      `${data.enqueued} mail${data.enqueued === 1 ? "" : "s"} in bakje “${data.batchName}”. Bekijk ze in de Wachtrij.`,
-    );
-    setDrafts([]);
-    setLastEmailIds([]);
-    startTransition(() => router.refresh());
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (!prospects.length) {
     return (
       <p className="border-y border-border py-6 text-sm text-text-muted">
@@ -621,7 +553,7 @@ export function OutreachEmailWorkbench({
             <>
               {" "}
               — alleen nog nooit verstuurd ({neverMailedTotal} met e-mail +
-              mailkans; bakje telt niet als verstuurd)
+              mailkans; wachtrij telt niet als verstuurd)
               {mailedTotal > 0
                 ? ` · ${mailedTotal} al verstuurd staan uit (vink hierboven aan om te zien)`
                 : ""}
@@ -724,7 +656,7 @@ export function OutreachEmailWorkbench({
                       <p className="text-xs text-text-dim">
                         {[p.contactName, p.email].filter(Boolean).join(" · ")}
                         {p.queuedCount > 0
-                          ? ` · ${p.queuedCount} in bakje`
+                          ? ` · ${p.queuedCount} in wachtrij`
                           : ""}
                       </p>
                     </td>
@@ -744,7 +676,7 @@ export function OutreachEmailWorkbench({
                           {p.replyCount > 0 ? " · gereageerd" : ""}
                         </span>
                       ) : p.queuedCount > 0 ? (
-                        <span className="text-text-muted">In bakje</span>
+                        <span className="text-text-muted">Wachtrij</span>
                       ) : (
                         <span className="text-text-dim">Nee</span>
                       )}
@@ -921,44 +853,6 @@ export function OutreachEmailWorkbench({
                   >
                     Naar wachtrij
                   </button>
-                  <details className="text-xs text-text-dim">
-                    <summary className="cursor-pointer hover:text-text">
-                      Oud: bakje
-                    </summary>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      <select
-                        className="max-w-[10rem] border border-border bg-bg px-2 py-1.5 text-sm"
-                        value={batchTarget}
-                        disabled={busy}
-                        onChange={(e) => setBatchTarget(e.target.value)}
-                        aria-label="Bakje"
-                      >
-                        <option value="new">Nieuw bakje</option>
-                        {openBatches.map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.name}
-                          </option>
-                        ))}
-                      </select>
-                      {batchTarget === "new" ? (
-                        <input
-                          className="w-28 border border-border bg-bg px-2 py-1.5 text-sm"
-                          placeholder="Naam"
-                          value={batchName}
-                          disabled={busy}
-                          onChange={(e) => setBatchName(e.target.value)}
-                        />
-                      ) : null}
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void enqueueToBatch()}
-                        className="border border-border px-2 py-1.5 text-sm disabled:opacity-50"
-                      >
-                        In bakje
-                      </button>
-                    </div>
-                  </details>
                 </>
               ) : null}
               <button

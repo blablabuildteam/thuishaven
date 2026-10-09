@@ -48,7 +48,7 @@ export default async function OutreachCrmPage() {
       <SectionHeader
         eyebrow="Stap 2"
         title="Bedrijven"
-        description="Funnel: bakje → klaar om te mailen → gegevens ontbreken → al verstuurd. Doel: iedereen een eerste mail. Klik een rij voor dossier."
+        description="Funnel: klaar om te mailen → gegevens ontbreken → al verstuurd. Doel: iedereen een eerste mail. Klik een rij voor dossier."
         action={
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <p className="text-sm text-text-dim">

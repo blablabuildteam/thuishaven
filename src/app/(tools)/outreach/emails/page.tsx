@@ -5,7 +5,6 @@ import {
   OutreachEmailWorkbench,
   type WorkbenchProspect,
 } from "@/components/outreach/email-workbench";
-import { listOpenBatches } from "@/lib/outreach/batches";
 import { listOutreachEmails } from "@/lib/outreach/data";
 import { listCrmRecords } from "@/lib/outreach/crm";
 import { leadScore } from "@/lib/outreach/lead-score";
@@ -34,7 +33,6 @@ export default async function EmailsPage({
     { rows: records },
     templateStats,
     params,
-    openBatches,
     testTo,
     handoff,
   ] = await Promise.all([
@@ -42,7 +40,6 @@ export default async function EmailsPage({
     listCrmRecords(),
     getTemplateStats(),
     searchParams,
-    listOpenBatches(),
     resolveOutreachTestRecipient(),
     peekHandoff(),
   ]);
@@ -148,7 +145,6 @@ export default async function EmailsPage({
         preselectIds={preselectIds}
         handoffVariantId={handoffVariantId}
         skippedNoEmail={skippedNoEmail}
-        openBatches={openBatches}
         aiConfigured={hasOutreachAiConfigured()}
       />
 

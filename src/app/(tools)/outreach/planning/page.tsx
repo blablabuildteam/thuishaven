@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { BatchQueue } from "@/components/outreach/batch-queue";
 import { PipelineStatusBanner } from "@/components/outreach/pipeline-status-banner";
 import { QueueList } from "@/components/outreach/queue-list";
 import { QueueSchedule } from "@/components/outreach/queue-schedule";
@@ -16,7 +15,6 @@ export const dynamic = "force-dynamic";
 export default async function OutreachPlanningPage() {
   const [
     {
-      batches,
       liveSendBlockReason,
       liveSendQuota,
       cadenceLabel,
@@ -34,6 +32,7 @@ export default async function OutreachPlanningPage() {
   const liveUnlocked = !liveSendBlockReason;
   const bouncePaused = Boolean(liveSendQuota?.bouncePause);
   const plannedCount = queueItems.filter((i) => i.scheduledAt).length;
+  const aiOk = hasOutreachAiConfigured();
 
   return (
     <div>
@@ -60,6 +59,9 @@ export default async function OutreachPlanningPage() {
             </StatusBadge>
             {plannedCount > 0 ? (
               <StatusBadge tone="info">{plannedCount} gepland</StatusBadge>
+            ) : null}
+            {!aiOk ? (
+              <StatusBadge tone="warn">Geen AI-key</StatusBadge>
             ) : null}
             <Link
               href="/outreach/emails"
@@ -91,24 +93,9 @@ export default async function OutreachPlanningPage() {
           items={queueItems}
           liveSendBlockReason={liveSendBlockReason}
           liveSendQuota={liveSendQuota}
-          aiConfigured={hasOutreachAiConfigured()}
+          aiConfigured={aiOk}
         />
       </section>
-
-      <details className="mb-10 border-t border-border pt-8">
-        <summary className="cursor-pointer font-display text-sm tracking-[0.06em] text-text-muted hover:text-text">
-          Oude bakjes-weergave (optioneel)
-        </summary>
-        <p className="mt-2 mb-4 text-sm text-text-muted">
-          Bakjes blijven werken voor groepsverzending, maar de list hierboven is
-          de hoofdplek om te reviewen.
-        </p>
-        <BatchQueue
-          batches={batches}
-          liveSendBlockReason={liveSendBlockReason}
-          liveSendQuota={liveSendQuota}
-        />
-      </details>
     </div>
   );
 }
