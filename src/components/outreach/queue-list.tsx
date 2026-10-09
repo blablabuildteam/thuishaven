@@ -103,7 +103,10 @@ export function QueueList({
     );
   }
 
-  async function post(body: Record<string, unknown>) {
+  async function post(
+    body: Record<string, unknown>,
+    opts?: { refresh?: boolean },
+  ) {
     setError(null);
     setMessage(null);
     const res = await fetch("/api/outreach/emails", {
@@ -116,7 +119,9 @@ export function QueueList({
       setError(data.error ?? "Actie mislukt");
       return null;
     }
-    startTransition(() => router.refresh());
+    if (opts?.refresh !== false) {
+      startTransition(() => router.refresh());
+    }
     return data;
   }
 
@@ -247,6 +252,53 @@ export function QueueList({
     }
   }
 
+  async function regenerateSelected() {
+    const ids = [...picked];
+    if (!ids.length) return;
+    setError(null);
+    setMessage(null);
+    let ok = 0;
+    let failed = 0;
+    let ai = 0;
+    for (const emailId of ids) {
+      const item = items.find((i) => i.emailId === emailId);
+      if (!item) {
+        failed += 1;
+        continue;
+      }
+      const e = editFor(item);
+      const data = await post(
+        {
+          action: "regenerate-queue",
+          emailId,
+          variantId: e.variantKey,
+        },
+        { refresh: false },
+      );
+      if (!data) {
+        failed += 1;
+        continue;
+      }
+      ok += 1;
+      if (data.source === "ai") ai += 1;
+      setEdits((prev) => ({
+        ...prev,
+        [emailId]: {
+          subject: data.subject ?? e.subject,
+          body: data.body ?? e.body,
+          senderProfileId: e.senderProfileId,
+          variantKey: data.variantId ?? e.variantKey,
+        },
+      }));
+    }
+    startTransition(() => router.refresh());
+    setMessage(
+      `${ok} opnieuw gegenereerd` +
+        (ai ? ` · ${ai} AI` : "") +
+        (failed ? ` · ${failed} mislukt` : ""),
+    );
+  }
+
   if (!items.length) {
     return (
       <p className="border-y border-border py-6 text-sm text-text-muted">
@@ -345,6 +397,19 @@ export function QueueList({
             onClick={() => void clearScheduleSelected()}
           >
             Wis planning
+          </button>
+          <button
+            type="button"
+            disabled={pending}
+            className="border border-border px-2 py-1 text-xs hover:border-accent"
+            onClick={() => void regenerateSelected()}
+            title={
+              aiConfigured
+                ? "Geselecteerde mails opnieuw persoonlijk maken met AI"
+                : "Zonder AI-key opnieuw vullen vanuit template"
+            }
+          >
+            Regenereer AI
           </button>
           {liveUnlocked ? (
             confirmArm ? (
