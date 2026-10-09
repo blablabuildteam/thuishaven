@@ -124,7 +124,14 @@ async function callLlmJson(prompt: string): Promise<
     const preferred = process.env.GEMINI_MODEL?.trim();
     const models = [
       ...new Set(
-        [preferred, "gemini-3.8-flash", "gemini-3.6-flash", "gemini-2.5-flash"].filter(
+        [
+          preferred,
+          "gemini-3.8-flash",
+          "gemini-3.7-flash",
+          "gemini-3.6-flash",
+          "gemini-3.5-flash",
+          "gemini-flash-latest",
+        ].filter(
           (m): m is string => Boolean(m),
         ),
       ),
@@ -152,9 +159,12 @@ async function callLlmJson(prompt: string): Promise<
       const text = await res.text();
       if (!res.ok) {
         lastError = `Gemini HTTP ${res.status}: ${text.slice(0, 200)}`;
+        // Missing model or overloaded/rate-limited: try the next model.
         if (
           res.status === 404 ||
-          /no longer available|not found|unknown model/i.test(text)
+          res.status === 429 ||
+          res.status >= 500 ||
+          /no longer available|not found|unknown model|high demand/i.test(text)
         ) {
           continue;
         }
@@ -329,9 +339,11 @@ Eisen:
 
 JSON verplicht: {"subject":"${subject.replace(/"/g, '\\"')}","body":"..."}`;
 
-  // One retry — we want AI-personal mails, not silent template copies.
+  // Retry with backoff — we want AI-personal mails, not silent template copies.
   let llm = await callLlmJson(prompt);
-  if (!llm.ok) {
+  for (const waitMs of [1500, 4000]) {
+    if (llm.ok) break;
+    await new Promise((r) => setTimeout(r, waitMs));
     llm = await callLlmJson(prompt);
   }
   if (!llm.ok) {

@@ -435,10 +435,20 @@ export function QueueList({
         })}
       </div>
 
-      <p className="text-sm text-text-muted">
-        Klik een rij om te lezen en te wijzigen. Selecteer meerdere voor bulk:
-        inplannen of activeren. Afzender is per mail.
-      </p>
+      <ol className="grid gap-2 text-sm sm:grid-cols-4">
+        {[
+          ["Lees", "Klik op een bedrijf. Pas tekst of afzender aan en sla op."],
+          ["Test", "“Stuur test” — je krijgt precies die mail in je eigen inbox."],
+          ["Plan in", "Vink mails aan → “Plan in”. Ze krijgen een verzendmoment."],
+          ["Activeer", "“Activeer verzenden” → ze gaan vanzelf op dat moment de deur uit."],
+        ].map(([title, text], i) => (
+          <li key={title} className="border border-border px-3 py-2">
+            <span className="font-display tabular-nums text-text-dim">{i + 1}</span>{" "}
+            <span className="font-medium text-text">{title}</span>
+            <p className="mt-0.5 text-xs text-text-muted">{text}</p>
+          </li>
+        ))}
+      </ol>
 
       {!aiConfigured ? (
         <p
@@ -447,7 +457,7 @@ export function QueueList({
         >
           Geen AI-key gezet (OPENAI/GEMINI) — mails komen uit vaste templates.
           Zet een key voor persoonlijke AI-mails (invalshoek blijft
-          behouden). Of herschrijf handmatig / “Regenereer met AI” later.
+          behouden). Of herschrijf handmatig / “Opnieuw laten schrijven” later.
         </p>
       ) : null}
 
@@ -468,43 +478,6 @@ export function QueueList({
           >
             Wis
           </button>
-          <button
-            type="button"
-            disabled={pending}
-            className="border border-border px-2 py-1 text-xs hover:border-accent"
-            onClick={() => void promoteSelected()}
-          >
-            Zet op te checken
-          </button>
-          <button
-            type="button"
-            disabled={pending}
-            className="bg-accent px-2 py-1 text-xs text-accent-contrast disabled:opacity-50"
-            onClick={() => void scheduleSelected()}
-          >
-            Plan in (bulk)
-          </button>
-          <button
-            type="button"
-            disabled={pending}
-            className="border border-border px-2 py-1 text-xs"
-            onClick={() => void clearScheduleSelected()}
-          >
-            Wis planning
-          </button>
-          <button
-            type="button"
-            disabled={pending}
-            className="border border-border px-2 py-1 text-xs hover:border-accent"
-            onClick={() => void regenerateSelected()}
-            title={
-              aiConfigured
-                ? "Geselecteerde mails opnieuw persoonlijk maken met AI"
-                : "Zonder AI-key opnieuw vullen vanuit template"
-            }
-          >
-            Regenereer AI
-          </button>
           {testUnlocked ? (
             <button
               type="button"
@@ -513,11 +486,19 @@ export function QueueList({
               onClick={() => void testSelected()}
               title={`Stuur geselecteerde mails als test naar ${testTo}`}
             >
-              Test selectie
+              Stuur test
             </button>
           ) : (
             <span className="text-xs text-text-dim">Testsend uit</span>
           )}
+          <button
+            type="button"
+            disabled={pending}
+            className="bg-accent px-2 py-1 text-xs text-accent-contrast disabled:opacity-50"
+            onClick={() => void scheduleSelected()}
+          >
+            Plan in
+          </button>
           {liveUnlocked ? (
             confirmArm ? (
               <span className="flex flex-wrap items-center gap-2">
@@ -562,13 +543,56 @@ export function QueueList({
                   className="text-xs underline"
                   onClick={() => void disarmSelected()}
                 >
-                  Deactiveer
+                  Verzenden stoppen
                 </button>
               </>
             )
           ) : (
-            <span className="text-xs text-text-dim">Live send nog uit</span>
+            <span
+              className="text-xs text-text-dim"
+              title={liveSendBlockReason ?? undefined}
+            >
+              Echt verzenden staat nog uit — testen kan wel
+            </span>
           )}
+          <details className="relative text-xs">
+            <summary className="cursor-pointer text-text-dim hover:text-text">
+              Meer
+            </summary>
+            <div className="absolute left-0 z-20 mt-1 flex w-56 flex-col items-start gap-1 border border-border bg-bg p-2">
+              <button
+                type="button"
+                disabled={pending}
+                className="hover:text-accent"
+                onClick={() => void regenerateSelected()}
+                title={
+                  aiConfigured
+                    ? "Geselecteerde mails opnieuw persoonlijk laten schrijven"
+                    : "Zonder AI-key opnieuw vullen vanuit template"
+                }
+              >
+                Opnieuw laten schrijven (AI)
+              </button>
+              <button
+                type="button"
+                disabled={pending}
+                className="hover:text-accent"
+                onClick={() => void clearScheduleSelected()}
+              >
+                Planning weghalen
+              </button>
+              {counts.concept > 0 ? (
+                <button
+                  type="button"
+                  disabled={pending}
+                  className="hover:text-accent"
+                  onClick={() => void promoteSelected()}
+                >
+                  Concept → te checken
+                </button>
+              ) : null}
+            </div>
+          </details>
         </div>
       ) : (
         <button
@@ -756,7 +780,7 @@ export function QueueList({
                                 : "Zonder AI-key wordt de standaardtemplate opnieuw gevuld"
                             }
                           >
-                            Regenereer met AI
+                            Opnieuw laten schrijven
                           </button>
                           {item.generationSource ? (
                             <StatusBadge

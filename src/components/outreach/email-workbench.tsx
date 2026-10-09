@@ -444,7 +444,7 @@ export function OutreachEmailWorkbench({
                 : "border border-border px-3 py-1.5 text-sm text-text-muted"
             }
           >
-            Per bedrijf (achterhaald)
+            Invalshoek per bedrijf (aanbevolen)
           </button>
           <button
             type="button"
@@ -455,7 +455,7 @@ export function OutreachEmailWorkbench({
                 : "border border-border px-3 py-1.5 text-sm text-text-muted"
             }
           >
-            Zelfde invalshoek
+            Eén invalshoek voor iedereen
           </button>
         </div>
 
