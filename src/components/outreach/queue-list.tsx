@@ -18,6 +18,9 @@ type Props = {
   liveSendBlockReason: string | null;
   liveSendQuota: LiveSendQuota | null;
   aiConfigured?: boolean;
+  /** Default inbox for test sends (never the prospect). */
+  defaultTestTo?: string;
+  testSendBlockReason?: string | null;
 };
 
 const STATUS_TONE: Record<
@@ -42,6 +45,8 @@ export function QueueList({
   liveSendBlockReason,
   liveSendQuota,
   aiConfigured = true,
+  defaultTestTo = "team@blablabuild.com",
+  testSendBlockReason = null,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -52,6 +57,7 @@ export function QueueList({
   const [message, setMessage] = useState<string | null>(null);
   const [confirmArm, setConfirmArm] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+  const [testTo, setTestTo] = useState(defaultTestTo);
   const [edits, setEdits] = useState<
     Record<
       string,
@@ -65,6 +71,7 @@ export function QueueList({
   >({});
 
   const liveUnlocked = !liveSendBlockReason;
+  const testUnlocked = !testSendBlockReason;
   const dayCapHit =
     liveSendQuota != null && liveSendQuota.remainingToday <= 0;
 
@@ -252,6 +259,73 @@ export function QueueList({
     }
   }
 
+  /** Save open edits then send this exact mail as a test (never to the prospect). */
+  async function testItem(item: QueueItem) {
+    if (!testUnlocked) {
+      setError(testSendBlockReason ?? "Test versturen staat uit");
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    if (edits[item.emailId]) {
+      const saved = await post(
+        {
+          action: "update-queue-item",
+          emailId: item.emailId,
+          subject: edits[item.emailId]!.subject,
+          body: edits[item.emailId]!.body,
+          senderProfileId: edits[item.emailId]!.senderProfileId,
+          variantKey: edits[item.emailId]!.variantKey,
+        },
+        { refresh: false },
+      );
+      if (!saved) return;
+      setEdits((prev) => {
+        const next = { ...prev };
+        delete next[item.emailId];
+        return next;
+      });
+    }
+    const data = await post({
+      action: "send-test",
+      emailId: item.emailId,
+      testTo,
+    });
+    if (data) {
+      const to = Array.isArray(data.deliveredTo)
+        ? data.deliveredTo.join(", ")
+        : testTo;
+      setMessage(
+        `Test verstuurd · ${item.companyName} → ${to} (prospect ziet dit niet)`,
+      );
+    }
+  }
+
+  async function testSelected() {
+    const ids = [...picked];
+    if (!ids.length) return;
+    if (!testUnlocked) {
+      setError(testSendBlockReason ?? "Test versturen staat uit");
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    const data = await post({
+      action: "send-test",
+      emailIds: ids,
+      testTo,
+    });
+    if (data) {
+      const to = Array.isArray(data.deliveredTo)
+        ? data.deliveredTo.join(", ")
+        : testTo;
+      setMessage(
+        `${data.ok ?? ids.length} testmail${(data.ok ?? ids.length) === 1 ? "" : "s"} → ${to}` +
+          (data.failed ? ` · ${data.failed} mislukt` : ""),
+      );
+    }
+  }
+
   async function regenerateSelected() {
     const ids = [...picked];
     if (!ids.length) return;
@@ -313,6 +387,26 @@ export function QueueList({
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-3 border-b border-border pb-3">
+        <label className="min-w-[12rem] flex-1 text-xs text-text-dim sm:max-w-xs">
+          Test naar (nooit naar het bedrijf)
+          <input
+            className="mt-1 w-full border border-border bg-bg px-3 py-1.5 text-sm text-text"
+            value={testTo}
+            onChange={(e) => setTestTo(e.target.value)}
+            placeholder="team@blablabuild.com"
+            disabled={!testUnlocked}
+          />
+        </label>
+        {!testUnlocked && testSendBlockReason ? (
+          <p className="text-xs text-warn">{testSendBlockReason}</p>
+        ) : (
+          <p className="pb-1 text-xs text-text-dim">
+            Open een mail → <span className="text-text">Stuur test</span> om
+            precies te zien hoe die binnenkomt.
+          </p>
+        )}
+      </div>
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2 border-b border-border pb-3 text-sm">
         {(
           [
@@ -411,6 +505,19 @@ export function QueueList({
           >
             Regenereer AI
           </button>
+          {testUnlocked ? (
+            <button
+              type="button"
+              disabled={pending}
+              className="border border-border px-2 py-1 text-xs hover:border-accent"
+              onClick={() => void testSelected()}
+              title={`Stuur geselecteerde mails als test naar ${testTo}`}
+            >
+              Test selectie
+            </button>
+          ) : (
+            <span className="text-xs text-text-dim">Testsend uit</span>
+          )}
           {liveUnlocked ? (
             confirmArm ? (
               <span className="flex flex-wrap items-center gap-2">
@@ -624,6 +731,19 @@ export function QueueList({
                             onClick={() => void saveItem(item)}
                           >
                             Opslaan
+                          </button>
+                          <button
+                            type="button"
+                            disabled={pending || !testUnlocked}
+                            className="border border-border px-3 py-1.5 text-sm hover:border-accent disabled:opacity-50"
+                            onClick={() => void testItem(item)}
+                            title={
+                              testUnlocked
+                                ? `Stuur precies deze mail als test naar ${testTo}`
+                                : (testSendBlockReason ?? "Testsend uit")
+                            }
+                          >
+                            Stuur test
                           </button>
                           <button
                             type="button"

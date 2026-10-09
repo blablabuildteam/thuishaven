@@ -8,6 +8,10 @@ import { hasOutreachAiConfigured } from "@/lib/integrations/outreach";
 import { listBatchesWithEmails } from "@/lib/outreach/batches";
 import { getOutreachPipelineStatus } from "@/lib/outreach/pipeline-status";
 import { listQueueItems } from "@/lib/outreach/queue";
+import {
+  outreachTestSendBlockReason,
+  resolveOutreachTestRecipient,
+} from "@/lib/outreach/send-policy";
 
 export const metadata = { title: "Wachtrij" };
 export const dynamic = "force-dynamic";
@@ -23,23 +27,26 @@ export default async function OutreachPlanningPage() {
     },
     pipeline,
     queueItems,
+    defaultTestTo,
   ] = await Promise.all([
     listBatchesWithEmails(),
     getOutreachPipelineStatus(),
     listQueueItems(),
+    resolveOutreachTestRecipient(),
   ]);
 
   const liveUnlocked = !liveSendBlockReason;
   const bouncePaused = Boolean(liveSendQuota?.bouncePause);
   const plannedCount = queueItems.filter((i) => i.scheduledAt).length;
   const aiOk = hasOutreachAiConfigured();
+  const testSendBlockReason = outreachTestSendBlockReason();
 
   return (
     <div>
       <SectionHeader
         eyebrow="Stap 4 · review"
         title="Wachtrij"
-        description="Eén lijst: concepten + te checken. Open een rij om tekst/afzender te wijzigen. Selecteer → Plan in → Activeer verzenden (typ “wachtrij”). Wijzigen zet auto-send weer uit."
+        description="Eén lijst: concepten + te checken. Open een rij om te lezen, te wijzigen of een test te sturen. Selecteer → Plan in → Activeer verzenden (typ “wachtrij”). Wijzigen zet auto-send weer uit."
         action={
           <div className="flex flex-wrap gap-2">
             {bouncePaused ? (
@@ -94,6 +101,8 @@ export default async function OutreachPlanningPage() {
           liveSendBlockReason={liveSendBlockReason}
           liveSendQuota={liveSendQuota}
           aiConfigured={aiOk}
+          defaultTestTo={defaultTestTo}
+          testSendBlockReason={testSendBlockReason}
         />
       </section>
     </div>
