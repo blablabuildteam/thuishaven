@@ -40,14 +40,14 @@ thuishavenb2b.nl`,
   {
     id: "reiner",
     label: "Via Reijner",
-    email: "reiner@thuishaven.nl",
+    email: "reijner@thuishaven.nl",
     name: "Reijner · Thuishaven",
-    replyToEmail: "reiner@thuishaven.nl",
+    replyToEmail: "reijner@thuishaven.nl",
     replyToName: "Reijner · Thuishaven",
     signature: `Reijner
 Thuishaven
 Festival locatie voor zakelijke events
-reiner@thuishaven.nl · +31 6 83 63 37 25
+reijner@thuishaven.nl · +31 6 83 63 37 25
 Contactweg 68, 1014 BW Amsterdam
 thuishavenb2b.nl`,
   },

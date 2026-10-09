@@ -617,11 +617,15 @@ export function QueueList({
               return (
                 <tr
                   key={item.emailId}
+                  onClick={open ? undefined : () => setOpenId(item.emailId)}
                   className={`border-b border-border/70 last:border-0 ${
                     on ? "bg-accent/5" : ""
-                  } ${open ? "bg-surface" : ""}`}
+                  } ${open ? "bg-surface" : "cursor-pointer hover:bg-surface/60"}`}
                 >
-                  <td className="py-3 pr-2 align-top">
+                  <td
+                    className="py-3 pr-2 align-top"
+                    onClick={(ev) => ev.stopPropagation()}
+                  >
                     <input
                       type="checkbox"
                       checked={on}
@@ -633,11 +637,12 @@ export function QueueList({
                     <button
                       type="button"
                       className="text-left font-medium text-text hover:text-accent"
-                      onClick={() =>
+                      onClick={(ev) => {
+                        ev.stopPropagation();
                         setOpenId((id) =>
                           id === item.emailId ? null : item.emailId,
-                        )
-                      }
+                        );
+                      }}
                     >
                       {item.companyName}
                     </button>

@@ -174,9 +174,9 @@ export const outreachBatches = pgTable("outreach_batches", {
   /** evenementen | reiner | yoram — UI-profiel. */
   senderProfileId: text("sender_profile_id").notNull().default("reiner"),
   /** Snapshot From (blijft staan als profiel later wijzigt). */
-  senderEmail: text("sender_email").notNull().default("reiner@thuishaven.nl"),
+  senderEmail: text("sender_email").notNull().default("reijner@thuishaven.nl"),
   senderName: text("sender_name").notNull().default("Reijner · Thuishaven"),
-  replyToEmail: text("reply_to_email").notNull().default("reiner@thuishaven.nl"),
+  replyToEmail: text("reply_to_email").notNull().default("reijner@thuishaven.nl"),
   replyToName: text("reply_to_name").notNull().default("Reijner · Thuishaven"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -196,7 +196,7 @@ export const outreachSettings = pgTable("outreach_settings", {
   allowedSenderEmails: text("allowed_sender_emails")
     .notNull()
     .default(
-      "evenementen@thuishaven.nl,reiner@thuishaven.nl,yoram@thuishaven.nl,zakelijk@thuishaven.nl,evenement@thuishaven.nl",
+      "evenementen@thuishaven.nl,reijner@thuishaven.nl,yoram@thuishaven.nl,zakelijk@thuishaven.nl,evenement@thuishaven.nl",
     ),
   testRecipient: text("test_recipient")
     .notNull()

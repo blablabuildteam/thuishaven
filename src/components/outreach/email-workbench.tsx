@@ -566,7 +566,7 @@ export function OutreachEmailWorkbench({
           <div className="flex flex-wrap gap-3 text-xs">
             <button
               type="button"
-              title="Hoogste leadscore eerst (jubileum, compleetheid, engagement)"
+              title="Kansrijkste eerst (jubileum, complete gegevens)"
               onClick={() => selectTop(10)}
               className="text-accent underline"
             >
@@ -574,7 +574,7 @@ export function OutreachEmailWorkbench({
             </button>
             <button
               type="button"
-              title="Hoogste leadscore eerst (jubileum, compleetheid, engagement)"
+              title="Kansrijkste eerst (jubileum, complete gegevens)"
               onClick={() => selectTop(25)}
               className="text-accent underline"
             >
@@ -606,7 +606,6 @@ export function OutreachEmailWorkbench({
                 </th>
                 <th className="px-3 py-2 font-medium">Bedrijf</th>
                 <th className="px-3 py-2 font-medium">Invalshoek</th>
-                <th className="px-3 py-2 text-right font-medium">Score</th>
               </tr>
             </thead>
             <tbody>
@@ -659,9 +658,6 @@ export function OutreachEmailWorkbench({
                           {p.replyCount > 0 ? " · gereageerd" : ""}
                         </span>
                       ) : null}
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono text-xs text-text-dim">
-                      {p.score}
                     </td>
                   </tr>
                 );

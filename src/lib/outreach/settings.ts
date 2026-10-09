@@ -53,7 +53,7 @@ function envDefaults(): OutreachSettings {
   return {
     senderEmail:
       process.env.BREVO_OUTREACH_SENDER_EMAIL?.trim() ||
-      "reiner@thuishaven.nl",
+      "reijner@thuishaven.nl",
     senderName:
       process.env.BREVO_OUTREACH_SENDER_NAME?.trim() || "Reijner · Thuishaven",
     replyToEmail:
