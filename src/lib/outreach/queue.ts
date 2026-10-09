@@ -190,22 +190,29 @@ export async function promoteToQueue(input: {
   if ("error" in allowed) return allowed;
 
   const db = getDb();
-  const updated = await db
-    .update(outreachEmails)
-    .set({
-      status: "queued",
-      senderProfileId: snap.senderProfileId,
-      senderEmail: snap.senderEmail,
-    })
+  const rows = await db
+    .select({ id: outreachEmails.id, body: outreachEmails.body })
+    .from(outreachEmails)
     .where(
       and(
         inArray(outreachEmails.id, ids),
         inArray(outreachEmails.status, ["draft", "queued"]),
       ),
-    )
-    .returning({ id: outreachEmails.id });
+    );
+  const profile = getSenderProfile(snap.senderProfileId);
+  for (const row of rows) {
+    await db
+      .update(outreachEmails)
+      .set({
+        status: "queued",
+        senderProfileId: snap.senderProfileId,
+        senderEmail: snap.senderEmail,
+        body: applySenderSignature(row.body, profile),
+      })
+      .where(eq(outreachEmails.id, row.id));
+  }
 
-  return { ok: true, promoted: updated.length };
+  return { ok: true, promoted: rows.length };
 }
 
 export async function updateQueueItem(input: {

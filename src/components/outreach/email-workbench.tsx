@@ -161,14 +161,16 @@ export function OutreachEmailWorkbench({
   }
 
   function selectAll() {
-    setSelected(new Set(ready.map((p) => p.id)));
+    setSelected(
+      new Set(ready.filter((p) => p.queuedCount === 0).map((p) => p.id)),
+    );
   }
 
   function selectTop(n: number) {
     setSelected(
       new Set(
         ready
-          .filter((p) => p.mailCount === 0)
+          .filter((p) => p.mailCount === 0 && p.queuedCount === 0)
           .slice(0, n)
           .map((p) => p.id),
       ),
@@ -250,6 +252,13 @@ export function OutreachEmailWorkbench({
             }));
 
       const failed = Number(data.failed ?? 0);
+      const failReasons = [
+        ...new Set(
+          ((data.results ?? []) as Array<{ error?: string }>)
+            .map((r) => r.error)
+            .filter((e): e is string => Boolean(e)),
+        ),
+      ].slice(0, 2);
       const sources = (
         (data.results ?? []) as Array<{ source?: string }>
       ).map((r) => r.source);
@@ -264,7 +273,7 @@ export function OutreachEmailWorkbench({
       if (!made.length) {
         setError(
           failed
-            ? `Geen drafts gemaakt (${failed} mislukt). Probeer opnieuw.`
+            ? `Geen drafts gemaakt (${failed} mislukt)${failReasons.length ? `: ${failReasons.join(" · ")}` : ". Probeer opnieuw."}`
             : "Geen drafts gemaakt.",
         );
       } else {
@@ -278,7 +287,8 @@ export function OutreachEmailWorkbench({
             (templateOnly && !aiOk
               ? ` · ${templateOnly} template (geen AI-key)`
               : "") +
-            " — staan als concept in de Wachtrij. Test, daarna “Naar wachtrij”.",
+            (failReasons.length ? ` (${failReasons.join(" · ")})` : "") +
+            " — ze staan al in de Wachtrij. Lees ze hieronder of daar, en stuur een test.",
         );
         requestAnimationFrame(() => {
           document
@@ -813,6 +823,25 @@ export function OutreachEmailWorkbench({
                 : ""}
             </p>
             <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+              <label className="flex items-center gap-1.5 text-xs text-text-dim">
+                Afzender
+                <select
+                  className="max-w-[11rem] border border-border bg-bg px-2 py-2 text-sm text-text"
+                  value={senderProfileId}
+                  disabled={busy}
+                  onChange={(e) =>
+                    setSenderProfileId(
+                      e.target.value as OutreachSenderProfileId,
+                    )
+                  }
+                >
+                  {OUTREACH_SENDER_PROFILES.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <button
                 type="button"
                 disabled={busy}
@@ -830,33 +859,14 @@ export function OutreachEmailWorkbench({
                 Test
               </button>
               {lastEmailIds.length > 0 ? (
-                <>
-                  <select
-                    className="max-w-[11rem] border border-border bg-bg px-2 py-2 text-sm"
-                    value={senderProfileId}
-                    disabled={busy}
-                    onChange={(e) =>
-                      setSenderProfileId(
-                        e.target.value as OutreachSenderProfileId,
-                      )
-                    }
-                    aria-label="Afzender"
-                  >
-                    {OUTREACH_SENDER_PROFILES.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.label}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void sendToQueue()}
-                    className="border border-accent bg-accent/10 px-3 py-2.5 text-sm disabled:opacity-50"
-                  >
-                    Naar wachtrij
-                  </button>
-                </>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void sendToQueue()}
+                  className="border border-accent bg-accent/10 px-3 py-2.5 text-sm disabled:opacity-50"
+                >
+                  Naar wachtrij
+                </button>
               ) : null}
               <button
                 type="button"

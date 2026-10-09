@@ -2,7 +2,7 @@
  * Outreach integrations — KvK (later), AI generation, Brevo send, sales notify.
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import {
   leads,
@@ -665,6 +665,21 @@ export async function generateAndStoreDraft(input: {
   }
   if (prospect.type === "agency" && meta.source === "bureau_import") {
     return { error: "Partnerbureau — geen cold mail" };
+  }
+  const [pending] = await db
+    .select({ id: outreachEmails.id })
+    .from(outreachEmails)
+    .where(
+      and(
+        eq(outreachEmails.prospectId, prospect.id),
+        inArray(outreachEmails.status, ["draft", "queued"]),
+      ),
+    )
+    .limit(1);
+  if (pending) {
+    return {
+      error: `${prospect.companyName} staat al in de Wachtrij — pas die mail daar aan of laat hem opnieuw schrijven`,
+    };
   }
 
   const profileId = input.senderProfileId ?? DEFAULT_SENDER_PROFILE_ID;
