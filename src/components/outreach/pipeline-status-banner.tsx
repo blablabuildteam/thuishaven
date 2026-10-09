@@ -33,8 +33,8 @@ export function PipelineStatusBanner({ status }: Props) {
       key: "ready",
       count: status.readyToMail,
       label: "Klaar om te mailen",
-      href: "/outreach/crm",
-      hint: "E-mail + doelgroep-fit ok · nog geen mail gemaakt",
+      href: "/outreach/emails",
+      hint: "E-mail + invalshoek ok · nog niet gemaild of in de Wachtrij",
       tone: status.readyToMail > 0 ? "success" : "neutral",
     },
     {
@@ -93,6 +93,9 @@ export function PipelineStatusBanner({ status }: Props) {
             {status.fitNo > 0 ? ` · ${status.fitNo} past niet` : ""}
             {status.missingEmail > 0
               ? ` · ${status.missingEmail} zonder e-mail`
+              : ""}
+            {status.nonMailing > 0
+              ? ` · ${status.nonMailing} KvK non-mailing (nooit mailen)`
               : ""}
           </p>
         ) : (

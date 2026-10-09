@@ -298,11 +298,11 @@ export async function generateOutreachEmail(input: {
 
   const jubileeLine =
     input.jubileeMark != null
-      ? input.jubileeYearsAway === 0
-        ? `${input.jubileeMark}-jarig jubileum dit jaar`
-        : `${input.jubileeMark}-jarig jubileum over ~${input.jubileeYearsAway} jaar (bedrijf ~${input.anniversaryYears ?? "?"} jaar oud)`
+      ? `KvK-inschrijving wijst op een ${input.jubileeMark}-jarig moment ${
+          input.jubileeYearsAway === 0 ? "dit jaar" : "binnenkort"
+        } — ONZEKER (inschrijfdatum is vaak een latere BV/fusie, niet de oprichting)`
       : input.anniversaryYears != null
-        ? `Bedrijf ~${input.anniversaryYears} jaar oud`
+        ? `KvK-inschrijving ~${input.anniversaryYears} jaar geleden — ONZEKER, niet noemen`
         : "geen jubileum-signaal";
 
   const seedHint = `${input.companyName}:${variantId}:${subjectKey}:${Date.now() % 97}`;
@@ -336,7 +336,7 @@ Availability URL: ${availabilityUrl}
 Eisen:
 1. Opening en tweede zin specifiek voor ${input.companyName}
 2. De gekozen invalshoek (${angleLabel}) merkt de lezer — natuurlijk, niet geforceerd
-3. Bij jubileum: noem concrete jaren/mark als bekend; anders geen verzonnen jubileum
+3. Jubileum: noem NOOIT een aantal jaren of oprichtingsjaar (de KvK-datum klopt vaak niet). Stel het als open vraag ("staat er bij jullie een jubileum of mijlpaal op de planning?") of spreek in algemene termen over een jubileum vieren
 4. Max één zachte vraag / CTA
 5. ~80–140 woorden, plain text, natuurlijk en foutloos Nederlands
 6. Noem NOOIT wat je niet weet of niet kon vinden (geen "ik kon online niet vinden…", geen "onbekend"). Ontbrekende feiten laat je gewoon weg.
@@ -850,6 +850,14 @@ export async function regenerateStoredDraft(input: {
       : undefined,
   });
   if ("error" in generated) return generated;
+  if (generated.source !== "ai") {
+    const reason = /\b429\b|quota/i.test(generated.fallbackReason ?? "")
+      ? "AI-tegoed is even op"
+      : "AI gaf geen bruikbare mail";
+    return {
+      error: `${reason} — de huidige mail is ongewijzigd gelaten. Probeer het later opnieuw.`,
+    };
+  }
 
   await db
     .update(outreachEmails)

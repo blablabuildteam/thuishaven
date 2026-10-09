@@ -4,7 +4,7 @@
  */
 
 import { listCrmRecords, type CrmRecord } from "@/lib/outreach/crm";
-import { isMailableAngle, mailAngleFor } from "@/lib/outreach/mail-angle";
+import { isReadyToMail, mailAngleFor } from "@/lib/outreach/mail-angle";
 
 export type OutreachPipelineStatus = {
   /** Non-partner, non-existing-customer. */
@@ -13,7 +13,7 @@ export type OutreachPipelineStatus = {
   mailed: number;
   /** queuedCount > 0, not mailed */
   inQueue: number;
-  /** Has email, mailable angle, never mailed, not queued */
+  /** Zie isReadyToMail — zelfde definitie als Bedrijven en Mailen. */
   readyToMail: number;
   /** Among not-yet-mailed */
   missingEmail: number;
@@ -27,6 +27,8 @@ export type OutreachPipelineStatus = {
   needsReview: number;
   /** Concept drafts (nog niet promoted) */
   drafts: number;
+  /** KvK non-mailing — nooit ongevraagd mailen */
+  nonMailing: number;
 };
 
 function eligible(rows: CrmRecord[]): CrmRecord[] {
@@ -46,6 +48,7 @@ export function computeOutreachPipelineStatus(
   let incompleteButHasEmail = 0;
   let fitUnknown = 0;
   let fitNo = 0;
+  let nonMailing = 0;
 
   for (const row of companies) {
     const hasMailed = row.mailCount > 0;
@@ -54,6 +57,10 @@ export function computeOutreachPipelineStatus(
 
     if (hasMailed) {
       mailed += 1;
+      continue;
+    }
+    if (row.nonMailing) {
+      nonMailing += 1;
       continue;
     }
 
@@ -77,17 +84,24 @@ export function computeOutreachPipelineStatus(
       }
     }
 
-    if (!queued && !hasDraft && row.email) {
-      const angle = mailAngleFor({
-        status: row.status,
-        existingCustomer: row.existingCustomer,
-        doelgroepFit: row.doelgroepFit,
-        doelgroepReason: row.doelgroepReason,
-        anniversaryYears: row.anniversaryYears,
-      });
-      if (isMailableAngle(angle.id)) {
-        readyToMail += 1;
-      }
+    const angle = mailAngleFor({
+      status: row.status,
+      existingCustomer: row.existingCustomer,
+      doelgroepFit: row.doelgroepFit,
+      doelgroepReason: row.doelgroepReason,
+      anniversaryYears: row.anniversaryYears,
+      nonMailing: row.nonMailing,
+    });
+    if (
+      isReadyToMail({
+        angleId: angle.id,
+        email: row.email,
+        mailCount: row.mailCount,
+        queuedCount: row.queuedCount,
+        draftCount: row.draftCount,
+      })
+    ) {
+      readyToMail += 1;
     }
   }
 
@@ -102,6 +116,7 @@ export function computeOutreachPipelineStatus(
     fitNo,
     needsReview: inQueue + drafts,
     drafts,
+    nonMailing,
   };
 }
 

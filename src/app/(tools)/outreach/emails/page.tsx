@@ -57,6 +57,7 @@ export default async function EmailsPage({
 
   const workbenchProspects: WorkbenchProspect[] = [];
   let skippedNoEmail = 0;
+  let inQueueCount = 0;
   for (const r of records) {
     if (
       r.type !== "company" ||
@@ -72,9 +73,14 @@ export default async function EmailsPage({
       doelgroepFit: r.doelgroepFit,
       doelgroepReason: r.doelgroepReason,
       anniversaryYears: r.anniversaryYears,
+      nonMailing: r.nonMailing,
     });
     const suggested = suggestedVariantForAngle(angle.id);
     if (!suggested) continue;
+    if (r.mailCount === 0 && (r.queuedCount > 0 || r.draftCount > 0)) {
+      inQueueCount += 1;
+      continue;
+    }
     if (!r.email) {
       skippedNoEmail += 1;
       continue;
@@ -145,6 +151,7 @@ export default async function EmailsPage({
         preselectIds={preselectIds}
         handoffVariantId={handoffVariantId}
         skippedNoEmail={skippedNoEmail}
+        inQueueCount={inQueueCount}
         aiConfigured={hasOutreachAiConfigured()}
       />
 

@@ -743,9 +743,9 @@ export function QueueList({
                         </div>
                         {e.variantKey === "jubileum" ? (
                           <p className="text-xs text-text-muted">
-                            Check het jubileumjaar even: dat komt uit de
-                            KvK-inschrijving en klopt niet altijd met de echte
-                            oprichting.
+                            Jubileum komt uit de KvK-inschrijving en klopt niet
+                            altijd met de echte oprichting. Noem daarom geen
+                            aantal jaren, tenzij je het zeker weet.
                           </p>
                         ) : null}
                         {e.variantKey !== (item.variantKey ?? "warm_tour") ? (

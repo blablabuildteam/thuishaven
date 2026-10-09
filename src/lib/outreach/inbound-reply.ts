@@ -24,7 +24,13 @@ export type RecordInboundReplyInput = {
   receivedAt?: Date;
   /** Skip creating a warm lead even if sentiment looks positive. */
   skipLead?: boolean;
+  /** Handmatig gelogd: sentiment is gekozen door de medewerker. */
+  sentiment?: ReplySentiment;
+  /** Default true. Uit bij handmatig loggen — het team weet het al. */
+  notifySales?: boolean;
 };
+
+export type ReplySentiment = "positive" | "negative" | "neutral" | "opt_out" | "ooo";
 
 export type RecordInboundReplyResult =
   | {
@@ -53,7 +59,7 @@ const POSITIVE_SOFT =
 
 export function inferReplySentiment(
   text: string | null | undefined,
-): "positive" | "negative" | "neutral" | "opt_out" | "ooo" {
+): ReplySentiment {
   const raw = (text ?? "").trim();
   if (!raw) return "neutral";
   if (OPT_OUT.test(raw)) return "opt_out";
@@ -84,9 +90,9 @@ export async function recordInboundReply(
   const at = input.receivedAt ?? new Date();
   const subject = input.subject?.trim() || null;
   const bodyPreview = preview(input.bodyPreview);
-  const sentiment = inferReplySentiment(
-    [subject, bodyPreview].filter(Boolean).join(" "),
-  );
+  const sentiment =
+    input.sentiment ??
+    inferReplySentiment([subject, bodyPreview].filter(Boolean).join(" "));
 
   const db = getDb();
 
@@ -280,7 +286,9 @@ export async function recordInboundReply(
       leadCreated = true;
       const testTo = getOutreachTestRecipient().toLowerCase();
       const skipNotify =
-        fromEmail === testTo || fromEmail.endsWith("@blablabuild.com");
+        input.notifySales === false ||
+        fromEmail === testTo ||
+        fromEmail.endsWith("@blablabuild.com");
       if (!skipNotify) {
         await notifySalesTeam({
           companyName: row.companyName,

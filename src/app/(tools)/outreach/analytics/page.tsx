@@ -79,10 +79,14 @@ export default async function OutreachAnalyticsPage() {
           </strong>
         </p>
         <p>
-          <span className="text-text-dim">Klik / bounce</span>{" "}
+          <span className="text-text-dim">Klik</span>{" "}
           <strong className="text-text">
-            {snap.kpis.clicked} / {snap.kpis.bounced}
+            {snap.kpis.clicked} ({formatPercent(snap.kpis.clickRate)})
           </strong>
+        </p>
+        <p>
+          <span className="text-text-dim">Bounce</span>{" "}
+          <strong className="text-text">{snap.kpis.bounced}</strong>
         </p>
         {snap.sendLocked ? (
           <StatusBadge tone="info">Live send uit · test ok</StatusBadge>
@@ -90,6 +94,61 @@ export default async function OutreachAnalyticsPage() {
           <StatusBadge tone="success">Live send aan</StatusBadge>
         )}
       </div>
+
+      <section className="mb-10 border-t border-border pt-8">
+        <h2 className="font-display text-lg tracking-[0.06em]">
+          Per invalshoek
+        </h2>
+        <p className="mt-1 mb-4 text-sm text-text-muted">
+          Welke haak werkt: jubileum, seizoen, funding, recordjaar of
+          algemeen. Reply-rate is de beste maatstaf — opens zijn onbetrouwbaar
+          door privacy-instellingen van mailprogramma&apos;s.
+        </p>
+        {snap.byAngle.length === 0 ? (
+          <p className="text-sm text-text-muted">Nog geen verzonden mails.</p>
+        ) : (
+          <div className="max-w-full overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead className="border-b border-border text-[11px] uppercase tracking-wider text-text-dim">
+                <tr>
+                  <th className="pb-2 font-medium">Invalshoek</th>
+                  <th className="pb-2 font-medium">Verzonden</th>
+                  <th className="pb-2 font-medium">Open</th>
+                  <th className="pb-2 font-medium">Klik</th>
+                  <th className="pb-2 font-medium">Reply</th>
+                </tr>
+              </thead>
+              <tbody>
+                {snap.byAngle.map((row, i) => (
+                  <tr
+                    key={row.variantKey}
+                    className="border-b border-border last:border-0"
+                  >
+                    <td className="py-2.5 pr-3 font-medium text-text">
+                      {row.variantName}
+                      {i === 0 && row.replied > 0 && snap.byAngle.length > 1 ? (
+                        <span className="ml-2">
+                          <StatusBadge tone="accent">Beste reply</StatusBadge>
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="py-2.5 font-mono">{row.sent}</td>
+                    <td className="py-2.5 font-mono">
+                      {row.opened} ({formatPercent(row.openRate)})
+                    </td>
+                    <td className="py-2.5 font-mono">
+                      {row.clicked} ({formatPercent(row.clickRate)})
+                    </td>
+                    <td className="py-2.5 font-mono">
+                      {row.replied} ({formatPercent(row.replyRate)})
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       <section className="mb-10 border-t border-border pt-8">
         <h2 className="font-display text-lg tracking-[0.06em]">
@@ -110,6 +169,7 @@ export default async function OutreachAnalyticsPage() {
                   <th className="pb-2 font-medium">From</th>
                   <th className="pb-2 font-medium">Verzonden</th>
                   <th className="pb-2 font-medium">Open</th>
+                  <th className="pb-2 font-medium">Klik</th>
                   <th className="pb-2 font-medium">Reply</th>
                   <th className="pb-2 font-medium">Bounce</th>
                 </tr>
@@ -129,6 +189,9 @@ export default async function OutreachAnalyticsPage() {
                     <td className="py-2.5 font-mono">{row.sent}</td>
                     <td className="py-2.5 font-mono">
                       {row.opened} ({formatPercent(row.openRate)})
+                    </td>
+                    <td className="py-2.5 font-mono">
+                      {row.clicked} ({formatPercent(row.clickRate)})
                     </td>
                     <td className="py-2.5 font-mono">
                       {row.replied} ({formatPercent(row.replyRate)})
@@ -236,8 +299,9 @@ export default async function OutreachAnalyticsPage() {
         </h2>
         <p className="mt-1 mb-4 text-sm text-text-muted">
           Alleen echte verzendingen. Opens en kliks komen via Brevo.
-          Antwoorden op evenement@ komen via de inbox-koppeling op hetzelfde
-          dossier terecht.
+          Antwoorden op evenement@ komen vanzelf op het dossier; een antwoord
+          via telefoon of een andere inbox log je in het dossier van het
+          bedrijf.
         </p>
         {happened.length === 0 ? (
           <p className="mt-2 text-sm text-text-muted">
@@ -249,7 +313,7 @@ export default async function OutreachAnalyticsPage() {
           </p>
         ) : (
           <div className="mt-3 max-w-full overflow-x-auto">
-            <table className="w-full min-w-[880px] text-left text-sm">
+            <table className="w-full min-w-[960px] text-left text-sm">
               <thead className="border-b border-border text-[11px] uppercase tracking-wider text-text-dim">
                 <tr>
                   <th className="pb-2 font-medium">Bedrijf</th>
@@ -257,6 +321,7 @@ export default async function OutreachAnalyticsPage() {
                   <th className="pb-2 font-medium">Status</th>
                   <th className="pb-2 font-medium">Verzonden</th>
                   <th className="pb-2 font-medium">Open</th>
+                  <th className="pb-2 font-medium">Klik</th>
                   <th className="pb-2 font-medium">Reply</th>
                 </tr>
               </thead>
@@ -271,6 +336,9 @@ export default async function OutreachAnalyticsPage() {
                     </td>
                     <td className="max-w-xs py-2.5 pr-3 text-text-muted">
                       {row.subject}
+                      {row.variantName ? (
+                        <p className="text-xs text-text-dim">{row.variantName}</p>
+                      ) : null}
                     </td>
                     <td className="py-2.5">
                       <StatusBadge
@@ -294,6 +362,9 @@ export default async function OutreachAnalyticsPage() {
                     </td>
                     <td className="py-2.5 font-mono text-xs text-text-dim">
                       {row.opened ? fmt(row.openedAt) : "—"}
+                    </td>
+                    <td className="py-2.5 font-mono text-xs text-text-dim">
+                      {row.clicked ? fmt(row.clickedAt) : "—"}
                     </td>
                     <td className="py-2.5 font-mono text-xs text-text-dim">
                       {row.replied ? fmt(row.repliedAt) : "—"}

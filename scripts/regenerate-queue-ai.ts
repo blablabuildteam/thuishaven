@@ -1,6 +1,6 @@
 /**
  * Re-run AI generation for every draft/queued outreach mail that is still a template.
- * Usage: npx tsx scripts/regenerate-queue-ai.ts [--all]
+ * Usage: npx tsx scripts/regenerate-queue-ai.ts [--all] [--variant=jubileum]
  */
 import { config } from "dotenv";
 config({ path: ".env.local" });
@@ -9,9 +9,12 @@ async function main() {
   const { getDb } = await import("../src/lib/db/client");
   const { outreachEmails } = await import("../src/lib/db/schema");
   const { regenerateStoredDraft } = await import("../src/lib/integrations/outreach");
-  const { and, inArray, or, isNull, ne } = await import("drizzle-orm");
+  const { and, eq, inArray, or, isNull, ne } = await import("drizzle-orm");
 
   const all = process.argv.includes("--all");
+  const variant = process.argv
+    .find((a) => a.startsWith("--variant="))
+    ?.slice("--variant=".length);
   const db = getDb();
   const rows = await db
     .select({ id: outreachEmails.id })
@@ -19,7 +22,8 @@ async function main() {
     .where(
       and(
         inArray(outreachEmails.status, ["draft", "queued"]),
-        all
+        variant ? eq(outreachEmails.variantKey, variant) : undefined,
+        all || variant
           ? undefined
           : or(
               isNull(outreachEmails.generationSource),

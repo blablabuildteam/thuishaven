@@ -23,6 +23,7 @@ export type OutreachMailResultRow = {
   toEmail: string | null;
   subject: string;
   variantKey: string | null;
+  variantName: string | null;
   subjectKey: string | null;
   status: string;
   sentAt: string | null;
@@ -47,6 +48,18 @@ export type AbRow = {
   clickRate: number;
   replyRate: number;
   winner?: boolean;
+};
+
+export type AngleKpiRow = {
+  variantKey: string;
+  variantName: string;
+  sent: number;
+  opened: number;
+  clicked: number;
+  replied: number;
+  openRate: number;
+  clickRate: number;
+  replyRate: number;
 };
 
 export type SenderKpiRow = {
@@ -83,6 +96,8 @@ export type OutreachResultsSnapshot = {
   };
   /** KPIs grouped by From / sender profile (Evenementen / Reiner / Yoram). */
   bySender: SenderKpiRow[];
+  /** Per invalshoek / template (jubileum, seizoen, …) over alle verzendingen. */
+  byAngle: AngleKpiRow[];
   ab: AbRow[];
   rows: OutreachMailResultRow[];
   recentReplies: Array<{
@@ -123,6 +138,14 @@ function senderLabel(
   return "Onbekend / legacy";
 }
 
+function variantName(key: string): string {
+  try {
+    return getOutreachVariant(key as OutreachVariantId).name;
+  } catch {
+    return key === "unknown" ? "Onbekend" : key;
+  }
+}
+
 function rate(part: number, whole: number): number {
   if (whole <= 0) return 0;
   return (part / whole) * 100;
@@ -151,6 +174,7 @@ export async function getOutreachResultsSnapshot(): Promise<OutreachResultsSnaps
         replyRate: 0,
       },
       bySender: [],
+      byAngle: [],
       ab: [],
       rows: [],
       recentReplies: [],
@@ -241,6 +265,38 @@ export async function getOutreachResultsSnapshot(): Promise<OutreachResultsSnaps
     )
     .groupBy(outreachEmails.senderEmail, outreachEmails.senderProfileId);
 
+  const angleAgg = await db
+    .select({
+      variantKey: outreachEmails.variantKey,
+      sent: sql<number>`count(*)::int`,
+      opened: sql<number>`count(*) filter (where ${outreachEmails.openedAt} is not null or ${outreachEmails.status} in ('opened','clicked','replied'))::int`,
+      clicked: sql<number>`count(*) filter (where ${outreachEmails.clickedAt} is not null or ${outreachEmails.status} in ('clicked','replied'))::int`,
+      replied: sql<number>`count(*) filter (where ${outreachEmails.repliedAt} is not null or ${outreachEmails.status} = 'replied')::int`,
+    })
+    .from(outreachEmails)
+    .where(
+      sql`${outreachEmails.status} in ('sent','opened','clicked','replied','bounced','opted_out')
+          or ${outreachEmails.sentAt} is not null`,
+    )
+    .groupBy(outreachEmails.variantKey);
+
+  const byAngle: AngleKpiRow[] = angleAgg
+    .map((r) => {
+      const key = r.variantKey ?? "unknown";
+      return {
+        variantKey: key,
+        variantName: variantName(key),
+        sent: r.sent,
+        opened: r.opened,
+        clicked: r.clicked,
+        replied: r.replied,
+        openRate: rate(r.opened, r.sent),
+        clickRate: rate(r.clicked, r.sent),
+        replyRate: rate(r.replied, r.sent),
+      };
+    })
+    .sort((a, b) => b.replyRate - a.replyRate || b.sent - a.sent);
+
   const bySender: SenderKpiRow[] = senderAgg
     .map((r) => {
       const sentN = r.sent ?? 0;
@@ -274,18 +330,11 @@ export async function getOutreachResultsSnapshot(): Promise<OutreachResultsSnaps
     const vk = r.variantKey ?? "unknown";
     const sk = r.subjectKey ?? "?";
     const key = `${vk}::${sk}`;
-    const variantName = (() => {
-      try {
-        return getOutreachVariant(vk as OutreachVariantId).name;
-      } catch {
-        return vk;
-      }
-    })();
     const row =
       abMap.get(key) ??
       ({
         variantKey: vk,
-        variantName,
+        variantName: variantName(vk),
         subjectKey: sk,
         subject: r.subject,
         sent: 0,
@@ -360,6 +409,7 @@ export async function getOutreachResultsSnapshot(): Promise<OutreachResultsSnaps
       replyRate: rate(repliedCount, sentCount),
     },
     bySender,
+    byAngle,
     ab: ab.sort((a, b) => a.variantKey.localeCompare(b.variantKey)),
     rows: mailRows.map((r) => ({
       id: r.id,
@@ -367,6 +417,7 @@ export async function getOutreachResultsSnapshot(): Promise<OutreachResultsSnaps
       toEmail: r.toEmail,
       subject: r.subject,
       variantKey: r.variantKey,
+      variantName: r.variantKey ? variantName(r.variantKey) : null,
       subjectKey: r.subjectKey,
       status: r.status,
       sentAt: r.sentAt?.toISOString() ?? null,

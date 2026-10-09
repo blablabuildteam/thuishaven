@@ -146,6 +146,8 @@ export function mailAngleFor(input: {
   doelgroepFit?: DoelgroepFit | string | null;
   doelgroepReason?: string | null;
   anniversaryYears?: number | null;
+  /** KvK non-mailing indicator — wettelijk geen ongevraagde mail. */
+  nonMailing?: boolean;
   now?: Date;
 }): MailAngle {
   if (input.existingCustomer || input.status === "excluded") {
@@ -154,6 +156,15 @@ export function mailAngleFor(input: {
       label: "Niet mailen",
       detail: "Staat op de uitsluitingslijst",
       rank: 90,
+    };
+  }
+
+  if (input.nonMailing) {
+    return {
+      id: "niet_mailen",
+      label: "Niet mailen (KvK)",
+      detail: "KvK non-mailing — geen ongevraagde mail sturen",
+      rank: 85,
     };
   }
 
@@ -179,8 +190,8 @@ export function mailAngleFor(input: {
           : `Jubileum ≤${JUBILEE_WINDOW_MONTHS} mnd`,
       detail:
         next.yearsAway === 0
-          ? `${next.mark} jaar dit jaar — jubileum-mail`
-          : `${next.mark} jaar binnenkort — jubileum-mail`,
+          ? `${next.mark} jaar volgens KvK-inschrijving (kan afwijken van oprichting) — jubileum-mail zonder jaartal`
+          : `${next.mark} jaar binnenkort volgens KvK-inschrijving — jubileum-mail zonder jaartal`,
       rank: 10,
       jubileeMark: next.mark,
       jubileeYearsAway: next.yearsAway,
@@ -240,6 +251,27 @@ export function isMailableAngle(id: MailAngleId): boolean {
     id === "funding" ||
     id === "recordjaar" ||
     id === "algemeen"
+  );
+}
+
+/**
+ * Eén definitie van "klaar om te mailen", overal gelijk (banner, Bedrijven, Mailen):
+ * mailbare invalshoek (incl. KvK non-mailing check via mailAngleFor), e-mail bekend,
+ * nog nooit gemaild en nog niet in de Wachtrij.
+ */
+export function isReadyToMail(input: {
+  angleId: MailAngleId;
+  email: string | null | undefined;
+  mailCount: number;
+  queuedCount: number;
+  draftCount: number;
+}): boolean {
+  return (
+    isMailableAngle(input.angleId) &&
+    Boolean(input.email) &&
+    input.mailCount === 0 &&
+    input.queuedCount === 0 &&
+    input.draftCount === 0
   );
 }
 

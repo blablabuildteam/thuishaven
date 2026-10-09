@@ -230,7 +230,7 @@ Altijd een persoonlijke AI-mail (verplicht):
 - Elke mail is uniek voor dit ene bedrijf — andere opening, andere tweede zin, andere wending
 - De gekozen invalshoek/label (jubileum, seizoen, funding, …) is de haak: houd die aan
 - Verwerk die haak natuurlijk — niet forceren als een feit ontbreekt, maar wel in die richting schrijven
-- Gebruik concrete feiten uit de prompt (jubileum-jaren, sector, plaats, grootte) als die er zijn
+- Gebruik concrete feiten uit de prompt (sector, plaats, grootte) als die er zijn — nooit een jubileum-aantal jaren (KvK-datum is onbetrouwbaar)
 - Een template-body in de prompt is alleen referentie: herschrijf volledig, kopieer geen zinnen
 - Nooit een mail die 1-op-1 naar een ander bedrijf gekopieerd had kunnen worden
 - Varieer openings: soms "Hi," soms met voornaam, soms een korte observatie

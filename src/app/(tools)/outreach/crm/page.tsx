@@ -25,6 +25,7 @@ export default async function OutreachCrmPage() {
         doelgroepFit: row.doelgroepFit,
         doelgroepReason: row.doelgroepReason,
         anniversaryYears: row.anniversaryYears,
+        nonMailing: row.nonMailing,
       });
       return {
         row,

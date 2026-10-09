@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CrmNoteForm } from "@/components/outreach/crm-note-form";
+import { ReplyLogForm } from "@/components/outreach/reply-log-form";
 import { RefillContactButton } from "@/components/outreach/refill-contact-button";
 import { LinkedinEstimateForm } from "@/components/outreach/linkedin-estimate-form";
 import { getCrmDossier, statusLabels } from "@/lib/outreach/crm";
@@ -52,6 +53,7 @@ export default async function CrmDossierPage({
     doelgroepFit: dossier.doelgroepFit,
     doelgroepReason: dossier.doelgroepReason,
     anniversaryYears: dossier.anniversaryYears,
+    nonMailing: dossier.nonMailing,
   });
   const score = leadScore({
     doelgroepFit: dossier.doelgroepFit,
@@ -290,6 +292,9 @@ export default async function CrmDossierPage({
                       {m.body}
                     </pre>
                   </details>
+                  {m.sentAt && !m.repliedAt && m.status !== "bounced" ? (
+                    <ReplyLogForm outreachEmailId={m.id} />
+                  ) : null}
                 </li>
               ))}
             </ul>

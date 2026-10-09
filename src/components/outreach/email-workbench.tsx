@@ -46,6 +46,8 @@ type Props = {
   /** Template meegenomen vanuit Bedrijven-handoff. */
   handoffVariantId?: OutreachVariantId | null;
   skippedNoEmail?: number;
+  /** Nog niet gemaild maar staan al in de Wachtrij — niet in deze lijst. */
+  inQueueCount?: number;
   aiConfigured?: boolean;
 };
 
@@ -73,6 +75,7 @@ export function OutreachEmailWorkbench({
   preselectIds = [],
   handoffVariantId = null,
   skippedNoEmail = 0,
+  inQueueCount = 0,
   aiConfigured = true,
 }: Props) {
   const router = useRouter();
@@ -561,19 +564,19 @@ export function OutreachEmailWorkbench({
         </div>
 
         <p className="mb-2 max-w-2xl text-sm text-text-muted">
-          <strong className="text-text">{ready.length}</strong> in beeld
-          {!showMailed ? (
+          <strong className="text-text">{neverMailedTotal}</strong> klaar om
+          te mailen
+          {showMailed ? <> · inclusief {mailedTotal} al verstuurd</> : null}
+          {q.trim() || onlyHandoff ? <> · {ready.length} in beeld</> : null}
+          {inQueueCount > 0 ? (
             <>
               {" "}
-              — alleen nog nooit verstuurd ({neverMailedTotal} met e-mail +
-              mailkans; wachtrij telt niet als verstuurd)
-              {mailedTotal > 0
-                ? ` · ${mailedTotal} al verstuurd staan uit (vink hierboven aan om te zien)`
-                : ""}
+              · {inQueueCount} staan al in de{" "}
+              <Link href="/outreach/planning" className="text-accent underline">
+                Wachtrij
+              </Link>
             </>
-          ) : (
-            <> — inclusief al verstuurd</>
-          )}
+          ) : null}
           {skippedNoEmail > 0 ? (
             <>
               {" "}

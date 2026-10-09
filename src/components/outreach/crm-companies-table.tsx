@@ -7,7 +7,12 @@ import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { statusLabels } from "@/lib/mock/outreach";
-import { type MailAngleId, isMailableAngle, mailAngleTone } from "@/lib/outreach/mail-angle";
+import {
+  type MailAngleId,
+  isMailableAngle,
+  isReadyToMail,
+  mailAngleTone,
+} from "@/lib/outreach/mail-angle";
 import { leadTierTone, type LeadScore } from "@/lib/outreach/lead-score";
 import {
   OUTREACH_VARIANTS,
@@ -116,14 +121,19 @@ type SortKey = "score" | "name" | "last";
 type SignalId = Extract<MailFilter, `sig_${string}`>;
 
 function signalMatch(id: SignalId, row: CrmRow, angle: Angle): boolean {
-  const mailable = isMailableAngle(angle.id);
   switch (id) {
     case "sig_jub_now":
       return angle.id === "jubileum" && angle.jubileeYearsAway === 0 && row.mailCount === 0;
     case "sig_jub_soon":
       return angle.id === "jubileum" && (angle.jubileeYearsAway ?? 0) >= 1 && row.mailCount === 0;
     case "sig_fresh":
-      return mailable && Boolean(row.email) && row.mailCount === 0;
+      return isReadyToMail({
+        angleId: angle.id,
+        email: row.email,
+        mailCount: row.mailCount,
+        queuedCount: row.queuedCount,
+        draftCount: row.draftCount,
+      });
     case "sig_followup":
       return (
         row.openCount > 0 &&
@@ -141,7 +151,7 @@ const SIGNALS: { id: SignalId; label: string; hint: string }[] = [
   { id: "sig_jub_soon", label: "Jubileum binnenkort", hint: "≤16 mnd · nog niet gemaild" },
   { id: "sig_replied", label: "Gereageerd", hint: "Opvolgen — nog geen lead" },
   { id: "sig_followup", label: "Geopend, geen reply", hint: "≥3 dagen · herinnering?" },
-  { id: "sig_fresh", label: "Klaar, nooit gemaild", hint: "E-mail + mailkans" },
+  { id: "sig_fresh", label: "Klaar om te mailen", hint: "Nog niet gemaild of in de Wachtrij" },
 ];
 
 type RegionFilter = "all" | "in" | "out" | "unknown";
@@ -345,7 +355,13 @@ export function CrmCompaniesTable({ rows }: Props) {
   const mailableIds = filtered
     .filter(
       ({ row, angle }) =>
-        isMailableAngle(angle.id) && Boolean(row.email) && row.mailCount === 0,
+        isReadyToMail({
+          angleId: angle.id,
+          email: row.email,
+          mailCount: row.mailCount,
+          queuedCount: row.queuedCount,
+          draftCount: row.draftCount,
+        }),
     )
     .map(({ row }) => row.id);
 
@@ -695,10 +711,13 @@ export function CrmCompaniesTable({ rows }: Props) {
             <tbody>
               {filtered.map(({ row, angle, score }) => {
                 const on = picked.has(row.id);
-                const canMail =
-                  isMailableAngle(angle.id) &&
-                  Boolean(row.email) &&
-                  row.mailCount === 0;
+                const canMail = isReadyToMail({
+                  angleId: angle.id,
+                  email: row.email,
+                  mailCount: row.mailCount,
+                  queuedCount: row.queuedCount,
+                  draftCount: row.draftCount,
+                });
                 const topReason =
                   score.reasons[0]?.replace(/^\+\d+\s*/, "") ?? null;
                 const missing = missingDataLabels(row);
@@ -718,11 +737,11 @@ export function CrmCompaniesTable({ rows }: Props) {
                         disabled={!canMail && !on}
                         title={
                           canMail
-                            ? row.queuedCount > 0
-                              ? "Selecteer om te mailen (staat al in de Wachtrij)"
-                              : "Selecteer om te mailen"
+                            ? "Selecteer om te mailen"
                             : row.mailCount > 0
                               ? "Al verstuurd"
+                              : row.queuedCount > 0 || row.draftCount > 0
+                                ? "Staat al in de Wachtrij"
                               : !row.email
                                 ? "Geen e-mail"
                                 : "Geen mailkans"
