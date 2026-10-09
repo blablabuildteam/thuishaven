@@ -244,7 +244,11 @@ export function isValidLiveSendConfirm(
   const typed = confirmText.trim();
   if (!typed) return false;
   if (typed.toUpperCase() === LIVE_SEND_CONFIRM_PHRASE) return true;
-  return typed === batchName.trim();
+  const name = batchName.trim();
+  if (!name) return false;
+  // Case-insensitive for short aliases like "wachtrij".
+  if (typed.toLowerCase() === name.toLowerCase()) return true;
+  return typed === name;
 }
 
 /**

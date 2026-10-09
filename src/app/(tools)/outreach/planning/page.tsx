@@ -40,7 +40,7 @@ export default async function OutreachPlanningPage() {
       <SectionHeader
         eyebrow="Stap 4 · review"
         title="Wachtrij"
-        description="Alle conceptmails in één lijst. Open om te lezen of te wijzigen (tekst, onderwerp, afzender). Selecteer meerdere → Plan in → Activeer verzenden."
+        description="Eén lijst: concepten + te checken. Open een rij om tekst/afzender te wijzigen. Selecteer → Plan in → Activeer verzenden (typ “wachtrij”). Wijzigen zet auto-send weer uit."
         action={
           <div className="flex flex-wrap gap-2">
             {bouncePaused ? (

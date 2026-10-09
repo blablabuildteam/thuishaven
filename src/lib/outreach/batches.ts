@@ -779,6 +779,8 @@ export async function updateQueuedOrDraft(input: {
     .set({
       subject: input.subject.trim(),
       body: input.body.trim(),
+      // Edits disarm auto-send — operator must reconfirm.
+      armedAt: null,
     })
     .where(eq(outreachEmails.id, input.emailId));
   return { ok: true };

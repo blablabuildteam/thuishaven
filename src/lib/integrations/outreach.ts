@@ -2,7 +2,7 @@
  * Outreach integrations — KvK (later), AI generation, Brevo send, sales notify.
  */
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import {
   leads,
@@ -16,8 +16,11 @@ import { getAgencyCampaignId, getCompanyCampaignId } from "@/lib/outreach/data";
 import { renderOutreachHtmlEmail } from "@/lib/outreach/email-html";
 import {
   applySenderSignature,
+  DEFAULT_SENDER_PROFILE_ID,
   getSenderProfile,
   isSenderProfileId,
+  snapshotSenderProfile,
+  type OutreachSenderProfileId,
 } from "@/lib/outreach/sender-profiles";
 import {
   assertAllowedOutreachSender,
@@ -586,6 +589,7 @@ export async function generateAndStoreDraft(input: {
   prospectId: string;
   variantId?: OutreachVariantId;
   subjectArm?: OutreachSubjectArm;
+  senderProfileId?: OutreachSenderProfileId;
 }): Promise<
   | {
       emailId: string;
@@ -595,6 +599,7 @@ export async function generateAndStoreDraft(input: {
       subjectKey: OutreachSubjectArm;
       source: "ai" | "template" | "template_fallback";
       fallbackReason?: string;
+      senderProfileId: OutreachSenderProfileId;
     }
   | { error: string }
 > {
@@ -616,6 +621,14 @@ export async function generateAndStoreDraft(input: {
   if (prospect.type === "agency" && meta.source === "bureau_import") {
     return { error: "Partnerbureau — geen cold mail" };
   }
+
+  const profileId = input.senderProfileId ?? DEFAULT_SENDER_PROFILE_ID;
+  if (!isSenderProfileId(profileId)) {
+    return { error: "Ongeldig afzenderprofiel" };
+  }
+  const snap = snapshotSenderProfile(profileId);
+  const allowed = await assertAllowedOutreachSender(snap.senderEmail);
+  if ("error" in allowed) return allowed;
 
   const campaignId =
     prospect.type === "company"
@@ -668,6 +681,8 @@ export async function generateAndStoreDraft(input: {
       variantKey: generated.variantId,
       subjectKey: generated.subjectKey,
       generationSource: generated.source,
+      senderProfileId: snap.senderProfileId,
+      senderEmail: snap.senderEmail,
     })
     .returning();
 
@@ -679,6 +694,7 @@ export async function generateAndStoreDraft(input: {
     subjectKey: generated.subjectKey,
     source: generated.source,
     fallbackReason: generated.fallbackReason,
+    senderProfileId: snap.senderProfileId,
   };
 }
 
@@ -839,6 +855,11 @@ export async function sendStoredDraft(input: {
   if (row.prospectStatus === "excluded") {
     return { error: "Prospect uitgesloten" };
   }
+  if (!forceTest && row.status !== "queued") {
+    return {
+      error: `Live send alleen voor wachtrij-mails (status nu: ${row.status})`,
+    };
+  }
   const rawMeta = (row.metadata ?? {}) as Record<string, unknown>;
   if (rawMeta.nonMailing === true) {
     return { error: "KvK non-mailing — dit bedrijf niet mailen" };
@@ -920,6 +941,29 @@ export async function sendStoredDraft(input: {
     row.subjectKey ? `subject:${row.subjectKey}` : null,
   ].filter((t): t is string => Boolean(t));
 
+  // Claim the row before Brevo so two cron workers can't double-send.
+  if (!forceTest) {
+    const [claimed] = await db
+      .update(outreachEmails)
+      .set({
+        status: "sent",
+        sentAt: new Date(),
+        senderEmail: sender.email,
+        senderProfileId,
+        armedAt: null,
+      })
+      .where(
+        and(
+          eq(outreachEmails.id, row.id),
+          eq(outreachEmails.status, "queued"),
+        ),
+      )
+      .returning({ id: outreachEmails.id });
+    if (!claimed) {
+      return { error: "Mail is al verstuurd of niet meer in de wachtrij" };
+    }
+  }
+
   const sent = await sendViaBrevo({
     to: intended,
     subject: row.subject,
@@ -931,7 +975,21 @@ export async function sendStoredDraft(input: {
     sender,
     replyTo,
   });
-  if (sent.error) return { error: sent.error };
+  if (sent.error) {
+    if (!forceTest) {
+      // Roll back claim so the mail can be retried.
+      await db
+        .update(outreachEmails)
+        .set({
+          status: "queued",
+          sentAt: null,
+          senderEmail: sender.email,
+          senderProfileId,
+        })
+        .where(eq(outreachEmails.id, row.id));
+    }
+    return { error: sent.error };
+  }
 
   const storedMessageId = sent.messageId
     ? sent.messageId.replace(/^<|>$/g, "").trim()
@@ -943,9 +1001,7 @@ export async function sendStoredDraft(input: {
     await db
       .update(outreachEmails)
       .set({
-        status: "sent",
         brevoMessageId: storedMessageId,
-        sentAt: new Date(),
         senderEmail: sender.email,
         senderProfileId,
       })

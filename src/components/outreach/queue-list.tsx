@@ -187,7 +187,12 @@ export function QueueList({
       confirmText,
     });
     if (data) {
-      setMessage(`${data.armed} geactiveerd — cron stuurt op gepland moment`);
+      setMessage(
+        `${data.armed} geactiveerd — cron stuurt op gepland moment` +
+          (data.skipped
+            ? ` · ${data.skipped} overgeslagen (nog niet gepland)`
+            : ""),
+      );
       setConfirmArm(false);
       setConfirmText("");
     }
@@ -200,7 +205,14 @@ export function QueueList({
       action: "disarm-queue",
       emailIds: ids,
     });
-    if (data) setMessage(`Auto-send uit voor ${data.disarmed} mails`);
+    if (data) {
+      setMessage(
+        `Auto-send uit voor ${data.disarmed} mails` +
+          (data.batchesDisarmed
+            ? ` · ${data.batchesDisarmed} bakje-auto-send gestopt`
+            : ""),
+      );
+    }
   }
 
   async function regenerateItem(item: QueueItem) {
@@ -445,6 +457,12 @@ export function QueueList({
                     <p className="text-xs text-text-dim">
                       {item.toEmail ?? "geen e-mail"}
                       {!open ? ` · ${item.subject}` : ""}
+                      {item.generationSource === "template" ||
+                      item.generationSource === "template_fallback"
+                        ? " · template"
+                        : item.generationSource === "ai"
+                          ? " · AI"
+                          : ""}
                     </p>
 
                     {open ? (

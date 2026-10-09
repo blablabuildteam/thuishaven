@@ -227,6 +227,7 @@ export function OutreachEmailWorkbench({
         body: JSON.stringify({
           items,
           subjectArm: subjectArm === "auto" ? undefined : subjectArm,
+          senderProfileId,
         }),
       });
       const data = await res.json().catch(() => ({}));

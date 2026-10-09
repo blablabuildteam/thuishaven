@@ -7,8 +7,8 @@ export const maxDuration = 60;
 
 /**
  * GET /api/cron/outreach-send
- * Every ~10 minutes: send queued bakje mails whose scheduled_at is due
- * and whose bakje has auto_send armed.
+ * Every ~10 minutes: send queued mails whose scheduled_at is due and that
+ * are armed (per-mail armed_at OR bakje auto_send).
  */
 export async function GET(request: Request) {
   if (!isCronAuthorized(request)) {

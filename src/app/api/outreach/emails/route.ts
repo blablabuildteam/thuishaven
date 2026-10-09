@@ -50,6 +50,8 @@ const VARIANT_IDS = [
   "brochure",
 ] as const;
 
+const SENDER_PROFILE_IDS = ["evenementen", "reiner", "yoram"] as const;
+
 const generateSchema = z
   .object({
     prospectId: z.string().uuid().optional(),
@@ -67,6 +69,7 @@ const generateSchema = z
       .optional(),
     variantId: z.enum(VARIANT_IDS).optional(),
     subjectArm: z.enum(["a", "b"]).optional(),
+    senderProfileId: z.enum(SENDER_PROFILE_IDS).optional(),
   })
   .refine(
     (d) =>
@@ -258,12 +261,14 @@ export async function POST(request: Request) {
     }
     await logSessionActivity(session, {
       action: "email_arm_queue",
-      summary: `Wachtrij auto-send · ${result.armed} mails`,
+      summary: `Wachtrij auto-send · ${result.armed} mails${
+        result.skipped ? ` · ${result.skipped} overgeslagen` : ""
+      }`,
       path: "/api/outreach/emails",
       method: "POST",
       status: 200,
       tool: "outreach",
-      meta: { armed: result.armed },
+      meta: { armed: result.armed, skipped: result.skipped },
     });
     return NextResponse.json(result);
   }
@@ -283,6 +288,22 @@ export async function POST(request: Request) {
     if ("error" in result) {
       return NextResponse.json(result, { status: 400 });
     }
+    await logSessionActivity(session, {
+      action: "email_disarm_queue",
+      summary: `Wachtrij auto-send uit · ${result.disarmed} mails${
+        result.batchesDisarmed
+          ? ` · ${result.batchesDisarmed} bakje(s) gestopt`
+          : ""
+      }`,
+      path: "/api/outreach/emails",
+      method: "POST",
+      status: 200,
+      tool: "outreach",
+      meta: {
+        disarmed: result.disarmed,
+        batchesDisarmed: result.batchesDisarmed,
+      },
+    });
     return NextResponse.json(result);
   }
 
@@ -639,6 +660,7 @@ export async function POST(request: Request) {
       prospectId: job.prospectId,
       variantId: job.variantId,
       subjectArm: parsed.data.subjectArm,
+      senderProfileId: parsed.data.senderProfileId,
     });
     if ("error" in result) {
       return NextResponse.json(result, { status: 400 });
@@ -653,6 +675,7 @@ export async function POST(request: Request) {
       meta: {
         prospectId: job.prospectId,
         variantId: job.variantId,
+        senderProfileId: result.senderProfileId,
       },
     });
     return NextResponse.json(result, { status: 201 });
@@ -666,6 +689,7 @@ export async function POST(request: Request) {
     variantId?: string;
     source?: string;
     fallbackReason?: string;
+    senderProfileId?: string;
     error?: string;
   }> = [];
   for (const job of jobs) {
@@ -673,6 +697,7 @@ export async function POST(request: Request) {
       prospectId: job.prospectId,
       variantId: job.variantId,
       subjectArm: parsed.data.subjectArm,
+      senderProfileId: parsed.data.senderProfileId,
     });
     if ("error" in result) {
       results.push({
@@ -689,6 +714,7 @@ export async function POST(request: Request) {
         variantId: result.variantId,
         source: result.source,
         fallbackReason: result.fallbackReason,
+        senderProfileId: result.senderProfileId,
       });
     }
   }

@@ -285,7 +285,16 @@ export async function processDueOutreachSends(limit = MAX_SENDS_PER_CRON): Promi
       forceTest: false,
     });
     if ("error" in sent) {
-      results.push({ emailId: row.emailId, ok: false, error: sent.error });
+      // Another worker already claimed/sent — not a real failure.
+      if (
+        sent.error.includes("al verstuurd") ||
+        sent.error.includes("niet meer in de wachtrij")
+      ) {
+        results.push({ emailId: row.emailId, ok: true });
+        if (row.batchId) touchedBatches.add(row.batchId);
+      } else {
+        results.push({ emailId: row.emailId, ok: false, error: sent.error });
+      }
     } else {
       results.push({ emailId: row.emailId, ok: true });
       if (row.batchId) touchedBatches.add(row.batchId);

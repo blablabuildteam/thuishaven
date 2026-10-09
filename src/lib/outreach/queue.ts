@@ -245,13 +245,14 @@ export async function updateQueueItem(input: {
     if ("error" in allowed) return allowed;
     patch.senderProfileId = snap.senderProfileId;
     patch.senderEmail = snap.senderEmail;
-    // Changing sender clears arm — must reconfirm.
-    patch.armedAt = null;
   }
 
   if (Object.keys(patch).length === 0) {
     return { error: "Niets om op te slaan" };
   }
+
+  // Any edit clears arm — operator must reconfirm auto-send.
+  patch.armedAt = null;
 
   await db
     .update(outreachEmails)
@@ -383,7 +384,10 @@ export async function clearQueueSchedule(input: {
 export async function armQueueEmails(input: {
   emailIds: string[];
   confirmText: string;
-}): Promise<{ ok: true; armed: number } | { error: string }> {
+}): Promise<
+  | { ok: true; armed: number; skipped: number }
+  | { error: string }
+> {
   if (!hasDatabase()) return { error: "DATABASE_URL ontbreekt" };
   const envBlock = outreachLiveSendBlockReason();
   if (envBlock) return { error: envBlock };
@@ -403,37 +407,88 @@ export async function armQueueEmails(input: {
   }
 
   const db = getDb();
+  const candidates = await db
+    .select({
+      id: outreachEmails.id,
+      status: outreachEmails.status,
+      scheduledAt: outreachEmails.scheduledAt,
+    })
+    .from(outreachEmails)
+    .where(inArray(outreachEmails.id, ids));
+
+  const eligible = candidates.filter(
+    (r) => r.status === "queued" && r.scheduledAt != null,
+  );
+  const skipped = ids.length - eligible.length;
+  if (!eligible.length) {
+    return {
+      error:
+        "Eerst inplannen — selecteer mails die al een gepland tijdstip hebben (status te checken/gepland).",
+    };
+  }
+
   const updated = await db
     .update(outreachEmails)
     .set({ armedAt: new Date(), status: "queued" })
-    .where(
-      and(
-        inArray(outreachEmails.id, ids),
-        eq(outreachEmails.status, "queued"),
-        isNotNull(outreachEmails.scheduledAt),
-      ),
-    )
+    .where(inArray(outreachEmails.id, eligible.map((e) => e.id)))
     .returning({ id: outreachEmails.id });
 
-  if (!updated.length) {
-    return {
-      error: "Eerst inplannen — selecteer mails die al een gepland tijdstip hebben.",
-    };
-  }
-  return { ok: true, armed: updated.length };
+  return { ok: true, armed: updated.length, skipped };
 }
 
 export async function disarmQueueEmails(input: {
   emailIds: string[];
-}): Promise<{ ok: true; disarmed: number } | { error: string }> {
+}): Promise<
+  | { ok: true; disarmed: number; batchesDisarmed: number }
+  | { error: string }
+> {
   if (!hasDatabase()) return { error: "DATABASE_URL ontbreekt" };
   const ids = [...new Set(input.emailIds.filter(Boolean))];
   if (!ids.length) return { error: "Geen mails geselecteerd" };
   const db = getDb();
+
+  const rows = await db
+    .select({
+      id: outreachEmails.id,
+      batchId: outreachEmails.batchId,
+    })
+    .from(outreachEmails)
+    .where(
+      and(
+        inArray(outreachEmails.id, ids),
+        inArray(outreachEmails.status, ["draft", "queued"]),
+      ),
+    );
+
+  if (!rows.length) {
+    return { error: "Geen concept-/wachtrij-mails om te deactiveren" };
+  }
+
   const updated = await db
     .update(outreachEmails)
     .set({ armedAt: null })
-    .where(inArray(outreachEmails.id, ids))
+    .where(
+      inArray(
+        outreachEmails.id,
+        rows.map((r) => r.id),
+      ),
+    )
     .returning({ id: outreachEmails.id });
-  return { ok: true, disarmed: updated.length };
+
+  // Also stop bakje auto-send for any bakjes these mails sit in —
+  // otherwise list "Deactiveer" looks off while cron still sends.
+  const batchIds = [
+    ...new Set(rows.map((r) => r.batchId).filter((id): id is string => Boolean(id))),
+  ];
+  let batchesDisarmed = 0;
+  if (batchIds.length) {
+    const batches = await db
+      .update(outreachBatches)
+      .set({ autoSend: false, armedAt: null, updatedAt: new Date() })
+      .where(inArray(outreachBatches.id, batchIds))
+      .returning({ id: outreachBatches.id });
+    batchesDisarmed = batches.length;
+  }
+
+  return { ok: true, disarmed: updated.length, batchesDisarmed };
 }
