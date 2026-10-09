@@ -688,7 +688,6 @@ export async function POST(request: Request) {
     body?: string;
     variantId?: string;
     source?: string;
-    fallbackReason?: string;
     senderProfileId?: string;
     error?: string;
   }> = [];
@@ -713,33 +712,29 @@ export async function POST(request: Request) {
         body: result.body,
         variantId: result.variantId,
         source: result.source,
-        fallbackReason: result.fallbackReason,
         senderProfileId: result.senderProfileId,
       });
     }
   }
 
   const ok = results.filter((r) => r.emailId).length;
-  const templateFallback = results.filter(
-    (r) => r.source === "template_fallback",
-  ).length;
+  const failed = results.length - ok;
   await logSessionActivity(session, {
     action: "email_draft_bulk",
     summary: `Bulk drafts · ${ok}/${jobs.length}${
-      templateFallback ? ` · ${templateFallback} template-fallback` : ""
+      failed ? ` · ${failed} mislukt` : ""
     }`,
     path: "/api/outreach/emails",
     method: "POST",
     status: 201,
     tool: "outreach",
-    meta: { count: jobs.length, ok, templateFallback },
+    meta: { count: jobs.length, ok, failed },
   });
 
   return NextResponse.json(
     {
       ok,
-      failed: results.length - ok,
-      templateFallback,
+      failed,
       results,
     },
     { status: 201 },

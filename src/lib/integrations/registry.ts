@@ -80,18 +80,24 @@ export const INTEGRATIONS: IntegrationDef[] = [
   },
   {
     id: "ai",
-    name: "AI (Gemini)",
+    name: "AI (Claude / Gemini)",
     tool: "shared",
     description:
-      "Dashboard AI-chat en outreach-personalisatie via Google Gemini (alternatief: OpenAI of Anthropic).",
-    envKeys: ["GEMINI_API_KEY"],
-    optionalEnvKeys: ["GEMINI_MODEL", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"],
-    askFromClient: [
-      "Gemini API-key via Google AI Studio",
-      "Optioneel: voorkeursmodel (standaard gemini-3.8-flash)",
+      "Outreach-mails via Claude (Anthropic, aanbevolen). Gemini/OpenAI als backup. Dashboard-chat gebruikt Gemini.",
+    envKeys: ["ANTHROPIC_API_KEY"],
+    optionalEnvKeys: [
+      "ANTHROPIC_MODEL",
+      "GEMINI_API_KEY",
+      "GEMINI_MODEL",
+      "OPENAI_API_KEY",
     ],
-    verifyHint: "GET generativelanguage.googleapis.com/models",
-    docsUrl: "https://aistudio.google.com/apikey",
+    askFromClient: [
+      "Anthropic API-key (console.anthropic.com) voor persoonlijke outreach-mails",
+      "Optioneel: ANTHROPIC_MODEL (standaard claude-sonnet-4-5)",
+      "Optioneel: GEMINI_API_KEY als backup / voor dashboard-chat",
+    ],
+    verifyHint: "GET api.anthropic.com/v1/models",
+    docsUrl: "https://console.anthropic.com/settings/keys",
     priority: "critical",
   },
   {

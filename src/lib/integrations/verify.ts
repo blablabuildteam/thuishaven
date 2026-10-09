@@ -73,12 +73,53 @@ async function verifyBrevo(): Promise<VerifyResult> {
 }
 
 async function verifyOpenAI(): Promise<VerifyResult> {
-  const name = "AI (Gemini)";
+  const name = "AI (Claude / Gemini)";
   const openai = process.env.OPENAI_API_KEY?.trim();
   const gemini = process.env.GEMINI_API_KEY?.trim();
   const anthropic = process.env.ANTHROPIC_API_KEY?.trim();
   if (!openai && !gemini && !anthropic) {
-    return base("ai", name, "missing", "Geen AI-key gezet (GEMINI_API_KEY)");
+    return base(
+      "ai",
+      name,
+      "missing",
+      "Geen AI-key (ANTHROPIC_API_KEY aanbevolen voor outreach)",
+    );
+  }
+
+  if (anthropic) {
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/models", {
+        headers: {
+          "x-api-key": anthropic,
+          "anthropic-version": "2023-06-01",
+        },
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        return base("ai", name, "error", `Anthropic HTTP ${res.status}`);
+      }
+      const model =
+        process.env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-4-5";
+      const extras = [
+        gemini ? "Gemini backup" : null,
+        openai ? "OpenAI backup" : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      return base(
+        "ai",
+        name,
+        "verified",
+        extras ? `Claude · ${model} · ${extras}` : `Claude · ${model}`,
+      );
+    } catch (e) {
+      return base(
+        "ai",
+        name,
+        "error",
+        e instanceof Error ? e.message : "Network error",
+      );
+    }
   }
 
   if (gemini) {
@@ -91,7 +132,12 @@ async function verifyOpenAI(): Promise<VerifyResult> {
         return base("ai", name, "error", `Gemini HTTP ${res.status}`);
       }
       const model = process.env.GEMINI_MODEL?.trim() || "gemini-3.8-flash";
-      return base("ai", name, "verified", `Gemini · ${model}`);
+      return base(
+        "ai",
+        name,
+        "verified",
+        `Gemini · ${model} (zet ANTHROPIC_API_KEY voor Claude)`,
+      );
     } catch (e) {
       return base(
         "ai",
@@ -102,33 +148,24 @@ async function verifyOpenAI(): Promise<VerifyResult> {
     }
   }
 
-  if (openai) {
-    try {
-      const res = await fetch("https://api.openai.com/v1/models", {
-        headers: { Authorization: `Bearer ${openai}` },
-        cache: "no-store",
-      });
-      if (!res.ok) {
-        return base("ai", name, "error", `OpenAI HTTP ${res.status}`);
-      }
-      const model = process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
-      return base("ai", name, "verified", `OpenAI · ${model}`);
-    } catch (e) {
-      return base(
-        "ai",
-        name,
-        "error",
-        e instanceof Error ? e.message : "Network error",
-      );
+  try {
+    const res = await fetch("https://api.openai.com/v1/models", {
+      headers: { Authorization: `Bearer ${openai}` },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      return base("ai", name, "error", `OpenAI HTTP ${res.status}`);
     }
+    const model = process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
+    return base("ai", name, "verified", `OpenAI · ${model}`);
+  } catch (e) {
+    return base(
+      "ai",
+      name,
+      "error",
+      e instanceof Error ? e.message : "Network error",
+    );
   }
-
-  return base(
-    "ai",
-    name,
-    "configured",
-    "Anthropic key aanwezig — live verify volgt bij eerste generate",
-  );
 }
 
 async function verifyDatabase(): Promise<VerifyResult> {

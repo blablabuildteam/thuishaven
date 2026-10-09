@@ -266,10 +266,6 @@ export function OutreachEmailWorkbench({
         (data.results ?? []) as Array<{ source?: string }>
       ).map((r) => r.source);
       if (data.source && !sources.length) sources.push(data.source);
-      const templateFallback =
-        Number(data.templateFallback ?? 0) ||
-        sources.filter((s) => s === "template_fallback").length;
-      const templateOnly = sources.filter((s) => s === "template").length;
       const aiOk = sources.filter((s) => s === "ai").length;
       setLastEmailIds(made.map((d) => d.emailId));
       setDrafts(made);
@@ -281,15 +277,9 @@ export function OutreachEmailWorkbench({
         );
       } else {
         setMessage(
-          `${made.length} draft${made.length === 1 ? "" : "s"} klaar` +
-            (aiOk ? ` · ${aiOk} AI` : "") +
+          `${made.length} persoonlijke AI-mail${made.length === 1 ? "" : "s"} klaar` +
+            (aiOk && aiOk !== made.length ? ` · ${aiOk} AI` : "") +
             (failed ? ` · ${failed} mislukt` : "") +
-            (templateFallback
-              ? ` · ${templateFallback} via standaardtemplate (AI faalde — check tekst)`
-              : "") +
-            (templateOnly && !aiOk
-              ? ` · ${templateOnly} template (geen AI-key)`
-              : "") +
             (failReasons.length ? ` (${failReasons.join(" · ")})` : "") +
             " — ze staan al in de Wachtrij. Lees ze hieronder of daar, en stuur een test.",
         );
@@ -440,9 +430,9 @@ export function OutreachEmailWorkbench({
           className="border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-text"
           role="status"
         >
-          Geen AI-key op deze omgeving — je krijgt standaardtemplates i.p.v.
-          persoonlijke mails. Zet OPENAI_API_KEY of GEMINI_API_KEY op Vercel /
-          in .env.local.
+          Geen AI-key op deze omgeving — er worden geen mails gemaakt. Zet
+          ANTHROPIC_API_KEY (aanbevolen) of GEMINI_API_KEY op Vercel / in
+          .env.local.
         </p>
       ) : null}
 

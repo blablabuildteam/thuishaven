@@ -455,8 +455,9 @@ export function QueueList({
           className="border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-text"
           role="status"
         >
-          Geen AI-key gezet (OPENAI/GEMINI) — mails komen uit vaste templates.
-          Zet een key voor persoonlijke AI-mails (invalshoek blijft
+          Geen AI-key gezet — opnieuw schrijven werkt niet. Zet
+          ANTHROPIC_API_KEY (aanbevolen) of GEMINI_API_KEY voor persoonlijke
+          AI-mails (invalshoek blijft
           behouden). Of herschrijf handmatig / “Opnieuw laten schrijven” later.
         </p>
       ) : null}

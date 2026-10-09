@@ -107,91 +107,132 @@ function parseJsonMail(raw: string): { subject: string; body: string } | null {
   return null;
 }
 
-async function callLlmJson(prompt: string): Promise<
-  { ok: true; text: string; vendor: "openai" | "gemini" } | { ok: false; error: string }
-> {
-  const openaiKey = process.env.OPENAI_API_KEY?.trim();
-  const geminiKey = process.env.GEMINI_API_KEY?.trim();
-  if (!openaiKey && !geminiKey) {
+type LlmVendor = "anthropic" | "gemini" | "openai";
+
+async function callAnthropicJson(
+  prompt: string,
+  apiKey: string,
+): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+  const model =
+    process.env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-4-5";
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 1200,
+      temperature: 0.9,
+      system: `${buildOutreachSystemPrompt()}
+
+Antwoord ALLEEN met geldige JSON: {"subject":"...","body":"..."}. Geen markdown, geen uitleg.`,
+      messages: [{ role: "user", content: prompt }],
+    }),
+    cache: "no-store",
+  });
+  const text = await res.text();
+  if (!res.ok) {
     return {
       ok: false,
-      error:
-        "OPENAI_API_KEY of GEMINI_API_KEY ontbreekt. Zet een AI-key in .env.local / Vercel.",
+      error: `Anthropic HTTP ${res.status}: ${text.slice(0, 200)}`,
     };
   }
+  let data: {
+    content?: Array<{ type?: string; text?: string }>;
+  };
+  try {
+    data = JSON.parse(text) as typeof data;
+  } catch {
+    return { ok: false, error: "Anthropic gaf geen JSON-antwoord" };
+  }
+  const out = data.content
+    ?.filter((p) => p.type === "text" || Boolean(p.text))
+    .map((p) => p.text ?? "")
+    .join("")
+    .trim();
+  if (!out) return { ok: false, error: "Leeg antwoord van Claude" };
+  return { ok: true, text: out };
+}
 
-  if (geminiKey) {
-    const preferred = process.env.GEMINI_MODEL?.trim();
-    const models = [
-      ...new Set(
-        [
-          preferred,
-          "gemini-3.8-flash",
-          "gemini-3.7-flash",
-          "gemini-3.6-flash",
-          "gemini-3.5-flash",
-          "gemini-flash-latest",
-        ].filter(
-          (m): m is string => Boolean(m),
-        ),
-      ),
-    ];
-    let lastError = "Geen bruikbaar Gemini-model";
-    for (const model of models) {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(geminiKey)}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            systemInstruction: {
-              parts: [{ text: buildOutreachSystemPrompt() }],
-            },
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.9,
-              responseMimeType: "application/json",
-            },
-          }),
-          cache: "no-store",
-        },
-      );
-      const text = await res.text();
-      if (!res.ok) {
-        lastError = `Gemini HTTP ${res.status}: ${text.slice(0, 200)}`;
-        // Missing model or overloaded/rate-limited: try the next model.
-        if (
-          res.status === 404 ||
-          res.status === 429 ||
-          res.status >= 500 ||
-          /no longer available|not found|unknown model|high demand/i.test(text)
-        ) {
-          continue;
-        }
-        return { ok: false, error: lastError };
-      }
-      const data = JSON.parse(text) as {
-        candidates?: Array<{
-          content?: { parts?: Array<{ text?: string }> };
-        }>;
-      };
-      const out = data.candidates?.[0]?.content?.parts
-        ?.map((p) => p.text ?? "")
-        .join("")
-        .trim();
-      if (!out) {
-        lastError = "Leeg antwoord van Gemini";
+async function callGeminiJson(
+  prompt: string,
+  apiKey: string,
+): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+  const preferred = process.env.GEMINI_MODEL?.trim();
+  const models = [
+    ...new Set(
+      [
+        preferred,
+        "gemini-3.8-flash",
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-flash-latest",
+      ].filter((m): m is string => Boolean(m)),
+    ),
+  ];
+  let lastError = "Geen bruikbaar Gemini-model";
+  for (const model of models) {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [{ text: buildOutreachSystemPrompt() }],
+          },
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.9,
+            responseMimeType: "application/json",
+          },
+        }),
+        cache: "no-store",
+      },
+    );
+    const text = await res.text();
+    if (!res.ok) {
+      lastError = `Gemini HTTP ${res.status}: ${text.slice(0, 200)}`;
+      if (
+        res.status === 404 ||
+        res.status === 429 ||
+        res.status >= 500 ||
+        /no longer available|not found|unknown model|high demand/i.test(text)
+      ) {
         continue;
       }
-      return { ok: true, text: out, vendor: "gemini" };
+      return { ok: false, error: lastError };
     }
-    return { ok: false, error: lastError };
+    const data = JSON.parse(text) as {
+      candidates?: Array<{
+        content?: { parts?: Array<{ text?: string }> };
+      }>;
+    };
+    const out = data.candidates?.[0]?.content?.parts
+      ?.map((p) => p.text ?? "")
+      .join("")
+      .trim();
+    if (!out) {
+      lastError = "Leeg antwoord van Gemini";
+      continue;
+    }
+    return { ok: true, text: out };
   }
+  return { ok: false, error: lastError };
+}
 
+async function callOpenAiJson(
+  prompt: string,
+  apiKey: string,
+): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${openaiKey}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -207,14 +248,58 @@ async function callLlmJson(prompt: string): Promise<
   });
   if (!res.ok) {
     const text = await res.text();
-    return { ok: false, error: `OpenAI HTTP ${res.status}: ${text.slice(0, 200)}` };
+    return {
+      ok: false,
+      error: `OpenAI HTTP ${res.status}: ${text.slice(0, 200)}`,
+    };
   }
   const data = (await res.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
   };
   const out = data.choices?.[0]?.message?.content?.trim();
   if (!out) return { ok: false, error: "Leeg antwoord van OpenAI" };
-  return { ok: true, text: out, vendor: "openai" };
+  return { ok: true, text: out };
+}
+
+/** Claude eerst (als key er is), daarna Gemini, daarna OpenAI. */
+async function callLlmJson(prompt: string): Promise<
+  { ok: true; text: string; vendor: LlmVendor } | { ok: false; error: string }
+> {
+  const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
+  const geminiKey = process.env.GEMINI_API_KEY?.trim();
+  const openaiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!anthropicKey && !geminiKey && !openaiKey) {
+    return {
+      ok: false,
+      error:
+        "Geen AI-key. Zet ANTHROPIC_API_KEY (aanbevolen), GEMINI_API_KEY of OPENAI_API_KEY in .env.local / Vercel.",
+    };
+  }
+
+  const errors: string[] = [];
+
+  if (anthropicKey) {
+    const result = await callAnthropicJson(prompt, anthropicKey);
+    if (result.ok) return { ok: true, text: result.text, vendor: "anthropic" };
+    errors.push(result.error);
+  }
+
+  if (geminiKey) {
+    const result = await callGeminiJson(prompt, geminiKey);
+    if (result.ok) return { ok: true, text: result.text, vendor: "gemini" };
+    errors.push(result.error);
+  }
+
+  if (openaiKey) {
+    const result = await callOpenAiJson(prompt, openaiKey);
+    if (result.ok) return { ok: true, text: result.text, vendor: "openai" };
+    errors.push(result.error);
+  }
+
+  return {
+    ok: false,
+    error: errors[0] ?? "AI gaf geen bruikbaar antwoord",
+  };
 }
 
 export async function generateOutreachEmail(input: {
@@ -243,9 +328,7 @@ export async function generateOutreachEmail(input: {
       body: string;
       variantId: OutreachVariantId;
       subjectKey: OutreachSubjectArm;
-      /** ai = LLM rewrite; template = no AI key; template_fallback = AI failed. */
-      source: "ai" | "template" | "template_fallback";
-      fallbackReason?: string;
+      source: "ai";
     }
   | { error: string }
 > {
@@ -280,19 +363,10 @@ export async function generateOutreachEmail(input: {
   const angleDetail =
     input.angleDetail?.trim() || variant.description || resolved.guidance;
 
-  const hasAi =
-    Boolean(process.env.OPENAI_API_KEY?.trim()) ||
-    Boolean(process.env.GEMINI_API_KEY?.trim());
-
-  if (!hasAi) {
+  if (!hasOutreachAiConfigured()) {
     return {
-      subject,
-      body: sign(resolved.body),
-      variantId,
-      subjectKey,
-      source: "template",
-      fallbackReason:
-        "Geen AI-key — standaardtemplate (geen persoonlijke AI-mail)",
+      error:
+        "Geen AI-key — zet ANTHROPIC_API_KEY (aanbevolen) of GEMINI_API_KEY op Vercel / in .env.local. Geen template-mails meer.",
     };
   }
 
@@ -345,7 +419,7 @@ Eisen:
 
 JSON verplicht: {"subject":"${subject.replace(/"/g, '\\"')}","body":"..."}`;
 
-  // Retry with backoff — we want AI-personal mails, not silent template copies.
+  // Retry with backoff — never fall back to a silent template copy.
   let llm = await callLlmJson(prompt);
   for (const waitMs of [1500, 4000]) {
     if (llm.ok) break;
@@ -353,14 +427,10 @@ JSON verplicht: {"subject":"${subject.replace(/"/g, '\\"')}","body":"..."}`;
     llm = await callLlmJson(prompt);
   }
   if (!llm.ok) {
-    return {
-      subject,
-      body: sign(resolved.body),
-      variantId,
-      subjectKey,
-      source: "template_fallback",
-      fallbackReason: llm.error || "AI gaf geen bruikbaar antwoord",
-    };
+    const reason = /\b429\b|quota|rate.?limit/i.test(llm.error)
+      ? "AI-tegoed of rate-limit is even op — probeer later opnieuw"
+      : llm.error || "AI gaf geen bruikbaar antwoord";
+    return { error: reason };
   }
 
   let parsed = parseJsonMail(llm.text);
@@ -370,19 +440,20 @@ JSON verplicht: {"subject":"${subject.replace(/"/g, '\\"')}","body":"..."}`;
   }
   if (!parsed || !llm.ok) {
     return {
-      subject,
-      body: sign(resolved.body),
-      variantId,
-      subjectKey,
-      source: "template_fallback",
-      fallbackReason: "AI-antwoord was geen geldige JSON-mail",
+      error: "AI-antwoord was geen geldige JSON-mail — opnieuw proberen",
     };
   }
 
   try {
+    const vendor =
+      llm.vendor === "anthropic"
+        ? "anthropic"
+        : llm.vendor === "openai"
+          ? "openai"
+          : "other";
     await recordUsage({
       tool: "outreach",
-      vendor: llm.vendor === "gemini" ? "other" : "openai",
+      vendor,
       operation: "generate_outreach_email",
       units: 1,
       unitLabel: "mail",
@@ -391,6 +462,7 @@ JSON verplicht: {"subject":"${subject.replace(/"/g, '\\"')}","body":"..."}`;
         subjectKey,
         company: input.companyName,
         angleLabel,
+        llm: llm.vendor,
       },
     });
   } catch {
@@ -625,8 +697,9 @@ export async function notifySalesTeam(input: {
 
 export function hasOutreachAiConfigured(): boolean {
   return (
-    Boolean(process.env.OPENAI_API_KEY?.trim()) ||
-    Boolean(process.env.GEMINI_API_KEY?.trim())
+    Boolean(process.env.ANTHROPIC_API_KEY?.trim()) ||
+    Boolean(process.env.GEMINI_API_KEY?.trim()) ||
+    Boolean(process.env.OPENAI_API_KEY?.trim())
   );
 }
 
@@ -642,8 +715,7 @@ export async function generateAndStoreDraft(input: {
       body: string;
       variantId: OutreachVariantId;
       subjectKey: OutreachSubjectArm;
-      source: "ai" | "template" | "template_fallback";
-      fallbackReason?: string;
+      source: "ai";
       senderProfileId: OutreachSenderProfileId;
     }
   | { error: string }
@@ -754,13 +826,12 @@ export async function generateAndStoreDraft(input: {
     body: generated.body,
     variantId: generated.variantId,
     subjectKey: generated.subjectKey,
-    source: generated.source,
-    fallbackReason: generated.fallbackReason,
+    source: "ai",
     senderProfileId: snap.senderProfileId,
   };
 }
 
-/** Re-run AI (or template) for an existing draft/queued mail. */
+/** Re-run AI for an existing draft/queued mail. Never overwrites with a template. */
 export async function regenerateStoredDraft(input: {
   emailId: string;
   variantId?: OutreachVariantId;
@@ -772,8 +843,7 @@ export async function regenerateStoredDraft(input: {
       body: string;
       variantId: OutreachVariantId;
       subjectKey: OutreachSubjectArm;
-      source: "ai" | "template" | "template_fallback";
-      fallbackReason?: string;
+      source: "ai";
     }
   | { error: string }
 > {
@@ -849,13 +919,9 @@ export async function regenerateStoredDraft(input: {
       ? row.senderProfileId
       : undefined,
   });
-  if ("error" in generated) return generated;
-  if (generated.source !== "ai") {
-    const reason = /\b429\b|quota/i.test(generated.fallbackReason ?? "")
-      ? "AI-tegoed is even op"
-      : "AI gaf geen bruikbare mail";
+  if ("error" in generated) {
     return {
-      error: `${reason} — de huidige mail is ongewijzigd gelaten. Probeer het later opnieuw.`,
+      error: `${generated.error} — de huidige mail is ongewijzigd gelaten.`,
     };
   }
 
@@ -866,7 +932,7 @@ export async function regenerateStoredDraft(input: {
       body: generated.body,
       variantKey: generated.variantId,
       subjectKey: generated.subjectKey,
-      generationSource: generated.source,
+      generationSource: "ai",
       armedAt: null,
     })
     .where(eq(outreachEmails.id, row.id));
@@ -877,8 +943,7 @@ export async function regenerateStoredDraft(input: {
     body: generated.body,
     variantId: generated.variantId,
     subjectKey: generated.subjectKey,
-    source: generated.source,
-    fallbackReason: generated.fallbackReason,
+    source: "ai",
   };
 }
 
