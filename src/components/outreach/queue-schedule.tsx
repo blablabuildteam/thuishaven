@@ -1,17 +1,33 @@
-import type { QueueScheduleDay } from "@/lib/outreach/batches";
+import type { QueueItem } from "@/lib/outreach/queue";
 
 type Props = {
   cadenceLabel: string;
   cadenceRationale: string;
-  schedule: QueueScheduleDay[];
+  items: QueueItem[];
 };
 
-export function QueueSchedule({
-  cadenceLabel,
-  cadenceRationale,
-  schedule,
-}: Props) {
-  const plannedCount = schedule.reduce((n, d) => n + d.items.length, 0);
+type Day = { label: string; items: QueueItem[] };
+
+function groupByDay(items: QueueItem[]): Day[] {
+  const days: Day[] = [];
+  const planned = items
+    .filter((i) => i.scheduledAt && i.scheduledLabel)
+    .sort((a, b) => a.scheduledAt!.localeCompare(b.scheduledAt!));
+  for (const item of planned) {
+    const label = item.scheduledLabel!.split(" · ")[0] ?? "";
+    let day = days.find((d) => d.label === label);
+    if (!day) {
+      day = { label, items: [] };
+      days.push(day);
+    }
+    day.items.push(item);
+  }
+  return days;
+}
+
+export function QueueSchedule({ cadenceLabel, cadenceRationale, items }: Props) {
+  const days = groupByDay(items);
+  const plannedCount = days.reduce((n, d) => n + d.items.length, 0);
 
   return (
     <section className="mb-8 border border-border bg-surface p-4">
@@ -19,11 +35,11 @@ export function QueueSchedule({
         <div>
           <h2 className="font-display text-xl tracking-[0.04em]">Planning</h2>
           <p className="mt-1 text-sm text-text-muted">
-            Geplande verzendmomenten. Na “Plan in” + “Auto-send aan” stuurt de
-            cron ze automatisch op die tijden (live-flags + daglimiet gelden).
+            Wanneer ingeplande mails de deur uit gaan. Alleen mails met
+            “Activeer verzenden” worden echt verstuurd.
           </p>
         </div>
-        <p className="text-sm text-text-dim">{plannedCount} gepland</p>
+        <p className="text-sm text-text-dim">{plannedCount} ingepland</p>
       </div>
 
       <div className="mt-4 border border-border/80 bg-bg px-3 py-3">
@@ -34,22 +50,19 @@ export function QueueSchedule({
         {cadenceRationale ? (
           <p className="mt-1 text-xs text-text-dim">{cadenceRationale}</p>
         ) : null}
-        <p className="mt-1 text-xs text-text-dim">
-          Afzender staat per bakje (Evenementen / Reiner / Yoram).
-        </p>
       </div>
 
-      {schedule.length === 0 ? (
+      {days.length === 0 ? (
         <p className="mt-4 text-sm text-text-muted">
-          Nog niets te plannen. Zet drafts in een bakje — dan verschijnen hier
-          dagen en tijden.
+          Nog niets ingepland. Vink hierboven mails aan en kies “Plan in” — dan
+          zie je hier per dag wanneer ze verstuurd worden.
         </p>
       ) : (
         <div className="mt-4 space-y-5">
-          {schedule.map((day) => (
-            <div key={day.day}>
+          {days.map((day) => (
+            <div key={day.label}>
               <h3 className="font-display text-base tracking-[0.06em]">
-                {day.weekdayLabel} {day.dayLabel}
+                {day.label}
                 <span className="ml-2 text-xs font-sans tracking-normal text-text-dim">
                   {day.items.length} mail{day.items.length === 1 ? "" : "s"}
                 </span>
@@ -61,7 +74,7 @@ export function QueueSchedule({
                     className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2 text-sm"
                   >
                     <span className="w-12 shrink-0 font-medium tabular-nums text-text">
-                      {item.time}
+                      {item.scheduledLabel!.split(" · ")[1]}
                     </span>
                     <span className="min-w-0 flex-1 text-text">
                       {item.companyName}
@@ -69,16 +82,12 @@ export function QueueSchedule({
                         <span className="text-text-dim"> · {item.toEmail}</span>
                       ) : null}
                       {item.variantLabel ? (
-                        <span className="text-text-dim">
-                          {" "}
-                          · {item.variantLabel}
-                          {item.templateAdapted ? " (aangepast)" : ""}
-                        </span>
+                        <span className="text-text-dim"> · {item.variantLabel}</span>
                       ) : null}
                     </span>
                     <span className="text-xs text-text-dim">
-                      {item.batchName}
-                      {item.senderLabel ? ` · ${item.senderLabel}` : ""}
+                      {item.senderProfileLabel}
+                      {item.statusLabel === "actief" ? " · actief" : " · nog niet geactiveerd"}
                     </span>
                   </li>
                 ))}

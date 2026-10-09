@@ -220,6 +220,8 @@ export function suggestSendSlots(input: {
   fromDay?: string | null;
   /** Extra seed so different bakjes get different minute patterns. */
   seed?: string | null;
+  /** Mails al ingepland per dag (YYYY-MM-DD) — tellen mee voor de daglimiet. */
+  occupiedPerDay?: Record<string, number>;
 }): SendSlotSuggestion[] {
   const mailCount = Math.max(0, input.mailCount);
   if (mailCount === 0) return [];
@@ -242,8 +244,9 @@ export function suggestSendSlots(input: {
     const date = new Date(`${cursor}T12:00:00+02:00`);
     const dow = date.getDay();
     const isoDow = dow === 0 ? 7 : dow;
-    if (weekdays.includes(isoDow)) {
-      const count = Math.min(perDay, remaining);
+    const free = perDay - (input.occupiedPerDay?.[cursor] ?? 0);
+    if (weekdays.includes(isoDow) && free > 0) {
+      const count = Math.min(free, remaining);
       const times = staggeredSendTimes({
         preferredHour: hour,
         count,

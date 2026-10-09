@@ -23,7 +23,6 @@ export default async function OutreachPlanningPage() {
       liveSendQuota,
       cadenceLabel,
       cadenceRationale,
-      schedule,
     },
     pipeline,
     queueItems,
@@ -46,7 +45,7 @@ export default async function OutreachPlanningPage() {
       <SectionHeader
         eyebrow="Stap 4 · review"
         title="Wachtrij"
-        description="Eén lijst: concepten + te checken. Open een rij om te lezen, te wijzigen of een test te sturen. Selecteer → Plan in → Activeer verzenden (typ “wachtrij”). Wijzigen zet auto-send weer uit."
+        description="Alle mails die klaarstaan. Open een bedrijf om te lezen, aan te passen of een test naar jezelf te sturen. Daarna: aanvinken → Plan in → Activeer verzenden. Pas je daarna iets aan, dan moet je opnieuw activeren."
         action={
           <div className="flex flex-wrap gap-2">
             {bouncePaused ? (
@@ -82,15 +81,12 @@ export default async function OutreachPlanningPage() {
 
       <PipelineStatusBanner status={pipeline} />
 
-      {!liveUnlocked && liveSendBlockReason ? (
-        <p className="mb-4 text-xs text-text-dim">{liveSendBlockReason}</p>
+      {!liveUnlocked ? (
+        <p className="mb-4 text-xs text-text-dim">
+          Echt versturen naar bedrijven staat nog uit — je kunt alles
+          voorbereiden, inplannen en testen.
+        </p>
       ) : null}
-
-      <QueueSchedule
-        cadenceLabel={cadenceLabel}
-        cadenceRationale={cadenceRationale}
-        schedule={schedule}
-      />
 
       <section className="mb-12">
         <h2 className="mb-4 font-display text-lg tracking-[0.06em]">
@@ -105,6 +101,12 @@ export default async function OutreachPlanningPage() {
           testSendBlockReason={testSendBlockReason}
         />
       </section>
+
+      <QueueSchedule
+        cadenceLabel={cadenceLabel}
+        cadenceRationale={cadenceRationale}
+        items={queueItems}
+      />
     </div>
   );
 }

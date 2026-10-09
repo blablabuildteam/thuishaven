@@ -235,6 +235,8 @@ export async function generateOutreachEmail(input: {
   variantId?: OutreachVariantId;
   subjectArm?: OutreachSubjectArm;
   availabilityUrl?: string;
+  /** Handtekening + ondertekening volgen deze afzender. */
+  senderProfileId?: OutreachSenderProfileId;
 }): Promise<
   | {
       subject: string;
@@ -272,6 +274,8 @@ export async function generateOutreachEmail(input: {
     contactFirstName: input.contactName?.trim().split(/\s+/)[0],
   });
   const subject = resolved.subject;
+  const senderProfile = getSenderProfile(input.senderProfileId);
+  const sign = (body: string) => applySenderSignature(body, senderProfile);
   const angleLabel = input.angleLabel?.trim() || variant.name;
   const angleDetail =
     input.angleDetail?.trim() || variant.description || resolved.guidance;
@@ -283,7 +287,7 @@ export async function generateOutreachEmail(input: {
   if (!hasAi) {
     return {
       subject,
-      body: appendOutreachSignature(resolved.body),
+      body: sign(resolved.body),
       variantId,
       subjectKey,
       source: "template",
@@ -334,8 +338,10 @@ Eisen:
 2. De gekozen invalshoek (${angleLabel}) merkt de lezer — natuurlijk, niet geforceerd
 3. Bij jubileum: noem concrete jaren/mark als bekend; anders geen verzonnen jubileum
 4. Max één zachte vraag / CTA
-5. ~80–140 woorden, plain text, Nederlands
-6. Variatie-seed (negeer inhoudelijk, gebruik om anders te schrijven): ${seedHint}
+5. ~80–140 woorden, plain text, natuurlijk en foutloos Nederlands
+6. Noem NOOIT wat je niet weet of niet kon vinden (geen "ik kon online niet vinden…", geen "onbekend"). Ontbrekende feiten laat je gewoon weg.
+7. Geen handtekening, naam of contactgegevens onderaan — die plakken we er zelf onder (afzender: ${senderProfile.name}). Eindig met een korte afsluiter zoals "Groet," of "Spreek je snel,".
+8. Variatie-seed (negeer inhoudelijk, gebruik om anders te schrijven): ${seedHint}
 
 JSON verplicht: {"subject":"${subject.replace(/"/g, '\\"')}","body":"..."}`;
 
@@ -349,7 +355,7 @@ JSON verplicht: {"subject":"${subject.replace(/"/g, '\\"')}","body":"..."}`;
   if (!llm.ok) {
     return {
       subject,
-      body: appendOutreachSignature(resolved.body),
+      body: sign(resolved.body),
       variantId,
       subjectKey,
       source: "template_fallback",
@@ -365,7 +371,7 @@ JSON verplicht: {"subject":"${subject.replace(/"/g, '\\"')}","body":"..."}`;
   if (!parsed || !llm.ok) {
     return {
       subject,
-      body: appendOutreachSignature(resolved.body),
+      body: sign(resolved.body),
       variantId,
       subjectKey,
       source: "template_fallback",
@@ -393,7 +399,7 @@ JSON verplicht: {"subject":"${subject.replace(/"/g, '\\"')}","body":"..."}`;
 
   return {
     subject,
-    body: appendOutreachSignature(parsed.body),
+    body: sign(parsed.body),
     variantId,
     subjectKey,
     source: "ai",
@@ -707,6 +713,7 @@ export async function generateAndStoreDraft(input: {
     angleDetail: angle.detail,
     variantId: input.variantId ?? angleVariant,
     subjectArm: input.subjectArm,
+    senderProfileId: snap.senderProfileId,
   });
   if ("error" in generated) return generated;
 
@@ -764,6 +771,7 @@ export async function regenerateStoredDraft(input: {
       prospectId: outreachEmails.prospectId,
       variantKey: outreachEmails.variantKey,
       subjectKey: outreachEmails.subjectKey,
+      senderProfileId: outreachEmails.senderProfileId,
     })
     .from(outreachEmails)
     .where(eq(outreachEmails.id, input.emailId))
@@ -822,6 +830,9 @@ export async function regenerateStoredDraft(input: {
     angleDetail: angle.detail,
     variantId,
     subjectArm,
+    senderProfileId: isSenderProfileId(row.senderProfileId)
+      ? row.senderProfileId
+      : undefined,
   });
   if ("error" in generated) return generated;
 

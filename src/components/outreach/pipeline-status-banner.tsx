@@ -25,8 +25,8 @@ export function PipelineStatusBanner({ status }: Props) {
       href: "/outreach/planning",
       hint:
         status.drafts > 0
-          ? `${status.inQueue} in wachtrij · ${status.drafts} concept`
-          : "In wachtrij of als concept — reviewen",
+          ? "Staan in de Wachtrij — lezen en testen"
+          : "Staan in de Wachtrij — lezen en testen",
       tone: status.needsReview > 0 ? "accent" : "neutral",
     },
     {
@@ -34,7 +34,7 @@ export function PipelineStatusBanner({ status }: Props) {
       count: status.readyToMail,
       label: "Klaar om te mailen",
       href: "/outreach/crm",
-      hint: "E-mail + doelgroep-fit ok · nog niet in bakje",
+      hint: "E-mail + doelgroep-fit ok · nog geen mail gemaakt",
       tone: status.readyToMail > 0 ? "success" : "neutral",
     },
     {
@@ -60,7 +60,7 @@ export function PipelineStatusBanner({ status }: Props) {
       count: status.incompleteButHasEmail,
       label: "Gegevens ontbreken",
       href: "/outreach/crm",
-      hint: "Heeft mail, maar mdw / contact / plaats ontbreekt",
+      hint: "Heeft e-mail, maar medewerkers / contact / plaats ontbreekt",
       tone: status.incompleteButHasEmail > 0 ? "warn" : "neutral",
       emphasize: status.incompleteButHasEmail > 0,
     },

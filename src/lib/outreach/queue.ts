@@ -2,7 +2,15 @@
  * Flat wachtrij — drafts + queued mails as one reviewable list.
  */
 
-import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  notInArray,
+} from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { outreachBatches, outreachEmails, prospects } from "@/lib/db/schema";
 import {
@@ -13,6 +21,7 @@ import {
   outreachLiveSendBlockReason,
 } from "@/lib/outreach/send-policy";
 import {
+  applySenderSignature,
   DEFAULT_SENDER_PROFILE_ID,
   getSenderProfile,
   isSenderProfileId,
@@ -209,7 +218,12 @@ export async function updateQueueItem(input: {
   if (!hasDatabase()) return { error: "DATABASE_URL ontbreekt" };
   const db = getDb();
   const [row] = await db
-    .select({ id: outreachEmails.id, status: outreachEmails.status })
+    .select({
+      id: outreachEmails.id,
+      status: outreachEmails.status,
+      body: outreachEmails.body,
+      senderProfileId: outreachEmails.senderProfileId,
+    })
     .from(outreachEmails)
     .where(eq(outreachEmails.id, input.emailId))
     .limit(1);
@@ -249,6 +263,13 @@ export async function updateQueueItem(input: {
 
   if (Object.keys(patch).length === 0) {
     return { error: "Niets om op te slaan" };
+  }
+
+  if (patch.body !== undefined || patch.senderProfileId !== undefined) {
+    const profile = getSenderProfile(
+      patch.senderProfileId ?? row.senderProfileId,
+    );
+    patch.body = applySenderSignature(patch.body ?? row.body, profile);
   }
 
   // Any edit clears arm — operator must reconfirm auto-send.
@@ -295,6 +316,21 @@ export async function scheduleQueueEmails(input: {
   }
 
   const settings = await loadOutreachSettings();
+  const alreadyPlanned = await db
+    .select({ scheduledAt: outreachEmails.scheduledAt })
+    .from(outreachEmails)
+    .where(
+      and(
+        inArray(outreachEmails.status, ["draft", "queued"]),
+        isNotNull(outreachEmails.scheduledAt),
+        notInArray(outreachEmails.id, ids),
+      ),
+    );
+  const occupiedPerDay: Record<string, number> = {};
+  for (const r of alreadyPlanned) {
+    const day = amsterdamDay(r.scheduledAt!);
+    occupiedPerDay[day] = (occupiedPerDay[day] ?? 0) + 1;
+  }
   const slots = suggestSendSlots({
     mailCount: rows.length,
     sendWeekdays: settings.sendWeekdays,
@@ -302,6 +338,7 @@ export async function scheduleQueueEmails(input: {
     preferredHour: settings.preferredHour,
     fromDay: input.fromDay ?? undefined,
     seed: ids[0],
+    occupiedPerDay,
   });
 
   const flat: Array<{ day: string; time: string }> = [];

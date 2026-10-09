@@ -719,7 +719,7 @@ export function CrmCompaniesTable({ rows }: Props) {
                         title={
                           canMail
                             ? row.queuedCount > 0
-                              ? "Selecteer om te mailen (zit al in bakje)"
+                              ? "Selecteer om te mailen (staat al in de Wachtrij)"
                               : "Selecteer om te mailen"
                             : row.mailCount > 0
                               ? "Al verstuurd"

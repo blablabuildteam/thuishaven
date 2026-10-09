@@ -83,7 +83,7 @@ export function OutreachSettingsForm({ initial }: Props) {
           Afzender-profielen
         </h2>
         <p className="text-sm text-text-muted">
-          Per bakje kies je Evenementen, Reiner of Yoram. Die adressen moeten
+          Per mail kies je Evenementen, Reiner of Yoram. Die adressen moeten
           in Brevo goedgekeurd zijn én hieronder op de allowlist staan.
         </p>
         <ul className="space-y-2 text-sm">
@@ -98,7 +98,7 @@ export function OutreachSettingsForm({ initial }: Props) {
           ))}
         </ul>
         <p className="text-xs text-text-dim">
-          Fallback hieronder geldt alleen voor testsends zonder bakje.
+          Fallback hieronder geldt alleen voor testsends zonder gekozen afzender.
         </p>
         <label className="block text-xs text-text-dim">
           Fallback afzender e-mail

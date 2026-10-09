@@ -9,7 +9,7 @@ import {
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-const STORAGE_KEY = "thuishaven-outreach-tour-v4";
+const STORAGE_KEY = "thuishaven-outreach-tour-v5";
 
 type TourStep = {
   /** Matches data-tour on a real UI element */
@@ -40,17 +40,22 @@ const STEPS: TourStep[] = [
   {
     target: "nav-mailen",
     title: "3 · Mailen",
-    body: "Kies een batch en een template. Eerst een test naar team@. Live versturen staat uit.",
+    body: "Kies een afzender en laat per bedrijf een persoonlijke mail schrijven (AI houdt de gevonden invalshoek aan). Ze komen in de Wachtrij.",
+  },
+  {
+    target: "nav-wachtrij",
+    title: "4 · Wachtrij",
+    body: "Lees en pas elke mail aan, stuur een test naar jezelf, en plan ze in. Pas na ‘Activeer verzenden’ gaan ze echt de deur uit.",
   },
   {
     target: "nav-templates",
     title: "Templates",
-    body: "Hier pas je de teksten aan en stuur je een test. In Mailen kies je welke template een batch krijgt.",
+    body: "De basisteksten per invalshoek. De AI gebruikt ze als vertrekpunt en schrijft per bedrijf een eigen versie.",
   },
   {
     target: "nav-resultaten",
-    title: "4 · Resultaten",
-    body: "Opens en replies. Welke template werkt, zie je hier en bij de templatekeuze.",
+    title: "5 · Resultaten",
+    body: "Wie opende, klikte of reageerde — en welke invalshoek het best werkt.",
   },
 ];
 

@@ -8,6 +8,8 @@ import type { LiveSendQuota } from "@/lib/outreach/batches";
 import { LIVE_SEND_CONFIRM_PHRASE } from "@/lib/outreach/live-send-constants";
 import type { QueueItem } from "@/lib/outreach/queue";
 import {
+  applySenderSignature,
+  getSenderProfile,
   OUTREACH_SENDER_PROFILES,
   type OutreachSenderProfileId,
 } from "@/lib/outreach/sender-profiles";
@@ -34,7 +36,7 @@ const STATUS_TONE: Record<
 };
 
 const STATUS_NL: Record<QueueItem["statusLabel"], string> = {
-  concept: "Concept",
+  concept: "Te checken",
   review: "Te checken",
   gepland: "Gepland",
   actief: "Actief (stuurt)",
@@ -52,7 +54,9 @@ export function QueueList({
   const [pending, startTransition] = useTransition();
   const [picked, setPicked] = useState<Set<string>>(() => new Set());
   const [openId, setOpenId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<"all" | QueueItem["statusLabel"]>("all");
+  const [filter, setFilter] = useState<"all" | "review" | "gepland" | "actief">(
+    "all",
+  );
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [confirmArm, setConfirmArm] = useState(false);
@@ -77,12 +81,19 @@ export function QueueList({
 
   const visible = useMemo(() => {
     if (filter === "all") return items;
+    if (filter === "review") {
+      return items.filter(
+        (i) => i.statusLabel === "review" || i.statusLabel === "concept",
+      );
+    }
     return items.filter((i) => i.statusLabel === filter);
   }, [items, filter]);
 
   const counts = useMemo(() => {
-    const c = { all: items.length, concept: 0, review: 0, gepland: 0, actief: 0 };
-    for (const i of items) c[i.statusLabel] += 1;
+    const c = { all: items.length, review: 0, gepland: 0, actief: 0 };
+    for (const i of items) {
+      c[i.statusLabel === "concept" ? "review" : i.statusLabel] += 1;
+    }
     return c;
   }, [items]);
 
@@ -152,16 +163,6 @@ export function QueueList({
     }
   }
 
-  async function promoteSelected() {
-    const ids = [...picked];
-    if (!ids.length) return;
-    const data = await post({
-      action: "promote-queue",
-      emailIds: ids,
-    });
-    if (data) setMessage(`${data.promoted} in wachtrij gezet om te checken`);
-  }
-
   async function scheduleSelected() {
     const ids = [...picked];
     if (!ids.length) return;
@@ -221,7 +222,7 @@ export function QueueList({
       setMessage(
         `Auto-send uit voor ${data.disarmed} mails` +
           (data.batchesDisarmed
-            ? ` · ${data.batchesDisarmed} bakje-auto-send gestopt`
+            ? ` · ook auto-send van ${data.batchesDisarmed} oude groep${data.batchesDisarmed === 1 ? "" : "en"} gestopt`
             : ""),
       );
     }
@@ -411,7 +412,6 @@ export function QueueList({
         {(
           [
             ["all", "Alles"],
-            ["concept", "Concept"],
             ["review", "Te checken"],
             ["gepland", "Gepland"],
             ["actief", "Actief"],
@@ -581,16 +581,6 @@ export function QueueList({
               >
                 Planning weghalen
               </button>
-              {counts.concept > 0 ? (
-                <button
-                  type="button"
-                  disabled={pending}
-                  className="hover:text-accent"
-                  onClick={() => void promoteSelected()}
-                >
-                  Concept → te checken
-                </button>
-              ) : null}
             </div>
           </details>
         </div>
@@ -709,6 +699,10 @@ export function QueueList({
                                     ...e,
                                     senderProfileId: ev.target
                                       .value as OutreachSenderProfileId,
+                                    body: applySenderSignature(
+                                      e.body,
+                                      getSenderProfile(ev.target.value),
+                                    ),
                                   },
                                 }))
                               }
@@ -747,6 +741,19 @@ export function QueueList({
                             </select>
                           </label>
                         </div>
+                        {e.variantKey === "jubileum" ? (
+                          <p className="text-xs text-text-muted">
+                            Check het jubileumjaar even: dat komt uit de
+                            KvK-inschrijving en klopt niet altijd met de echte
+                            oprichting.
+                          </p>
+                        ) : null}
+                        {e.variantKey !== (item.variantKey ?? "warm_tour") ? (
+                          <p className="text-xs text-warn">
+                            Andere invalshoek gekozen — klik “Opnieuw laten
+                            schrijven” om de tekst daarop aan te passen.
+                          </p>
+                        ) : null}
                         <div className="flex flex-wrap items-center gap-2">
                           <button
                             type="button"
