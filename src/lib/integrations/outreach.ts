@@ -114,7 +114,7 @@ async function callAnthropicJson(
   apiKey: string,
 ): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
   const model =
-    process.env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-4-5";
+    process.env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-5-5";
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -125,7 +125,6 @@ async function callAnthropicJson(
     body: JSON.stringify({
       model,
       max_tokens: 1200,
-      temperature: 0.9,
       system: `${buildOutreachSystemPrompt()}
 
 Antwoord ALLEEN met geldige JSON: {"subject":"...","body":"..."}. Geen markdown, geen uitleg.`,

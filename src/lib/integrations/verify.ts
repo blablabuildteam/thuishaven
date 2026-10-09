@@ -99,7 +99,7 @@ async function verifyOpenAI(): Promise<VerifyResult> {
         return base("ai", name, "error", `Anthropic HTTP ${res.status}`);
       }
       const model =
-        process.env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-4-5";
+        process.env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-5-5";
       const extras = [
         gemini ? "Gemini backup" : null,
         openai ? "OpenAI backup" : null,

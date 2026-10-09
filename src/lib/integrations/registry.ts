@@ -93,7 +93,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     ],
     askFromClient: [
       "Anthropic API-key (console.anthropic.com) voor persoonlijke outreach-mails",
-      "Optioneel: ANTHROPIC_MODEL (standaard claude-sonnet-4-5)",
+      "Optioneel: ANTHROPIC_MODEL (standaard claude-sonnet-5-5)",
       "Optioneel: GEMINI_API_KEY als backup / voor dashboard-chat",
     ],
     verifyHint: "GET api.anthropic.com/v1/models",
