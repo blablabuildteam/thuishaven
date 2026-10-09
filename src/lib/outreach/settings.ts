@@ -57,7 +57,7 @@ function envDefaults(): OutreachSettings {
     senderName:
       process.env.BREVO_OUTREACH_SENDER_NAME?.trim() || "Reijner · Thuishaven",
     replyToEmail:
-      process.env.BREVO_OUTREACH_REPLY_TO?.trim() || "evenementen@thuishaven.nl",
+      process.env.BREVO_OUTREACH_REPLY_TO?.trim() || "evenement@thuishaven.nl",
     replyToName:
       process.env.BREVO_OUTREACH_REPLY_TO_NAME?.trim() ||
       "Thuishaven Evenementen",

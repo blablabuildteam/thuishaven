@@ -27,13 +27,13 @@ export const OUTREACH_SENDER_PROFILES: readonly OutreachSenderProfile[] = [
   {
     id: "evenementen",
     label: "Evenementen",
-    email: "evenementen@thuishaven.nl",
+    email: "evenement@thuishaven.nl",
     name: "Thuishaven Evenementen",
-    replyToEmail: "evenementen@thuishaven.nl",
+    replyToEmail: "evenement@thuishaven.nl",
     replyToName: "Thuishaven Evenementen",
     signature: `Thuishaven Evenementen
 Festival locatie voor zakelijke events
-evenementen@thuishaven.nl
+evenement@thuishaven.nl
 Contactweg 68, 1014 BW Amsterdam
 thuishavenb2b.nl`,
   },

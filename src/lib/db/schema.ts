@@ -196,7 +196,7 @@ export const outreachSettings = pgTable("outreach_settings", {
   allowedSenderEmails: text("allowed_sender_emails")
     .notNull()
     .default(
-      "evenementen@thuishaven.nl,reijner@thuishaven.nl,yoram@thuishaven.nl,zakelijk@thuishaven.nl,evenement@thuishaven.nl",
+      "evenement@thuishaven.nl,reijner@thuishaven.nl,yoram@thuishaven.nl,zakelijk@thuishaven.nl",
     ),
   testRecipient: text("test_recipient")
     .notNull()
