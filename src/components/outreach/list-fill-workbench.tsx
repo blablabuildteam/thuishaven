@@ -12,7 +12,6 @@ import {
   criteriaSummary,
   distanceIndexForPreset,
   formatEmployeeBounds,
-  keywordKey,
   normalizeCriteria,
   readyDistanceStops,
   sliceKey,
@@ -101,24 +100,16 @@ export function ListFillWorkbench({
   const [criteria, setCriteria] = useState<ApolloSearchCriteria>(() =>
     normalizeCriteria(initialCriteria ?? DEFAULT_APOLLO_CRITERIA),
   );
-  const [keywords, setKeywords] = useState(
-    () => (initialCriteria?.keywordTags ?? []).join(", "),
-  );
   const [coverage, setCoverage] = useState<Record<string, SliceState>>(() =>
     Object.fromEntries(initialCoverage.map((s) => [s.key, s])),
   );
 
-  const keywordTags = keywords
-    .split(/[,;]+/)
-    .map((t) => t.trim())
-    .filter(Boolean)
-    .slice(0, 8);
-
+  /** Altijd alle branches — geen keyword-filter in de UI. */
   function criteriaBody(): ApolloSearchCriteria {
-    return { ...criteria, keywordTags };
+    return { ...criteria, keywordTags: [] };
   }
 
-  const activeCriteria = { ...criteria, keywordTags };
+  const activeCriteria = criteriaBody();
   const selectedSlices = slicesForCriteria(activeCriteria);
   const selectedKeys = new Set(selectedSlices.map((s) => s.key));
   const distanceIdx = distanceIndexForPreset(criteria.placePreset);
@@ -171,15 +162,14 @@ export function ListFillWorkbench({
     };
   })();
 
-  /** Incremental Apollo totals per distance stop (current mdw + keywords). */
+  /** Incremental Apollo totals per distance stop (current mdw). */
   const distanceImpact = useMemo(() => {
-    const kw = keywordTags;
     return readyDistanceStops().map((stop) => {
       const zone = stop.outerZone;
       if (!zone) {
         return { stop, apollo: null as number | null, remaining: null as number | null, created: 0, uncounted: 0 };
       }
-      const stats = zoneSliceStats(zone, criteria.employeeRanges, kw, coverage);
+      const stats = zoneSliceStats(zone, criteria.employeeRanges, [], coverage);
       return {
         stop,
         apollo: stats.apolloTotal,
@@ -188,7 +178,7 @@ export function ListFillWorkbench({
         uncounted: stats.uncounted,
       };
     });
-  }, [criteria.employeeRanges, keywordTags, coverage]);
+  }, [criteria.employeeRanges, coverage]);
 
   const selectionImpact = useMemo(() => {
     let cumulativeApollo = 0;
@@ -296,41 +286,11 @@ export function ListFillWorkbench({
     apolloReady,
     pending,
     criteria.employeeRanges.join(","),
-    keywordTags.join(","),
     // Re-run when coverage gains totals (or still has gaps for far).
     Object.values(coverage)
       .filter((s) => s.total != null)
       .length,
   ]);
-
-  const pastSearches = useMemo(() => {
-    const byKw = new Map<string, { keywords: string[]; slices: SliceState[] }>();
-    for (const s of Object.values(coverage)) {
-      const k = keywordKey(s.keywords);
-      const entry = byKw.get(k) ?? { keywords: s.keywords, slices: [] };
-      entry.slices.push(s);
-      byKw.set(k, entry);
-    }
-    return [...byKw.entries()]
-      .map(([k, v]) => ({
-        key: k,
-        keywords: v.keywords,
-        created: v.slices.reduce((n, s) => n + s.created, 0),
-        seen: v.slices.reduce((n, s) => n + s.seen, 0),
-        done: v.slices.filter((s) => s.done).length,
-        slices: v.slices.length,
-        lastRunAt: v.slices
-          .map((s) => s.lastRunAt)
-          .filter(Boolean)
-          .sort()
-          .at(-1),
-      }))
-      .sort((a, b) => (b.lastRunAt ?? "").localeCompare(a.lastRunAt ?? ""));
-  }, [coverage]);
-
-  const keywordSearches = pastSearches.filter(
-    (p) => p.keywords.length > 0 && p.seen > 0,
-  );
 
   const fetchCents =
     (plan.knownPages + plan.unknownSlices) * OUTREACH_RATES.apolloCreditCents;
@@ -674,22 +634,6 @@ export function ListFillWorkbench({
           </div>
         </div>
 
-        <label className="mt-6 block">
-          <span className="text-sm font-medium text-text">
-            Alleen bepaalde branches?{" "}
-            <span className="font-normal text-text-dim">(optioneel)</span>
-          </span>
-          <input
-            value={keywords}
-            onChange={(e) => setKeywords(e.target.value)}
-            placeholder="bijv. software, advocatuur, bank"
-            className="mt-1.5 block w-full max-w-sm border border-border bg-bg px-3 py-1.5 text-sm text-text"
-          />
-          <span className="mt-1 block text-xs text-text-dim">
-            Leeg laten = alle branches. Meerdere woorden scheiden met een komma.
-          </span>
-        </label>
-
         <div className="mt-6 max-w-2xl border-l-2 border-accent bg-accent/5 px-4 py-3 text-sm">
           <p className="text-text">
             Je zoekt: bedrijven met{" "}
@@ -697,7 +641,7 @@ export function ListFillWorkbench({
             {distanceIdx === 0
               ? "in Amsterdam"
               : `tot ${selectionImpact.selectedStop?.label ?? ""} van Amsterdam`}
-            {keywordTags.length ? `, branche: ${keywordTags.join(", ")}` : ""}.
+            .
           </p>
           <p className="mt-1 text-text-muted">
             {selectionImpact.cumulativeApollo != null ? (
@@ -774,7 +718,7 @@ export function ListFillWorkbench({
                   <tr key={r.id} className="border-b border-border last:border-0">
                     <td className="px-3 py-2 text-text-muted">{r.label}</td>
                     {SEARCH_ZONES.map((z) => {
-                      const key = sliceKey(z.id, r.id, keywordTags);
+                      const key = sliceKey(z.id, r.id, []);
                       const st = coverage[key];
                       const inSel = selectedKeys.has(key);
                       return (
@@ -826,36 +770,6 @@ export function ListFillWorkbench({
           ) : null}
         </details>
 
-        {keywordSearches.length > 0 ? (
-          <details className="mt-3">
-            <summary className="cursor-pointer text-sm text-text-muted hover:text-text">
-              Eerder gezocht op branche ({keywordSearches.length})
-            </summary>
-            <p className="mt-2 text-xs text-text-dim">
-              Klik op een zoekopdracht om die branches weer in te vullen.
-            </p>
-            <ul className="mt-2 divide-y divide-border border-y border-border text-sm">
-              {keywordSearches.map((p) => (
-                <li
-                  key={p.key || "none"}
-                  className="flex flex-wrap items-baseline justify-between gap-2 py-2"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setKeywords(p.keywords.join(", "))}
-                    className="text-left text-text hover:text-accent"
-                  >
-                    {p.keywords.length ? p.keywords.join(", ") : "Alle branches"}
-                  </button>
-                  <span className="text-xs text-text-muted">
-                    {p.seen} bekeken · {p.created} toegevoegd
-                    {p.lastRunAt ? ` · ${fmtDate(p.lastRunAt)}` : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </details>
-        ) : null}
         <p className="sr-only">{criteriaSummary(activeCriteria)}</p>
       </section>
 
