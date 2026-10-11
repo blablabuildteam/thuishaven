@@ -22,6 +22,50 @@ import type { OutreachVariantId } from "@/lib/outreach/tone";
 export const metadata = { title: "Mailen" };
 export const dynamic = "force-dynamic";
 
+function availableContacts(r: {
+  email: string | null;
+  decisionMakerName?: string;
+  decisionMakerTitle?: string;
+  contacts: Array<{
+    name: string;
+    title?: string;
+    email?: string;
+  }>;
+  mailedEmails: string[];
+  pendingEmails: string[];
+}): Array<{ name: string; title?: string; email: string }> {
+  const mailed = new Set(r.mailedEmails.map((e) => e.toLowerCase()));
+  const pending = new Set(r.pendingEmails.map((e) => e.toLowerCase()));
+  const list = [...r.contacts];
+  if (
+    r.email &&
+    !list.some(
+      (c) => c.email && c.email.toLowerCase() === r.email!.toLowerCase(),
+    )
+  ) {
+    list.unshift({
+      name: r.decisionMakerName ?? "Contact",
+      title: r.decisionMakerTitle,
+      email: r.email,
+    });
+  }
+  const seen = new Set<string>();
+  const out: Array<{ name: string; title?: string; email: string }> = [];
+  for (const c of list) {
+    const email = c.email?.trim().toLowerCase();
+    if (!email || seen.has(email) || mailed.has(email) || pending.has(email)) {
+      continue;
+    }
+    seen.add(email);
+    out.push({
+      name: c.name,
+      ...(c.title ? { title: c.title } : {}),
+      email: c.email!.trim(),
+    });
+  }
+  return out;
+}
+
 export default async function EmailsPage({
   searchParams,
 }: {
@@ -54,8 +98,12 @@ export default async function EmailsPage({
 
   const sharedCounts = new Map<string, number>();
   for (const r of records) {
+    for (const c of r.contacts) {
+      const key = c.email?.trim().toLowerCase();
+      if (key) sharedCounts.set(key, (sharedCounts.get(key) ?? 0) + 1);
+    }
     const key = r.email?.trim().toLowerCase();
-    if (key) sharedCounts.set(key, (sharedCounts.get(key) ?? 0) + 1);
+    if (key) sharedCounts.set(key, Math.max(sharedCounts.get(key) ?? 0, 1));
   }
 
   const workbenchProspects: WorkbenchProspect[] = [];
@@ -80,20 +128,27 @@ export default async function EmailsPage({
     });
     const suggested = suggestedVariantForAngle(angle.id);
     if (!suggested) continue;
-    if (r.mailCount === 0 && (r.queuedCount > 0 || r.draftCount > 0)) {
-      inQueueCount += 1;
+
+    const contacts = availableContacts(r);
+    if (contacts.length === 0) {
+      const hasAnyEmail =
+        Boolean(r.email) || r.contacts.some((c) => c.email);
+      if (!hasAnyEmail) {
+        skippedNoEmail += 1;
+        continue;
+      }
+      // All contact emails already queued or mailed.
+      if (r.pendingEmails.length > 0) inQueueCount += 1;
       continue;
     }
-    if (!r.email) {
-      skippedNoEmail += 1;
-      continue;
-    }
+
+    const primary = contacts[0]!;
     const score = leadScore({
       doelgroepFit: r.doelgroepFit,
       angleId: angle.id,
       jubileeYearsAway: angle.jubileeYearsAway,
       hasEmail: true,
-      hasContact: Boolean(r.decisionMakerName),
+      hasContact: Boolean(primary.name),
       openCount: r.openCount,
       clickCount: r.clickCount,
       replyCount: r.replyCount,
@@ -102,14 +157,15 @@ export default async function EmailsPage({
     workbenchProspects.push({
       id: r.id,
       companyName: r.companyName,
-      email: r.email,
-      contactName: r.decisionMakerName ?? null,
+      email: primary.email,
+      contactName: primary.name,
+      contacts,
       quality: checkRecipientEmail({
-        email: r.email,
-        contactName: r.decisionMakerName,
+        email: primary.email,
+        contactName: primary.name,
         website: r.website,
         companyName: r.companyName,
-        sharedCount: sharedCounts.get(r.email.trim().toLowerCase()) ?? 1,
+        sharedCount: sharedCounts.get(primary.email.toLowerCase()) ?? 1,
       }),
       angleId: angle.id,
       suggestedVariantId: suggested as OutreachVariantId,
@@ -129,7 +185,7 @@ export default async function EmailsPage({
       <SectionHeader
         eyebrow="Stap 3"
         title="Mailen"
-        description="Vink bedrijven aan, kies de afzender en klik Genereer. AI schrijft elke mail persoonlijk; daarna lees en test je ze in de Wachtrij."
+        description="Vink bedrijven aan, kies desnoods een ander contact, en klik Genereer. AI schrijft elke mail persoonlijk; daarna lees en test je ze in de Wachtrij."
         action={
           <Link
             href="/outreach/planning"
@@ -153,7 +209,6 @@ export default async function EmailsPage({
         inQueueCount={inQueueCount}
         aiConfigured={hasOutreachAiConfigured()}
       />
-
     </div>
   );
 }

@@ -294,6 +294,9 @@ export const outreachEmails = pgTable("outreach_emails", {
   /** Snapshot of From used at send time (for Resultaten per afzender). */
   senderEmail: text("sender_email"),
   senderProfileId: text("sender_profile_id"),
+  /** Contact at the company this mail is addressed to (optional; else prospects.email). */
+  recipientEmail: text("recipient_email"),
+  recipientName: text("recipient_name"),
   sentAt: timestamp("sent_at", { withTimezone: true }),
   openedAt: timestamp("opened_at", { withTimezone: true }),
   clickedAt: timestamp("clicked_at", { withTimezone: true }),

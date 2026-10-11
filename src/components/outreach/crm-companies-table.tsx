@@ -10,7 +10,6 @@ import { statusLabels } from "@/lib/mock/outreach";
 import {
   type MailAngleId,
   isMailableAngle,
-  isReadyToMail,
   mailAngleTone,
 } from "@/lib/outreach/mail-angle";
 import { leadTierTone, type LeadScore } from "@/lib/outreach/lead-score";
@@ -79,8 +78,56 @@ type CrmRow = {
     email?: string;
     linkedinUrl?: string;
   }>;
+  mailedEmails?: string[];
+  pendingEmails?: string[];
   kvkMatchWeak?: boolean;
 };
+
+function hasOpenMailTarget(row: CrmRow): boolean {
+  const mailed = new Set(
+    (row.mailedEmails ?? []).map((e) => e.toLowerCase()),
+  );
+  const pending = new Set(
+    (row.pendingEmails ?? []).map((e) => e.toLowerCase()),
+  );
+  const emails = [
+    ...row.contacts.map((c) => c.email),
+    row.email,
+  ].filter((e): e is string => Boolean(e));
+  return emails.some((e) => {
+    const key = e.toLowerCase();
+    return !mailed.has(key) && !pending.has(key);
+  });
+}
+
+function contactSummary(row: CrmRow): {
+  name: string | null;
+  email: string | null;
+  extra: number;
+} {
+  const email =
+    row.decisionMakerEmail ??
+    row.contacts.find((c) => c.email)?.email ??
+    row.email;
+  const name =
+    row.decisionMakerName ??
+    row.contacts.find((c) =>
+      email && c.email
+        ? c.email.toLowerCase() === email.toLowerCase()
+        : Boolean(c.name),
+    )?.name ??
+    row.contacts[0]?.name ??
+    null;
+  const known = new Set(
+    [email?.toLowerCase(), name?.toLowerCase()].filter(Boolean),
+  );
+  const extra = row.contacts.filter((c) => {
+    if (c.email && known.has(c.email.toLowerCase())) return false;
+    if (!c.email && c.name && known.has(c.name.toLowerCase())) return false;
+    return true;
+  }).length;
+  return { name, email: email ?? null, extra };
+}
 
 type Angle = {
   id: MailAngleId;
@@ -127,13 +174,7 @@ function signalMatch(id: SignalId, row: CrmRow, angle: Angle): boolean {
     case "sig_jub_soon":
       return angle.id === "jubileum" && (angle.jubileeYearsAway ?? 0) >= 1 && row.mailCount === 0;
     case "sig_fresh":
-      return isReadyToMail({
-        angleId: angle.id,
-        email: row.email,
-        mailCount: row.mailCount,
-        queuedCount: row.queuedCount,
-        draftCount: row.draftCount,
-      });
+      return isMailableAngle(angle.id) && hasOpenMailTarget(row);
     case "sig_followup":
       return (
         row.openCount > 0 &&
@@ -354,13 +395,7 @@ export function CrmCompaniesTable({ rows }: Props) {
   const mailableIds = filtered
     .filter(
       ({ row, angle }) =>
-        isReadyToMail({
-          angleId: angle.id,
-          email: row.email,
-          mailCount: row.mailCount,
-          queuedCount: row.queuedCount,
-          draftCount: row.draftCount,
-        }),
+        isMailableAngle(angle.id) && hasOpenMailTarget(row),
     )
     .map(({ row }) => row.id);
 
@@ -654,6 +689,7 @@ export function CrmCompaniesTable({ rows }: Props) {
                   <span className="sr-only">Selecteer</span>
                 </th>
                 <th className="px-0 py-2.5 pr-4 font-medium">Bedrijf</th>
+                <th className="px-4 py-2.5 font-medium">Contact</th>
                 <th className="px-4 py-2.5 font-medium">Score</th>
                 <th className="px-4 py-2.5 font-medium">Waarom nu</th>
                 <th className="px-4 py-2.5 font-medium">Laatste mail</th>
@@ -662,18 +698,14 @@ export function CrmCompaniesTable({ rows }: Props) {
             <tbody>
               {filtered.map(({ row, angle, score }) => {
                 const on = picked.has(row.id);
-                const canMail = isReadyToMail({
-                  angleId: angle.id,
-                  email: row.email,
-                  mailCount: row.mailCount,
-                  queuedCount: row.queuedCount,
-                  draftCount: row.draftCount,
-                });
+                const canMail =
+                  isMailableAngle(angle.id) && hasOpenMailTarget(row);
                 const topReason =
                   score.reasons[0]?.replace(/^\+\d+\s*/, "") ?? null;
                 const missing = missingDataLabels(row);
                 const showIncompleteBadge =
                   row.incomplete && row.mailCount === 0;
+                const contact = contactSummary(row);
                 return (
                   <tr
                     key={row.id}
@@ -737,6 +769,27 @@ export function CrmCompaniesTable({ rows }: Props) {
                             ? ` · ${row.draftCount} concept`
                             : ""}
                       </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      {contact.name || contact.email ? (
+                        <>
+                          {contact.name ? (
+                            <p className="font-medium text-text">
+                              {contact.name}
+                            </p>
+                          ) : null}
+                          <p className="max-w-[14rem] truncate text-xs text-text-muted">
+                            {contact.email ?? "geen e-mail"}
+                          </p>
+                          {contact.extra > 0 ? (
+                            <p className="mt-0.5 text-[11px] text-text-dim">
+                              +{contact.extra} andere
+                            </p>
+                          ) : null}
+                        </>
+                      ) : (
+                        <span className="text-xs text-warn">Geen contact</span>
+                      )}
                     </td>
                     <td
                       className="px-4 py-3"

@@ -732,6 +732,9 @@ export async function generateAndStoreDraft(input: {
   variantId?: OutreachVariantId;
   subjectArm?: OutreachSubjectArm;
   senderProfileId?: OutreachSenderProfileId;
+  /** Optional contact at the company (defaults to primary / prospects.email). */
+  recipientEmail?: string;
+  recipientName?: string;
 }): Promise<
   | {
       emailId: string;
@@ -762,6 +765,36 @@ export async function generateAndStoreDraft(input: {
   if (prospect.type === "agency" && meta.source === "bureau_import") {
     return { error: "Partnerbureau — geen cold mail" };
   }
+  const dm =
+    meta.decisionMaker && typeof meta.decisionMaker === "object"
+      ? (meta.decisionMaker as { name?: string; email?: string })
+      : null;
+  const contactsMeta = Array.isArray(meta.contacts)
+    ? meta.contacts.filter(
+        (c): c is { name?: string; email?: string } =>
+          Boolean(c) && typeof c === "object",
+      )
+    : [];
+  const recipientEmail = (
+    input.recipientEmail?.trim() ||
+    prospect.email ||
+    (typeof dm?.email === "string" ? dm.email : "") ||
+    ""
+  ).trim();
+  const matchedContact = contactsMeta.find(
+    (c) =>
+      typeof c.email === "string" &&
+      c.email.toLowerCase() === recipientEmail.toLowerCase(),
+  );
+  const recipientName =
+    input.recipientName?.trim() ||
+    (typeof matchedContact?.name === "string" ? matchedContact.name : undefined) ||
+    (!input.recipientEmail ? dm?.name : undefined) ||
+    undefined;
+  if (!recipientEmail) {
+    return { error: `${prospect.companyName}: geen e-mailadres` };
+  }
+
   const [pending] = await db
     .select({ id: outreachEmails.id })
     .from(outreachEmails)
@@ -769,12 +802,13 @@ export async function generateAndStoreDraft(input: {
       and(
         eq(outreachEmails.prospectId, prospect.id),
         inArray(outreachEmails.status, ["draft", "queued"]),
+        sql`lower(coalesce(${outreachEmails.recipientEmail}, ${prospect.email ?? ""})) = ${recipientEmail.toLowerCase()}`,
       ),
     )
     .limit(1);
   if (pending) {
     return {
-      error: `${prospect.companyName} staat al in de Wachtrij — pas die mail daar aan of laat hem opnieuw schrijven`,
+      error: `${prospect.companyName} (${recipientEmail}) staat al in de Wachtrij — pas die mail daar aan of laat hem opnieuw schrijven`,
     };
   }
 
@@ -792,13 +826,9 @@ export async function generateAndStoreDraft(input: {
       : await getAgencyCampaignId();
   if (!campaignId) return { error: "Geen campagne gevonden" };
 
-  const dm =
-    meta.decisionMaker && typeof meta.decisionMaker === "object"
-      ? (meta.decisionMaker as { name?: string })
-      : null;
   const quality = await prospectEmailQuality(
-    prospect.email,
-    dm?.name,
+    recipientEmail,
+    recipientName,
     prospect.website,
   );
   const blockedAddress = blockedEmailReason(quality);
@@ -822,7 +852,7 @@ export async function generateAndStoreDraft(input: {
   const generated = await generateOutreachEmail({
     type: prospect.type,
     companyName: prospect.companyName,
-    contactName: greetingContactName(prospect.email, dm?.name),
+    contactName: greetingContactName(recipientEmail, recipientName),
     sector: prospect.sector ?? undefined,
     city: prospect.city ?? undefined,
     employeeCount: prospect.employeeCount ?? undefined,
@@ -850,6 +880,8 @@ export async function generateAndStoreDraft(input: {
       generationSource: generated.source,
       senderProfileId: snap.senderProfileId,
       senderEmail: snap.senderEmail,
+      recipientEmail,
+      recipientName: recipientName ?? null,
     })
     .returning();
 
@@ -1011,6 +1043,8 @@ export async function sendStoredDraft(input: {
       batchId: outreachEmails.batchId,
       emailSenderProfileId: outreachEmails.senderProfileId,
       emailSenderEmail: outreachEmails.senderEmail,
+      recipientEmail: outreachEmails.recipientEmail,
+      recipientName: outreachEmails.recipientName,
       email: prospects.email,
       companyName: prospects.companyName,
       prospectId: prospects.id,
@@ -1043,6 +1077,7 @@ export async function sendStoredDraft(input: {
 
   const meta = rawMeta as { contacts?: string[] };
   const intended =
+    row.recipientEmail ??
     row.email ??
     (Array.isArray(meta.contacts) ? meta.contacts[0] : undefined);
   if (!intended) return { error: "Geen e-mailadres op prospect" };

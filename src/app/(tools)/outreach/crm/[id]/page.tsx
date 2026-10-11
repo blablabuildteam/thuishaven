@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { CrmNoteForm } from "@/components/outreach/crm-note-form";
 import { ReplyLogForm } from "@/components/outreach/reply-log-form";
 import { RefillContactButton } from "@/components/outreach/refill-contact-button";
+import { CrmContactsEditor } from "@/components/outreach/crm-contacts-editor";
 import { LinkedinEstimateForm } from "@/components/outreach/linkedin-estimate-form";
 import { getCrmDossier, statusLabels } from "@/lib/outreach/crm";
 import { mailAngleFor, mailAngleTone } from "@/lib/outreach/mail-angle";
@@ -287,6 +288,13 @@ export default async function CrmDossierPage({
                   <details className="mt-1.5">
                     <summary className="cursor-pointer text-sm font-medium text-text hover:text-accent">
                       {m.subject}
+                      {m.recipientEmail ? (
+                        <span className="ml-2 font-normal text-text-dim">
+                          → {[m.recipientName, m.recipientEmail]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                      ) : null}
                     </summary>
                     <pre className="mt-2 whitespace-pre-wrap font-sans text-sm leading-relaxed text-text-muted">
                       {m.body}
@@ -420,42 +428,14 @@ export default async function CrmDossierPage({
             <h2 className="mb-3 font-display text-xl tracking-[0.06em] text-text">
               Contactpersonen
             </h2>
-            {dossier.contacts.length > 0 ? (
-              <ul className="space-y-3">
-                {dossier.contacts.map((c) => (
-                  <li key={`${c.name}-${c.title ?? ""}`}>
-                    <p className="font-medium text-text">{c.name}</p>
-                    <p className="text-xs">
-                      {[c.title, c.email ?? "geen e-mail"]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </p>
-                    {c.linkedinUrl ? (
-                      <a
-                        href={c.linkedinUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs text-accent underline"
-                      >
-                        LinkedIn
-                      </a>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p>
-                Nog geen Event/Office Manager. Zoek hieronder opnieuw, of via{" "}
-                <Link
-                  href="/outreach/lijst-bijwerken"
-                  className="text-accent underline"
-                >
-                  Lijst bijwerken
-                </Link>
-                .
-              </p>
-            )}
-            <RefillContactButton prospectId={dossier.id} />
+            <CrmContactsEditor
+              prospectId={dossier.id}
+              initialContacts={dossier.contacts}
+              primaryEmail={dossier.email}
+            />
+            <div className="mt-4 border-t border-border pt-3">
+              <RefillContactButton prospectId={dossier.id} />
+            </div>
             <p className="mt-3">
               Website:{" "}
               {dossier.website ? (

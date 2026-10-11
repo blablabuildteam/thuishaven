@@ -62,6 +62,8 @@ const generateSchema = z
         z.object({
           prospectId: z.string().uuid(),
           variantId: z.enum(VARIANT_IDS),
+          recipientEmail: z.string().email().optional(),
+          recipientName: z.string().min(1).max(120).optional(),
         }),
       )
       .min(1)
@@ -70,6 +72,8 @@ const generateSchema = z
     variantId: z.enum(VARIANT_IDS).optional(),
     subjectArm: z.enum(["a", "b"]).optional(),
     senderProfileId: z.enum(SENDER_PROFILE_IDS).optional(),
+    recipientEmail: z.string().email().optional(),
+    recipientName: z.string().min(1).max(120).optional(),
   })
   .refine(
     (d) =>
@@ -641,10 +645,14 @@ export async function POST(request: Request) {
   const jobs: Array<{
     prospectId: string;
     variantId?: (typeof VARIANT_IDS)[number];
+    recipientEmail?: string;
+    recipientName?: string;
   }> = parsed.data.items
     ? parsed.data.items.map((i) => ({
         prospectId: i.prospectId,
         variantId: i.variantId,
+        recipientEmail: i.recipientEmail,
+        recipientName: i.recipientName,
       }))
     : (
         parsed.data.prospectIds ??
@@ -652,6 +660,8 @@ export async function POST(request: Request) {
       ).map((prospectId) => ({
         prospectId,
         variantId: parsed.data.variantId,
+        recipientEmail: parsed.data.recipientEmail,
+        recipientName: parsed.data.recipientName,
       }));
 
   if (jobs.length === 1) {
@@ -661,6 +671,8 @@ export async function POST(request: Request) {
       variantId: job.variantId,
       subjectArm: parsed.data.subjectArm,
       senderProfileId: parsed.data.senderProfileId,
+      recipientEmail: job.recipientEmail,
+      recipientName: job.recipientName,
     });
     if ("error" in result) {
       return NextResponse.json(result, { status: 400 });
@@ -697,6 +709,8 @@ export async function POST(request: Request) {
       variantId: job.variantId,
       subjectArm: parsed.data.subjectArm,
       senderProfileId: parsed.data.senderProfileId,
+      recipientEmail: job.recipientEmail,
+      recipientName: job.recipientName,
     });
     if ("error" in result) {
       results.push({

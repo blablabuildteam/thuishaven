@@ -647,7 +647,9 @@ export function QueueList({
                       {item.companyName}
                     </button>
                     <p className="text-xs text-text-dim">
-                      {item.toEmail ?? "geen e-mail"}
+                      {[item.toName, item.toEmail ?? "geen e-mail"]
+                        .filter(Boolean)
+                        .join(" · ")}
                       {!open ? ` · ${item.subject}` : ""}
                       {item.generationSource === "template" ||
                       item.generationSource === "template_fallback"

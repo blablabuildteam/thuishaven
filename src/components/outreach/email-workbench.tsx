@@ -21,11 +21,19 @@ import {
   type TemplateStat,
 } from "@/lib/outreach/template-stat-label";
 
+export type WorkbenchContact = {
+  name: string;
+  title?: string;
+  email: string;
+};
+
 export type WorkbenchProspect = {
   id: string;
   companyName: string;
   email: string;
   contactName: string | null;
+  /** Mailbare contacten (nog niet gemaild / in wachtrij). */
+  contacts: WorkbenchContact[];
   quality: EmailQuality;
   angleId: string;
   suggestedVariantId: OutreachVariantId | null;
@@ -130,6 +138,25 @@ export function OutreachEmailWorkbench({
           .map((p) => p.id),
       ),
   );
+  const [recipientById, setRecipientById] = useState<Record<string, string>>(
+    () =>
+      Object.fromEntries(
+        prospects.map((p) => [
+          p.id,
+          p.contacts[0]?.email ?? p.email,
+        ]),
+      ),
+  );
+
+  function contactFor(p: WorkbenchProspect): WorkbenchContact {
+    const email = recipientById[p.id] ?? p.contacts[0]?.email ?? p.email;
+    return (
+      p.contacts.find((c) => c.email.toLowerCase() === email.toLowerCase()) ?? {
+        name: p.contactName ?? "Contact",
+        email,
+      }
+    );
+  }
   const [mode, setMode] = useState<Mode>(
     handoffVariantId ? "override" : "suggested",
   );
@@ -189,10 +216,7 @@ export function OutreachEmailWorkbench({
     setSelected(
       new Set(
         ready
-          .filter(
-            (p) =>
-              p.mailCount === 0 && p.queuedCount === 0 && !blockedIds.has(p.id),
-          )
+          .filter((p) => !blockedIds.has(p.id))
           .slice(0, n)
           .map((p) => p.id),
       ),
@@ -227,10 +251,15 @@ export function OutreachEmailWorkbench({
 
     setBusy(true);
     try {
-      const items = picks.map((p) => ({
-        prospectId: p.id,
-        variantId: variantFor(p),
-      }));
+      const items = picks.map((p) => {
+        const contact = contactFor(p);
+        return {
+          prospectId: p.id,
+          variantId: variantFor(p),
+          recipientEmail: contact.email,
+          recipientName: contact.name,
+        };
+      });
 
       const res = await fetch("/api/outreach/emails", {
         method: "POST",
@@ -665,12 +694,39 @@ export function OutreachEmailWorkbench({
                       >
                         {p.companyName}
                       </Link>
-                      <p className="text-xs text-text-dim">
-                        {[p.contactName, p.email].filter(Boolean).join(" · ")}
-                        {p.queuedCount > 0
-                          ? ` · ${p.queuedCount} in wachtrij`
-                          : ""}
-                      </p>
+                      {p.contacts.length > 1 ? (
+                        <label
+                          className="mt-1 block"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <span className="sr-only">Contact</span>
+                          <select
+                            value={contactFor(p).email}
+                            onChange={(e) =>
+                              setRecipientById((prev) => ({
+                                ...prev,
+                                [p.id]: e.target.value,
+                              }))
+                            }
+                            className="mt-0.5 max-w-full border border-border bg-bg px-2 py-1 text-xs text-text"
+                          >
+                            {p.contacts.map((c) => (
+                              <option key={c.email} value={c.email}>
+                                {c.name} · {c.email}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : (
+                        <p className="text-xs text-text-dim">
+                          {[contactFor(p).name, contactFor(p).email]
+                            .filter(Boolean)
+                            .join(" · ")}
+                          {p.queuedCount > 0
+                            ? ` · ${p.queuedCount} in wachtrij`
+                            : ""}
+                        </p>
+                      )}
                       {p.quality.issues.length > 0 ? (
                         <p
                           className={`mt-0.5 text-[11px] ${blocked ? "text-danger" : "text-warn"}`}

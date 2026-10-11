@@ -98,6 +98,10 @@ export type CrmRecord = {
     email?: string;
     linkedinUrl?: string;
   }>;
+  /** Lowercase recipient emails already mailed (sent lifecycle). */
+  mailedEmails: string[];
+  /** Lowercase recipient emails in draft/queued. */
+  pendingEmails: string[];
   kvkMatchWeak: boolean;
   /** Missing pieces for enrichment. */
   incomplete: boolean;
@@ -109,6 +113,8 @@ export type CrmMailLogItem = {
   body: string;
   status: string;
   variantKey: string | null;
+  recipientEmail: string | null;
+  recipientName: string | null;
   createdAt: string;
   sentAt: string | null;
   openedAt: string | null;
@@ -145,6 +151,8 @@ function mapRecord(
     lastTouchAt: string | null;
     lastSentAt: string | null;
     lastVariantKey: string | null;
+    mailedEmails: string[];
+    pendingEmails: string[];
   },
 ): CrmRecord {
   const meta = (p.metadata ?? {}) as Record<string, unknown>;
@@ -298,6 +306,8 @@ function mapRecord(
           : undefined,
     decisionMakerLinkedin,
     contacts,
+    mailedEmails: extras.mailedEmails,
+    pendingEmails: extras.pendingEmails,
     kvkHeadcountOff: kvkHeadcountLooksOff(
       kvkEmployeeCount ?? p.employeeCount,
     ),
@@ -339,7 +349,17 @@ export async function listCrmRecords(): Promise<{
     .from(inboundReplies)
     .groupBy(inboundReplies.prospectId);
 
+  const recipientStats = await db
+    .select({
+      prospectId: outreachEmails.prospectId,
+      mailedEmails: sql<string[]>`coalesce(array_agg(distinct lower(${outreachEmails.recipientEmail})) filter (where ${outreachEmails.status} in ('sent','opened','clicked','replied','bounced','opted_out') and ${outreachEmails.recipientEmail} is not null), '{}')`,
+      pendingEmails: sql<string[]>`coalesce(array_agg(distinct lower(${outreachEmails.recipientEmail})) filter (where ${outreachEmails.status} in ('draft','queued') and ${outreachEmails.recipientEmail} is not null), '{}')`,
+    })
+    .from(outreachEmails)
+    .groupBy(outreachEmails.prospectId);
+
   const mailMap = new Map(mailStats.map((s) => [s.prospectId, s]));
+  const recipientMap = new Map(recipientStats.map((s) => [s.prospectId, s]));
   const replyMap = new Map(
     replyStats.filter((s) => s.prospectId).map((s) => [s.prospectId!, s]),
   );
@@ -352,6 +372,7 @@ export async function listCrmRecords(): Promise<{
     })
     .map((p) => {
     const mail = mailMap.get(p.id);
+    const recipients = recipientMap.get(p.id);
     const reply = replyMap.get(p.id);
     const toDate = (d: unknown): Date | null => {
       if (!d) return null;
@@ -372,6 +393,8 @@ export async function listCrmRecords(): Promise<{
       lastTouchAt: last?.toISOString() ?? null,
       lastSentAt: toDate(mail?.lastSent)?.toISOString() ?? null,
       lastVariantKey: mail?.lastVariantKey ?? null,
+      mailedEmails: recipients?.mailedEmails ?? [],
+      pendingEmails: recipients?.pendingEmails ?? [],
     });
   });
 
@@ -590,6 +613,20 @@ export async function getCrmDossier(
         lastTouchAt: lastTouch,
         lastSentAt: sentMails[0]?.sentAt?.toISOString() ?? null,
         lastVariantKey: sentMails[0]?.variantKey ?? null,
+        mailedEmails: [
+          ...new Set(
+            sentMails
+              .map((m) => m.recipientEmail?.trim().toLowerCase())
+              .filter((e): e is string => Boolean(e)),
+          ),
+        ],
+        pendingEmails: [
+          ...new Set(
+            [...queuedMails, ...draftMails]
+              .map((m) => m.recipientEmail?.trim().toLowerCase())
+              .filter((e): e is string => Boolean(e)),
+          ),
+        ],
       }),
       mails: mails.map((m) => ({
         id: m.id,
@@ -597,6 +634,8 @@ export async function getCrmDossier(
         body: m.body,
         status: m.status,
         variantKey: m.variantKey,
+        recipientEmail: m.recipientEmail,
+        recipientName: m.recipientName,
         createdAt: m.createdAt.toISOString(),
         sentAt: m.sentAt?.toISOString() ?? null,
         openedAt: m.openedAt?.toISOString() ?? null,

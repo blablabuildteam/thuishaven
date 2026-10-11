@@ -53,6 +53,7 @@ export type QueueItem = {
   prospectId: string;
   companyName: string;
   toEmail: string | null;
+  toName: string | null;
   emailQuality: EmailQuality;
   subject: string;
   body: string;
@@ -99,7 +100,9 @@ export async function listQueueItems(): Promise<QueueItem[]> {
       emailId: outreachEmails.id,
       prospectId: outreachEmails.prospectId,
       companyName: prospects.companyName,
-      toEmail: prospects.email,
+      toEmail: outreachEmails.recipientEmail,
+      toName: outreachEmails.recipientName,
+      companyEmail: prospects.email,
       website: prospects.website,
       metadata: prospects.metadata,
       subject: outreachEmails.subject,
@@ -133,7 +136,9 @@ export async function listQueueItems(): Promise<QueueItem[]> {
 
   const addresses = [
     ...new Set(
-      rows.map((r) => r.toEmail?.trim().toLowerCase()).filter(Boolean),
+      rows
+        .map((r) => (r.toEmail ?? r.companyEmail)?.trim().toLowerCase())
+        .filter(Boolean),
     ),
   ] as string[];
   const shared = new Map<string, number>();
@@ -171,13 +176,15 @@ export async function listQueueItems(): Promise<QueueItem[]> {
       emailId: r.emailId,
       prospectId: r.prospectId,
       companyName: r.companyName,
-      toEmail: r.toEmail,
+      toEmail: r.toEmail ?? r.companyEmail,
+      toName: r.toName ?? dm?.name ?? null,
       emailQuality: checkRecipientEmail({
-        email: r.toEmail,
+        email: r.toEmail ?? r.companyEmail,
         contactName:
-          dm?.name && r.body.includes(dm.name.trim().split(/\s+/)[0] ?? "")
+          r.toName ??
+          (dm?.name && r.body.includes(dm.name.trim().split(/\s+/)[0] ?? "")
             ? dm.name
-            : null,
+            : null),
         website: r.website,
         companyName: r.companyName,
         sharedCount: shared.get(r.toEmail?.trim().toLowerCase() ?? "") ?? 1,
