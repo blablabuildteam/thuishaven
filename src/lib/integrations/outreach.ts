@@ -17,6 +17,7 @@ import { renderOutreachHtmlEmail } from "@/lib/outreach/email-html";
 import {
   blockedEmailReason,
   checkRecipientEmail,
+  ensureOpeningGreeting,
   greetingContactName,
 } from "@/lib/outreach/email-quality";
 import {
@@ -383,6 +384,10 @@ export async function generateOutreachEmail(input: {
         ? `KvK-inschrijving ~${input.anniversaryYears} jaar geleden — ONZEKER, niet noemen`
         : "geen jubileum-signaal";
 
+  // Caller already filtered via greetingContactName (generic → none, mismatch → none).
+  const salutationFirst = input.contactName?.trim().split(/\s+/)[0] || undefined;
+  const salutationLine = salutationFirst ? `Hi ${salutationFirst},` : "Hi,";
+
   const seedHint = `${input.companyName}:${variantId}:${subjectKey}:${Date.now() % 97}`;
   const prompt = `Schrijf één persoonlijke outbound mail voor precies dit bedrijf. Altijd AI-origineel — geen template-gevoel.
 
@@ -399,7 +404,8 @@ ${resolved.body}
 
 Feiten:
 - Bedrijf: ${input.companyName}
-- Contact: ${input.contactName ?? "onbekend (begin met Hi,)"}
+- Contact: ${input.contactName ?? "geen persoonlijke naam (algemeen adres of onbekend)"}
+- Verplichte aanhef (eerste regel, exact zo): ${salutationLine}
 - Sector: ${input.sector ?? "onbekend"}
 - Plaats: ${input.city ?? "onbekend"}
 - Medewerkers (schatting): ${input.employeeCount ?? "onbekend"}
@@ -412,14 +418,15 @@ Availability (optioneel, kort): ${availability}
 Availability URL: ${availabilityUrl}
 
 Eisen:
-1. Opening en tweede zin specifiek voor ${input.companyName}
-2. De gekozen invalshoek (${angleLabel}) merkt de lezer — natuurlijk, niet geforceerd
-3. Jubileum: noem NOOIT een aantal jaren of oprichtingsjaar (de KvK-datum klopt vaak niet). Stel het als open vraag ("staat er bij jullie een jubileum of mijlpaal op de planning?") of spreek in algemene termen over een jubileum vieren
-4. Max één zachte vraag / CTA
-5. ~80–140 woorden, plain text, natuurlijk en foutloos Nederlands
-6. Noem NOOIT wat je niet weet of niet kon vinden (geen "ik kon online niet vinden…", geen "onbekend"). Ontbrekende feiten laat je gewoon weg.
-7. Geen handtekening, naam of contactgegevens onderaan — die plakken we er zelf onder (afzender: ${senderProfile.name}). Eindig met een korte afsluiter zoals "Groet," of "Spreek je snel,".
-8. Variatie-seed (negeer inhoudelijk, gebruik om anders te schrijven): ${seedHint}
+1. Eerste regel MUST exact zijn: ${salutationLine} — daarna een lege regel, dan de mail. Geen andere aanhef.
+2. Opening (na de aanhef) en tweede zin specifiek voor ${input.companyName}
+3. De gekozen invalshoek (${angleLabel}) merkt de lezer — natuurlijk, niet geforceerd
+4. Jubileum: noem NOOIT een aantal jaren of oprichtingsjaar (de KvK-datum klopt vaak niet). Stel het als open vraag ("staat er bij jullie een jubileum of mijlpaal op de planning?") of spreek in algemene termen over een jubileum vieren
+5. Max één zachte vraag / CTA
+6. ~80–140 woorden, plain text, natuurlijk en foutloos Nederlands
+7. Noem NOOIT wat je niet weet of niet kon vinden (geen "ik kon online niet vinden…", geen "onbekend"). Ontbrekende feiten laat je gewoon weg.
+8. Geen handtekening, naam of contactgegevens onderaan — die plakken we er zelf onder (afzender: ${senderProfile.name}). Eindig met een korte afsluiter zoals "Groet," of "Spreek je snel,".
+9. Variatie-seed (negeer inhoudelijk, gebruik om anders te schrijven): ${seedHint}
 
 JSON verplicht: {"subject":"${subject.replace(/"/g, '\\"')}","body":"..."}`;
 
@@ -475,7 +482,7 @@ JSON verplicht: {"subject":"${subject.replace(/"/g, '\\"')}","body":"..."}`;
 
   return {
     subject,
-    body: sign(parsed.body),
+    body: sign(ensureOpeningGreeting(parsed.body, salutationFirst)),
     variantId,
     subjectKey,
     source: "ai",

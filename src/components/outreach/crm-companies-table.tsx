@@ -506,14 +506,28 @@ export function CrmCompaniesTable({ rows }: Props) {
                   Signaal: {SIGNALS.find((s) => s.id === mail)?.label}
                 </option>
               ) : null}
+              {(
+                [
+                  "jubileum",
+                  "seizoen",
+                  "funding",
+                  "recordjaar",
+                  "cold",
+                ] as MailFilter[]
+              ).includes(mail) ? (
+                <option value={mail}>
+                  {mail === "jubileum"
+                    ? `Jubileum (${counts.jubileum})`
+                    : mail === "seizoen"
+                      ? `Seizoen (${counts.seizoen})`
+                      : mail === "funding"
+                        ? `Deal / funding (${counts.funding})`
+                        : mail === "recordjaar"
+                          ? `Recordjaar (${counts.recordjaar})`
+                          : `Algemeen (${counts.cold})`}
+                </option>
+              ) : null}
               <option value="kans">Mailkans ({counts.kans})</option>
-              <option value="jubileum">Jubileum ({counts.jubileum})</option>
-              <option value="seizoen">Seizoen ({counts.seizoen})</option>
-              <option value="funding">Deal / funding ({counts.funding})</option>
-              <option value="recordjaar">
-                Recordjaar ({counts.recordjaar})
-              </option>
-              <option value="cold">Algemeen ({counts.cold})</option>
               <option value="onvolledig">
                 Onvolledig ({counts.onvolledig})
               </option>

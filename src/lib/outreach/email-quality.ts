@@ -180,14 +180,45 @@ export function checkRecipientEmail(input: {
   return { level: issues.length > 0 ? "warn" : "ok", issues };
 }
 
-/** Name to greet with — dropped when the address belongs to someone else. */
+/**
+ * Name for the salutation.
+ * - personal address + matching name → use name
+ * - generic address (info@, events@, …) → none → "Hi,"
+ * - name clearly doesn't belong to the address → none
+ */
 export function greetingContactName(
   email: string | null | undefined,
   contactName: string | null | undefined,
 ): string | undefined {
   if (!contactName?.trim()) return undefined;
+  if (email && isGenericLocalPart(email)) return undefined;
   if (email && contactNameMismatch(email, contactName)) return undefined;
   return contactName.trim();
+}
+
+/** First name for "Hi Voornaam," — undefined means general "Hi,". */
+export function greetingFirstName(
+  email: string | null | undefined,
+  contactName: string | null | undefined,
+): string | undefined {
+  const full = greetingContactName(email, contactName);
+  if (!full) return undefined;
+  const first = full.split(/\s+/)[0]?.trim();
+  return first && first.length >= 2 ? first : undefined;
+}
+
+/** Force the opening line to the right salutation after AI generation. */
+export function ensureOpeningGreeting(
+  body: string,
+  firstName: string | undefined,
+): string {
+  const trimmed = body.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").trimStart();
+  const opening = firstName ? `Hi ${firstName},` : "Hi,";
+  const withoutOpening = trimmed.replace(
+    /^(hi|hoi|hallo|beste|goeiedag|goedendag)(\s+[^\n,]*)?,?\s*\n+/i,
+    "",
+  );
+  return `${opening}\n\n${withoutOpening.trimStart()}`;
 }
 
 export function blockedEmailReason(quality: EmailQuality): string | null {
