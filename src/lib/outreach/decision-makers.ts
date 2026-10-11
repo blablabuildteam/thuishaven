@@ -3,9 +3,15 @@ import { getDb, hasDatabase } from "@/lib/db/client";
 import { prospects } from "@/lib/db/schema";
 import { searchDecisionMakers } from "@/lib/integrations/apollo/client";
 import {
+  findHunterDomainPeople,
   findHunterPersonEmail,
   hasHunterConfig,
 } from "@/lib/integrations/hunter/client";
+import {
+  isMailableTitle,
+  titleRelevanceScore,
+} from "@/lib/outreach/decision-titles";
+import { isGenericLocalPart } from "@/lib/outreach/email-quality";
 
 export type DecisionMaker = {
   name: string;
@@ -60,6 +66,166 @@ async function resolvePersonEmail(
   };
 }
 
+const LOCKED_STATUSES = new Set([
+  "contacted",
+  "opened",
+  "replied",
+  "lead",
+  "excluded",
+]);
+
+type FillTarget = {
+  id: string;
+  companyName: string;
+  website: string | null;
+  email: string | null;
+  status: (typeof prospects.$inferSelect)["status"];
+  metadata: Record<string, unknown> | null;
+};
+
+/** Apollo first (events → office → assistant), then Hunter's people on the domain. */
+async function findCompanyPeople(target: FillTarget): Promise<{
+  ok: boolean;
+  error?: string;
+  contacts: DecisionMaker[];
+  hunterUsed: boolean;
+}> {
+  const found = await searchDecisionMakers({
+    companyName: target.companyName,
+    website: target.website,
+  });
+  const contacts: DecisionMaker[] = [];
+  let hunterUsed = false;
+
+  if (found.ok && found.people.length > 0) {
+    let finderUsed = false;
+    for (const p of found.people) {
+      let resolved: Awaited<ReturnType<typeof resolvePersonEmail>> = p.email?.includes("@")
+        ? { email: p.email, emailSource: "apollo" }
+        : {};
+      // Hunter email-finder for the best person only (search credits).
+      if (!resolved.email && !finderUsed) {
+        finderUsed = true;
+        resolved = await resolvePersonEmail(p, target);
+        if (resolved.emailSource === "hunter") hunterUsed = true;
+      }
+      contacts.push({
+        name: p.name,
+        title: p.title,
+        email: resolved.email,
+        linkedinUrl: p.linkedinUrl,
+        source: "apollo",
+        emailSource: resolved.emailSource,
+        hunterScore: resolved.hunterScore,
+      });
+    }
+  }
+
+  const hasMailable = contacts.some((c) => c.email);
+  if (!hasMailable && hasHunterConfig() && target.website) {
+    const domain = await findHunterDomainPeople(target.website);
+    if (domain.ok) {
+      const relevant = domain.people
+        .filter((p) => isMailableTitle(p.title))
+        .sort(
+          (a, b) =>
+            titleRelevanceScore(a.title) - titleRelevanceScore(b.title) ||
+            (b.confidence ?? 0) - (a.confidence ?? 0),
+        )
+        .slice(0, 3);
+      for (const p of relevant) {
+        if (contacts.some((c) => c.email === p.email)) continue;
+        hunterUsed = true;
+        contacts.push({
+          name: p.name,
+          title: p.title,
+          email: p.email,
+          linkedinUrl: p.linkedinUrl,
+          source: "apollo",
+          emailSource: "hunter",
+          hunterScore: p.confidence,
+        });
+      }
+    }
+  }
+
+  if (contacts.length === 0) {
+    return {
+      ok: false,
+      error: found.error ?? "Geen Event/Office Manager of assistent gevonden",
+      contacts,
+      hunterUsed,
+    };
+  }
+  return { ok: true, contacts, hunterUsed };
+}
+
+function manualContacts(meta: Record<string, unknown>): Record<string, unknown>[] {
+  const raw = Array.isArray(meta.contacts) ? meta.contacts : [];
+  return raw.filter(
+    (c): c is Record<string, unknown> =>
+      Boolean(c) &&
+      typeof c === "object" &&
+      (c as { emailSource?: string }).emailSource === "manual",
+  );
+}
+
+async function storeFoundPeople(
+  target: FillTarget,
+  contacts: DecisionMaker[],
+  extraMeta: Record<string, unknown> = {},
+): Promise<DecisionMaker> {
+  const db = getDb();
+  const meta = { ...(target.metadata ?? {}), ...extraMeta };
+  const keep = manualContacts(meta).filter(
+    (m) =>
+      !contacts.some(
+        (c) =>
+          c.email &&
+          typeof m.email === "string" &&
+          c.email.toLowerCase() === m.email.toLowerCase(),
+      ),
+  );
+  const primary = contacts.find((c) => c.email?.includes("@")) ?? contacts[0]!;
+  meta.decisionMaker = primary;
+  meta.contacts = [...contacts, ...keep];
+  meta.decisionMakerAt = new Date().toISOString();
+  meta.peopleEnrichedAt = new Date().toISOString();
+  if (primary.emailSource === "hunter") meta.emailSource = "hunter";
+  delete meta.decisionMakerFails;
+  delete meta.decisionMakerError;
+
+  const locked = LOCKED_STATUSES.has(target.status);
+  // Company address follows the person we found — unless mailing already started.
+  const nextEmail = locked
+    ? target.email || primary.email || null
+    : primary.email || target.email || null;
+  await db
+    .update(prospects)
+    .set({
+      email: nextEmail,
+      status:
+        !target.email && primary.email && !locked ? "ready" : target.status,
+      metadata: meta,
+      updatedAt: new Date(),
+    })
+    .where(eq(prospects.id, target.id));
+  return primary;
+}
+
+async function storeFailure(target: FillTarget, error: string) {
+  const meta = { ...(target.metadata ?? {}) };
+  meta.decisionMakerFails =
+    typeof meta.decisionMakerFails === "number"
+      ? meta.decisionMakerFails + 1
+      : 1;
+  meta.decisionMakerError = error;
+  await getDb()
+    .update(prospects)
+    .set({ metadata: meta, updatedAt: new Date() })
+    .where(eq(prospects.id, target.id));
+}
+
 export async function fillDecisionMakers(limit = 8): Promise<{
   ok: boolean;
   error?: string;
@@ -108,21 +274,9 @@ export async function fillDecisionMakers(limit = 8): Promise<{
   let withEmail = 0;
 
   for (const target of targets) {
-    const found = await searchDecisionMakers({
-      companyName: target.companyName,
-      website: target.website,
-    });
-    const meta = { ...(target.metadata ?? {}) };
-    if (!found.ok || found.people.length === 0) {
-      meta.decisionMakerFails =
-        typeof meta.decisionMakerFails === "number"
-          ? meta.decisionMakerFails + 1
-          : 1;
-      meta.decisionMakerError = found.error ?? "Geen persoon gevonden";
-      await db
-        .update(prospects)
-        .set({ metadata: meta, updatedAt: new Date() })
-        .where(eq(prospects.id, target.id));
+    const found = await findCompanyPeople(target);
+    if (!found.ok) {
+      await storeFailure(target, found.error ?? "Geen persoon gevonden");
       rows.push({
         id: target.id,
         companyName: target.companyName,
@@ -131,63 +285,7 @@ export async function fillDecisionMakers(limit = 8): Promise<{
       });
       continue;
     }
-
-    const person = found.people[0]!;
-    const resolved = await resolvePersonEmail(person, target);
-    const contacts: DecisionMaker[] = [];
-    for (let i = 0; i < found.people.length; i++) {
-      const p = found.people[i]!;
-      const emailResolved =
-        i === 0
-          ? resolved
-          : p.email?.includes("@")
-            ? { email: p.email, emailSource: "apollo" as const }
-            : {};
-      contacts.push({
-        name: p.name,
-        title: p.title,
-        email: emailResolved.email,
-        linkedinUrl: p.linkedinUrl,
-        source: "apollo",
-        emailSource: emailResolved.emailSource,
-        hunterScore: i === 0 ? resolved.hunterScore : undefined,
-      });
-    }
-    // Primary: prefer someone with email, else first (usually Event Manager).
-    const primary =
-      contacts.find((c) => c.email?.includes("@")) ?? contacts[0]!;
-    const dm: DecisionMaker = primary;
-    meta.decisionMaker = dm;
-    meta.contacts = contacts;
-    meta.decisionMakerAt = new Date().toISOString();
-    meta.peopleEnrichedAt = new Date().toISOString();
-    if (resolved.emailSource === "hunter") {
-      meta.emailSource = "hunter";
-    }
-    delete meta.decisionMakerFails;
-    delete meta.decisionMakerError;
-
-    const locked = new Set([
-      "contacted",
-      "opened",
-      "replied",
-      "lead",
-      "excluded",
-    ]);
-    const nextEmail = target.email || dm.email || null;
-    await db
-      .update(prospects)
-      .set({
-        email: nextEmail,
-        status:
-          !target.email && dm.email && !locked.has(target.status)
-            ? "ready"
-            : target.status,
-        metadata: meta,
-        updatedAt: new Date(),
-      })
-      .where(eq(prospects.id, target.id));
-
+    const dm = await storeFoundPeople(target, found.contacts);
     filled += 1;
     if (dm.email) withEmail += 1;
     rows.push({
@@ -195,15 +293,14 @@ export async function fillDecisionMakers(limit = 8): Promise<{
       companyName: target.companyName,
       ok: true,
       person: dm,
-      hunterEmail: resolved.emailSource === "hunter",
+      hunterEmail: found.hunterUsed,
     });
   }
 
   return { ok: true, processed: rows.length, filled, withEmail, rows };
 }
 
-
-/** Forceer opnieuw zoeken voor één bedrijf (overschrijft bestaande contact). */
+/** Forceer opnieuw zoeken voor één bedrijf (handmatige contacten blijven staan). */
 export async function refillDecisionMakerForProspect(
   prospectId: string,
 ): Promise<{
@@ -237,21 +334,9 @@ export async function refillDecisionMakerForProspect(
     return { ok: false, error: "Prospect uitgesloten", filled: 0, withEmail: 0, rows: [] };
   }
 
-  const found = await searchDecisionMakers({
-    companyName: target.companyName,
-    website: target.website,
-  });
-  const meta = { ...(target.metadata ?? {}) };
-  if (!found.ok || found.people.length === 0) {
-    meta.decisionMakerFails =
-      typeof meta.decisionMakerFails === "number"
-        ? meta.decisionMakerFails + 1
-        : 1;
-    meta.decisionMakerError = found.error ?? "Geen persoon gevonden";
-    await db
-      .update(prospects)
-      .set({ metadata: meta, updatedAt: new Date() })
-      .where(eq(prospects.id, target.id));
+  const found = await findCompanyPeople(target);
+  if (!found.ok) {
+    await storeFailure(target, found.error ?? "Geen persoon gevonden");
     return {
       ok: false,
       error: found.error ?? "Geen Event/Office Manager gevonden",
@@ -268,52 +353,9 @@ export async function refillDecisionMakerForProspect(
     };
   }
 
-  const contacts: DecisionMaker[] = [];
-  for (let i = 0; i < found.people.length; i++) {
-    const person = found.people[i]!;
-    const resolved = await resolvePersonEmail(person, target);
-    contacts.push({
-      name: person.name,
-      title: person.title,
-      email: resolved.email,
-      linkedinUrl: person.linkedinUrl,
-      source: "apollo",
-      emailSource: resolved.emailSource,
-      hunterScore: resolved.hunterScore,
-    });
-  }
-  const primary =
-    contacts.find((c) => c.email?.includes("@")) ?? contacts[0]!;
-  meta.decisionMaker = primary;
-  meta.contacts = contacts;
-  meta.decisionMakerAt = new Date().toISOString();
-  meta.peopleEnrichedAt = new Date().toISOString();
-  meta.decisionMakerRefilledAt = new Date().toISOString();
-  if (primary.emailSource === "hunter") meta.emailSource = "hunter";
-  delete meta.decisionMakerFails;
-  delete meta.decisionMakerError;
-
-  const locked = new Set([
-    "contacted",
-    "opened",
-    "replied",
-    "lead",
-    "excluded",
-  ]);
-  const nextEmail = primary.email || target.email || null;
-  await db
-    .update(prospects)
-    .set({
-      email: nextEmail,
-      status:
-        !target.email && primary.email && !locked.has(target.status)
-          ? "ready"
-          : target.status,
-      metadata: meta,
-      updatedAt: new Date(),
-    })
-    .where(eq(prospects.id, target.id));
-
+  const primary = await storeFoundPeople(target, found.contacts, {
+    decisionMakerRefilledAt: new Date().toISOString(),
+  });
   return {
     ok: true,
     filled: 1,
@@ -324,7 +366,7 @@ export async function refillDecisionMakerForProspect(
         companyName: target.companyName,
         ok: true,
         person: primary,
-        hunterEmail: primary.emailSource === "hunter",
+        hunterEmail: found.hunterUsed,
       },
     ],
   };
@@ -419,6 +461,18 @@ export async function fillHunterEmailsForDecisionMakers(limit = 8): Promise<{
       hunterScore: hunter.score,
     };
     meta.decisionMaker = dm;
+    if (Array.isArray(meta.contacts)) {
+      meta.contacts = meta.contacts.map((c) =>
+        c &&
+        typeof c === "object" &&
+        (c as { name?: string }).name === current.name &&
+        !(c as { email?: string }).email
+          ? { ...c, email: hunter.email, emailSource: "hunter", hunterScore: hunter.score }
+          : c,
+      );
+    } else {
+      meta.contacts = [dm];
+    }
     meta.emailSource = "hunter";
     meta.hunterEmailAt = new Date().toISOString();
     delete meta.hunterEmailFails;
@@ -431,7 +485,10 @@ export async function fillHunterEmailsForDecisionMakers(limit = 8): Promise<{
       "lead",
       "excluded",
     ]);
-    const nextEmail = target.email || hunter.email;
+    const nextEmail =
+      locked.has(target.status) || (target.email && !isGenericLocalPart(target.email))
+        ? target.email || hunter.email
+        : hunter.email;
     await db
       .update(prospects)
       .set({

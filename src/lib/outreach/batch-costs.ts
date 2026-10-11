@@ -9,6 +9,7 @@ export const APOLLO_PAGE_SIZE = 100;
 export const OUTREACH_RATES = {
   apolloCreditCents: 8,
   hunterSearchCents: 9,
+  hunterVerifyCents: 1,
   kvkCallCents: 2,
   kvkCallsPerCompany: 3,
 } as const;

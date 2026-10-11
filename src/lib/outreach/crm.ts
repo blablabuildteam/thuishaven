@@ -18,6 +18,7 @@ import {
   EXISTING_CUSTOMER_REASON,
   EXCLUSION_IMPORT_SOURCE,
 } from "./exclusions-sync";
+import { readEmailChecks, type EmailCheck } from "./contact-ranking";
 
 export { statusLabels };
 
@@ -97,7 +98,10 @@ export type CrmRecord = {
     title?: string;
     email?: string;
     linkedinUrl?: string;
+    emailSource?: string;
   }>;
+  /** Mailbox checks per lowercase address. */
+  emailChecks: Record<string, EmailCheck>;
   /** Lowercase recipient emails already mailed (sent lifecycle). */
   mailedEmails: string[];
   /** Lowercase recipient emails in draft/queued. */
@@ -220,7 +224,7 @@ function mapRecord(
       ? (meta.decisionMaker as { linkedinUrl: string }).linkedinUrl
       : undefined;
   const contactsRaw = Array.isArray(meta.contacts) ? meta.contacts : [];
-  let contacts = contactsRaw
+  const contacts = contactsRaw
     .filter((c): c is Record<string, unknown> => Boolean(c) && typeof c === "object")
     .map((c) => ({
       name: typeof c.name === "string" ? c.name : "",
@@ -231,14 +235,24 @@ function mapRecord(
           : undefined,
       linkedinUrl:
         typeof c.linkedinUrl === "string" ? c.linkedinUrl : undefined,
+      emailSource:
+        typeof c.emailSource === "string" ? c.emailSource : undefined,
     }))
     .filter((c) => c.name.length >= 2);
+  const dmEmailSource =
+    meta.decisionMaker &&
+    typeof meta.decisionMaker === "object" &&
+    typeof (meta.decisionMaker as { emailSource?: string }).emailSource ===
+      "string"
+      ? (meta.decisionMaker as { emailSource: string }).emailSource
+      : undefined;
   if (contacts.length === 0 && decisionMakerName) {
     contacts.push({
       name: decisionMakerName,
       title: decisionMakerTitle,
       email: decisionMakerEmail,
       linkedinUrl: decisionMakerLinkedin,
+      emailSource: dmEmailSource,
     });
   }
   const incomplete =
@@ -306,6 +320,7 @@ function mapRecord(
           : undefined,
     decisionMakerLinkedin,
     contacts,
+    emailChecks: readEmailChecks(meta),
     mailedEmails: extras.mailedEmails,
     pendingEmails: extras.pendingEmails,
     kvkHeadcountOff: kvkHeadcountLooksOff(

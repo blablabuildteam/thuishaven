@@ -146,8 +146,10 @@ export async function searchDoelgroepCompanies(options?: {
 }
 
 import {
+  BROADER_DECISION_TITLES,
   DECISION_TITLES,
   isEventRelevantTitle,
+  isMailableTitle,
   titleRelevanceScore,
 } from "@/lib/outreach/decision-titles";
 
@@ -231,20 +233,28 @@ export async function enrichOrganizationHeadcount(
   };
 }
 
-export async function searchDecisionMakers(input: {
-  companyName: string;
-  website?: string | null;
-}): Promise<{ ok: boolean; error?: string; people: ApolloPerson[] }> {
-  const key = process.env.APOLLO_API_KEY?.trim();
-  if (!key) {
-    return { ok: false, error: "APOLLO_API_KEY ontbreekt", people: [] };
-  }
+type ApolloSearchHit = {
+  id?: string;
+  name?: string;
+  first_name?: string;
+  last_name?: string;
+  title?: string;
+  email?: string;
+  linkedin_url?: string;
+  has_email?: boolean;
+};
 
+async function apolloPeopleSearch(
+  key: string,
+  input: { companyName: string; website?: string | null },
+  titles: readonly string[],
+  round: "core" | "broader",
+): Promise<{ ok: boolean; error?: string; people: ApolloSearchHit[] }> {
   const domain = domainFromWebsite(input.website);
   const body: Record<string, unknown> = {
     page: 1,
-    per_page: 5,
-    person_titles: [...DECISION_TITLES],
+    per_page: 10,
+    person_titles: [...titles],
     include_similar_titles: false,
   };
   if (domain) body.q_organization_domains_list = [domain];
@@ -261,23 +271,11 @@ export async function searchDecisionMakers(input: {
     body: JSON.stringify(body),
     cache: "no-store",
   });
-
   const json = (await res.json().catch(() => ({}))) as {
     error?: string;
     message?: string;
-    people?: Array<{
-      id?: string;
-      name?: string;
-      first_name?: string;
-      last_name?: string;
-      last_name_obfuscated?: string;
-      title?: string;
-      email?: string;
-      linkedin_url?: string;
-      has_email?: boolean;
-    }>;
+    people?: ApolloSearchHit[];
   };
-
   if (!res.ok) {
     return {
       ok: false,
@@ -293,48 +291,57 @@ export async function searchDecisionMakers(input: {
     units: 1,
     unitLabel: "search",
     costEurCents: 0,
-    meta: { companyName: input.companyName, endpoint: "api_search" },
+    meta: { companyName: input.companyName, endpoint: "api_search", round },
   }).catch(() => undefined);
 
-  const candidates = [...(json.people ?? [])]
-    .filter((p) => isEventRelevantTitle(p.title))
-    .sort((a, b) => {
-      const ae = a.has_email === true ? 0 : 1;
-      const be = b.has_email === true ? 0 : 1;
-      return (
-        ae - be ||
-        titleRelevanceScore(a.title) - titleRelevanceScore(b.title)
-      );
-    });
+  return { ok: true, people: json.people ?? [] };
+}
 
-  // If filter emptied the list (rare), fall back to scored raw hits but still reject HR-only.
-  const pool =
-    candidates.length > 0
-      ? candidates
-      : [...(json.people ?? [])]
-          .filter((p) => {
-            const s = (p.title ?? "").toLowerCase();
-            return !/\b(hr|people ops|recruiter|talent)\b/.test(s);
-          })
-          .sort(
-            (a, b) =>
-              titleRelevanceScore(a.title) - titleRelevanceScore(b.title),
-          );
+export async function searchDecisionMakers(input: {
+  companyName: string;
+  website?: string | null;
+}): Promise<{ ok: boolean; error?: string; people: ApolloPerson[] }> {
+  const key = process.env.APOLLO_API_KEY?.trim();
+  if (!key) {
+    return { ok: false, error: "APOLLO_API_KEY ontbreekt", people: [] };
+  }
+
+  const core = await apolloPeopleSearch(key, input, DECISION_TITLES, "core");
+  if (!core.ok) return { ok: false, error: core.error, people: [] };
+  let pool = core.people.filter((p) => isEventRelevantTitle(p.title));
+
+  if (pool.length === 0) {
+    const broader = await apolloPeopleSearch(
+      key,
+      input,
+      BROADER_DECISION_TITLES,
+      "broader",
+    );
+    if (broader.ok) {
+      pool = broader.people.filter((p) => isMailableTitle(p.title));
+    }
+  }
+  if (pool.length === 0) {
+    return { ok: true, people: [] };
+  }
+
+  pool.sort((a, b) => {
+    const ae = a.has_email === true ? 0 : 1;
+    const be = b.has_email === true ? 0 : 1;
+    return (
+      titleRelevanceScore(a.title) - titleRelevanceScore(b.title) || ae - be
+    );
+  });
 
   const people: ApolloPerson[] = [];
-  // Unlock up to 2 people with email preference (credits). Keep a 3rd search hit as option.
-  let unlocks = 0;
-  for (let i = 0; i < Math.min(pool.length, 3); i++) {
+  // Unlock (1 credit each): always the best match, others only if Apollo has an email.
+  for (let i = 0; i < Math.min(pool.length, 4); i++) {
     const raw = pool[i]!;
-    const wantUnlock =
-      unlocks < 2 &&
-      Boolean(raw.id) &&
-      (unlocks === 0 || raw.has_email === true || i < 2);
+    const wantUnlock = Boolean(raw.id) && (i === 0 || raw.has_email === true);
     if (wantUnlock && raw.id) {
       const enriched = await enrichApolloPerson(key, raw.id);
       if (enriched) {
-        people.push(enriched);
-        unlocks += 1;
+        people.push({ ...enriched, title: enriched.title ?? raw.title });
         continue;
       }
     }

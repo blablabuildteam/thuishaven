@@ -2,8 +2,16 @@ import Link from "next/link";
 import { SectionHeader } from "@/components/ui/section-header";
 import {
   OutreachEmailWorkbench,
+  type WorkbenchContact,
   type WorkbenchProspect,
 } from "@/components/outreach/email-workbench";
+import {
+  checkLabel,
+  rankMailTargets,
+  TARGET_TIER_LABEL,
+  type EmailCheck,
+  type RankableContact,
+} from "@/lib/outreach/contact-ranking";
 import { listCrmRecords } from "@/lib/outreach/crm";
 import { leadScore } from "@/lib/outreach/lead-score";
 import { checkRecipientEmail } from "@/lib/outreach/email-quality";
@@ -24,46 +32,28 @@ export const dynamic = "force-dynamic";
 
 function availableContacts(r: {
   email: string | null;
-  decisionMakerName?: string;
-  decisionMakerTitle?: string;
-  contacts: Array<{
-    name: string;
-    title?: string;
-    email?: string;
-  }>;
+  website: string | null;
+  companyName: string;
+  contacts: RankableContact[];
+  emailChecks: Record<string, EmailCheck>;
   mailedEmails: string[];
   pendingEmails: string[];
-}): Array<{ name: string; title?: string; email: string }> {
-  const mailed = new Set(r.mailedEmails.map((e) => e.toLowerCase()));
-  const pending = new Set(r.pendingEmails.map((e) => e.toLowerCase()));
-  const list = [...r.contacts];
-  if (
-    r.email &&
-    !list.some(
-      (c) => c.email && c.email.toLowerCase() === r.email!.toLowerCase(),
-    )
-  ) {
-    list.unshift({
-      name: r.decisionMakerName ?? "Contact",
-      title: r.decisionMakerTitle,
-      email: r.email,
-    });
-  }
-  const seen = new Set<string>();
-  const out: Array<{ name: string; title?: string; email: string }> = [];
-  for (const c of list) {
-    const email = c.email?.trim().toLowerCase();
-    if (!email || seen.has(email) || mailed.has(email) || pending.has(email)) {
-      continue;
-    }
-    seen.add(email);
-    out.push({
-      name: c.name,
-      ...(c.title ? { title: c.title } : {}),
-      email: c.email!.trim(),
-    });
-  }
-  return out;
+}): WorkbenchContact[] {
+  const { targets } = rankMailTargets({
+    contacts: r.contacts,
+    company: { website: r.website, companyName: r.companyName },
+    companyEmail: r.email,
+    checks: r.emailChecks,
+    exclude: [...r.mailedEmails, ...r.pendingEmails],
+  });
+  return targets.map((t) => ({
+    name: t.name,
+    ...(t.title ? { title: t.title } : {}),
+    email: t.email,
+    tierLabel: TARGET_TIER_LABEL[t.tier],
+    checkLabel: checkLabel(t.check),
+    verified: t.check?.status === "valid",
+  }));
 }
 
 export default async function EmailsPage({

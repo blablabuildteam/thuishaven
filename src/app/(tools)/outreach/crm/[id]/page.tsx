@@ -432,6 +432,11 @@ export default async function CrmDossierPage({
               prospectId={dossier.id}
               initialContacts={dossier.contacts}
               primaryEmail={dossier.email}
+              emailChecks={dossier.emailChecks}
+              company={{
+                website: dossier.website,
+                companyName: dossier.companyName,
+              }}
             />
             <div className="mt-4 border-t border-border pt-3">
               <RefillContactButton prospectId={dossier.id} />

@@ -118,7 +118,20 @@ export async function saveProspectContacts(input: {
     null;
 
   const meta = { ...(row.metadata ?? {}) } as Record<string, unknown>;
-  meta.contacts = contacts;
+  const previous = new Map<string, Record<string, unknown>>();
+  for (const raw of Array.isArray(meta.contacts) ? meta.contacts : []) {
+    if (!raw || typeof raw !== "object") continue;
+    const email = normalizeEmail((raw as { email?: string }).email);
+    if (email) previous.set(email, raw as Record<string, unknown>);
+  }
+  meta.contacts = contacts.map((c) => {
+    const email = normalizeEmail(c.email);
+    if (!email) return c;
+    const old = previous.get(email);
+    const source =
+      old && typeof old.emailSource === "string" ? old.emailSource : "manual";
+    return { ...c, emailSource: source };
+  });
   if (primary) {
     meta.decisionMaker = {
       name: primary.name,

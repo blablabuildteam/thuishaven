@@ -98,6 +98,19 @@ function domainsRelated(
   return words.some((w) => b.includes(w));
 }
 
+/** False for private mailboxes or a domain unrelated to the company website. */
+export function emailFitsCompany(
+  email: string,
+  website: string | null | undefined,
+  companyName: string | null | undefined,
+): boolean {
+  const domain = email.trim().toLowerCase().split("@")[1] ?? "";
+  if (!domain || FREE_PROVIDERS.test(domain)) return false;
+  const host = websiteHost(website);
+  if (!host) return true;
+  return domainsRelated(baseDomain(host), baseDomain(domain), companyName);
+}
+
 export function isGenericLocalPart(email: string): boolean {
   return GENERIC_LOCALS.test(normalize(email.split("@")[0] ?? ""));
 }

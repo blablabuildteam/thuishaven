@@ -25,6 +25,9 @@ export type WorkbenchContact = {
   name: string;
   title?: string;
   email: string;
+  tierLabel?: string;
+  checkLabel?: string;
+  verified?: boolean;
 };
 
 /** Cap so one company doesn't flood the queue / domain. */
@@ -267,68 +270,76 @@ export function OutreachEmailWorkbench({
         return;
       }
 
-      const res = await fetch("/api/outreach/emails", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items,
-          subjectArm: subjectArm === "auto" ? undefined : subjectArm,
-          senderProfileId,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(data.error ?? "Genereren mislukt");
-        return;
+      type GenResult = {
+        prospectId?: string;
+        emailId?: string;
+        subject?: string;
+        body?: string;
+        source?: string;
+        recipientEmail?: string;
+        recipientName?: string;
+        error?: string;
+      };
+      const results: GenResult[] = [];
+      // Small chunks: each mail = address check + AI, keep requests well under the time limit.
+      const CHUNK = 6;
+      for (let i = 0; i < items.length; i += CHUNK) {
+        const chunk = items.slice(i, i + CHUNK);
+        if (items.length > CHUNK) {
+          setMessage(`Bezig… ${i} van ${items.length} mails`);
+        }
+        const res = await fetch("/api/outreach/emails", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: chunk,
+            subjectArm: subjectArm === "auto" ? undefined : subjectArm,
+            senderProfileId,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (!results.length) {
+            setError(data.error ?? "Genereren mislukt");
+            return;
+          }
+          for (const c of chunk) {
+            results.push({ ...c, error: data.error ?? "Genereren mislukt" });
+          }
+          continue;
+        }
+        if (data.emailId) {
+          results.push({
+            prospectId: chunk[0]?.prospectId,
+            ...data,
+            recipientEmail: data.recipientEmail ?? chunk[0]?.recipientEmail,
+            recipientName: data.recipientName ?? chunk[0]?.recipientName,
+          });
+        } else {
+          results.push(...((data.results ?? []) as GenResult[]));
+        }
       }
 
-      const made: DraftEdit[] = data.emailId
-        ? [
-            {
-              emailId: data.emailId,
-              companyName: picks[0]?.companyName ?? "",
-              contactLabel: items[0]
-                ? `${items[0].recipientName} · ${items[0].recipientEmail}`
-                : "",
-              subject: data.subject,
-              body: data.body,
-            },
-          ]
-        : (
-            (data.results ?? []) as Array<{
-              prospectId?: string;
-              emailId?: string;
-              subject?: string;
-              body?: string;
-              recipientEmail?: string;
-              recipientName?: string;
-            }>
-          )
-            .filter((r) => r.emailId && r.subject && r.body)
-            .map((r) => ({
-              emailId: r.emailId!,
-              companyName:
-                picks.find((p) => p.id === r.prospectId)?.companyName ?? "",
-              contactLabel: [r.recipientName, r.recipientEmail]
-                .filter(Boolean)
-                .join(" · "),
-              subject: r.subject!,
-              body: r.body!,
-            }));
+      const made: DraftEdit[] = results
+        .filter((r) => r.emailId && r.subject && r.body)
+        .map((r) => ({
+          emailId: r.emailId!,
+          companyName:
+            picks.find((p) => p.id === r.prospectId)?.companyName ?? "",
+          contactLabel: [r.recipientName, r.recipientEmail]
+            .filter(Boolean)
+            .join(" · "),
+          subject: r.subject!,
+          body: r.body!,
+        }));
 
-      const failed = Number(data.failed ?? 0);
+      const failed = results.filter((r) => r.error).length;
       const failReasons = [
         ...new Set(
-          ((data.results ?? []) as Array<{ error?: string }>)
-            .map((r) => r.error)
-            .filter((e): e is string => Boolean(e)),
+          results.map((r) => r.error).filter((e): e is string => Boolean(e)),
         ),
       ].slice(0, 2);
-      const sources = (
-        (data.results ?? []) as Array<{ source?: string }>
-      ).map((r) => r.source);
-      if (data.source && !sources.length) sources.push(data.source);
-      const aiOk = sources.filter((s) => s === "ai").length;
+      const aiOk = results.filter((r) => r.emailId && r.source === "ai").length;
       setLastEmailIds(made.map((d) => d.emailId));
       setDrafts(made);
       if (!made.length) {
@@ -712,14 +723,22 @@ export function OutreachEmailWorkbench({
                         {mailTargets(p).map((c) => (
                           <li key={c.email} className="truncate">
                             {[c.name, c.email].filter(Boolean).join(" · ")}
+                            {c.tierLabel ? (
+                              <span className="ml-1.5 text-text-dim/80">
+                                · {c.tierLabel}
+                              </span>
+                            ) : null}
+                            <span
+                              className={
+                                c.verified
+                                  ? "ml-1.5 text-emerald-400"
+                                  : "ml-1.5 text-text-dim/70"
+                              }
+                            >
+                              · {c.verified ? "✓ bestaat" : c.checkLabel ?? ""}
+                            </span>
                           </li>
                         ))}
-                        {p.contacts.length > MAX_CONTACTS_PER_COMPANY ? (
-                          <li className="text-text-dim">
-                            +{p.contacts.length - MAX_CONTACTS_PER_COMPANY}{" "}
-                            later (max {MAX_CONTACTS_PER_COMPANY} tegelijk)
-                          </li>
-                        ) : null}
                       </ul>
                       {p.quality.issues.length > 0 ? (
                         <p

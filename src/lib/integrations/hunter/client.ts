@@ -132,6 +132,138 @@ export async function findHunterPersonEmail(input: {
   return { ok: true, email, score: json.data?.score };
 }
 
+export type HunterVerifyStatus =
+  | "valid"
+  | "invalid"
+  | "accept_all"
+  | "webmail"
+  | "disposable"
+  | "unknown";
+
+/** Check whether a mailbox exists. 1 verification credit. */
+export async function verifyHunterEmail(email: string): Promise<
+  | { ok: true; status: HunterVerifyStatus; score?: number }
+  | { ok: false; error: string; quota?: boolean }
+> {
+  const key = process.env.HUNTER_API_KEY?.trim();
+  if (!key) return { ok: false, error: "HUNTER_API_KEY ontbreekt" };
+  const q = new URLSearchParams({ email: email.trim(), api_key: key });
+  const res = await fetch(`https://api.hunter.io/v2/email-verifier?${q}`, {
+    cache: "no-store",
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    errors?: Array<{ id?: string; details?: string }>;
+    data?: { status?: string; score?: number };
+  };
+  if (res.status === 202) {
+    return { ok: true, status: "unknown" };
+  }
+  if (!res.ok) {
+    const detail = json.errors?.[0]?.details ?? `Hunter HTTP ${res.status}`;
+    return {
+      ok: false,
+      error: detail,
+      quota: res.status === 429 || /usage|limit|quota|credits/i.test(detail),
+    };
+  }
+
+  void recordUsage({
+    tool: "outreach",
+    vendor: "enrichment",
+    operation: "hunter_email_verifier",
+    units: 1,
+    unitLabel: "controle",
+    costEurCents: OUTREACH_RATES.hunterVerifyCents,
+    meta: { email },
+  }).catch(() => undefined);
+
+  const raw = json.data?.status;
+  const status: HunterVerifyStatus =
+    raw === "valid" ||
+    raw === "invalid" ||
+    raw === "accept_all" ||
+    raw === "webmail" ||
+    raw === "disposable"
+      ? raw
+      : "unknown";
+  return { ok: true, status, score: json.data?.score };
+}
+
+export type HunterDomainPerson = {
+  name: string;
+  title?: string;
+  email: string;
+  confidence?: number;
+  linkedinUrl?: string;
+};
+
+/** Personal mailboxes on a domain with job title. 1 search credit. */
+export async function findHunterDomainPeople(
+  website: string,
+): Promise<{ ok: boolean; people: HunterDomainPerson[]; error?: string }> {
+  const key = process.env.HUNTER_API_KEY?.trim();
+  if (!key) return { ok: false, people: [], error: "HUNTER_API_KEY ontbreekt" };
+  const domain = domainFromWebsite(website);
+  if (!domain) return { ok: false, people: [], error: "Geen domein" };
+
+  const q = new URLSearchParams({
+    domain,
+    api_key: key,
+    type: "personal",
+    limit: "10",
+  });
+  const res = await fetch(`https://api.hunter.io/v2/domain-search?${q}`, {
+    cache: "no-store",
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    errors?: Array<{ details?: string }>;
+    data?: {
+      emails?: Array<{
+        value?: string;
+        confidence?: number;
+        position?: string;
+        first_name?: string;
+        last_name?: string;
+        linkedin?: string;
+      }>;
+    };
+  };
+  if (!res.ok) {
+    return {
+      ok: false,
+      people: [],
+      error: json.errors?.[0]?.details ?? `Hunter HTTP ${res.status}`,
+    };
+  }
+
+  void recordUsage({
+    tool: "outreach",
+    vendor: "enrichment",
+    operation: "hunter_domain_people",
+    units: 1,
+    unitLabel: "zoekopdracht",
+    costEurCents: OUTREACH_RATES.hunterSearchCents,
+    meta: { domain },
+  }).catch(() => undefined);
+
+  const people = (json.data?.emails ?? [])
+    .map((e) => {
+      const name = [e.first_name, e.last_name]
+        .map((s) => (typeof s === "string" ? s.trim() : ""))
+        .filter(Boolean)
+        .join(" ");
+      return {
+        name,
+        ...(e.position ? { title: e.position } : {}),
+        email: e.value?.trim().toLowerCase() ?? "",
+        confidence: e.confidence,
+        ...(e.linkedin ? { linkedinUrl: e.linkedin } : {}),
+      };
+    })
+    .filter((p) => p.email.includes("@") && p.name.length >= 2);
+  return { ok: true, people };
+}
+
 /** Generieke inbox op een domein — alleen als er geen Event Manager is. */
 export async function findHunterDomainEmail(
   website: string,

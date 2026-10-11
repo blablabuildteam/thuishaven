@@ -14,6 +14,10 @@ import {
 } from "@/lib/outreach/mail-angle";
 import { leadTierTone, type LeadScore } from "@/lib/outreach/lead-score";
 import {
+  rankMailTargets,
+  type EmailCheck,
+} from "@/lib/outreach/contact-ranking";
+import {
   OUTREACH_VARIANTS,
   type OutreachVariantId,
 } from "@/lib/outreach/tone";
@@ -43,6 +47,7 @@ const COMPANY_HANDOFF_VARIANTS = OUTREACH_VARIANTS.filter(
 type CrmRow = {
   id: string;
   companyName: string;
+  website?: string | null;
   status: keyof typeof statusLabels;
   email: string | null;
   city: string | null;
@@ -77,27 +82,24 @@ type CrmRow = {
     title?: string;
     email?: string;
     linkedinUrl?: string;
+    emailSource?: string;
   }>;
+  emailChecks?: Record<string, EmailCheck>;
   mailedEmails?: string[];
   pendingEmails?: string[];
   kvkMatchWeak?: boolean;
 };
 
 function hasOpenMailTarget(row: CrmRow): boolean {
-  const mailed = new Set(
-    (row.mailedEmails ?? []).map((e) => e.toLowerCase()),
+  return (
+    rankMailTargets({
+      contacts: row.contacts,
+      company: { website: row.website, companyName: row.companyName },
+      companyEmail: row.email,
+      checks: row.emailChecks,
+      exclude: [...(row.mailedEmails ?? []), ...(row.pendingEmails ?? [])],
+    }).targets.length > 0
   );
-  const pending = new Set(
-    (row.pendingEmails ?? []).map((e) => e.toLowerCase()),
-  );
-  const emails = [
-    ...row.contacts.map((c) => c.email),
-    row.email,
-  ].filter((e): e is string => Boolean(e));
-  return emails.some((e) => {
-    const key = e.toLowerCase();
-    return !mailed.has(key) && !pending.has(key);
-  });
 }
 
 function contactSummary(row: CrmRow): {
@@ -105,28 +107,18 @@ function contactSummary(row: CrmRow): {
   email: string | null;
   extra: number;
 } {
-  const email =
-    row.decisionMakerEmail ??
-    row.contacts.find((c) => c.email)?.email ??
-    row.email;
+  const { targets } = rankMailTargets({
+    contacts: row.contacts,
+    company: { website: row.website, companyName: row.companyName },
+    companyEmail: row.email,
+    checks: row.emailChecks,
+  });
+  const top = targets[0];
   const name =
-    row.decisionMakerName ??
-    row.contacts.find((c) =>
-      email && c.email
-        ? c.email.toLowerCase() === email.toLowerCase()
-        : Boolean(c.name),
-    )?.name ??
-    row.contacts[0]?.name ??
-    null;
-  const known = new Set(
-    [email?.toLowerCase(), name?.toLowerCase()].filter(Boolean),
-  );
-  const extra = row.contacts.filter((c) => {
-    if (c.email && known.has(c.email.toLowerCase())) return false;
-    if (!c.email && c.name && known.has(c.name.toLowerCase())) return false;
-    return true;
-  }).length;
-  return { name, email: email ?? null, extra };
+    top?.name || (top ? null : (row.decisionMakerName ?? row.contacts[0]?.name ?? null));
+  const email = top?.email ?? null;
+  const extra = Math.max(0, targets.length - 1);
+  return { name, email, extra };
 }
 
 type Angle = {

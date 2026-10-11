@@ -20,6 +20,8 @@ import {
   ensureOpeningGreeting,
   greetingContactName,
 } from "@/lib/outreach/email-quality";
+import { verifyProspectEmail } from "@/lib/outreach/email-verify";
+import { isUndeliverable } from "@/lib/outreach/contact-ranking";
 import {
   applySenderSignature,
   DEFAULT_SENDER_PROFILE_ID,
@@ -842,6 +844,15 @@ export async function generateAndStoreDraft(input: {
   if (blockedAddress) {
     return { error: `${prospect.companyName}: ${blockedAddress}` };
   }
+  const mailbox = await verifyProspectEmail({
+    prospectId: prospect.id,
+    email: recipientEmail,
+  });
+  if (isUndeliverable(mailbox ?? undefined)) {
+    return {
+      error: `${prospect.companyName}: ${recipientEmail} bestaat niet (gecontroleerd) — niet gemaild`,
+    };
+  }
 
   const angle = mailAngleFor({
     status: prospect.status,
@@ -1093,6 +1104,13 @@ export async function sendStoredDraft(input: {
       await prospectEmailQuality(intended, null, null),
     );
     if (blockedAddress) return { error: blockedAddress };
+    const mailbox = await verifyProspectEmail({
+      prospectId: row.prospectId,
+      email: intended,
+    });
+    if (isUndeliverable(mailbox ?? undefined)) {
+      return { error: `${intended} bestaat niet (gecontroleerd) — niet verstuurd` };
+    }
   }
 
   // Prefer per-mail snapshot, then bakje, then global settings.

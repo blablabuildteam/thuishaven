@@ -2,28 +2,95 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  checkLabel,
+  contactTargetTier,
+  isOtherCompanyEmail,
+  isUndeliverable,
+  TARGET_TIER_LABEL,
+  type CompanyRef,
+  type EmailCheck,
+} from "@/lib/outreach/contact-ranking";
 
 export type EditableContact = {
   name: string;
   title?: string;
   email?: string;
   linkedinUrl?: string;
+  emailSource?: string;
 };
 
 type Props = {
   prospectId: string;
   initialContacts: EditableContact[];
   primaryEmail: string | null;
+  emailChecks: Record<string, EmailCheck>;
+  company: CompanyRef;
+};
+
+const SOURCE_LABEL: Record<string, string> = {
+  apollo: "Apollo",
+  hunter: "Hunter",
+  website: "Website",
+  manual: "Handmatig",
 };
 
 function blank(): EditableContact {
   return { name: "", title: "", email: "", linkedinUrl: "" };
 }
 
+function ContactStatus({
+  contact,
+  checks,
+  company,
+}: {
+  contact: EditableContact;
+  checks: Record<string, EmailCheck>;
+  company: CompanyRef;
+}) {
+  const email = contact.email?.trim().toLowerCase();
+  if (!email) {
+    return <p className="text-xs text-text-dim">Geen e-mail — wordt niet gemaild</p>;
+  }
+  const check = checks[email];
+  const tier = contactTargetTier({ ...contact, email }, company);
+  const otherCompany = isOtherCompanyEmail({ ...contact, email }, company);
+  const dead = isUndeliverable(check);
+  const source = contact.emailSource
+    ? (SOURCE_LABEL[contact.emailSource] ?? contact.emailSource)
+    : null;
+  return (
+    <p className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs">
+      <span className={tier === 9 ? "text-warning" : "text-text-muted"}>
+        {otherCompany
+          ? "Adres van ander bedrijf — wordt niet gemaild"
+          : tier === 9
+            ? "Functie niet relevant — wordt niet gemaild"
+            : TARGET_TIER_LABEL[tier]}
+      </span>
+      <span
+        className={
+          dead
+            ? "text-danger"
+            : check?.status === "valid"
+              ? "text-emerald-400"
+              : "text-text-dim"
+        }
+      >
+        · {checkLabel(check)}
+        {dead ? " — wordt niet gemaild" : ""}
+      </span>
+      {source ? <span className="text-text-dim">· bron: {source}</span> : null}
+    </p>
+  );
+}
+
 export function CrmContactsEditor({
   prospectId,
   initialContacts,
   primaryEmail,
+  emailChecks,
+  company,
 }: Props) {
   const router = useRouter();
   const [contacts, setContacts] = useState<EditableContact[]>(
@@ -39,19 +106,20 @@ export function CrmContactsEditor({
     return idx >= 0 ? idx : 0;
   });
   const [busy, setBusy] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   function update(i: number, patch: Partial<EditableContact>) {
     setContacts((prev) =>
       prev.map((c, idx) => (idx === i ? { ...c, ...patch } : c)),
     );
-    setSaved(false);
+    setNotice(null);
   }
 
   function add() {
-    setContacts((prev) => [...prev, blank()]);
-    setSaved(false);
+    setContacts((prev) => [...prev, { ...blank(), emailSource: "manual" }]);
+    setNotice(null);
   }
 
   function remove(i: number) {
@@ -64,13 +132,13 @@ export function CrmContactsEditor({
       if (i < p) return Math.max(0, p - 1);
       return p;
     });
-    setSaved(false);
+    setNotice(null);
   }
 
   async function save() {
     setBusy(true);
     setError(null);
-    setSaved(false);
+    setNotice(null);
     try {
       const cleaned = contacts
         .map((c) => ({
@@ -94,10 +162,36 @@ export function CrmContactsEditor({
         setError(data.error ?? "Opslaan mislukt");
         return;
       }
-      setSaved(true);
+      setNotice("Opgeslagen.");
       router.refresh();
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function verify() {
+    setVerifying(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/outreach/crm/verify-emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prospectId }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        warning?: string;
+        checked?: number;
+      };
+      if (!res.ok) {
+        setError(data.error ?? "Controle mislukt");
+        return;
+      }
+      setNotice(data.warning ?? `${data.checked ?? 0} adres(sen) gecontroleerd.`);
+      router.refresh();
+    } finally {
+      setVerifying(false);
     }
   }
 
@@ -116,7 +210,7 @@ export function CrmContactsEditor({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-[11px] uppercase tracking-wider text-text-dim">
                   Contact {i + 1}
-                  {isPrimary ? " · mail naar" : ""}
+                  {isPrimary ? " · bedrijfsadres" : ""}
                 </p>
                 <div className="flex gap-2">
                   {!isPrimary ? (
@@ -124,11 +218,11 @@ export function CrmContactsEditor({
                       type="button"
                       onClick={() => {
                         setPrimaryIndex(i);
-                        setSaved(false);
+                        setNotice(null);
                       }}
                       className="text-xs text-text-muted underline-offset-2 hover:underline"
                     >
-                      Mail naar deze
+                      Maak bedrijfsadres
                     </button>
                   ) : null}
                   <button
@@ -140,6 +234,7 @@ export function CrmContactsEditor({
                   </button>
                 </div>
               </div>
+              <ContactStatus contact={c} checks={emailChecks} company={company} />
               <label className="block">
                 <span className="sr-only">Naam</span>
                 <input
@@ -163,7 +258,9 @@ export function CrmContactsEditor({
                 <input
                   type="email"
                   value={c.email ?? ""}
-                  onChange={(e) => update(i, { email: e.target.value })}
+                  onChange={(e) =>
+                    update(i, { email: e.target.value, emailSource: "manual" })
+                  }
                   placeholder="naam@bedrijf.nl"
                   className="block w-full border border-border bg-bg px-2 py-1.5 text-sm text-text"
                 />
@@ -192,6 +289,14 @@ export function CrmContactsEditor({
         </button>
         <button
           type="button"
+          disabled={verifying}
+          onClick={() => void verify()}
+          className="border border-border px-3 py-1.5 text-xs text-text-muted hover:border-accent hover:text-text disabled:opacity-50"
+        >
+          {verifying ? "Controleren…" : "Controleer adressen"}
+        </button>
+        <button
+          type="button"
           disabled={busy}
           onClick={() => void save()}
           className="bg-accent px-3 py-1.5 text-xs font-display tracking-[0.1em] text-accent-contrast disabled:opacity-50"
@@ -204,12 +309,12 @@ export function CrmContactsEditor({
           {error}
         </p>
       ) : null}
-      {saved ? (
-        <p className="text-sm text-text-muted">Opgeslagen.</p>
-      ) : null}
+      {notice ? <p className="text-sm text-text-muted">{notice}</p> : null}
       <p className="text-xs text-text-dim">
-        “Mail naar deze” bepaalt welk adres als eerste wordt gebruikt bij
-        Mailen. Je kunt later ook een ander contact kiezen.
+        Mailen kiest zelf de beste mensen: eerst Events, dan Office/facility,
+        dan assistent/communicatie (max 3). Een algemeen adres alleen als er
+        niemand persoonlijk is. Adressen worden vlak voor het schrijven
+        gecontroleerd; bestaat een adres niet, dan wordt het overgeslagen.
       </p>
     </div>
   );
