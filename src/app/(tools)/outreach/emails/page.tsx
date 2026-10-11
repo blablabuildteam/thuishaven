@@ -185,7 +185,7 @@ export default async function EmailsPage({
       <SectionHeader
         eyebrow="Stap 3"
         title="Mailen"
-        description="Vink bedrijven aan, kies desnoods een ander contact, en klik Genereer. AI schrijft elke mail persoonlijk; daarna lees en test je ze in de Wachtrij."
+        description="Vink bedrijven aan en genereer: elk mailbaar contact krijgt een eigen persoonlijke mail (max 3 per bedrijf)."
         action={
           <Link
             href="/outreach/planning"

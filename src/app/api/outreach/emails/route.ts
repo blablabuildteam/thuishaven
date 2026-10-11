@@ -67,7 +67,7 @@ const generateSchema = z
         }),
       )
       .min(1)
-      .max(40)
+      .max(80)
       .optional(),
     variantId: z.enum(VARIANT_IDS).optional(),
     subjectArm: z.enum(["a", "b"]).optional(),
@@ -688,9 +688,17 @@ export async function POST(request: Request) {
         prospectId: job.prospectId,
         variantId: job.variantId,
         senderProfileId: result.senderProfileId,
+        recipientEmail: job.recipientEmail ?? null,
       },
     });
-    return NextResponse.json(result, { status: 201 });
+    return NextResponse.json(
+      {
+        ...result,
+        recipientEmail: job.recipientEmail,
+        recipientName: job.recipientName,
+      },
+      { status: 201 },
+    );
   }
 
   const results: Array<{
@@ -701,6 +709,8 @@ export async function POST(request: Request) {
     variantId?: string;
     source?: string;
     senderProfileId?: string;
+    recipientEmail?: string;
+    recipientName?: string;
     error?: string;
   }> = [];
   for (const job of jobs) {
@@ -716,6 +726,8 @@ export async function POST(request: Request) {
       results.push({
         prospectId: job.prospectId,
         variantId: job.variantId,
+        recipientEmail: job.recipientEmail,
+        recipientName: job.recipientName,
         error: result.error,
       });
     } else {
@@ -727,6 +739,8 @@ export async function POST(request: Request) {
         variantId: result.variantId,
         source: result.source,
         senderProfileId: result.senderProfileId,
+        recipientEmail: job.recipientEmail,
+        recipientName: job.recipientName,
       });
     }
   }

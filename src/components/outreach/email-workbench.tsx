@@ -27,6 +27,9 @@ export type WorkbenchContact = {
   email: string;
 };
 
+/** Cap so one company doesn't flood the queue / domain. */
+const MAX_CONTACTS_PER_COMPANY = 3;
+
 export type WorkbenchProspect = {
   id: string;
   companyName: string;
@@ -65,6 +68,7 @@ type Props = {
 type DraftEdit = {
   emailId: string;
   companyName: string;
+  contactLabel: string;
   subject: string;
   body: string;
 };
@@ -138,25 +142,18 @@ export function OutreachEmailWorkbench({
           .map((p) => p.id),
       ),
   );
-  const [recipientById, setRecipientById] = useState<Record<string, string>>(
-    () =>
-      Object.fromEntries(
-        prospects.map((p) => [
-          p.id,
-          p.contacts[0]?.email ?? p.email,
-        ]),
-      ),
-  );
-
-  function contactFor(p: WorkbenchProspect): WorkbenchContact {
-    const email = recipientById[p.id] ?? p.contacts[0]?.email ?? p.email;
-    return (
-      p.contacts.find((c) => c.email.toLowerCase() === email.toLowerCase()) ?? {
-        name: p.contactName ?? "Contact",
-        email,
-      }
-    );
+  function mailTargets(p: WorkbenchProspect): WorkbenchContact[] {
+    return p.contacts.slice(0, MAX_CONTACTS_PER_COMPANY);
   }
+
+  const selectedMailCount = useMemo(() => {
+    let n = 0;
+    for (const p of prospects) {
+      if (!selected.has(p.id) || p.quality.level === "block") continue;
+      n += mailTargets(p).length;
+    }
+    return n;
+  }, [prospects, selected]);
   const [mode, setMode] = useState<Mode>(
     handoffVariantId ? "override" : "suggested",
   );
@@ -251,15 +248,24 @@ export function OutreachEmailWorkbench({
 
     setBusy(true);
     try {
-      const items = picks.map((p) => {
-        const contact = contactFor(p);
-        return {
+      const items = picks.flatMap((p) =>
+        mailTargets(p).map((contact) => ({
           prospectId: p.id,
           variantId: variantFor(p),
           recipientEmail: contact.email,
           recipientName: contact.name,
-        };
-      });
+        })),
+      );
+      if (!items.length) {
+        setError("Geen mailbare contacten in de selectie");
+        return;
+      }
+      if (items.length > 80) {
+        setError(
+          `Te veel mails in één keer (${items.length}). Selecteer minder bedrijven (max 80 mails).`,
+        );
+        return;
+      }
 
       const res = await fetch("/api/outreach/emails", {
         method: "POST",
@@ -281,6 +287,9 @@ export function OutreachEmailWorkbench({
             {
               emailId: data.emailId,
               companyName: picks[0]?.companyName ?? "",
+              contactLabel: items[0]
+                ? `${items[0].recipientName} · ${items[0].recipientEmail}`
+                : "",
               subject: data.subject,
               body: data.body,
             },
@@ -291,6 +300,8 @@ export function OutreachEmailWorkbench({
               emailId?: string;
               subject?: string;
               body?: string;
+              recipientEmail?: string;
+              recipientName?: string;
             }>
           )
             .filter((r) => r.emailId && r.subject && r.body)
@@ -298,6 +309,9 @@ export function OutreachEmailWorkbench({
               emailId: r.emailId!,
               companyName:
                 picks.find((p) => p.id === r.prospectId)?.companyName ?? "",
+              contactLabel: [r.recipientName, r.recipientEmail]
+                .filter(Boolean)
+                .join(" · "),
               subject: r.subject!,
               body: r.body!,
             }));
@@ -694,39 +708,19 @@ export function OutreachEmailWorkbench({
                       >
                         {p.companyName}
                       </Link>
-                      {p.contacts.length > 1 ? (
-                        <label
-                          className="mt-1 block"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <span className="sr-only">Contact</span>
-                          <select
-                            value={contactFor(p).email}
-                            onChange={(e) =>
-                              setRecipientById((prev) => ({
-                                ...prev,
-                                [p.id]: e.target.value,
-                              }))
-                            }
-                            className="mt-0.5 max-w-full border border-border bg-bg px-2 py-1 text-xs text-text"
-                          >
-                            {p.contacts.map((c) => (
-                              <option key={c.email} value={c.email}>
-                                {c.name} · {c.email}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      ) : (
-                        <p className="text-xs text-text-dim">
-                          {[contactFor(p).name, contactFor(p).email]
-                            .filter(Boolean)
-                            .join(" · ")}
-                          {p.queuedCount > 0
-                            ? ` · ${p.queuedCount} in wachtrij`
-                            : ""}
-                        </p>
-                      )}
+                      <ul className="mt-1 space-y-0.5 text-xs text-text-dim">
+                        {mailTargets(p).map((c) => (
+                          <li key={c.email} className="truncate">
+                            {[c.name, c.email].filter(Boolean).join(" · ")}
+                          </li>
+                        ))}
+                        {p.contacts.length > MAX_CONTACTS_PER_COMPANY ? (
+                          <li className="text-text-dim">
+                            +{p.contacts.length - MAX_CONTACTS_PER_COMPANY}{" "}
+                            later (max {MAX_CONTACTS_PER_COMPANY} tegelijk)
+                          </li>
+                        ) : null}
+                      </ul>
                       {p.quality.issues.length > 0 ? (
                         <p
                           className={`mt-0.5 text-[11px] ${blocked ? "text-danger" : "text-warn"}`}
@@ -795,6 +789,9 @@ export function OutreachEmailWorkbench({
               <p className="text-sm font-medium text-text">
                 {draft.companyName || "Bedrijf"}
               </p>
+              {draft.contactLabel ? (
+                <p className="text-xs text-text-dim">{draft.contactLabel}</p>
+              ) : null}
               <label className="mt-2 block text-xs text-text-dim">
                 Onderwerp
                 <input
@@ -849,9 +846,13 @@ export function OutreachEmailWorkbench({
         <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div className="pointer-events-auto flex w-full max-w-3xl flex-col gap-2 border border-border bg-surface px-3 py-3 shadow-[0_-8px_30px_rgba(0,0,0,0.12)] sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
             <p className="text-sm text-text">
-              <span className="font-medium">{selected.size}</span> geselecteerd
+              <span className="font-medium">{selected.size}</span>{" "}
+              {selected.size === 1 ? "bedrijf" : "bedrijven"}
+              {" · "}
+              <span className="font-medium">{selectedMailCount}</span>{" "}
+              {selectedMailCount === 1 ? "mail" : "mails"}
               {lastEmailIds.length > 0
-                ? ` · ${lastEmailIds.length} draft${lastEmailIds.length === 1 ? "" : "s"}`
+                ? ` · ${lastEmailIds.length} klaar`
                 : ""}
             </p>
             <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
@@ -880,7 +881,9 @@ export function OutreachEmailWorkbench({
                 onClick={() => void generate()}
                 className="bg-accent px-4 py-2.5 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
               >
-                {busy ? "Bezig…" : `Genereer ${selected.size} draft${selected.size === 1 ? "" : "s"}`}
+                {busy
+                  ? "Bezig…"
+                  : `Genereer ${selectedMailCount} mail${selectedMailCount === 1 ? "" : "s"}`}
               </button>
               <button
                 type="button"
