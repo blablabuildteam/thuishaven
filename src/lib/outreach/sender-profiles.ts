@@ -19,9 +19,49 @@ export type OutreachSenderProfile = {
   name: string;
   replyToEmail: string;
   replyToName: string;
+  /** Naam bovenin de handtekening (persoon of team). */
+  signatureName: string;
+  /** Merkregel onder de naam. */
+  signatureOrg: string;
+  /** Korte rol / tagline. */
+  signatureRole: string;
+  phone?: string;
+  address: string;
+  websiteUrl: string;
+  websiteLabel: string;
   /** Plain-text handtekening onder de mail. */
   signature: string;
 };
+
+function buildPlainSignature(p: {
+  signatureName: string;
+  signatureOrg: string;
+  signatureRole: string;
+  email: string;
+  phone?: string;
+  address: string;
+  websiteLabel: string;
+}): string {
+  const contact = p.phone ? `${p.email} · ${p.phone}` : p.email;
+  return [
+    p.signatureName,
+    p.signatureOrg,
+    p.signatureRole,
+    contact,
+    p.address,
+    p.websiteLabel,
+  ]
+    .filter((line) => line.trim().length > 0)
+    .join("\n");
+}
+
+const SHARED = {
+  signatureOrg: "Thuishaven",
+  signatureRole: "Festival locatie voor zakelijke events",
+  address: "Contactweg 68, 1014 BW Amsterdam",
+  websiteUrl: "https://thuishavenb2b.nl",
+  websiteLabel: "thuishavenb2b.nl",
+} as const;
 
 export const OUTREACH_SENDER_PROFILES: readonly OutreachSenderProfile[] = [
   {
@@ -31,11 +71,20 @@ export const OUTREACH_SENDER_PROFILES: readonly OutreachSenderProfile[] = [
     name: "Thuishaven Evenementen",
     replyToEmail: "evenement@thuishaven.nl",
     replyToName: "Thuishaven Evenementen",
-    signature: `Thuishaven Evenementen
-Festival locatie voor zakelijke events
-evenement@thuishaven.nl
-Contactweg 68, 1014 BW Amsterdam
-thuishavenb2b.nl`,
+    signatureName: "Thuishaven Evenementen",
+    signatureOrg: "",
+    signatureRole: SHARED.signatureRole,
+    address: SHARED.address,
+    websiteUrl: SHARED.websiteUrl,
+    websiteLabel: SHARED.websiteLabel,
+    signature: buildPlainSignature({
+      signatureName: "Thuishaven Evenementen",
+      signatureOrg: SHARED.signatureRole,
+      signatureRole: "",
+      email: "evenement@thuishaven.nl",
+      address: SHARED.address,
+      websiteLabel: SHARED.websiteLabel,
+    }),
   },
   {
     id: "reiner",
@@ -44,12 +93,15 @@ thuishavenb2b.nl`,
     name: "Reijner · Thuishaven",
     replyToEmail: "reijner@thuishaven.nl",
     replyToName: "Reijner · Thuishaven",
-    signature: `Reijner
-Thuishaven
-Festival locatie voor zakelijke events
-reijner@thuishaven.nl · +31 6 83 63 37 25
-Contactweg 68, 1014 BW Amsterdam
-thuishavenb2b.nl`,
+    signatureName: "Reijner",
+    phone: "+31 6 83 63 37 25",
+    ...SHARED,
+    signature: buildPlainSignature({
+      signatureName: "Reijner",
+      ...SHARED,
+      email: "reijner@thuishaven.nl",
+      phone: "+31 6 83 63 37 25",
+    }),
   },
   {
     id: "yoram",
@@ -58,12 +110,13 @@ thuishavenb2b.nl`,
     name: "Yoram · Thuishaven",
     replyToEmail: "yoram@thuishaven.nl",
     replyToName: "Yoram · Thuishaven",
-    signature: `Yoram
-Thuishaven
-Festival locatie voor zakelijke events
-yoram@thuishaven.nl
-Contactweg 68, 1014 BW Amsterdam
-thuishavenb2b.nl`,
+    signatureName: "Yoram",
+    ...SHARED,
+    signature: buildPlainSignature({
+      signatureName: "Yoram",
+      ...SHARED,
+      email: "yoram@thuishaven.nl",
+    }),
   },
 ] as const;
 
@@ -94,6 +147,18 @@ export function getSenderProfile(
   return (
     found ??
     OUTREACH_SENDER_PROFILES.find((p) => p.id === DEFAULT_SENDER_PROFILE_ID)!
+  );
+}
+
+/** Match a trailing plain-text signature block to a known profile. */
+export function matchSenderProfileFromSignature(
+  signatureText: string,
+): OutreachSenderProfile | null {
+  const first = signatureText.trim().split("\n")[0]?.trim();
+  if (!first) return null;
+  if (first === "Reiner") return getSenderProfile("reiner");
+  return (
+    OUTREACH_SENDER_PROFILES.find((p) => p.signatureName === first) ?? null
   );
 }
 
@@ -135,8 +200,7 @@ export function applySenderSignature(
   );
 
   for (const p of OUTREACH_SENDER_PROFILES) {
-    const marker = p.signature.split("\n")[0]?.trim();
-    if (!marker) continue;
+    const marker = p.signatureName;
     const idx = trimmed.lastIndexOf(`\n\n${marker}`);
     if (idx >= 0) {
       const tail = trimmed.slice(idx + 2);
@@ -162,7 +226,7 @@ export function applySenderSignature(
 
   if (
     trimmed.endsWith(profile.signature) ||
-    (trimmed.includes(profile.signature.split("\n")[0]!) &&
+    (trimmed.includes(profile.signatureName) &&
       /Festival locatie voor zakelijke events/i.test(trimmed.slice(-220)))
   ) {
     return trimmed;
