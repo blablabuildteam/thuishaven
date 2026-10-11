@@ -36,7 +36,7 @@ export function PipelineStatusBanner({ status }: Props) {
       count: status.toComplete,
       label: "Aan te vullen",
       href: "/outreach/lijst-bijwerken",
-      hint: "Mist e-mail, gegevens of doelgroep-check",
+      hint: "Nog geen contactpersoon, e-mail of KvK — klik om aan te vullen",
     },
     {
       key: "mailed",

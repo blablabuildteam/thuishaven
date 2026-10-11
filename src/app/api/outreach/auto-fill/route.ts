@@ -49,6 +49,11 @@ export async function POST(request: Request) {
     discover: parsed.data.discover === true,
     fillHeadcounts: parsed.data.fillHeadcounts !== false,
     criteria: parsed.data.criteria,
+    // One small round per request; the page repeats until nothing is left.
+    maxKvkRounds: 1,
+    maxPeopleRounds: 1,
+    maxHunterRounds: 1,
+    maxWebsiteRounds: 1,
   });
 
   if (!result.ok) {

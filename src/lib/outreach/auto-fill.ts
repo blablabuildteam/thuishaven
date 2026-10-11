@@ -24,6 +24,8 @@ import {
 import {
   fillDecisionMakers,
   fillHunterEmailsForDecisionMakers,
+  needsPeopleSearch,
+  relevantDecisionMakerSql,
 } from "@/lib/outreach/decision-makers";
 import { fillCompanyWebsiteEmails } from "@/lib/outreach/website-email";
 import { getDb, hasDatabase } from "@/lib/db/client";
@@ -45,6 +47,7 @@ export type AutoFillSummary = {
   peopleFilled: number;
   hunterFilled: number;
   websiteFilled: number;
+  warnings: string[];
   rounds: {
     kvk: number;
     people: number;
@@ -128,6 +131,7 @@ export async function runOutreachAutoFill(options?: {
     peopleFilled: 0,
     hunterFilled: 0,
     websiteFilled: 0,
+    warnings: [],
     rounds: { kvk: 0, people: 0, hunter: 0, website: 0 },
   };
 
@@ -210,7 +214,11 @@ export async function runOutreachAutoFill(options?: {
     const maxRounds = options?.maxHunterRounds ?? 8;
     for (let i = 0; i < maxRounds; i++) {
       const batch = await fillHunterEmailsForDecisionMakers(12);
-      if (!batch.ok) break;
+      if (!batch.ok) {
+        if (batch.error) summary.warnings.push(batch.error);
+        summary.hunterFilled += batch.filled;
+        break;
+      }
       if (batch.processed === 0) break;
       summary.rounds.hunter += 1;
       summary.hunterFilled += batch.filled;
@@ -267,8 +275,7 @@ export async function countAutoFillPending(): Promise<{
     .where(
       and(
         base,
-        sql`${prospects.metadata}->>'decisionMaker' is null`,
-        sql`coalesce((${prospects.metadata}->>'decisionMakerFails')::int, 0) < 2`,
+        needsPeopleSearch(),
       ),
     );
 
@@ -281,6 +288,7 @@ export async function countAutoFillPending(): Promise<{
         sql`${prospects.metadata}->>'decisionMaker' is not null`,
         sql`coalesce(${prospects.metadata}->'decisionMaker'->>'email', '') = ''`,
         sql`coalesce((${prospects.metadata}->>'hunterEmailFails')::int, 0) < 2`,
+        relevantDecisionMakerSql(),
       ),
     );
 

@@ -66,6 +66,34 @@ async function resolvePersonEmail(
   };
 }
 
+/** Bump when the search gets smarter, so older results are searched once more. */
+const PEOPLE_SEARCH_VERSION = 2;
+
+/**
+ * Nobody searched yet, or an older search found no Event/Office person
+ * (and we haven't mailed this company yet).
+ */
+export function needsPeopleSearch() {
+  return sql`(
+    (${prospects.metadata}->>'decisionMaker' is null
+      and coalesce((${prospects.metadata}->>'decisionMakerFails')::int, 0) < 2)
+    or (
+      coalesce((${prospects.metadata}->>'peopleSearchV')::int, 0) < ${PEOPLE_SEARCH_VERSION}
+      and ${prospects.status} not in ('contacted', 'opened', 'replied', 'lead', 'excluded')
+      and coalesce(${prospects.metadata}->'decisionMaker'->>'title', '') !~* '(event|evenement|office.?manag|facilit|workplace)'
+      and coalesce(${prospects.metadata}->'decisionMaker'->>'source', '') <> 'manual'
+    )
+  )`;
+}
+
+/** Primary contact is someone we'd actually mail (or added by hand). */
+export function relevantDecisionMakerSql() {
+  return sql`(
+    coalesce(${prospects.metadata}->'decisionMaker'->>'title', '') ~* '(event|evenement|office|facilit|workplace|assist|secretar|communicat)'
+    or coalesce(${prospects.metadata}->'decisionMaker'->>'source', '') = 'manual'
+  )`;
+}
+
 const LOCKED_STATUSES = new Set([
   "contacted",
   "opened",
@@ -191,6 +219,7 @@ async function storeFoundPeople(
   meta.contacts = [...contacts, ...keep];
   meta.decisionMakerAt = new Date().toISOString();
   meta.peopleEnrichedAt = new Date().toISOString();
+  meta.peopleSearchV = PEOPLE_SEARCH_VERSION;
   if (primary.emailSource === "hunter") meta.emailSource = "hunter";
   delete meta.decisionMakerFails;
   delete meta.decisionMakerError;
@@ -220,6 +249,7 @@ async function storeFailure(target: FillTarget, error: string) {
       ? meta.decisionMakerFails + 1
       : 1;
   meta.decisionMakerError = error;
+  meta.peopleSearchV = PEOPLE_SEARCH_VERSION;
   await getDb()
     .update(prospects)
     .set({ metadata: meta, updatedAt: new Date() })
@@ -261,8 +291,7 @@ export async function fillDecisionMakers(limit = 8): Promise<{
         eq(prospects.type, "company"),
         ne(prospects.status, "excluded"),
         sql`coalesce(${prospects.metadata}->>'source', '') <> 'system'`,
-        sql`${prospects.metadata}->>'decisionMaker' is null`,
-        sql`coalesce((${prospects.metadata}->>'decisionMakerFails')::int, 0) < 2`,
+        needsPeopleSearch(),
         sql`coalesce(${prospects.metadata}->>'doelgroepFit', '') <> 'nee'`,
       ),
     )
@@ -412,6 +441,7 @@ export async function fillHunterEmailsForDecisionMakers(limit = 8): Promise<{
         sql`${prospects.metadata}->>'decisionMaker' is not null`,
         sql`coalesce(${prospects.metadata}->'decisionMaker'->>'email', '') = ''`,
         sql`coalesce((${prospects.metadata}->>'hunterEmailFails')::int, 0) < 2`,
+        relevantDecisionMakerSql(),
         sql`coalesce(${prospects.metadata}->>'doelgroepFit', '') <> 'nee'`,
       ),
     )
@@ -435,6 +465,15 @@ export async function fillHunterEmailsForDecisionMakers(limit = 8): Promise<{
       linkedinUrl: current.linkedinUrl,
     });
 
+    if (hunter.quota) {
+      return {
+        ok: false,
+        error: "Hunter-tegoed is op voor deze maand",
+        processed: rows.length,
+        filled,
+        rows,
+      };
+    }
     if (!hunter.ok || !hunter.email) {
       meta.hunterEmailFails =
         typeof meta.hunterEmailFails === "number"

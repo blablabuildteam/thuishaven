@@ -70,6 +70,8 @@ export async function findHunterPersonEmail(input: {
   email?: string;
   score?: number;
   error?: string;
+  /** Monthly credits used up — not the company's fault. */
+  quota?: boolean;
 }> {
   const key = process.env.HUNTER_API_KEY?.trim();
   if (!key) return { ok: false, error: "HUNTER_API_KEY ontbreekt" };
@@ -105,9 +107,11 @@ export async function findHunterPersonEmail(input: {
     };
   };
   if (!res.ok) {
+    const detail = json.errors?.[0]?.details ?? `Hunter HTTP ${res.status}`;
     return {
       ok: false,
-      error: json.errors?.[0]?.details ?? `Hunter HTTP ${res.status}`,
+      error: detail,
+      quota: res.status === 429 || /usage|limit|quota|credits/i.test(detail),
     };
   }
 
