@@ -5,12 +5,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
-  APOLLO_EMPLOYEE_RANGES,
   DEFAULT_APOLLO_CRITERIA,
   SEARCH_ZONES,
   boundsFromEmployeeRanges,
   criteriaSummary,
   distanceIndexForPreset,
+  employeeRangesFromBounds,
   formatEmployeeBounds,
   normalizeCriteria,
   readyDistanceStops,
@@ -46,21 +46,6 @@ type Props = {
   coverage: SliceState[];
   initialCriteria?: Partial<ApolloSearchCriteria> | null;
 };
-
-/** Dual-thumb range over Apollo bucket indices (0 … n-1). */
-function employeeIndexSpan(ranges: string[]): { lo: number; hi: number } {
-  const idxs = APOLLO_EMPLOYEE_RANGES.map((r, i) =>
-    ranges.includes(r.id) ? i : -1,
-  ).filter((i) => i >= 0);
-  if (idxs.length === 0) return { lo: 1, hi: 3 };
-  return { lo: Math.min(...idxs), hi: Math.max(...idxs) };
-}
-
-function rangesFromIndexSpan(lo: number, hi: number): string[] {
-  const a = Math.max(0, Math.min(lo, hi));
-  const b = Math.min(APOLLO_EMPLOYEE_RANGES.length - 1, Math.max(lo, hi));
-  return APOLLO_EMPLOYEE_RANGES.slice(a, b + 1).map((r) => r.id);
-}
 
 function pagesLeftFor(s: SliceState | undefined): number | null {
   if (!s) return null;
@@ -100,6 +85,11 @@ export function ListFillWorkbench({
   const [criteria, setCriteria] = useState<ApolloSearchCriteria>(() =>
     normalizeCriteria(initialCriteria ?? DEFAULT_APOLLO_CRITERIA),
   );
+  const initialBounds = boundsFromEmployeeRanges(
+    normalizeCriteria(initialCriteria ?? DEFAULT_APOLLO_CRITERIA).employeeRanges,
+  );
+  const [minInput, setMinInput] = useState(String(initialBounds.min));
+  const [maxInput, setMaxInput] = useState(String(initialBounds.max));
   const [coverage, setCoverage] = useState<Record<string, SliceState>>(() =>
     Object.fromEntries(initialCoverage.map((s) => [s.key, s])),
   );
@@ -352,14 +342,21 @@ export function ListFillWorkbench({
     pendingEmail +
     pendingHeadcount;
 
-  const empSpan = employeeIndexSpan(criteria.employeeRanges);
   const empBounds = boundsFromEmployeeRanges(criteria.employeeRanges);
 
-  function setEmployeeSpan(lo: number, hi: number) {
-    setCriteria((c) => ({
-      ...c,
-      employeeRanges: rangesFromIndexSpan(lo, hi),
-    }));
+  function commitEmployeeBounds(minRaw: string, maxRaw: string) {
+    const min = Number(String(minRaw).replace(/\D/g, ""));
+    const max = Number(String(maxRaw).replace(/\D/g, ""));
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min < 1) {
+      setMinInput(String(empBounds.min));
+      setMaxInput(String(empBounds.max));
+      return;
+    }
+    const next = employeeRangesFromBounds(min, max);
+    const bounds = boundsFromEmployeeRanges(next);
+    setMinInput(String(bounds.min));
+    setMaxInput(String(bounds.max));
+    setCriteria((c) => ({ ...c, employeeRanges: next }));
   }
 
   function run(
@@ -591,44 +588,49 @@ export function ListFillWorkbench({
             Hoeveel medewerkers?
           </p>
           <p className="mt-0.5 text-xs text-text-dim">
-            Grotere bedrijven organiseren vaker personeelsfeesten en events.
+            Typ zelf het bereik. Zelfde getal twee keer = precies dat aantal
+            (bijv. 2500 en 2500).
           </p>
           <div className="mt-2 flex flex-wrap items-end gap-3">
             <label className="text-xs text-text-dim">
               Van
-              <select
-                className="mt-1 block border border-border bg-bg px-3 py-2 text-sm text-text"
-                value={empSpan.lo}
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={500000}
+                step={1}
+                className="mt-1 block w-28 border border-border bg-bg px-3 py-2 text-sm text-text tabular-nums"
+                value={minInput}
                 disabled={pending || filling}
-                onChange={(e) => {
-                  const lo = Number(e.target.value);
-                  setEmployeeSpan(lo, Math.max(lo, empSpan.hi));
+                onChange={(e) => setMinInput(e.target.value)}
+                onBlur={() => commitEmployeeBounds(minInput, maxInput)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.currentTarget.blur();
+                  }
                 }}
-              >
-                {APOLLO_EMPLOYEE_RANGES.map((r, i) => (
-                  <option key={r.id} value={i}>
-                    {r.label.split("–")[0]}
-                  </option>
-                ))}
-              </select>
+              />
             </label>
             <label className="text-xs text-text-dim">
               Tot
-              <select
-                className="mt-1 block border border-border bg-bg px-3 py-2 text-sm text-text"
-                value={empSpan.hi}
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={500000}
+                step={1}
+                className="mt-1 block w-28 border border-border bg-bg px-3 py-2 text-sm text-text tabular-nums"
+                value={maxInput}
                 disabled={pending || filling}
-                onChange={(e) => {
-                  const hi = Number(e.target.value);
-                  setEmployeeSpan(Math.min(empSpan.lo, hi), hi);
+                onChange={(e) => setMaxInput(e.target.value)}
+                onBlur={() => commitEmployeeBounds(minInput, maxInput)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.currentTarget.blur();
+                  }
                 }}
-              >
-                {APOLLO_EMPLOYEE_RANGES.map((r, i) => (
-                  <option key={r.id} value={i}>
-                    {r.label.split("–")[1] ?? r.label}
-                  </option>
-                ))}
-              </select>
+              />
             </label>
             <span className="pb-2 text-sm text-text-muted">medewerkers</span>
           </div>
@@ -697,64 +699,62 @@ export function ListFillWorkbench({
             Details: wat is waar al gezocht?
           </summary>
           <p className="mt-2 text-xs text-text-dim">
-            Per afstand en grootte: hoeveel bedrijven Apollo kent, hoeveel we
-            al bekeken hebben en hoeveel er nieuw op de lijst kwamen. De
-            gekleurde vakjes horen bij je huidige keuze.
+            Per afstand: hoeveel bedrijven Apollo kent voor jouw
+            medewerker-filter (
+            {formatEmployeeBounds(empBounds.min, empBounds.max)}), hoeveel we
+            al bekeken hebben en hoeveel er nieuw op de lijst kwamen.
           </p>
           <div className="mt-3 overflow-x-auto border border-border">
-            <table className="w-full min-w-[640px] text-left text-sm">
+            <table className="w-full min-w-[480px] text-left text-sm">
               <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
                 <tr>
-                  <th className="px-3 py-2 font-medium">Medewerkers</th>
-                  {SEARCH_ZONES.map((z) => (
-                    <th key={z.id} className="px-3 py-2 font-medium" title={z.hint}>
-                      {z.label}
-                    </th>
-                  ))}
+                  <th className="px-3 py-2 font-medium">Afstand</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {APOLLO_EMPLOYEE_RANGES.map((r) => (
-                  <tr key={r.id} className="border-b border-border last:border-0">
-                    <td className="px-3 py-2 text-text-muted">{r.label}</td>
-                    {SEARCH_ZONES.map((z) => {
-                      const key = sliceKey(z.id, r.id, []);
-                      const st = coverage[key];
-                      const inSel = selectedKeys.has(key);
-                      return (
-                        <td
-                          key={z.id}
-                          className={`px-3 py-2 align-top text-xs ${
-                            inSel ? "bg-accent/5" : "opacity-50"
-                          }`}
-                        >
-                          {!st ? (
-                            <span className="text-text-dim">
-                              {inSel ? "Nog niet gezocht" : "—"}
+                {SEARCH_ZONES.map((z) => {
+                  const range = criteria.employeeRanges[0] ?? "500,5000";
+                  const key = sliceKey(z.id, range, []);
+                  const st = coverage[key];
+                  const inSel = selectedKeys.has(key);
+                  return (
+                    <tr
+                      key={z.id}
+                      className={`border-b border-border last:border-0 ${
+                        inSel ? "bg-accent/5" : "opacity-50"
+                      }`}
+                    >
+                      <td className="px-3 py-2 text-text-muted" title={z.hint}>
+                        {z.label}
+                      </td>
+                      <td className="px-3 py-2 text-xs">
+                        {!st ? (
+                          <span className="text-text-dim">
+                            {inSel ? "Nog niet gezocht" : "—"}
+                          </span>
+                        ) : st.done ? (
+                          <span className="text-success">
+                            ✓ Klaar · {st.created} toegevoegd
+                            <span className="block text-text-dim">
+                              van {st.total ?? st.seen} bij Apollo
+                              {st.lastRunAt ? ` · ${fmtDate(st.lastRunAt)}` : ""}
                             </span>
-                          ) : st.done ? (
-                            <span className="text-success">
-                              ✓ Klaar · {st.created} toegevoegd
-                              <span className="block text-text-dim">
-                                van {st.total ?? st.seen} bij Apollo
-                                {st.lastRunAt ? ` · ${fmtDate(st.lastRunAt)}` : ""}
-                              </span>
+                          </span>
+                        ) : (
+                          <span className="text-text">
+                            ~{(st.total ?? 0).toLocaleString("nl-NL")} bij Apollo
+                            <span className="block text-text-dim">
+                              {st.seen > 0
+                                ? `${st.seen} bekeken · ${st.created} toegevoegd`
+                                : "nog niet bekeken"}
                             </span>
-                          ) : (
-                            <span className="text-text">
-                              ~{(st.total ?? 0).toLocaleString("nl-NL")} bij Apollo
-                              <span className="block text-text-dim">
-                                {st.seen > 0
-                                  ? `${st.seen} bekeken · ${st.created} toegevoegd`
-                                  : "nog niet bekeken"}
-                              </span>
-                            </span>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

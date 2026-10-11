@@ -46,10 +46,35 @@ export type ApolloSearchCriteria = {
 };
 
 export const DEFAULT_APOLLO_CRITERIA: ApolloSearchCriteria = {
-  employeeRanges: ["501,1000", "1001,2000", "2001,5000"],
+  /** One Apollo range string "min,max" — custom numbers are allowed. */
+  employeeRanges: ["500,5000"],
   placePreset: "ring",
   keywordTags: [],
 };
+
+const RANGE_RE = /^(\d{1,6})\s*,\s*(\d{1,6})$/;
+const MIN_EMPLOYEES = 1;
+const MAX_EMPLOYEES = 500_000;
+
+/** Parse Apollo "min,max" — rejects nonsense / inverted ranges. */
+export function parseEmployeeRange(
+  raw: string,
+): { min: number; max: number } | null {
+  const m = RANGE_RE.exec(raw.trim());
+  if (!m) return null;
+  const min = Number(m[1]);
+  const max = Number(m[2]);
+  if (
+    !Number.isFinite(min) ||
+    !Number.isFinite(max) ||
+    min < MIN_EMPLOYEES ||
+    max < min ||
+    max > MAX_EMPLOYEES
+  ) {
+    return null;
+  }
+  return { min, max };
+}
 
 export function placesForPreset(preset: PlacePreset): readonly string[] {
   if (preset === "amsterdam") return ["Amsterdam"];
@@ -72,10 +97,18 @@ export function placePresetLabel(preset: PlacePreset): string {
 export function normalizeCriteria(
   raw?: Partial<ApolloSearchCriteria> | null,
 ): ApolloSearchCriteria {
-  const allowed = new Set(APOLLO_EMPLOYEE_RANGES.map((r) => r.id));
-  const ranges = (raw?.employeeRanges ?? DEFAULT_APOLLO_CRITERIA.employeeRanges)
-    .map((r) => String(r).trim())
-    .filter((r) => allowed.has(r as ApolloEmployeeRangeId));
+  // Accept Apollo's predefined buckets and any custom "min,max".
+  // Multiple ranges collapse to one span so the UI can show Van/Tot.
+  const parsed = (raw?.employeeRanges ?? DEFAULT_APOLLO_CRITERIA.employeeRanges)
+    .map((r) => parseEmployeeRange(String(r)))
+    .filter((r): r is { min: number; max: number } => Boolean(r));
+  const employeeRanges =
+    parsed.length > 0
+      ? employeeRangesFromBounds(
+          Math.min(...parsed.map((p) => p.min)),
+          Math.max(...parsed.map((p) => p.max)),
+        )
+      : [...DEFAULT_APOLLO_CRITERIA.employeeRanges];
   const placePreset: PlacePreset =
     raw?.placePreset === "kern" ||
     raw?.placePreset === "amsterdam" ||
@@ -89,8 +122,7 @@ export function normalizeCriteria(
     .filter(Boolean)
     .slice(0, 8);
   return {
-    employeeRanges:
-      ranges.length > 0 ? ranges : [...DEFAULT_APOLLO_CRITERIA.employeeRanges],
+    employeeRanges,
     placePreset,
     keywordTags,
   };
@@ -210,16 +242,20 @@ export function slicesForCriteria(c: ApolloSearchCriteria): SearchSlice[] {
 }
 
 export function sliceLabel(s: Pick<SearchSlice, "zone" | "range" | "keywords">): string {
+  const known = APOLLO_EMPLOYEE_RANGES.find((r) => r.id === s.range)?.label;
+  const parsed = parseEmployeeRange(s.range);
   const size =
-    APOLLO_EMPLOYEE_RANGES.find((r) => r.id === s.range)?.label ?? s.range;
+    known ??
+    (parsed
+      ? formatEmployeeBounds(parsed.min, parsed.max).replace(" medewerkers", "")
+      : s.range);
   const tags = s.keywords.length ? ` · ${s.keywords.join(", ")}` : "";
   return `${zoneLabel(s.zone)} · ${size} mdw${tags}`;
 }
 
 export function criteriaSummary(c: ApolloSearchCriteria): string {
-  const sizes = c.employeeRanges
-    .map((id) => APOLLO_EMPLOYEE_RANGES.find((r) => r.id === id)?.label ?? id)
-    .join(" · ");
+  const bounds = boundsFromEmployeeRanges(c.employeeRanges);
+  const sizes = formatEmployeeBounds(bounds.min, bounds.max);
   const tags = c.keywordTags.length
     ? ` · keywords: ${c.keywordTags.join(", ")}`
     : "";
@@ -309,31 +345,36 @@ export const EMPLOYEE_BUCKETS = APOLLO_EMPLOYEE_RANGES.map((r) => {
   return { id: r.id, label: r.label, min, max };
 });
 
-/** Contiguous Apollo buckets covering [minEmployees, maxEmployees]. */
+/** One Apollo range from free-form min/max (exact = same number twice). */
 export function employeeRangesFromBounds(
   minEmployees: number,
   maxEmployees: number,
 ): string[] {
-  const lo = Math.min(minEmployees, maxEmployees);
-  const hi = Math.max(minEmployees, maxEmployees);
-  const ids = EMPLOYEE_BUCKETS.filter((b) => b.max >= lo && b.min <= hi).map(
-    (b) => b.id,
+  const lo = Math.max(
+    MIN_EMPLOYEES,
+    Math.min(minEmployees, maxEmployees) | 0,
   );
-  return ids.length > 0 ? ids : [...DEFAULT_APOLLO_CRITERIA.employeeRanges];
+  const hi = Math.min(
+    MAX_EMPLOYEES,
+    Math.max(minEmployees, maxEmployees) | 0,
+  );
+  return [`${lo},${Math.max(lo, hi)}`];
 }
 
-/** Slider bounds from selected Apollo range ids (expands to full span). */
+/** Bounds from selected Apollo range ids (custom or predefined). */
 export function boundsFromEmployeeRanges(ranges: string[]): {
   min: number;
   max: number;
 } {
-  const selected = EMPLOYEE_BUCKETS.filter((b) => ranges.includes(b.id));
-  if (selected.length === 0) {
-    return { min: 501, max: 5000 };
+  const parsed = ranges
+    .map((r) => parseEmployeeRange(r))
+    .filter((r): r is { min: number; max: number } => Boolean(r));
+  if (parsed.length === 0) {
+    return { min: 500, max: 5000 };
   }
   return {
-    min: Math.min(...selected.map((s) => s.min)),
-    max: Math.max(...selected.map((s) => s.max)),
+    min: Math.min(...parsed.map((s) => s.min)),
+    max: Math.max(...parsed.map((s) => s.max)),
   };
 }
 
