@@ -328,6 +328,10 @@ export function ListFillWorkbench({
       .sort((a, b) => (b.lastRunAt ?? "").localeCompare(a.lastRunAt ?? ""));
   }, [coverage]);
 
+  const keywordSearches = pastSearches.filter(
+    (p) => p.keywords.length > 0 && p.seen > 0,
+  );
+
   const fetchCents =
     (plan.knownPages + plan.unknownSlices) * OUTREACH_RATES.apolloCreditCents;
 
@@ -702,7 +706,7 @@ export function ListFillWorkbench({
                 {selectionImpact.cumulativeApollo.toLocaleString("nl-NL")}.
                 {plan.fetched > 0
                   ? ` Daarvan hebben we er al ${plan.fetched.toLocaleString("nl-NL")} bekeken (${plan.created} toegevoegd).`
-                  : " We hebben hier nog niet gezocht."}
+                  : " Bedrijven die al op de lijst staan, slaan we bij het toevoegen over."}
               </>
             ) : counting ? (
               "Apollo telt hoeveel bedrijven er zijn…"
@@ -822,16 +826,16 @@ export function ListFillWorkbench({
           ) : null}
         </details>
 
-        {pastSearches.length > 0 ? (
+        {keywordSearches.length > 0 ? (
           <details className="mt-3">
             <summary className="cursor-pointer text-sm text-text-muted hover:text-text">
-              Eerder gezocht op branche ({pastSearches.length})
+              Eerder gezocht op branche ({keywordSearches.length})
             </summary>
             <p className="mt-2 text-xs text-text-dim">
               Klik op een zoekopdracht om die branches weer in te vullen.
             </p>
             <ul className="mt-2 divide-y divide-border border-y border-border text-sm">
-              {pastSearches.map((p) => (
+              {keywordSearches.map((p) => (
                 <li
                   key={p.key || "none"}
                   className="flex flex-wrap items-baseline justify-between gap-2 py-2"
