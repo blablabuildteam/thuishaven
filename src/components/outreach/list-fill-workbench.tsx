@@ -13,6 +13,7 @@ import {
   employeeRangesFromBounds,
   formatEmployeeBounds,
   normalizeCriteria,
+  presetForDistanceIndex,
   readyDistanceStops,
   sliceKey,
   slicesForCriteria,
@@ -524,63 +525,82 @@ export function ListFillWorkbench({
           getallen laten zien hoeveel bedrijven Apollo daar kent.
         </p>
 
-        <div className="mt-5">
-          <p className="text-sm font-medium text-text">
-            Hoe ver vanaf Amsterdam?
-          </p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {distanceImpact.map((row, i) => {
-              const towns = SEARCH_ZONES.find(
-                (z) => z.id === row.stop.outerZone,
-              )?.hint;
-              const delta =
-                row.apollo == null
-                  ? counting
-                    ? "tellen…"
-                    : "nog niet geteld"
-                  : i === 0
-                    ? `~${row.apollo.toLocaleString("nl-NL")} bedrijven`
-                    : `+${row.apollo.toLocaleString("nl-NL")} extra`;
-              return (
-                <button
-                  key={row.stop.preset}
-                  type="button"
-                  disabled={pending || filling}
-                  title={towns}
-                  onClick={() =>
-                    setCriteria((c) => ({
-                      ...c,
-                      placePreset: row.stop.preset,
-                    }))
-                  }
-                  className={`max-w-[11rem] px-3 py-1.5 text-left text-sm ${
-                    distanceIdx === i
-                      ? "border border-accent bg-accent/10"
-                      : "border border-border text-text-muted hover:border-accent"
-                  }`}
-                >
-                  <span className="block">
-                    {i === 0 ? "Alleen Amsterdam" : `Tot ${row.stop.label}`}
-                  </span>
-                  {towns && i > 0 ? (
-                    <span className="block truncate text-[11px] text-text-dim">
-                      {towns}
-                    </span>
-                  ) : null}
-                  <span
-                    className={`mt-0.5 block text-[11px] tabular-nums ${
-                      distanceIdx === i ? "text-text" : "text-text-dim"
-                    }`}
-                  >
-                    {delta}
-                  </span>
-                </button>
-              );
-            })}
+        <div className="mt-5 max-w-xl">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-sm font-medium text-text">
+              Hoe ver vanaf Amsterdam?
+            </p>
+            <p className="font-display text-lg tracking-[0.06em] text-text">
+              {distanceIdx === 0
+                ? "Alleen Amsterdam"
+                : `Tot ${selectionImpact.selectedStop?.label ?? ""}`}
+            </p>
           </div>
-          <p className="mt-1.5 text-xs text-text-dim">
-            Elke stap verder telt de bedrijven van de stappen ervoor mee.
-          </p>
+          <label className="mt-3 block">
+            <span className="sr-only">Straal vanaf Amsterdam</span>
+            <input
+              type="range"
+              min={0}
+              max={Math.max(0, distanceImpact.length - 1)}
+              step={1}
+              value={distanceIdx}
+              disabled={pending || filling || distanceImpact.length === 0}
+              onChange={(e) =>
+                setCriteria((c) => ({
+                  ...c,
+                  placePreset: presetForDistanceIndex(Number(e.target.value)),
+                }))
+              }
+              className="distance-slider w-full cursor-pointer disabled:opacity-50"
+              style={{
+                // Fill left of thumb so the “meter” reads clearly.
+                background: `linear-gradient(to right, var(--accent) ${
+                  distanceImpact.length <= 1
+                    ? 0
+                    : (distanceIdx / (distanceImpact.length - 1)) * 100
+                }%, var(--border) ${
+                  distanceImpact.length <= 1
+                    ? 0
+                    : (distanceIdx / (distanceImpact.length - 1)) * 100
+                }%)`,
+              }}
+            />
+          </label>
+          <div className="mt-1.5 flex justify-between gap-1">
+            {distanceImpact.map((row, i) => (
+              <button
+                key={row.stop.preset}
+                type="button"
+                disabled={pending || filling}
+                onClick={() =>
+                  setCriteria((c) => ({
+                    ...c,
+                    placePreset: row.stop.preset,
+                  }))
+                }
+                className={`min-w-0 flex-1 text-center text-[11px] tabular-nums ${
+                  distanceIdx === i
+                    ? "font-medium text-text"
+                    : "text-text-dim hover:text-text"
+                }`}
+              >
+                {i === 0 ? "0 km" : `${row.stop.km} km`}
+              </button>
+            ))}
+          </div>
+          {(() => {
+            const selected = distanceImpact[distanceIdx];
+            const towns = SEARCH_ZONES.find(
+              (z) => z.id === selected?.stop.outerZone,
+            )?.hint;
+            return towns && distanceIdx > 0 ? (
+              <p className="mt-2 text-xs text-text-muted">{towns}</p>
+            ) : (
+              <p className="mt-2 text-xs text-text-muted">
+                Alleen bedrijven in de stad zelf.
+              </p>
+            );
+          })()}
         </div>
 
         <div className="mt-6">
