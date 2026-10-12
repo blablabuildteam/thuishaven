@@ -1,9 +1,10 @@
-import { and, eq, gte, lte, max } from "drizzle-orm";
+import { and, eq, gte, lte, max, sql } from "drizzle-orm";
 import { cache } from "react";
 import { DASHBOARD_TTL_MS, rememberTtl } from "@/lib/cache/ttl";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import {
   editions,
+  ticketInventory,
   ticketInventoryDaily,
   ticketSalesDaily,
   ticketSalesOnDay,
@@ -114,17 +115,110 @@ function normalizeDay(value: string | Date): string {
 }
 
 /**
- * Prefer the Weeztix order histogram per event (full onsale window).
- * Snapshot / ticketCountToday rows only fill events with no histogram,
- * plus today when the histogram has not caught up yet.
- *
- * On today both sources are partial: the histogram is only as fresh as its
- * last sync, the snapshot delta misses sales made before the first snapshot
- * of the day. Taking the higher of the two keeps a manual refresh meaningful
- * instead of freezing today on whichever number landed first.
+ * Order-histogram days stay as they are. For today, once inventory has been
+ * synced later than the curve, sold is the running total minus every
+ * histogram day before today. That is midnight-to-now, so tickets from
+ * yesterday evening stay on yesterday, and events that sold after the last
+ * curve sync still show up.
+ */
+export function applyCalendarDayToday(input: {
+  endDay: string;
+  orderRows: DailyTicketSalesRow[];
+  baselines: Array<{
+    editionId: string;
+    soldBefore: number;
+    revenueBefore: number;
+    curveSyncedAt: Date | null;
+  }>;
+  inventory: Array<{
+    editionId: string;
+    name: string;
+    startsAt: Date;
+    sold: number;
+    revenueCents: number;
+    syncedAt: Date;
+  }>;
+}): DailyTicketSalesRow[] {
+  const baselineById = new Map(
+    input.baselines.map((row) => [row.editionId, row]),
+  );
+  const inventoryById = new Map(
+    input.inventory.map((row) => [row.editionId, row]),
+  );
+  const kept: DailyTicketSalesRow[] = [];
+  const curveToday = new Map<string, DailyTicketSalesRow>();
+
+  for (const row of input.orderRows) {
+    const day = normalizeDay(row.day);
+    if (!day) continue;
+    if (day === input.endDay) {
+      curveToday.set(row.editionId, { ...row, day });
+      continue;
+    }
+    kept.push({ ...row, day });
+  }
+
+  const editionIds = new Set<string>([
+    ...kept.map((row) => row.editionId),
+    ...curveToday.keys(),
+    ...input.baselines.map((row) => row.editionId),
+  ]);
+
+  for (const editionId of editionIds) {
+    const curve = curveToday.get(editionId);
+    const baseline = baselineById.get(editionId);
+    const inventory = inventoryById.get(editionId);
+    const curveSold = curve?.sold ?? 0;
+    const baselineSold = Number(baseline?.soldBefore ?? 0);
+    const curveSyncedAt = baseline?.curveSyncedAt
+      ? new Date(baseline.curveSyncedAt)
+      : null;
+    const inventorySyncedAt = inventory?.syncedAt
+      ? new Date(inventory.syncedAt)
+      : null;
+    const inventoryIsNewer =
+      Boolean(inventorySyncedAt) &&
+      amsterdamDay(inventorySyncedAt!) === input.endDay &&
+      (!curveSyncedAt ||
+        inventorySyncedAt!.getTime() > curveSyncedAt.getTime());
+
+    let sold = curveSold;
+    let revenueCents = curve?.revenueCents ?? 0;
+    if (inventory && inventoryIsNewer && baselineSold > 0) {
+      const fromInventory = inventory.sold - baselineSold;
+      if (fromInventory > sold) {
+        sold = fromInventory;
+        revenueCents = Math.max(
+          0,
+          inventory.revenueCents - Number(baseline?.revenueBefore ?? 0),
+        );
+      }
+    }
+    if (sold <= 0) continue;
+
+    const meta = curve ?? kept.find((row) => row.editionId === editionId) ?? inventory;
+    if (!meta?.name || !meta.startsAt) continue;
+    kept.push({
+      editionId,
+      name: meta.name,
+      startsAt: meta.startsAt,
+      day: input.endDay,
+      sold,
+      paidSold: sold,
+      freeSold: 0,
+      revenueCents,
+    });
+  }
+
+  return kept;
+}
+
+/**
+ * Prefer the Weeztix order histogram per event. Snapshot deltas only fill
+ * events with no histogram at all. They still include yesterday evening, so
+ * they must not replace a day the histogram already covers.
  */
 export function mergeDailyTicketSalesRows(input: {
-  endDay: string;
   orderRows: DailyTicketSalesRow[];
   snapshotRows: DailyTicketSalesRow[];
 }): DailyTicketSalesRow[] {
@@ -137,26 +231,16 @@ export function mergeDailyTicketSalesRows(input: {
     if (day) orderByKey.set(`${row.editionId}:${day}`, row);
   }
 
-  const outByKey = new Map(orderByKey);
   const extra: DailyTicketSalesRow[] = [];
-
   for (const row of input.snapshotRows) {
     const day = normalizeDay(row.day);
     if (!day) continue;
-    const key = `${row.editionId}:${day}`;
-    const order = orderByKey.get(key);
-    if (!order) {
-      if (!orderEditionIds.has(row.editionId) || day === input.endDay) {
-        extra.push(row);
-      }
-      continue;
-    }
-    if (day === input.endDay && row.sold > (outByKey.get(key)?.sold ?? 0)) {
-      outByKey.set(key, row);
-    }
+    if (orderEditionIds.has(row.editionId)) continue;
+    if (orderByKey.has(`${row.editionId}:${day}`)) continue;
+    extra.push(row);
   }
 
-  return [...outByKey.values(), ...extra];
+  return [...orderByKey.values(), ...extra];
 }
 
 export function buildDailyTicketSales(input: {
@@ -279,14 +363,18 @@ function asTime(value: unknown): number | null {
 export async function latestDailyTicketSalesRefreshAt(): Promise<string | null> {
   if (!hasDatabase()) return null;
   const db = getDb();
-  const [orders, onDay, inventory] = await Promise.all([
+  const [orders, onDay, inventory, running] = await Promise.all([
     db.select({ at: max(ticketSalesDaily.syncedAt) }).from(ticketSalesDaily),
     db.select({ at: max(ticketSalesOnDay.syncedAt) }).from(ticketSalesOnDay),
     db
       .select({ at: max(ticketInventoryDaily.syncedAt) })
       .from(ticketInventoryDaily),
+    db
+      .select({ at: max(ticketInventory.syncedAt) })
+      .from(ticketInventory)
+      .where(eq(ticketInventory.platform, "weeztix")),
   ]);
-  const times = [orders[0]?.at, onDay[0]?.at, inventory[0]?.at]
+  const times = [orders[0]?.at, onDay[0]?.at, inventory[0]?.at, running[0]?.at]
     .map(asTime)
     .filter((time): time is number => time != null);
   if (times.length === 0) return null;
@@ -418,7 +506,7 @@ export const loadDailyTicketSales = cache(
 
     const refreshedAt = await latestDailyTicketSalesRefreshAt();
     const series = await rememberTtl(
-      `tickets:daily:${windowDays}:${endDay}:${refreshedAt ?? "none"}`,
+      `tickets:daily:v3:${windowDays}:${endDay}:${refreshedAt ?? "none"}`,
       DASHBOARD_TTL_MS,
       () => loadDailyTicketSalesFresh(endDay, windowDays),
     );
@@ -434,7 +522,8 @@ async function loadDailyTicketSalesFresh(
     const startDay = shiftIsoDay(endDay, -(windowDays - 1));
     const prevDay = shiftIsoDay(startDay, -1);
 
-    const [orderRows, onDayRows, inventoryRows] = await Promise.all([
+    const [orderRows, onDayRows, inventoryRows, baselines, currentInventory] =
+      await Promise.all([
       db
         .select({
           editionId: ticketSalesDaily.editionId,
@@ -491,6 +580,28 @@ async function loadDailyTicketSalesFresh(
             lte(ticketInventoryDaily.day, endDay),
           ),
         ),
+      db
+        .select({
+          editionId: ticketSalesDaily.editionId,
+          soldBefore: sql<number>`coalesce(sum(${ticketSalesDaily.sold}) filter (where ${ticketSalesDaily.day} < ${endDay}), 0)::int`,
+          revenueBefore: sql<number>`coalesce(sum(${ticketSalesDaily.revenueCents}) filter (where ${ticketSalesDaily.day} < ${endDay}), 0)::int`,
+          curveSyncedAt: max(ticketSalesDaily.syncedAt),
+        })
+        .from(ticketSalesDaily)
+        .where(eq(ticketSalesDaily.platform, "weeztix"))
+        .groupBy(ticketSalesDaily.editionId),
+      db
+        .select({
+          editionId: ticketInventory.editionId,
+          name: editions.name,
+          startsAt: editions.startsAt,
+          sold: ticketInventory.sold,
+          revenueCents: ticketInventory.revenueCents,
+          syncedAt: ticketInventory.syncedAt,
+        })
+        .from(ticketInventory)
+        .innerJoin(editions, eq(editions.id, ticketInventory.editionId))
+        .where(eq(ticketInventory.platform, "weeztix")),
     ]);
 
     const onDayKeys = new Set(
@@ -536,15 +647,24 @@ async function loadDailyTicketSalesFresh(
       endDay,
       windowDays,
       rows: mergeDailyTicketSalesRows({
-        endDay,
-        orderRows: orderRows.map((row) => ({
-          editionId: row.editionId,
-          name: row.name,
-          startsAt: row.startsAt,
-          day: normalizeDay(row.day),
-          sold: row.sold,
-          revenueCents: row.revenueCents,
-        })),
+        orderRows: applyCalendarDayToday({
+          endDay,
+          orderRows: orderRows.map((row) => ({
+            editionId: row.editionId,
+            name: row.name,
+            startsAt: row.startsAt,
+            day: normalizeDay(row.day),
+            sold: row.sold,
+            revenueCents: row.revenueCents,
+          })),
+          baselines: baselines.map((row) => ({
+            editionId: row.editionId,
+            soldBefore: Number(row.soldBefore ?? 0),
+            revenueBefore: Number(row.revenueBefore ?? 0),
+            curveSyncedAt: row.curveSyncedAt,
+          })),
+          inventory: currentInventory,
+        }),
         snapshotRows: [
           ...onDayRows.map((row) => ({
             editionId: row.editionId,
