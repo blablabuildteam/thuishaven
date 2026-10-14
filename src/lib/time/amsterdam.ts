@@ -64,8 +64,23 @@ export function formatTicketSheetDate(dayIso: string): string {
   return `${weekday} ${date}`;
 }
 
-/** Hours (Europe/Amsterdam) when the Weeztix sales sync runs. */
+/** Hours (Europe/Amsterdam) when the shared dashboard sync runs (TicketSwap, RA, ads …). */
 export const AMSTERDAM_SYNC_HOURS = [8, 13, 19, 23] as const;
+
+/**
+ * Weeztix syncs more often than the shared sync so the live sales-per-day chart
+ * stays close to Weeztix during active selling: roughly every two hours from
+ * 08:00 through midnight. The four WEEZTIX_FULL_SYNC_HOURS below do the heavy
+ * all-event pass (unchanged from before); the hours in between only refresh the
+ * events still on sale. Kept ascending (midnight first) so the "next sync" label
+ * can scan it in order.
+ */
+export const WEEZTIX_SYNC_HOURS = [
+  0, 8, 10, 12, 13, 15, 17, 19, 21, 23,
+] as const;
+
+/** Of those, the slots that still run the full all-event stats + backfill. */
+export const WEEZTIX_FULL_SYNC_HOURS = [8, 13, 19, 23] as const;
 
 function amsterdamHourMinute(at: Date): { hour: number; minute: number } {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -80,12 +95,12 @@ function amsterdamHourMinute(at: Date): { hour: number; minute: number } {
   return { hour: hour === 24 ? 0 : hour, minute: read("minute") };
 }
 
-/** Next planned Weeztix sync: today at 08:00, 13:00, 19:00, or 23:00, else tomorrow 08:00. */
+/** Next planned Weeztix sync from the two-hourly 08:00–00:00 schedule, else tomorrow. */
 export function formatNextAmsterdamSync(at: Date = new Date()): string {
   const { hour, minute } = amsterdamHourMinute(at);
   const current = hour * 60 + minute;
-  const nextHour = AMSTERDAM_SYNC_HOURS.find((slot) => slot * 60 > current);
-  const clock = `${String(nextHour ?? AMSTERDAM_SYNC_HOURS[0]).padStart(2, "0")}:00`;
+  const nextHour = WEEZTIX_SYNC_HOURS.find((slot) => slot * 60 > current);
+  const clock = `${String(nextHour ?? WEEZTIX_SYNC_HOURS[0]).padStart(2, "0")}:00`;
   return `Volgende automatisch ${nextHour != null ? "vandaag" : "morgen"} ${clock}`;
 }
 

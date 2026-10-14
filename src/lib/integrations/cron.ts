@@ -1,10 +1,15 @@
 import { timingSafeEqual } from "crypto";
-import { AMSTERDAM_SYNC_HOURS } from "@/lib/time/amsterdam";
+import {
+  AMSTERDAM_SYNC_HOURS,
+  WEEZTIX_FULL_SYNC_HOURS,
+  WEEZTIX_SYNC_HOURS,
+} from "@/lib/time/amsterdam";
 
 /** Amsterdam-uren voor dashboard-sync (Weeztix + TicketSwap + RA). */
 export { AMSTERDAM_SYNC_HOURS };
 export const TICKETSWAP_CRON_HOURS_AMSTERDAM = AMSTERDAM_SYNC_HOURS;
-export const WEEZTIX_CRON_HOURS_AMSTERDAM = AMSTERDAM_SYNC_HOURS;
+/** Weeztix draait vaker dan de gedeelde sync (zie WEEZTIX_SYNC_HOURS). */
+export const WEEZTIX_CRON_HOURS_AMSTERDAM = WEEZTIX_SYNC_HOURS;
 export const RA_CRON_HOURS_AMSTERDAM = AMSTERDAM_SYNC_HOURS;
 
 function safeEqual(a: string, b: string): boolean {
@@ -41,7 +46,16 @@ export function isTicketswapCronSlot(at: Date = new Date()): boolean {
 }
 
 export function isWeeztixCronSlot(at: Date = new Date()): boolean {
-  return isAmsterdamSyncSlot(at);
+  return (WEEZTIX_CRON_HOURS_AMSTERDAM as readonly number[]).includes(
+    amsterdamHour(at),
+  );
+}
+
+/** Heavy slot: full all-event stats + (at 08:00) the complete backfill. */
+export function isWeeztixFullSlot(at: Date = new Date()): boolean {
+  return (WEEZTIX_FULL_SYNC_HOURS as readonly number[]).includes(
+    amsterdamHour(at),
+  );
 }
 
 export function isRaCronSlot(at: Date = new Date()): boolean {

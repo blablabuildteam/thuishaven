@@ -3,7 +3,9 @@ import {
   amsterdamHour,
   isCronAuthorized,
   isWeeztixCronSlot,
+  isWeeztixFullSlot,
 } from "@/lib/integrations/cron";
+import { refreshDailyTicketSales } from "@/lib/dashboard/daily-ticket-sales";
 import { logIntegration } from "@/lib/integrations/log";
 import {
   syncWeeztixDailySales,
@@ -17,9 +19,12 @@ export const maxDuration = 300;
 
 /**
  * GET /api/cron/weeztix
- * Vercel Cron: 08:00, 13:00, 19:00, 23:00 Europe/Amsterdam.
- * Events + voorraad + inventory-snapshot + dagcurve van events in verkoop
- * elke slot; volledige backfill met referrers/demo om 08:00.
+ * Vercel Cron draait elk uur (06–23 UTC); de route filtert op WEEZTIX_SYNC_HOURS
+ * (~elke 2 uur van 08:00 t/m 00:00 Europe/Amsterdam), DST-proof.
+ * De vier WEEZTIX_FULL_SYNC_HOURS (08/13/19/23) draaien de volledige all-event
+ * sync (voorraad + referrers/demo-backfill om 08:00). De tussenliggende slots
+ * verversen alleen de events die nog in verkoop staan, zodat de live
+ * verkoop-per-dag-grafiek bijblijft zonder alle events elk uur op te halen.
  */
 export async function GET(request: Request) {
   if (!isCronAuthorized(request)) {
@@ -37,6 +42,45 @@ export async function GET(request: Request) {
       reason: "outside_schedule",
       amsterdamHour: hour,
     });
+  }
+
+  // In-between slots: refresh only the events still on sale (stats + sale-days
+  // + order curve), the same light pull the dashboard's manual refresh runs.
+  if (!force && !isWeeztixFullSlot(now)) {
+    const light = await refreshDailyTicketSales().catch((e) => ({
+      ok: false as const,
+      refreshedAt: null,
+      error: e instanceof Error ? e.message : "Weeztix light sync mislukt",
+    }));
+    await logIntegration({
+      source: "weeztix",
+      level: light.ok ? "info" : "error",
+      event: light.ok ? "cron.light.ok" : "cron.light.failed",
+      message: light.ok
+        ? `Cron Weeztix (licht): events in verkoop ververst · ${hour}:00`
+        : light.error ?? "Weeztix light sync mislukt",
+      detail: { trigger: "vercel-cron", amsterdamHour: hour, light: true },
+      throttleMs: 0,
+    });
+    if (light.ok) {
+      const { invalidateEventInsightsCache } = await import(
+        "@/lib/insights/event-insights"
+      );
+      await invalidateEventInsightsCache();
+    } else {
+      console.error(`[weeztix] cron.light.failed: ${light.error}`);
+    }
+    return NextResponse.json(
+      {
+        trigger: "vercel-cron",
+        amsterdamHour: hour,
+        light: true,
+        ok: light.ok,
+        refreshedAt: light.refreshedAt,
+        error: light.ok ? undefined : light.error,
+      },
+      { status: light.ok ? 200 : 502 },
+    );
   }
 
   const events = await syncWeeztixReadOnly({ includeStats: true });

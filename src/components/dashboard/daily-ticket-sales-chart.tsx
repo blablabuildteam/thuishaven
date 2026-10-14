@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -384,6 +392,9 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
   );
 }
 
+/** Open the dashboard and the stand is older than this → pull live on mount. */
+const AUTO_REFRESH_STALE_MS = 10 * 60 * 1000;
+
 function DailySalesRefresh({ refreshedAt }: { refreshedAt: string | null }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -402,7 +413,7 @@ function DailySalesRefresh({ refreshedAt }: { refreshedAt: string | null }) {
     return () => window.clearInterval(id);
   }, []);
 
-  async function onRefresh() {
+  const onRefresh = useCallback(async () => {
     setBusy(true);
     setError(null);
     try {
@@ -426,7 +437,22 @@ function DailySalesRefresh({ refreshedAt }: { refreshedAt: string | null }) {
     } finally {
       setBusy(false);
     }
-  }
+  }, [router]);
+
+  /**
+   * Pull the live stand once when the dashboard opens, if the last sync is
+   * older than the window above. The cron keeps the chart fresh in the
+   * background; this closes the gap to Weeztix the moment someone looks.
+   */
+  const didAutoRefresh = useRef(false);
+  useEffect(() => {
+    if (didAutoRefresh.current) return;
+    didAutoRefresh.current = true;
+    const stale =
+      !refreshedAt ||
+      Date.now() - new Date(refreshedAt).getTime() > AUTO_REFRESH_STALE_MS;
+    if (stale) void onRefresh();
+  }, [refreshedAt, onRefresh]);
 
   return (
     <div className="mt-2 flex items-center gap-2">
