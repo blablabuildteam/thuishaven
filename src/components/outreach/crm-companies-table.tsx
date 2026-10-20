@@ -1170,7 +1170,7 @@ export function CrmCompaniesTable({
                       on ? "bg-accent/5" : ""
                     }`}
                   >
-                    <td className="py-3 pr-2 align-top">
+                    <td className="py-3 pr-2 align-middle">
                       <input
                         type="checkbox"
                         checked={on}
