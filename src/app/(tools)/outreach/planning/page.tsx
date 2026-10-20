@@ -1,12 +1,10 @@
 import Link from "next/link";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { PipelineStatusBanner } from "@/components/outreach/pipeline-status-banner";
 import { QueueList } from "@/components/outreach/queue-list";
 import { QueueSchedule } from "@/components/outreach/queue-schedule";
 import { hasOutreachAiConfigured } from "@/lib/integrations/outreach";
 import { listBatchesWithEmails } from "@/lib/outreach/batches";
-import { getOutreachPipelineStatus } from "@/lib/outreach/pipeline-status";
 import { listQueueItems } from "@/lib/outreach/queue";
 import {
   outreachTestSendBlockReason,
@@ -24,50 +22,58 @@ export default async function OutreachPlanningPage() {
       cadenceLabel,
       cadenceRationale,
     },
-    pipeline,
     queueItems,
     defaultTestTo,
   ] = await Promise.all([
     listBatchesWithEmails(),
-    getOutreachPipelineStatus(),
     listQueueItems(),
     resolveOutreachTestRecipient(),
   ]);
 
   const liveUnlocked = !liveSendBlockReason;
   const bouncePaused = Boolean(liveSendQuota?.bouncePause);
-  const plannedCount = queueItems.filter((i) => i.scheduledAt).length;
+  const plannedCount = queueItems.filter(
+    (i) => i.statusLabel === "gepland",
+  ).length;
   const aiOk = hasOutreachAiConfigured();
   const testSendBlockReason = outreachTestSendBlockReason();
 
   return (
     <div>
       <SectionHeader
-        eyebrow="Stap 4 · review"
+        eyebrow="Stap 4"
         title="Wachtrij"
-        description="Alle mails die klaarstaan. Open een bedrijf om te lezen, aan te passen of een test naar jezelf te sturen. Daarna: aanvinken → Plan in → Activeer verzenden. Pas je daarna iets aan, dan moet je opnieuw activeren."
+        description="Alle mails die klaarstaan. Open een bedrijf om de mail te lezen, aan te passen, te testen en in te plannen. Ingeplande mails gaan op hun moment vanzelf, zolang echt versturen aan staat."
         action={
           <div className="flex flex-wrap gap-2">
             {bouncePaused ? (
-              <StatusBadge tone="danger">Bounce-pause</StatusBadge>
+              <span title="Te veel mails kwamen terug (bounces). Versturen is tijdelijk gepauzeerd.">
+                <StatusBadge tone="danger">Gepauzeerd door bounces</StatusBadge>
+              </span>
             ) : liveUnlocked ? (
-              <StatusBadge tone="success">Live send aan</StatusBadge>
+              <span title="Ingeplande mails gaan echt naar de bedrijven.">
+                <StatusBadge tone="success">Echt versturen staat aan</StatusBadge>
+              </span>
             ) : (
-              <StatusBadge tone="danger">Live send uit</StatusBadge>
+              <span title="Mails gaan nu alleen als test naar team@. Een admin zet echt versturen aan.">
+                <StatusBadge tone="neutral">Echt versturen staat uit</StatusBadge>
+              </span>
             )}
-            {liveSendQuota ? (
-              <StatusBadge tone="neutral">
-                {liveSendQuota.sentToday}/{liveSendQuota.dailyCap} vandaag
-              </StatusBadge>
+            {liveSendQuota && liveUnlocked ? (
+              <span title="Zoveel mails mogen er per dag echt uit.">
+                <StatusBadge tone="neutral">
+                  {liveSendQuota.sentToday} van {liveSendQuota.dailyCap} vandaag
+                </StatusBadge>
+              </span>
             ) : null}
             <StatusBadge tone={queueItems.length > 0 ? "accent" : "neutral"}>
-              {queueItems.length} in lijst
+              {queueItems.length} in de wachtrij
             </StatusBadge>
             {plannedCount > 0 ? (
               <StatusBadge tone="info">{plannedCount} gepland</StatusBadge>
             ) : null}
             {!aiOk ? (
-              <StatusBadge tone="warn">Geen AI-key</StatusBadge>
+              <StatusBadge tone="neutral">Geen AI-key</StatusBadge>
             ) : null}
             <Link
               href="/outreach/emails"
@@ -79,12 +85,10 @@ export default async function OutreachPlanningPage() {
         }
       />
 
-      <PipelineStatusBanner status={pipeline} />
-
       {!liveUnlocked ? (
-        <p className="mb-4 text-xs text-text-dim">
-          Echt versturen naar bedrijven staat nog uit — je kunt alles
-          voorbereiden, inplannen en testen.
+        <p className="mb-4 text-sm text-text-muted">
+          Echt versturen staat uit: mails gaan nu alleen als test naar team@.
+          Je kunt alles voorbereiden en inplannen; een admin zet versturen aan.
         </p>
       ) : null}
 

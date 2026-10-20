@@ -13,6 +13,7 @@ import {
   type RankableContact,
 } from "@/lib/outreach/contact-ranking";
 import { listCrmRecords } from "@/lib/outreach/crm";
+import { countQueueItems } from "@/lib/outreach/queue";
 import { leadScore } from "@/lib/outreach/lead-score";
 import { checkRecipientEmail } from "@/lib/outreach/email-quality";
 import { getTemplateStats } from "@/lib/outreach/template-stats";
@@ -67,12 +68,14 @@ export default async function EmailsPage({
     params,
     testTo,
     handoff,
+    inQueueCount,
   ] = await Promise.all([
     listCrmRecords(),
     getTemplateStats(),
     searchParams,
     resolveOutreachTestRecipient(),
     peekHandoff(),
+    countQueueItems(),
   ]);
   const handoffIds = handoff.prospectIds;
   const handoffVariantId = handoff.variantId ?? null;
@@ -98,7 +101,6 @@ export default async function EmailsPage({
 
   const workbenchProspects: WorkbenchProspect[] = [];
   let skippedNoEmail = 0;
-  let inQueueCount = 0;
   for (const r of records) {
     if (
       r.type !== "company" ||
@@ -128,7 +130,6 @@ export default async function EmailsPage({
         continue;
       }
       // All contact emails already queued or mailed.
-      if (r.pendingEmails.length > 0) inQueueCount += 1;
       continue;
     }
 

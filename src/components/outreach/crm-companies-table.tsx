@@ -755,7 +755,7 @@ export function CrmCompaniesTable({ rows }: Props) {
                                 ? `Ontbreekt: ${missing.join(" / ")}`
                                 : "Gegevens ontbreken"
                             }
-                            className="inline-flex border border-warn/50 bg-warn/15 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-warn"
+                            className="inline-flex border border-warn/50 bg-warn/15 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-warn-fg"
                           >
                             gegevens ontbreken
                           </span>
@@ -794,7 +794,7 @@ export function CrmCompaniesTable({ rows }: Props) {
                           ) : null}
                         </>
                       ) : (
-                        <span className="text-xs text-warn">Geen contact</span>
+                        <span className="text-xs text-warn-fg">Geen contact</span>
                       )}
                     </td>
                     <td

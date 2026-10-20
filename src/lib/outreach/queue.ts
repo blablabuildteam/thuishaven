@@ -14,6 +14,8 @@ import {
 } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { outreachBatches, outreachEmails, prospects } from "@/lib/db/schema";
+import { sendStoredDraft } from "@/lib/integrations/outreach";
+import { OVERDUE_GRACE_MS } from "@/lib/outreach/live-send-constants";
 import {
   assertAllowedOutreachSender,
   assertLiveSendAllowed,
@@ -46,7 +48,7 @@ export type QueueItemStatusLabel =
   | "concept"
   | "review"
   | "gepland"
-  | "actief";
+  | "verlopen";
 
 export type QueueItem = {
   emailId: string;
@@ -65,6 +67,8 @@ export type QueueItem = {
   scheduledAt: string | null;
   scheduledLabel: string | null;
   armedAt: string | null;
+  /** Planned and confirmed — the cron sends it once live send is on. */
+  armed: boolean;
   senderProfileId: OutreachSenderProfileId;
   senderProfileLabel: string;
   senderEmail: string;
@@ -81,14 +85,25 @@ function variantLabel(key: string | null): string | null {
 function statusLabel(row: {
   status: string;
   scheduledAt: Date | null;
-  armedAt: Date | null;
-  batchAutoSend: boolean | null;
 }): QueueItemStatusLabel {
-  const armed = Boolean(row.armedAt) || Boolean(row.batchAutoSend);
-  if (armed && row.scheduledAt) return "actief";
-  if (row.scheduledAt) return "gepland";
+  if (row.scheduledAt) {
+    return row.scheduledAt.getTime() < Date.now() - OVERDUE_GRACE_MS
+      ? "verlopen"
+      : "gepland";
+  }
   if (row.status === "queued") return "review";
   return "concept";
+}
+
+/** Same set as `listQueueItems` (unsent drafts + queued), as a count. */
+export async function countQueueItems(): Promise<number> {
+  if (!hasDatabase()) return 0;
+  const [row] = await getDb()
+    .select({ n: sql<number>`count(*)::int` })
+    .from(outreachEmails)
+    .innerJoin(prospects, eq(outreachEmails.prospectId, prospects.id))
+    .where(inArray(outreachEmails.status, ["draft", "queued"]));
+  return Number(row?.n) || 0;
 }
 
 export async function listQueueItems(): Promise<QueueItem[]> {
@@ -169,7 +184,9 @@ export async function listQueueItems(): Promise<QueueItem[]> {
       const day = amsterdamDay(scheduledAt);
       const time = amsterdamClock(scheduledAt);
       const weekdayLabel =
-        ["zo", "ma", "di", "wo", "do", "vr", "za"][scheduledAt.getDay()] ?? "";
+        ["zo", "ma", "di", "wo", "do", "vr", "za"][
+          new Date(`${day}T12:00:00Z`).getUTCDay()
+        ] ?? "";
       scheduledLabel = `${weekdayLabel} ${formatDayShort(day)} · ${time}`;
     }
     return {
@@ -203,12 +220,11 @@ export async function listQueueItems(): Promise<QueueItem[]> {
       statusLabel: statusLabel({
         status: r.status,
         scheduledAt: r.scheduledAt,
-        armedAt: r.armedAt,
-        batchAutoSend: r.batchAutoSend,
       }),
       scheduledAt: scheduledAt?.toISOString() ?? null,
       scheduledLabel,
       armedAt: r.armedAt?.toISOString() ?? null,
+      armed: Boolean(r.armedAt) || Boolean(r.batchAutoSend),
       senderProfileId: profileId,
       senderProfileLabel: profile.label,
       senderEmail: r.senderEmail || r.batchSenderEmail || profile.email,
@@ -290,7 +306,6 @@ export async function updateQueueItem(input: {
     senderProfileId?: string;
     senderEmail?: string;
     variantKey?: string | null;
-    armedAt?: null;
   } = {};
 
   if (typeof input.subject === "string" && input.subject.trim()) {
@@ -323,9 +338,6 @@ export async function updateQueueItem(input: {
     );
     patch.body = applySenderSignature(patch.body ?? row.body, profile);
   }
-
-  // Any edit clears arm — operator must reconfirm auto-send.
-  patch.armedAt = null;
 
   await db
     .update(outreachEmails)
@@ -431,7 +443,7 @@ export async function scheduleQueueEmails(input: {
       .set({
         status: "queued",
         scheduledAt: at,
-        armedAt: null,
+        armedAt: now,
         ...(hasSender
           ? {}
           : {
@@ -580,4 +592,97 @@ export async function disarmQueueEmails(input: {
   }
 
   return { ok: true, disarmed: updated.length, batchesDisarmed };
+}
+
+const MAX_RESCHEDULE_DAYS = 60;
+
+/** Put one mail on a self-chosen moment (Amsterdam time). */
+export async function rescheduleQueueEmail(input: {
+  emailId: string;
+  day: string;
+  time: string;
+}): Promise<{ ok: true; scheduledAt: string } | { error: string }> {
+  if (!hasDatabase()) return { error: "DATABASE_URL ontbreekt" };
+  const probe = new Date(`${input.day}T12:00:00Z`);
+  if (
+    Number.isNaN(probe.getTime()) ||
+    probe.toISOString().slice(0, 10) !== input.day ||
+    !/^([01]\d|2[0-3]):[0-5]\d$/.test(input.time)
+  ) {
+    return { error: "Ongeldige datum of tijd" };
+  }
+  const at = amsterdamDateTimeToUtc(input.day, input.time);
+  if (Number.isNaN(at.getTime())) return { error: "Ongeldige datum of tijd" };
+  const now = Date.now();
+  if (at.getTime() < now + 60_000) {
+    return { error: "Kies een moment in de toekomst" };
+  }
+  if (at.getTime() > now + MAX_RESCHEDULE_DAYS * 24 * 3600_000) {
+    return { error: `Maximaal ${MAX_RESCHEDULE_DAYS} dagen vooruit` };
+  }
+
+  const db = getDb();
+  const [row] = await db
+    .select({
+      status: outreachEmails.status,
+      senderProfileId: outreachEmails.senderProfileId,
+    })
+    .from(outreachEmails)
+    .where(eq(outreachEmails.id, input.emailId))
+    .limit(1);
+  if (!row) return { error: "Mail niet gevonden" };
+  if (row.status !== "draft" && row.status !== "queued") {
+    return { error: "Deze mail is al verstuurd" };
+  }
+  const defaultSnap = snapshotSenderProfile(DEFAULT_SENDER_PROFILE_ID);
+  await db
+    .update(outreachEmails)
+    .set({
+      status: "queued",
+      scheduledAt: at,
+      armedAt: new Date(),
+      ...(isSenderProfileId(row.senderProfileId)
+        ? {}
+        : {
+            senderProfileId: defaultSnap.senderProfileId,
+            senderEmail: defaultSnap.senderEmail,
+          }),
+    })
+    .where(eq(outreachEmails.id, input.emailId));
+  return { ok: true, scheduledAt: at.toISOString() };
+}
+
+/** Send one reviewed mail to the prospect right away (all live gates apply). */
+export async function sendQueueEmailNow(input: {
+  emailId: string;
+}): Promise<
+  { ok: true; deliveredTo: string[] } | { error: string }
+> {
+  if (!hasDatabase()) return { error: "DATABASE_URL ontbreekt" };
+  const gate = await assertLiveSendAllowed(1);
+  if ("error" in gate) return gate;
+
+  const db = getDb();
+  const [row] = await db
+    .select({ status: outreachEmails.status })
+    .from(outreachEmails)
+    .where(eq(outreachEmails.id, input.emailId))
+    .limit(1);
+  if (!row) return { error: "Mail niet gevonden" };
+  if (row.status !== "draft" && row.status !== "queued") {
+    return { error: "Deze mail is al verstuurd" };
+  }
+  if (row.status === "draft") {
+    await db
+      .update(outreachEmails)
+      .set({ status: "queued" })
+      .where(eq(outreachEmails.id, input.emailId));
+  }
+
+  const sent = await sendStoredDraft({
+    emailId: input.emailId,
+    forceTest: false,
+  });
+  if ("error" in sent) return sent;
+  return { ok: true, deliveredTo: sent.deliveredTo };
 }

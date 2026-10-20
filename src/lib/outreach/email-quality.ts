@@ -186,7 +186,7 @@ export function checkRecipientEmail(input: {
     issues.push({
       code: "name_mismatch",
       level: "warn",
-      label: "Naam past niet bij adres",
+      label: "Geen persoonlijke aanhef",
     });
   }
 

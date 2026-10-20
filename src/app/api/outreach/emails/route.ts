@@ -28,7 +28,9 @@ import {
   clearQueueSchedule,
   disarmQueueEmails,
   promoteToQueue,
+  rescheduleQueueEmail,
   scheduleQueueEmails,
+  sendQueueEmailNow,
   updateQueueItem,
 } from "@/lib/outreach/queue";
 
@@ -240,6 +242,59 @@ export async function POST(request: Request) {
     if ("error" in result) {
       return NextResponse.json(result, { status: 400 });
     }
+    return NextResponse.json(result);
+  }
+
+  if (action === "reschedule-queue-item") {
+    const schema = z.object({
+      action: z.literal("reschedule-queue-item"),
+      emailId: z.string().uuid(),
+      day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      time: z.string().regex(/^\d{2}:\d{2}$/),
+    });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Ongeldige datum of tijd" }, { status: 400 });
+    }
+    const result = await rescheduleQueueEmail(parsed.data);
+    if ("error" in result) {
+      return NextResponse.json(result, { status: 400 });
+    }
+    await logSessionActivity(session, {
+      action: "email_reschedule_queue",
+      summary: `Mail verplaatst · ${parsed.data.day} ${parsed.data.time}`,
+      path: "/api/outreach/emails",
+      method: "POST",
+      status: 200,
+      tool: "outreach",
+      meta: { emailId: parsed.data.emailId, scheduledAt: result.scheduledAt },
+    });
+    return NextResponse.json(result);
+  }
+
+  if (action === "send-now-queue-item") {
+    const schema = z.object({
+      action: z.literal("send-now-queue-item"),
+      emailId: z.string().uuid(),
+      confirm: z.literal(true),
+    });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Bevestiging verplicht" }, { status: 400 });
+    }
+    const result = await sendQueueEmailNow({ emailId: parsed.data.emailId });
+    if ("error" in result) {
+      return NextResponse.json(result, { status: 400 });
+    }
+    await logSessionActivity(session, {
+      action: "email_send_now",
+      summary: `Mail direct verstuurd · ${parsed.data.emailId}`,
+      path: "/api/outreach/emails",
+      method: "POST",
+      status: 200,
+      tool: "outreach",
+      meta: { emailId: parsed.data.emailId, deliveredTo: result.deliveredTo },
+    });
     return NextResponse.json(result);
   }
 

@@ -2,10 +2,11 @@
  * Schedule queued bakje mails and auto-send via cron when due.
  */
 
-import { and, asc, eq, isNotNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, gte, isNotNull, lte, or, sql } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { outreachBatches, outreachEmails } from "@/lib/db/schema";
 import { sendStoredDraft } from "@/lib/integrations/outreach";
+import { OVERDUE_GRACE_MS } from "@/lib/outreach/live-send-constants";
 import {
   assertLiveSendAllowed,
   isValidLiveSendConfirm,
@@ -258,6 +259,10 @@ export async function processDueOutreachSends(limit = MAX_SENDS_PER_CRON): Promi
         eq(outreachEmails.status, "queued"),
         isNotNull(outreachEmails.scheduledAt),
         lte(outreachEmails.scheduledAt, now),
+        gte(
+          outreachEmails.scheduledAt,
+          new Date(now.getTime() - OVERDUE_GRACE_MS),
+        ),
         or(
           isNotNull(outreachEmails.armedAt),
           and(

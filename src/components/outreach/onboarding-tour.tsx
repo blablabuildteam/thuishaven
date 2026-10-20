@@ -45,7 +45,7 @@ const STEPS: TourStep[] = [
   {
     target: "nav-wachtrij",
     title: "4 · Wachtrij",
-    body: "Lees en pas elke mail aan, stuur een test naar jezelf, en plan ze in. Pas na ‘Activeer verzenden’ gaan ze echt de deur uit.",
+    body: "Lees en pas elke mail aan, stuur een test naar jezelf, en plan ze in of verstuur er een direct. Ingeplande mails gaan op hun moment vanzelf, zolang echt versturen aan staat.",
   },
   {
     target: "nav-templates",

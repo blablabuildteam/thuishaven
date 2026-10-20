@@ -22,24 +22,31 @@ const FLOW = [
     title: "Lijst bijwerken",
     href: "/outreach/lijst-bijwerken",
     verb: "Ophalen & aanvullen",
-    body: "Apollo haalt mid-size bedrijven in de AMS-ring. Daarna automatisch: mdw → KvK (jubileum) → contacten → e-mail.",
+    body: "Bedrijven rond Amsterdam ophalen. Daarna vullen we automatisch het aantal medewerkers, het KvK-jubileum, de juiste contactpersoon en het e-mailadres aan.",
   },
   {
     n: "02",
     title: "Bedrijven",
     href: "/outreach/crm",
     verb: "Kiezen & filteren",
-    body: "Je werklijst met invalshoeken. Open een dossier voor contacten, notities en geschiedenis.",
+    body: "Je werklijst met de beste kansen bovenaan. Open een dossier voor contacten, notities en geschiedenis.",
   },
   {
     n: "03",
     title: "Mailen",
     href: "/outreach/emails",
-    verb: "Schrijven & testen",
-    body: "Bedrijf + invalshoek → draft in Reijner-toon → test naar team@. Live versturen blijft dicht.",
+    verb: "Laten schrijven",
+    body: "Kies bedrijven en laat per contact een persoonlijke mail schrijven. Die komen in de Wachtrij.",
   },
   {
     n: "04",
+    title: "Wachtrij",
+    href: "/outreach/planning",
+    verb: "Lezen, testen & plannen",
+    body: "Lees elke mail, stuur een test naar team@ en plan hem in of verstuur hem direct. Ingeplande mails gaan op hun moment vanzelf, zolang echt versturen aan staat.",
+  },
+  {
+    n: "05",
     title: "Resultaten",
     href: "/outreach/analytics",
     verb: "Meten & opvolgen",
@@ -119,7 +126,7 @@ export default async function OutreachUitlegPage() {
           Bedrijfsevent outreach · demo
         </p>
         <h1 className="mt-3 max-w-3xl font-display text-4xl leading-[1.05] tracking-[0.02em] text-text sm:text-5xl lg:text-6xl">
-          Lijst bijwerken → Bedrijven → Mailen → Resultaten
+          Lijst bijwerken → Bedrijven → Mailen → Wachtrij → Resultaten
         </h1>
         <p className="mt-5 max-w-2xl text-base leading-relaxed text-text-muted sm:text-lg">
           Mid-size bedrijven rond Amsterdam ophalen, een natuurlijke invalshoek
@@ -159,7 +166,7 @@ export default async function OutreachUitlegPage() {
               Route
             </p>
             <h2 className="mt-1 font-display text-2xl tracking-[0.04em] sm:text-3xl">
-              Vier stappen
+              Vijf stappen
             </h2>
           </div>
           <p className="hidden max-w-xs text-right text-xs text-text-dim sm:block">

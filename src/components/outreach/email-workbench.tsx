@@ -63,7 +63,7 @@ type Props = {
   /** Template meegenomen vanuit Bedrijven-handoff. */
   handoffVariantId?: OutreachVariantId | null;
   skippedNoEmail?: number;
-  /** Nog niet gemaild maar staan al in de Wachtrij — niet in deze lijst. */
+  /** Unsent mails (draft + queued) — same number the Wachtrij shows. */
   inQueueCount?: number;
   aiConfigured?: boolean;
 };
@@ -633,7 +633,7 @@ export function OutreachEmailWorkbench({
           {inQueueCount > 0 ? (
             <>
               {" "}
-              · {inQueueCount} staan al in de{" "}
+              · {inQueueCount} mail{inQueueCount === 1 ? "" : "s"} in de{" "}
               <Link href="/outreach/planning" className="text-accent underline">
                 Wachtrij
               </Link>
@@ -742,7 +742,7 @@ export function OutreachEmailWorkbench({
                       </ul>
                       {p.quality.issues.length > 0 ? (
                         <p
-                          className={`mt-0.5 text-[11px] ${blocked ? "text-danger" : "text-warn"}`}
+                          className={`mt-0.5 text-[11px] ${blocked ? "text-danger" : "text-warn-fg"}`}
                         >
                           {blocked ? "Niet mailen: " : ""}
                           {p.quality.issues.map((i) => i.label).join(" · ")}
@@ -757,7 +757,7 @@ export function OutreachEmailWorkbench({
                             companyVariants.find((v) => v.id === chosen)?.name}
                       </StatusBadge>
                       {p.lastSentAt ? (
-                        <span className="mt-1 block text-[11px] text-warn">
+                        <span className="mt-1 block text-[11px] text-warn-fg">
                           Verstuurd {fmtDay(p.lastSentAt)}
                           {p.replyCount > 0 ? " · gereageerd" : ""}
                         </span>
@@ -772,7 +772,7 @@ export function OutreachEmailWorkbench({
       </div>
 
       {selectedMailed > 0 ? (
-        <p className="text-sm text-warn">
+        <p className="text-sm text-warn-fg">
           Let op: {selectedMailed} van de geselecteerde bedrijven is al eerder
           gemaild.
         </p>
