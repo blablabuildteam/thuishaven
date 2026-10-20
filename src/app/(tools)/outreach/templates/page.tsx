@@ -22,7 +22,7 @@ export default async function OutreachTemplatesPage() {
       <SectionHeader
         eyebrow="Bij stap 3"
         title="Templates"
-        description="Alle teksten op één plek. Pas aan, stuur een test, en kies daarna in de werklijst welke template een selectie krijgt."
+        description="Alle teksten op één plek. Pas aan, stuur een test, en kies daarna bij Bedrijven welke template een selectie krijgt."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone="neutral">{templates.length} templates</StatusBadge>
@@ -30,7 +30,7 @@ export default async function OutreachTemplatesPage() {
               href="/outreach/crm?stap=nog"
               className="bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast"
             >
-              Naar werklijst →
+              Naar bedrijven →
             </Link>
           </div>
         }

@@ -26,7 +26,7 @@ const FLOW = [
   },
   {
     n: "02",
-    title: "Werklijst",
+    title: "Bedrijven",
     href: "/outreach/crm",
     verb: "Kiezen, schrijven & plannen",
     body: "Alle bedrijven met de beste kansen bovenaan. Vink aan en laat per contact een persoonlijke mail schrijven. Open de mail om hem te lezen, een test naar team@ te sturen en in te plannen of direct te versturen.",
@@ -112,7 +112,7 @@ export default async function OutreachUitlegPage() {
           Bedrijfsevent outreach · demo
         </p>
         <h1 className="mt-3 max-w-3xl font-display text-4xl leading-[1.05] tracking-[0.02em] text-text sm:text-5xl lg:text-6xl">
-          Lijst bijwerken → Werklijst → Resultaten
+          Lijst bijwerken → Bedrijven → Resultaten
         </h1>
         <p className="mt-5 max-w-2xl text-base leading-relaxed text-text-muted sm:text-lg">
           Mid-size bedrijven rond Amsterdam ophalen, een natuurlijke invalshoek
@@ -130,7 +130,7 @@ export default async function OutreachUitlegPage() {
             href="/outreach/crm"
             className="border border-border px-5 py-3 font-display text-sm tracking-[0.12em] hover:border-accent"
           >
-            Naar werklijst
+            Naar bedrijven
           </Link>
           <Link
             href="/outreach/juridisch"
@@ -322,7 +322,7 @@ export default async function OutreachUitlegPage() {
             → mail).
           </li>
           <li>
-            <span className="text-text">Werklijst</span> — begin bij de
+            <span className="text-text">Bedrijven</span> — begin bij de
             signalen (jubileum, gereageerd, geopend zonder reply). Sorteer op
             leadscore. Check de contactrol; bij twijfel opnieuw zoeken op het
             dossier.

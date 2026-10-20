@@ -169,7 +169,7 @@ export function QueueList({
       <p className="border-y border-border py-6 text-sm text-text-muted">
         Nog geen mails in de wachtrij. Schrijf ze via{" "}
         <Link href="/outreach/crm?stap=nog" className="text-accent underline">
-          de werklijst
+          Bedrijven
         </Link>
         ; ze verschijnen hier dan vanzelf.
       </p>

@@ -162,7 +162,7 @@ const outreachSections: NavSection[] = [
       },
       {
         href: "/outreach/crm",
-        label: "2 · Werklijst",
+        label: "2 · Bedrijven",
         icon: Contact,
         tourId: "nav-bedrijven",
       },

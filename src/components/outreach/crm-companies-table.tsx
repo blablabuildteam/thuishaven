@@ -26,8 +26,10 @@ import {
 } from "@/lib/outreach/sender-profiles";
 import { leadTierTone, type LeadScore } from "@/lib/outreach/lead-score";
 import {
+  contactTargetTier,
   rankMailTargets,
   type EmailCheck,
+  type TargetTier,
 } from "@/lib/outreach/contact-ranking";
 import {
   OUTREACH_VARIANTS,
@@ -119,23 +121,57 @@ function hasOpenMailTarget(row: CrmRow): boolean {
   return openMailTargets(row).length > 0;
 }
 
-function contactSummary(row: CrmRow): {
-  name: string | null;
+const PERSON_VERDICT: Record<TargetTier, { label: string; tone: string }> = {
+  0: { label: "Lijkt de juiste", tone: "text-text" },
+  1: { label: "Lijkt de juiste", tone: "text-text" },
+  2: { label: "Twijfelachtig", tone: "text-warn-fg" },
+  3: { label: "Algemeen adres", tone: "text-warn-fg" },
+  9: { label: "Niet de juiste functie", tone: "text-text-dim" },
+};
+
+type FoundPerson = {
+  name: string;
+  title: string | null;
   email: string | null;
-  extra: number;
-} {
-  const { targets } = rankMailTargets({
-    contacts: row.contacts,
-    company: { website: row.website, companyName: row.companyName },
-    companyEmail: row.email,
-    checks: row.emailChecks,
-  });
-  const top = targets[0];
-  const name =
-    top?.name || (top ? null : (row.decisionMakerName ?? row.contacts[0]?.name ?? null));
-  const email = top?.email ?? null;
-  const extra = Math.max(0, targets.length - 1);
-  return { name, email, extra };
+  tier: TargetTier;
+  label: string;
+  tone: string;
+};
+
+function foundPeople(row: CrmRow): FoundPerson[] {
+  const company = { website: row.website, companyName: row.companyName };
+  return row.contacts
+    .filter((c) => c.name?.trim())
+    .map((c) => {
+      const email = c.email?.trim() || null;
+      const tier = email
+        ? contactTargetTier(
+            {
+              name: c.name,
+              title: c.title,
+              email,
+              emailSource: c.emailSource,
+            },
+            company,
+          )
+        : 9;
+      const verdict = email
+        ? PERSON_VERDICT[tier]
+        : { label: "Geen e-mailadres", tone: "text-text-dim" };
+      return {
+        name: c.name,
+        title: c.title?.trim() || null,
+        email,
+        tier,
+        label: verdict.label,
+        tone: verdict.tone,
+      };
+    });
+}
+
+function fmtEmployees(count: number | null): string {
+  if (count == null) return "Onbekend";
+  return new Intl.NumberFormat("nl-NL").format(count);
 }
 
 type Angle = {
@@ -299,6 +335,8 @@ export function CrmCompaniesTable({
   const [picked, setPicked] = useState<Set<string>>(
     () => new Set(initialProspectId ? [initialProspectId] : []),
   );
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const [addForm, setAddForm] = useState({ name: "", title: "", email: "" });
   const closeDrawer = useCallback(() => setDrawerId(null), []);
 
   const pendingByProspect = useMemo(() => {
@@ -561,6 +599,64 @@ export function CrmCompaniesTable({
       return { error: (data.error as string | undefined) ?? "Actie mislukt" };
     }
     return data as Record<string, unknown>;
+  }
+
+  async function addPerson(row: CrmRow) {
+    const name = addForm.name.trim();
+    const email = addForm.email.trim();
+    const title = addForm.title.trim();
+    if (name.length < 2) {
+      setError("Vul minimaal een naam in");
+      return;
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError("Dit e-mailadres klopt niet");
+      return;
+    }
+    const existing = row.contacts
+      .filter((c) => c.name.trim().length >= 2)
+      .map((c) => ({
+        name: c.name.trim(),
+        ...(c.title?.trim() ? { title: c.title.trim() } : {}),
+        ...(c.email?.trim() ? { email: c.email.trim() } : {}),
+        ...(c.linkedinUrl?.trim() ? { linkedinUrl: c.linkedinUrl.trim() } : {}),
+      }));
+    const matched = existing.findIndex(
+      (c) => c.email?.toLowerCase() === row.email?.trim().toLowerCase(),
+    );
+    const primaryIndex = matched >= 0 ? matched : existing.length;
+    setError(null);
+    setMessage(null);
+    setBusy(true);
+    try {
+      const res = await fetch("/api/outreach/crm/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prospectId: row.id,
+          contacts: [
+            ...existing,
+            {
+              name,
+              ...(title ? { title } : {}),
+              ...(email ? { email } : {}),
+            },
+          ],
+          primaryIndex,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Opslaan mislukt");
+        return;
+      }
+      setMessage(`${name} toegevoegd bij ${row.companyName}`);
+      setAddingId(null);
+      setAddForm({ name: "", title: "", email: "" });
+      startTransition(() => router.refresh());
+    } finally {
+      setBusy(false);
+    }
   }
 
   function variantForRow(r: Row): OutreachVariantId {
@@ -1031,14 +1127,15 @@ export function CrmCompaniesTable({
         </p>
       ) : (
         <div className="max-w-full overflow-x-auto border-y border-border">
-          <table className="w-full min-w-[640px] text-left text-sm">
+          <table className="w-full min-w-[860px] text-left text-sm">
             <thead className="border-b border-border text-[11px] uppercase tracking-wider text-text-dim">
               <tr>
                 <th className="w-10 py-2.5 pr-2 font-medium">
                   <span className="sr-only">Selecteer</span>
                 </th>
                 <th className="px-0 py-2.5 pr-4 font-medium">Bedrijf</th>
-                <th className="px-4 py-2.5 font-medium">Contact</th>
+                <th className="px-4 py-2.5 font-medium">Grootte</th>
+                <th className="px-4 py-2.5 font-medium">Personen</th>
                 <th className="px-4 py-2.5 font-medium">Score</th>
                 <th className="px-4 py-2.5 font-medium">Waarom nu</th>
                 <th className="px-4 py-2.5 font-medium">Mail</th>
@@ -1061,7 +1158,11 @@ export function CrmCompaniesTable({
                 const missing = missingDataLabels(row);
                 const showIncompleteBadge =
                   row.incomplete && row.mailCount === 0;
-                const contact = contactSummary(row);
+                const people = foundPeople(row);
+                const shownPeople = people.slice(0, 3);
+                const hasRightPerson = people.some(
+                  (p) => p.tier === 0 || p.tier === 1,
+                );
                 return (
                   <tr
                     key={row.id}
@@ -1121,25 +1222,120 @@ export function CrmCompaniesTable({
                           : ""}
                       </p>
                     </td>
+                    <td
+                      className="px-4 py-3 tabular-nums text-text"
+                      title={
+                        row.employeeCount == null
+                          ? "Aantal medewerkers nog niet bekend"
+                          : "Aantal medewerkers"
+                      }
+                    >
+                      {fmtEmployees(row.employeeCount)}
+                    </td>
                     <td className="px-4 py-3">
-                      {contact.name || contact.email ? (
-                        <>
-                          {contact.name ? (
-                            <p className="font-medium text-text">
-                              {contact.name}
-                            </p>
-                          ) : null}
-                          <p className="max-w-[14rem] truncate text-xs text-text-muted">
-                            {contact.email ?? "geen e-mail"}
-                          </p>
-                          {contact.extra > 0 ? (
-                            <p className="mt-0.5 text-[11px] text-text-dim">
-                              +{contact.extra} andere
-                            </p>
-                          ) : null}
-                        </>
+                      {shownPeople.length > 0 ? (
+                        <ul className="space-y-2">
+                          {shownPeople.map((person, personIndex) => (
+                            <li key={`${person.name}-${person.email ?? personIndex}`}>
+                              <p className="font-medium text-text">
+                                {person.name}
+                              </p>
+                              <p className="max-w-[16rem] text-xs text-text-muted">
+                                {person.title ?? "Functie onbekend"}
+                                {person.email ? ` · ${person.email}` : ""}
+                              </p>
+                              <p className={`text-xs ${person.tone}`}>
+                                {person.label}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
                       ) : (
-                        <span className="text-xs text-warn-fg">Geen contact</span>
+                        <p className="text-xs text-warn-fg">
+                          Nog niemand gevonden
+                        </p>
+                      )}
+                      {people.length > shownPeople.length ? (
+                        <p className="mt-1 text-[11px] text-text-dim">
+                          +{people.length - shownPeople.length} andere
+                        </p>
+                      ) : null}
+                      {!hasRightPerson ? (
+                        <p className="mt-1 text-xs text-warn-fg">
+                          Verder zoeken
+                        </p>
+                      ) : null}
+                      {addingId === row.id ? (
+                        <form
+                          className="mt-2 space-y-1.5"
+                          onSubmit={(ev) => {
+                            ev.preventDefault();
+                            void addPerson(row);
+                          }}
+                        >
+                          <input
+                            required
+                            aria-label="Naam"
+                            placeholder="Naam"
+                            value={addForm.name}
+                            onChange={(ev) =>
+                              setAddForm((f) => ({ ...f, name: ev.target.value }))
+                            }
+                            className="block w-full max-w-[16rem] border border-border bg-bg px-2 py-1 text-xs text-text"
+                          />
+                          <input
+                            aria-label="Functie"
+                            placeholder="Functie"
+                            value={addForm.title}
+                            onChange={(ev) =>
+                              setAddForm((f) => ({
+                                ...f,
+                                title: ev.target.value,
+                              }))
+                            }
+                            className="block w-full max-w-[16rem] border border-border bg-bg px-2 py-1 text-xs text-text"
+                          />
+                          <input
+                            aria-label="E-mail"
+                            placeholder="E-mail"
+                            value={addForm.email}
+                            onChange={(ev) =>
+                              setAddForm((f) => ({
+                                ...f,
+                                email: ev.target.value,
+                              }))
+                            }
+                            className="block w-full max-w-[16rem] border border-border bg-bg px-2 py-1 text-xs text-text"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              type="submit"
+                              disabled={busy}
+                              className="bg-accent px-2 py-1 text-xs text-accent-contrast disabled:opacity-50"
+                            >
+                              Opslaan
+                            </button>
+                            <button
+                              type="button"
+                              className="text-xs text-text-dim underline"
+                              onClick={() => setAddingId(null)}
+                            >
+                              Annuleer
+                            </button>
+                          </div>
+                        </form>
+                      ) : (
+                        <button
+                          type="button"
+                          className="mt-1 text-xs text-text-muted underline-offset-2 hover:text-text hover:underline"
+                          onClick={() => {
+                            setAddingId(row.id);
+                            setAddForm({ name: "", title: "", email: "" });
+                            setError(null);
+                          }}
+                        >
+                          Persoon toevoegen
+                        </button>
                       )}
                     </td>
                     <td

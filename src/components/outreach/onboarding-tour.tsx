@@ -24,12 +24,12 @@ const STEPS: TourStep[] = [
   {
     target: "nav-lijst",
     title: "1 · Lijst bijwerken",
-    body: "Bedrijven ophalen en e-mails aanvullen. Daarna door naar de Werklijst.",
+    body: "Bedrijven ophalen en e-mails aanvullen. Daarna door naar Bedrijven.",
   },
   {
     target: "nav-bedrijven",
-    title: "2 · Werklijst",
-    body: "Alle bedrijven met de beste kansen bovenaan. Klik een naam voor het dossier met contacten, notities en maillog.",
+    title: "2 · Bedrijven",
+    body: "Alle bedrijven, met grootte en de gevonden personen. Klik een naam voor het dossier. Lijkt niemand de juiste, voeg dan zelf iemand toe of zoek verder.",
   },
   {
     target: "crm-stages",

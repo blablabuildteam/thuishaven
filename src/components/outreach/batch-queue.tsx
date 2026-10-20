@@ -227,7 +227,7 @@ export function BatchQueue({
         <p className="border border-border px-4 py-6 text-sm text-text-muted">
           Nog geen bakjes. Genereer drafts in{" "}
           <Link href="/outreach/crm?stap=nog" className="text-accent underline">
-            de werklijst
+            Bedrijven
           </Link>{" "}
           en kies “Zet in bakje”.
         </p>

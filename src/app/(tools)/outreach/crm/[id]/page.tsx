@@ -78,7 +78,7 @@ export default async function CrmDossierPage({
             ? "Partner"
             : dossier.existingCustomer
               ? "Niet mailen"
-              : "Werklijst"
+              : "Bedrijven"
         }
         title={dossier.companyName}
         description={

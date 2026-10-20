@@ -17,7 +17,7 @@ import {
   resolveOutreachTestRecipient,
 } from "@/lib/outreach/send-policy";
 
-export const metadata = { title: "Werklijst" };
+export const metadata = { title: "Bedrijven" };
 export const dynamic = "force-dynamic";
 
 const STAGE_IDS: WerklijstStage[] = [
@@ -95,8 +95,8 @@ export default async function OutreachCrmPage({
     <div>
       <SectionHeader
         eyebrow="Stap 2"
-        title="Werklijst"
-        description="Alle bedrijven met de beste kansen bovenaan. Vink aan en laat mails schrijven; klik daarna op een mail om hem te lezen, te testen en in te plannen."
+        title="Bedrijven"
+        description="Alle bedrijven in de doelgroep. Per bedrijf zie je de grootte en de gevonden personen. Vink aan als je mails wilt laten schrijven."
         action={
           <div className="flex flex-wrap items-center gap-2">
             {bouncePaused ? (

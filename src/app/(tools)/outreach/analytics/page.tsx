@@ -53,7 +53,7 @@ export default async function OutreachAnalyticsPage() {
               href="/outreach/crm"
               className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
             >
-              ← Werklijst
+              ← Bedrijven
             </Link>
           </div>
         }
@@ -307,7 +307,7 @@ export default async function OutreachAnalyticsPage() {
           <p className="mt-2 text-sm text-text-muted">
             Nog geen mails.{" "}
             <Link href="/outreach/crm?stap=nog" className="text-accent underline">
-              Schrijf er een in de werklijst
+              Schrijf er een bij Bedrijven
             </Link>
             .
           </p>
@@ -386,7 +386,7 @@ export default async function OutreachAnalyticsPage() {
             href="/outreach/crm"
             className="text-xs text-accent hover:underline"
           >
-            Bekijk in de werklijst →
+            Bekijk bij Bedrijven →
           </Link>
         </div>
         {snap.recentReplies.length === 0 ? (
