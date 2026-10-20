@@ -634,7 +634,7 @@ export function OutreachEmailWorkbench({
             <>
               {" "}
               · {inQueueCount} mail{inQueueCount === 1 ? "" : "s"} in de{" "}
-              <Link href="/outreach/planning" className="text-accent underline">
+              <Link href="/outreach/crm?stap=check" className="text-accent underline">
                 Wachtrij
               </Link>
             </>

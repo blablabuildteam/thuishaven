@@ -1,17 +1,29 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { MailDrawer } from "@/components/outreach/mail-drawer";
+import {
+  QUEUE_STATUS_NL,
+  QUEUE_STATUS_TONE,
+} from "@/components/outreach/queue-mail-panel";
 import { statusLabels } from "@/lib/mock/outreach";
 import {
   type MailAngleId,
   isMailableAngle,
   mailAngleTone,
+  suggestedVariantForAngle,
 } from "@/lib/outreach/mail-angle";
+import type { QueueItem } from "@/lib/outreach/queue";
+import {
+  DEFAULT_SENDER_PROFILE_ID,
+  OUTREACH_SENDER_PROFILES,
+  type OutreachSenderProfileId,
+} from "@/lib/outreach/sender-profiles";
 import { leadTierTone, type LeadScore } from "@/lib/outreach/lead-score";
 import {
   rankMailTargets,
@@ -23,14 +35,17 @@ import {
 } from "@/lib/outreach/tone";
 
 const FOLLOW_UP_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
-/** One Mailen batch at a time (cookie handoff, not URL length). */
-const MAX_HANDOFF = 80;
+/** Same cap as the generate API: one contact = one mail. */
+const MAX_WRITE_MAILS = 80;
+const PICK_TOP = 20;
+/** Small chunks: each mail = address check + AI, keep requests under the time limit. */
+const WRITE_CHUNK = 6;
 
 const HANDOFF_VARIANT_IDS = new Set(
   OUTREACH_VARIANTS.map((v) => v.id),
 );
 
-/** Map Bedrijven-filter → default template for Mailen. */
+/** Map angle filter → default template when writing. */
 function variantFromMailFilter(filter: string): OutreachVariantId | null {
   if (HANDOFF_VARIANT_IDS.has(filter as OutreachVariantId)) {
     return filter as OutreachVariantId;
@@ -90,16 +105,18 @@ type CrmRow = {
   kvkMatchWeak?: boolean;
 };
 
+function openMailTargets(row: CrmRow) {
+  return rankMailTargets({
+    contacts: row.contacts,
+    company: { website: row.website, companyName: row.companyName },
+    companyEmail: row.email,
+    checks: row.emailChecks,
+    exclude: [...(row.mailedEmails ?? []), ...(row.pendingEmails ?? [])],
+  }).targets;
+}
+
 function hasOpenMailTarget(row: CrmRow): boolean {
-  return (
-    rankMailTargets({
-      contacts: row.contacts,
-      company: { website: row.website, companyName: row.companyName },
-      companyEmail: row.email,
-      checks: row.emailChecks,
-      exclude: [...(row.mailedEmails ?? []), ...(row.pendingEmails ?? [])],
-    }).targets.length > 0
-  );
+  return openMailTargets(row).length > 0;
 }
 
 function contactSummary(row: CrmRow): {
@@ -136,9 +153,49 @@ type Row = {
   score: LeadScore;
 };
 
+export type WerklijstStage =
+  | "all"
+  | "nog"
+  | "check"
+  | "gepland"
+  | "verlopen"
+  | "verstuurd";
+
 type Props = {
   rows: Row[];
+  queueItems?: QueueItem[];
+  liveSendBlockReason?: string | null;
+  testSendBlockReason?: string | null;
+  defaultTestTo?: string;
+  aiConfigured?: boolean;
+  initialStage?: WerklijstStage;
+  /** Preselect + show this company (e.g. from a dossier link). */
+  initialProspectId?: string | null;
 };
+
+const STAGES: { id: WerklijstStage; label: string; hint: string }[] = [
+  { id: "all", label: "Alles", hint: "Alle bedrijven in dit filter" },
+  { id: "nog", label: "Nog mailen", hint: "Mailbaar contact, nog geen mail" },
+  { id: "check", label: "Te checken", hint: "Mail geschreven: lezen, testen, plannen" },
+  { id: "gepland", label: "Gepland", hint: "Gaat op het geplande moment" },
+  { id: "verlopen", label: "Verlopen", hint: "Tijdstip voorbij, opnieuw plannen" },
+  { id: "verstuurd", label: "Verstuurd", hint: "Minstens één echte mail" },
+];
+
+function rowStage(
+  row: CrmRow,
+  pending: QueueItem[],
+  canMail: boolean,
+): Exclude<WerklijstStage, "all"> | null {
+  if (pending.some((i) => i.statusLabel === "verlopen")) return "verlopen";
+  if (pending.some((i) => i.statusLabel === "review" || i.statusLabel === "concept")) {
+    return "check";
+  }
+  if (pending.some((i) => i.statusLabel === "gepland")) return "gepland";
+  if (row.mailCount > 0) return "verstuurd";
+  if (canMail) return "nog";
+  return null;
+}
 
 type MailFilter =
   | "all"
@@ -204,23 +261,96 @@ function missingDataLabels(row: CrmRow): string[] {
   return missing;
 }
 
-export function CrmCompaniesTable({ rows }: Props) {
+export function CrmCompaniesTable({
+  rows,
+  queueItems = [],
+  liveSendBlockReason = null,
+  testSendBlockReason = null,
+  defaultTestTo = "team@blablabuild.com",
+  aiConfigured = true,
+  initialStage = "all",
+  initialProspectId = null,
+}: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [handoffBusy, setHandoffBusy] = useState(false);
-  const [handoffError, setHandoffError] = useState<string | null>(null);
-  /** null = laat Mailen per bedrijf kiezen; anders één template meenemen. */
-  const [handoffVariant, setHandoffVariant] = useState<
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  /** "auto" = invalshoek per bedrijf; anders één template voor de hele selectie. */
+  const [writeVariant, setWriteVariant] = useState<
     OutreachVariantId | "auto"
   >("auto");
+  const [senderProfileId, setSenderProfileId] =
+    useState<OutreachSenderProfileId>(DEFAULT_SENDER_PROFILE_ID);
+  const [confirmPlan, setConfirmPlan] = useState(false);
+  const [stage, setStage] = useState<WerklijstStage>(
+    initialProspectId ? "all" : initialStage,
+  );
+  const [drawerId, setDrawerId] = useState<string | null>(null);
   const [q, setQ] = useState("");
-  const [mail, setMail] = useState<MailFilter>("kans");
+  const [mail, setMail] = useState<MailFilter>(
+    initialProspectId || initialStage !== "all" ? "all" : "kans",
+  );
   const [region, setRegion] = useState<RegionFilter>("all");
   const [completeness, setCompleteness] =
     useState<CompletenessFilter>("all");
   const [sort, setSort] = useState<SortKey>("score");
   const [moreOpen, setMoreOpen] = useState(false);
-  const [picked, setPicked] = useState<Set<string>>(() => new Set());
+  const [picked, setPicked] = useState<Set<string>>(
+    () => new Set(initialProspectId ? [initialProspectId] : []),
+  );
+  const closeDrawer = useCallback(() => setDrawerId(null), []);
+
+  const pendingByProspect = useMemo(() => {
+    const map = new Map<string, QueueItem[]>();
+    for (const item of queueItems) {
+      const list = map.get(item.prospectId) ?? [];
+      list.push(item);
+      map.set(item.prospectId, list);
+    }
+    return map;
+  }, [queueItems]);
+
+  const meta = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        canMail: boolean;
+        pending: QueueItem[];
+        stage: Exclude<WerklijstStage, "all"> | null;
+      }
+    >();
+    for (const { row, angle } of rows) {
+      const canMail = isMailableAngle(angle.id) && hasOpenMailTarget(row);
+      const pendingMails = pendingByProspect.get(row.id) ?? [];
+      map.set(row.id, {
+        canMail,
+        pending: pendingMails,
+        stage: rowStage(row, pendingMails, canMail),
+      });
+    }
+    return map;
+  }, [rows, pendingByProspect]);
+
+  const stageCounts = useMemo(() => {
+    const c: Record<WerklijstStage, number> = {
+      all: rows.length,
+      nog: 0,
+      check: 0,
+      gepland: 0,
+      verlopen: 0,
+      verstuurd: 0,
+    };
+    for (const m of meta.values()) if (m.stage) c[m.stage] += 1;
+    return c;
+  }, [rows.length, meta]);
+
+  function pickStage(next: WerklijstStage) {
+    setStage(next);
+    if (next !== "all" && next !== "nog") setMail("all");
+    setPicked(new Set());
+    setConfirmPlan(false);
+  }
 
   const signalCounts = useMemo(() => {
     const out = {} as Record<SignalId, number>;
@@ -289,6 +419,8 @@ export function CrmCompaniesTable({ rows }: Props) {
       ) {
         return false;
       }
+
+      if (stage !== "all" && meta.get(row.id)?.stage !== stage) return false;
 
       if (mail.startsWith("sig_")) {
         if (!signalMatch(mail as SignalId, row, angle)) return false;
@@ -382,21 +514,23 @@ export function CrmCompaniesTable({ rows }: Props) {
         a.row.companyName.localeCompare(b.row.companyName, "nl")
       );
     });
-  }, [rows, q, mail, region, completeness, sort]);
+  }, [rows, q, mail, region, completeness, sort, stage, meta]);
 
-  const mailableIds = filtered
-    .filter(
-      ({ row, angle }) =>
-        isMailableAngle(angle.id) && hasOpenMailTarget(row),
-    )
-    .map(({ row }) => row.id);
-
-  const pickedMailable = mailableIds.filter((id) => picked.has(id));
-  const handoffIds =
-    pickedMailable.length > 0 ? pickedMailable : mailableIds;
-  const handoffCount = Math.min(handoffIds.length, MAX_HANDOFF);
+  const byId = useMemo(
+    () => new Map(rows.map((r) => [r.row.id, r])),
+    [rows],
+  );
+  const pickedRows = [...picked]
+    .map((id) => byId.get(id))
+    .filter((r): r is Row => Boolean(r));
+  const writeRows = pickedRows.filter((r) => meta.get(r.row.id)?.canMail);
+  const pickedEmailIds = pickedRows.flatMap(
+    (r) => meta.get(r.row.id)?.pending.map((i) => i.emailId) ?? [],
+  );
+  const drawerRow = drawerId ? byId.get(drawerId) : undefined;
 
   function togglePick(id: string) {
+    setConfirmPlan(false);
     setPicked((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -405,46 +539,188 @@ export function CrmCompaniesTable({ rows }: Props) {
     });
   }
 
-  function pickVisibleMailable() {
-    setPicked(new Set(mailableIds.slice(0, MAX_HANDOFF)));
+  function pickTopMailable() {
+    setPicked(
+      new Set(
+        filtered
+          .filter(({ row }) => meta.get(row.id)?.stage === "nog")
+          .slice(0, PICK_TOP)
+          .map(({ row }) => row.id),
+      ),
+    );
   }
 
-  async function goToMailen() {
-    const ids = handoffIds.slice(0, MAX_HANDOFF);
-    if (!ids.length) return;
-    setHandoffError(null);
-    setHandoffBusy(true);
-    const variantId =
-      handoffVariant === "auto"
-        ? variantFromMailFilter(mail)
-        : handoffVariant;
+  async function post(body: Record<string, unknown>) {
+    const res = await fetch("/api/outreach/emails", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { error: (data.error as string | undefined) ?? "Actie mislukt" };
+    }
+    return data as Record<string, unknown>;
+  }
+
+  function variantForRow(r: Row): OutreachVariantId {
+    if (writeVariant !== "auto") return writeVariant;
+    return (
+      variantFromMailFilter(mail) ??
+      suggestedVariantForAngle(r.angle.id) ??
+      "warm_tour"
+    );
+  }
+
+  async function writeMails() {
+    setError(null);
+    setMessage(null);
+    const items = writeRows.flatMap((r) =>
+      openMailTargets(r.row).map((t) => ({
+        prospectId: r.row.id,
+        variantId: variantForRow(r),
+        recipientEmail: t.email,
+        ...(t.name?.trim() ? { recipientName: t.name.trim() } : {}),
+      })),
+    );
+    if (!items.length) {
+      setError("Geen mailbare contacten in de selectie");
+      return;
+    }
+    if (items.length > MAX_WRITE_MAILS) {
+      setError(
+        `Dat zijn ${items.length} mails. Kies minder bedrijven (max ${MAX_WRITE_MAILS} mails per keer).`,
+      );
+      return;
+    }
+    setBusy(true);
+    let made = 0;
+    let ai = 0;
+    const failures: string[] = [];
     try {
-      const res = await fetch("/api/outreach/handoff", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prospectIds: ids,
-          ...(variantId ? { variantId } : {}),
-        }),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        redirectTo?: string;
-      };
-      if (!res.ok) {
-        setHandoffError(data.error ?? "Handoff mislukt");
+      for (let i = 0; i < items.length; i += WRITE_CHUNK) {
+        const chunk = items.slice(i, i + WRITE_CHUNK);
+        if (items.length > WRITE_CHUNK) {
+          setMessage(`Bezig met schrijven… ${i} van ${items.length} mails`);
+        }
+        const data = await post({ items: chunk, senderProfileId });
+        if (typeof data.error === "string") {
+          failures.push(data.error);
+          continue;
+        }
+        const results = (
+          data.emailId ? [data] : ((data.results ?? []) as Record<string, unknown>[])
+        ) as Array<{ emailId?: string; source?: string; error?: string }>;
+        for (const r of results) {
+          if (r.emailId) {
+            made += 1;
+            if (r.source === "ai") ai += 1;
+          } else if (r.error) {
+            failures.push(r.error);
+          }
+        }
+      }
+    } finally {
+      setBusy(false);
+    }
+    const reasons = [...new Set(failures)].slice(0, 2).join(" · ");
+    if (!made) {
+      setError(
+        `Geen mails geschreven${failures.length ? ` (${failures.length} mislukt: ${reasons})` : ""}`,
+      );
+      return;
+    }
+    setMessage(
+      `${made} mail${made === 1 ? "" : "s"} geschreven` +
+        (ai < made ? ` · ${made - ai} met standaardtekst` : "") +
+        (failures.length ? ` · ${failures.length} mislukt (${reasons})` : "") +
+        ". Ze staan nu bij Te checken: klik op een bedrijf om te lezen en te testen.",
+    );
+    setPicked(new Set());
+    setStage("check");
+    setMail("all");
+    startTransition(() => router.refresh());
+  }
+
+  async function bulk(
+    action: "schedule-queue" | "clear-queue-schedule" | "send-test",
+  ) {
+    if (!pickedEmailIds.length) return;
+    setError(null);
+    setMessage(null);
+    setConfirmPlan(false);
+    setBusy(true);
+    try {
+      const data = await post(
+        action === "send-test"
+          ? { action, emailIds: pickedEmailIds.slice(0, 40), testTo: defaultTestTo }
+          : { action, emailIds: pickedEmailIds },
+      );
+      if ("error" in data && typeof data.error === "string") {
+        setError(data.error);
         return;
       }
-      startTransition(() => {
-        router.push(data.redirectTo ?? "/outreach/emails");
-      });
+      if (action === "schedule-queue") {
+        const first =
+          typeof data.firstAt === "string"
+            ? new Date(data.firstAt).toLocaleString("nl-NL", {
+                timeZone: "Europe/Amsterdam",
+                weekday: "short",
+                day: "numeric",
+                month: "short",
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : null;
+        setMessage(
+          `${data.scheduled} mail${data.scheduled === 1 ? "" : "s"} gespreid ingepland${first ? `, vanaf ${first}` : ""}`,
+        );
+      } else if (action === "clear-queue-schedule") {
+        setMessage(`Planning geannuleerd voor ${data.cleared} mails`);
+      } else {
+        const n = typeof data.ok === "number" ? data.ok : 1;
+        setMessage(
+          `${n} testmail${n === 1 ? "" : "s"} naar ${defaultTestTo}` +
+            (data.failed ? ` · ${data.failed} mislukt` : ""),
+        );
+      }
+      setPicked(new Set());
+      startTransition(() => router.refresh());
     } finally {
-      setHandoffBusy(false);
+      setBusy(false);
     }
   }
 
   return (
     <div>
+      <nav
+        aria-label="Mailstatus"
+        data-tour="crm-stages"
+        className="mb-5 flex flex-wrap items-baseline gap-x-5 gap-y-2 border-b border-border pb-3 text-sm"
+      >
+        {STAGES.map((st) => {
+          const n = stageCounts[st.id];
+          if (st.id === "verlopen" && n === 0 && stage !== "verlopen") return null;
+          const on = stage === st.id;
+          return (
+            <button
+              key={st.id}
+              type="button"
+              title={st.hint}
+              onClick={() => pickStage(st.id)}
+              className={`border-b-2 pb-1 ${
+                on
+                  ? "border-accent text-text"
+                  : "border-transparent text-text-muted hover:text-text"
+              }`}
+            >
+              <span className="font-display tabular-nums tracking-wide">{n}</span>
+              <span className="ml-1.5">{st.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {SIGNALS.map((s) => {
           const on = mail === s.id;
@@ -536,82 +812,149 @@ export function CrmCompaniesTable({ rows }: Props) {
           </button>
         </div>
 
-        {handoffCount > 0 ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {picked.size > 0 ? (
-              <button
-                type="button"
-                onClick={() => setPicked(new Set())}
-                className="text-xs text-text-dim underline"
-              >
-                Wis selectie
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={pickVisibleMailable}
-                className="text-xs text-text-muted underline-offset-2 hover:underline"
-                title={`Vinkt max ${MAX_HANDOFF} aan met e-mail, nog nooit gemaild`}
-              >
-                Vink mailklare aan
-              </button>
-            )}
-            <label className="block">
-              <span className="sr-only">Invalshoek</span>
-              <select
-                value={handoffVariant}
-                onChange={(e) =>
-                  setHandoffVariant(
-                    e.target.value as OutreachVariantId | "auto",
-                  )
-                }
-                className="block min-w-[10rem] border border-border bg-bg px-3 py-2 text-sm text-text"
-                title="Meenemen naar Mailen"
-              >
-                <option value="auto">
-                  Auto
-                  {variantFromMailFilter(mail)
-                    ? ` → ${
-                        COMPANY_HANDOFF_VARIANTS.find(
-                          (v) => v.id === variantFromMailFilter(mail),
-                        )?.name ?? variantFromMailFilter(mail)
-                      }`
-                    : " — invalshoek per bedrijf"}
-                </option>
-                {COMPANY_HANDOFF_VARIANTS.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              disabled={handoffBusy || pending}
-              onClick={() => void goToMailen()}
-              title={
-                pickedMailable.length > 0
-                  ? `Jouw selectie · max ${MAX_HANDOFF}`
-                  : `Alle mailklare in dit filter · max ${MAX_HANDOFF} per keer`
-              }
-              className="shrink-0 bg-accent px-4 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast disabled:opacity-50"
-            >
-              {handoffBusy || pending
-                ? "Bezig…"
-                : pickedMailable.length > 0
-                  ? `Mail selectie (${handoffCount}) →`
-                  : `Mail ${handoffCount}${
-                      mailableIds.length > MAX_HANDOFF
-                        ? ` van ${mailableIds.length}`
-                        : ""
-                    } →`}
-            </button>
-          </div>
-        ) : null}
       </div>
-      {handoffError ? (
+
+      {picked.size > 0 ? (
+        <div className="sticky top-0 z-10 mb-4 flex flex-wrap items-center gap-2 border border-border bg-bg px-3 py-2 text-sm">
+          <span className="text-text-dim">{picked.size} aangevinkt</span>
+          <button
+            type="button"
+            onClick={() => {
+              setPicked(new Set());
+              setConfirmPlan(false);
+            }}
+            className="text-xs text-text-dim underline"
+          >
+            Wis
+          </button>
+          {writeRows.length > 0 ? (
+            <span className="flex flex-wrap items-center gap-2 border-l border-border pl-2">
+              <label className="block">
+                <span className="sr-only">Invalshoek</span>
+                <select
+                  value={writeVariant}
+                  onChange={(e) =>
+                    setWriteVariant(e.target.value as OutreachVariantId | "auto")
+                  }
+                  className="block min-w-[10rem] border border-border bg-bg px-2 py-1 text-xs text-text"
+                  title="Welke invalshoek de mails krijgen"
+                >
+                  <option value="auto">
+                    Invalshoek:{" "}
+                    {variantFromMailFilter(mail)
+                      ? (COMPANY_HANDOFF_VARIANTS.find(
+                          (v) => v.id === variantFromMailFilter(mail),
+                        )?.name ?? variantFromMailFilter(mail))
+                      : "per bedrijf"}
+                  </option>
+                  {COMPANY_HANDOFF_VARIANTS.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="sr-only">Afzender</span>
+                <select
+                  value={senderProfileId}
+                  onChange={(e) =>
+                    setSenderProfileId(e.target.value as OutreachSenderProfileId)
+                  }
+                  className="block border border-border bg-bg px-2 py-1 text-xs text-text"
+                  title="Namens wie de mail gaat"
+                >
+                  {OUTREACH_SENDER_PROFILES.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                disabled={busy || pending}
+                onClick={() => void writeMails()}
+                className="bg-accent px-3 py-1 font-display text-xs tracking-[0.1em] text-accent-contrast disabled:opacity-50"
+                title="Per contact een persoonlijke mail laten schrijven (max 3 per bedrijf)"
+              >
+                {busy ? "Bezig…" : `Schrijf mails (${writeRows.length})`}
+              </button>
+            </span>
+          ) : null}
+          {pickedEmailIds.length > 0 ? (
+            <span className="flex flex-wrap items-center gap-2 border-l border-border pl-2">
+              <button
+                type="button"
+                disabled={busy || pending || Boolean(testSendBlockReason)}
+                onClick={() => void bulk("send-test")}
+                className="border border-border px-2 py-1 text-xs hover:border-accent disabled:opacity-50"
+                title={testSendBlockReason ?? `Als test naar ${defaultTestTo}`}
+              >
+                Stuur test
+              </button>
+              {confirmPlan ? (
+                <span className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-text">
+                    {pickedEmailIds.length} mail
+                    {pickedEmailIds.length === 1 ? "" : "s"} gespreid inplannen
+                    op de vaste verzenddagen?
+                  </span>
+                  <button
+                    type="button"
+                    disabled={busy || pending}
+                    onClick={() => void bulk("schedule-queue")}
+                    className="bg-accent px-2 py-1 text-accent-contrast disabled:opacity-50"
+                  >
+                    Ja, plan in
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmPlan(false)}
+                    className="underline"
+                  >
+                    Nee
+                  </button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy || pending}
+                  onClick={() => setConfirmPlan(true)}
+                  className="border border-accent px-2 py-1 text-xs text-text disabled:opacity-50"
+                >
+                  Plan in ({pickedEmailIds.length})
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={busy || pending}
+                onClick={() => void bulk("clear-queue-schedule")}
+                className="text-xs underline"
+              >
+                Planning annuleren
+              </button>
+            </span>
+          ) : null}
+        </div>
+      ) : stageCounts.nog > 0 && (stage === "all" || stage === "nog") ? (
+        <button
+          type="button"
+          onClick={pickTopMailable}
+          className="mb-4 text-xs text-text-muted underline-offset-2 hover:underline"
+          title="Vinkt de bedrijven met de hoogste score aan die nog geen mail hebben"
+        >
+          Vink top {PICK_TOP} nog te mailen aan
+        </button>
+      ) : null}
+      {error ? (
         <p className="mb-3 text-sm text-danger" role="alert">
-          {handoffError}
+          {error}
+        </p>
+      ) : null}
+      {message ? (
+        <p className="mb-3 text-sm text-text-muted" role="status">
+          {message}
         </p>
       ) : null}
 
@@ -675,7 +1018,7 @@ export function CrmCompaniesTable({ rows }: Props) {
         {filtered.length} van {rows.length}
         {mail === "kans" ? " · mailkans" : ""}
         {picked.size > 0 ? ` · ${picked.size} aangevinkt` : ""}
-        {" · vink aan om te selecteren, klik naam voor dossier"}
+        {" · vink aan om mails te schrijven of in te plannen, klik de naam voor het dossier"}
       </p>
 
       {filtered.length === 0 ? (
@@ -698,14 +1041,21 @@ export function CrmCompaniesTable({ rows }: Props) {
                 <th className="px-4 py-2.5 font-medium">Contact</th>
                 <th className="px-4 py-2.5 font-medium">Score</th>
                 <th className="px-4 py-2.5 font-medium">Waarom nu</th>
-                <th className="px-4 py-2.5 font-medium">Laatste mail</th>
+                <th className="px-4 py-2.5 font-medium">Mail</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(({ row, angle, score }) => {
                 const on = picked.has(row.id);
-                const canMail =
-                  isMailableAngle(angle.id) && hasOpenMailTarget(row);
+                const rowMeta = meta.get(row.id);
+                const canMail = rowMeta?.canMail ?? false;
+                const pendingMails = rowMeta?.pending ?? [];
+                const headMail =
+                  pendingMails.find((i) => i.statusLabel === "verlopen") ??
+                  pendingMails.find(
+                    (i) => i.statusLabel === "review" || i.statusLabel === "concept",
+                  ) ??
+                  pendingMails[0];
                 const topReason =
                   score.reasons[0]?.replace(/^\+\d+\s*/, "") ?? null;
                 const missing = missingDataLabels(row);
@@ -723,17 +1073,17 @@ export function CrmCompaniesTable({ rows }: Props) {
                       <input
                         type="checkbox"
                         checked={on}
-                        disabled={!canMail && !on}
+                        disabled={!canMail && pendingMails.length === 0 && !on}
                         title={
-                          canMail
-                            ? "Selecteer om te mailen"
-                            : row.mailCount > 0
-                              ? "Al verstuurd"
-                              : row.queuedCount > 0 || row.draftCount > 0
-                                ? "Staat al in de Wachtrij"
-                              : !row.email
-                                ? "Geen e-mail"
-                                : "Geen mailkans"
+                          pendingMails.length > 0
+                            ? "Selecteer om te testen of in te plannen"
+                            : canMail
+                              ? "Selecteer om een mail te laten schrijven"
+                              : row.mailCount > 0
+                                ? "Al verstuurd"
+                                : !row.email
+                                  ? "Geen e-mail"
+                                  : "Geen mailkans"
                         }
                         onChange={() => togglePick(row.id)}
                         aria-label={`Selecteer ${row.companyName}`}
@@ -769,11 +1119,6 @@ export function CrmCompaniesTable({ rows }: Props) {
                         (row.city || row.kvkCity || row.apolloCity)
                           ? " · buiten regio"
                           : ""}
-                        {row.queuedCount > 0
-                          ? ` · ${row.queuedCount} in wachtrij`
-                          : row.draftCount > 0
-                            ? ` · ${row.draftCount} concept`
-                            : ""}
                       </p>
                     </td>
                     <td className="px-4 py-3">
@@ -824,22 +1169,39 @@ export function CrmCompaniesTable({ rows }: Props) {
                       </p>
                     </td>
                     <td className="px-4 py-3 text-xs text-text-muted">
-                      {row.lastSentAt ? (
-                        <>
-                          {fmt(row.lastSentAt)}
-                          {row.mailCount > 0 ? (
-                            <p className="text-text-dim">
-                              {row.openCount} open · {row.replyCount} reply
-                            </p>
+                      {headMail ? (
+                        <button
+                          type="button"
+                          onClick={() => setDrawerId(row.id)}
+                          className="group block text-left"
+                          title="Open de mail om te lezen, testen of plannen"
+                        >
+                          <StatusBadge tone={QUEUE_STATUS_TONE[headMail.statusLabel]}>
+                            {QUEUE_STATUS_NL[headMail.statusLabel]}
+                          </StatusBadge>
+                          {headMail.statusLabel === "gepland" &&
+                          headMail.scheduledLabel ? (
+                            <span className="mt-1 block tabular-nums text-text-dim">
+                              {headMail.scheduledLabel}
+                            </span>
                           ) : null}
-                        </>
-                      ) : row.queuedCount > 0 ? (
-                        <span className="text-text-dim">In wachtrij</span>
-                      ) : row.draftCount > 0 ? (
-                        <span className="text-text-dim">Concept</span>
-                      ) : (
+                          <span className="mt-1 block text-accent group-hover:underline">
+                            {pendingMails.length > 1
+                              ? `Open ${pendingMails.length} mails`
+                              : "Open mail"}
+                          </span>
+                        </button>
+                      ) : null}
+                      {row.lastSentAt ? (
+                        <div className={headMail ? "mt-2" : undefined}>
+                          Verstuurd {fmt(row.lastSentAt)}
+                          <p className="text-text-dim">
+                            {row.openCount} open · {row.replyCount} reply
+                          </p>
+                        </div>
+                      ) : !headMail ? (
                         <span className="text-text-dim">Nog niet</span>
-                      )}
+                      ) : null}
                     </td>
                   </tr>
                 );
@@ -848,6 +1210,19 @@ export function CrmCompaniesTable({ rows }: Props) {
           </table>
         </div>
       )}
+
+      {drawerRow ? (
+        <MailDrawer
+          prospectId={drawerRow.row.id}
+          companyName={drawerRow.row.companyName}
+          items={meta.get(drawerRow.row.id)?.pending ?? []}
+          testTo={defaultTestTo}
+          testSendBlockReason={testSendBlockReason}
+          liveSendBlockReason={liveSendBlockReason}
+          aiConfigured={aiConfigured}
+          onClose={closeDrawer}
+        />
+      ) : null}
     </div>
   );
 }

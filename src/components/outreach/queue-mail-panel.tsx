@@ -22,6 +22,23 @@ type Props = {
   onClose?: () => void;
 };
 
+export const QUEUE_STATUS_TONE: Record<
+  QueueItem["statusLabel"],
+  "neutral" | "accent" | "success" | "warn" | "info"
+> = {
+  concept: "info",
+  review: "info",
+  gepland: "accent",
+  verlopen: "neutral",
+};
+
+export const QUEUE_STATUS_NL: Record<QueueItem["statusLabel"], string> = {
+  concept: "Te checken",
+  review: "Te checken",
+  gepland: "Gepland",
+  verlopen: "Tijdstip verlopen",
+};
+
 type Edit = {
   subject: string;
   body: string;

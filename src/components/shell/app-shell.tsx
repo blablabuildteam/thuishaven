@@ -18,7 +18,6 @@ import {
   Ticket,
   Users,
   Sparkles,
-  Mail,
   LineChart,
   Workflow,
   Ban,
@@ -28,7 +27,6 @@ import {
   X,
   BookOpen,
   Scale,
-  Inbox,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -164,25 +162,13 @@ const outreachSections: NavSection[] = [
       },
       {
         href: "/outreach/crm",
-        label: "2 · Bedrijven",
+        label: "2 · Werklijst",
         icon: Contact,
         tourId: "nav-bedrijven",
       },
       {
-        href: "/outreach/emails",
-        label: "3 · Mailen",
-        icon: Mail,
-        tourId: "nav-mailen",
-      },
-      {
-        href: "/outreach/planning",
-        label: "4 · Wachtrij",
-        icon: Inbox,
-        tourId: "nav-wachtrij",
-      },
-      {
         href: "/outreach/analytics",
-        label: "5 · Resultaten",
+        label: "3 · Resultaten",
         icon: LineChart,
         tourId: "nav-resultaten",
       },

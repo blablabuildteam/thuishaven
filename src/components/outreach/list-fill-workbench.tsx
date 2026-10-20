@@ -869,7 +869,7 @@ export function ListFillWorkbench({
 
         {openWork === 0 ? (
           <p className="mt-4 text-sm text-text-muted">
-            Alles is aangevuld. Ga door naar Bedrijven om te mailen.
+            Alles is aangevuld. Ga door naar de Werklijst om te mailen.
           </p>
         ) : (
           <div className="mt-4 flex flex-wrap items-center gap-3">

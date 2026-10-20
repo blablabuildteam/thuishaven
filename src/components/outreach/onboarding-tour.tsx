@@ -9,7 +9,7 @@ import {
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-const STORAGE_KEY = "thuishaven-outreach-tour-v5";
+const STORAGE_KEY = "thuishaven-outreach-tour-v6";
 
 type TourStep = {
   /** Matches data-tour on a real UI element */
@@ -24,28 +24,18 @@ const STEPS: TourStep[] = [
   {
     target: "nav-lijst",
     title: "1 · Lijst bijwerken",
-    body: "Bedrijven ophalen en e-mails aanvullen. Daarna door naar Bedrijven.",
+    body: "Bedrijven ophalen en e-mails aanvullen. Daarna door naar de Werklijst.",
   },
   {
     target: "nav-bedrijven",
-    title: "2 · Bedrijven",
-    body: "Je werklijst. Bovenaan de signalen (jubileum, gereageerd). Klik een rij open voor notities en maillog.",
+    title: "2 · Werklijst",
+    body: "Alle bedrijven met de beste kansen bovenaan. Klik een naam voor het dossier met contacten, notities en maillog.",
   },
   {
-    target: "crm-mailen",
-    title: "Door naar Mailen",
-    body: "Filter wie je wilt, dan ‘Mail deze’ — die selectie staat klaar in Mailen.",
+    target: "crm-stages",
+    title: "Van bedrijf naar mail",
+    body: "Vink bedrijven aan en kies ‘Schrijf mails’. Ze komen bij ‘Te checken’: klik ‘Open mail’ om te lezen, een test te sturen en in te plannen. Ingeplande mails gaan op hun moment vanzelf, zolang echt versturen aan staat.",
     go: "/outreach/crm",
-  },
-  {
-    target: "nav-mailen",
-    title: "3 · Mailen",
-    body: "Kies een afzender en laat per bedrijf een persoonlijke mail schrijven (AI houdt de gevonden invalshoek aan). Ze komen in de Wachtrij.",
-  },
-  {
-    target: "nav-wachtrij",
-    title: "4 · Wachtrij",
-    body: "Lees en pas elke mail aan, stuur een test naar jezelf, en plan ze in of verstuur er een direct. Ingeplande mails gaan op hun moment vanzelf, zolang echt versturen aan staat.",
   },
   {
     target: "nav-templates",
@@ -54,7 +44,7 @@ const STEPS: TourStep[] = [
   },
   {
     target: "nav-resultaten",
-    title: "5 · Resultaten",
+    title: "3 · Resultaten",
     body: "Wie opende, klikte of reageerde — en welke invalshoek het best werkt.",
   },
 ];

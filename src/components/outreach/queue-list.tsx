@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { QueueMailPanel } from "@/components/outreach/queue-mail-panel";
+import {
+  QUEUE_STATUS_NL,
+  QUEUE_STATUS_TONE,
+  QueueMailPanel,
+} from "@/components/outreach/queue-mail-panel";
 import type { LiveSendQuota } from "@/lib/outreach/batches";
 import type { QueueItem } from "@/lib/outreach/queue";
 
@@ -19,23 +23,6 @@ type Props = {
 };
 
 type Filter = "all" | "review" | "gepland" | "verlopen";
-
-export const QUEUE_STATUS_TONE: Record<
-  QueueItem["statusLabel"],
-  "neutral" | "accent" | "success" | "warn" | "info"
-> = {
-  concept: "info",
-  review: "info",
-  gepland: "accent",
-  verlopen: "neutral",
-};
-
-export const QUEUE_STATUS_NL: Record<QueueItem["statusLabel"], string> = {
-  concept: "Te checken",
-  review: "Te checken",
-  gepland: "Gepland",
-  verlopen: "Tijdstip verlopen",
-};
 
 export function QueueList({
   items,
@@ -181,8 +168,8 @@ export function QueueList({
     return (
       <p className="border-y border-border py-6 text-sm text-text-muted">
         Nog geen mails in de wachtrij. Schrijf ze via{" "}
-        <Link href="/outreach/emails" className="text-accent underline">
-          Mailen
+        <Link href="/outreach/crm?stap=nog" className="text-accent underline">
+          de werklijst
         </Link>
         ; ze verschijnen hier dan vanzelf.
       </p>

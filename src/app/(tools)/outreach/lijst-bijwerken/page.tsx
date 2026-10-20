@@ -50,7 +50,7 @@ export default async function LijstBijwerkenPage() {
               href="/outreach/crm"
               className="border border-border bg-surface px-3 py-2 font-display text-sm tracking-[0.1em] hover:border-accent"
             >
-              Volgende: Bedrijven →
+              Volgende: Werklijst →
             </Link>
           </div>
         }

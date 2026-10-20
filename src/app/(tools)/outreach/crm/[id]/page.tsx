@@ -78,7 +78,7 @@ export default async function CrmDossierPage({
             ? "Partner"
             : dossier.existingCustomer
               ? "Niet mailen"
-              : "Bedrijven"
+              : "Werklijst"
         }
         title={dossier.companyName}
         description={
@@ -119,10 +119,10 @@ export default async function CrmDossierPage({
             </Link>
             {!dossier.partner && !dossier.existingCustomer ? (
               <Link
-                href={`/outreach/emails?prospect=${dossier.id}`}
+                href={`/outreach/crm?prospect=${dossier.id}`}
                 className="bg-accent px-3 py-2 font-display text-sm tracking-[0.1em] text-accent-contrast"
               >
-                Zet klaar in Mailen
+                Mail dit bedrijf
               </Link>
             ) : null}
           </div>
