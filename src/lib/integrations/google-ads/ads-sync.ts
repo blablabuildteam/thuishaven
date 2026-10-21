@@ -183,7 +183,6 @@ export async function syncYouTubeAdsReadOnly(options?: {
       );
       const result = await linkAdsToEditions({
         platform: "youtube",
-        limit: 250,
       });
       linked = result.linked;
       if (linked > 0) notes.push(`${linked} ads → edities`);
@@ -384,7 +383,6 @@ export async function syncGoogleSearchAdsReadOnly(options?: {
       );
       const result = await linkAdsToEditions({
         platform: "google",
-        limit: 250,
       });
       linked = result.linked;
       if (linked > 0) notes.push(`${linked} ads → edities`);

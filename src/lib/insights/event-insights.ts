@@ -6,6 +6,7 @@ import {
   paidSpendByPlatform,
   type PaidSpendByPlatform,
 } from "@/lib/marketing/ad-metrics";
+import { findNameDate } from "@/lib/marketing/campaign-tag";
 import {
   loadMailHourCurves,
   ticketsSoldIn24h,
@@ -349,7 +350,17 @@ export type EventInsightPaidAd = {
   permalink: string | null;
   publishedAt: string | null;
   dateStart: string | null;
+  /** Date in the creative's name when it isn't this event's day (e.g. "8 NOV"). */
+  creativeDate: string | null;
 };
+
+/** A creative named for another night, e.g. an 8 NOV video in the ADE campaign. */
+function otherDayInName(name: string | null, eventDay: string): string | null {
+  const date = findNameDate(name);
+  if (!date) return null;
+  const [, m, d] = eventDay.split("-").map(Number);
+  return date.m === m && date.d === d ? null : date.label;
+}
 
 export type { PaidSpendByPlatform } from "@/lib/marketing/ad-metrics";
 export {
@@ -1244,6 +1255,7 @@ export async function loadEventInsightsFresh(options?: {
             : ad.dateStart
               ? amsterdamDay(ad.dateStart)
               : null,
+        creativeDate: otherDayInName(ad.adName, day),
       }));
       const spendCents = paidAds.reduce((s, a) => s + a.spendCents, 0);
       const purchases = paidAds.reduce((s, a) => s + a.purchases, 0);
@@ -1678,7 +1690,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v49"],
+  ["event-insights-upcoming-v50"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1694,7 +1706,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v49"],
+  ["event-insights-past-v50"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],
@@ -1743,7 +1755,7 @@ export const loadEventInsights = cache(async (options?: {
   }
 
   return rememberTtl(
-    `event-insights:v49:${limit}:${asOfDay}`,
+    `event-insights:v50:${limit}:${asOfDay}`,
     DASHBOARD_TTL_MS,
     async () => {
       // Outside Next data cache: recover empty DB / schedule list refresh

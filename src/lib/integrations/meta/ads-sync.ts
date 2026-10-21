@@ -185,7 +185,6 @@ export async function syncMetaAdsReadOnly(options?: {
       );
       const result = await linkAdsToEditions({
         platform: "meta",
-        limit: 250,
       });
       linked = result.linked;
       if (linked > 0) notes.push(`${linked} ads → edities`);

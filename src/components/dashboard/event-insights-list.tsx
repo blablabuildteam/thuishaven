@@ -1906,6 +1906,14 @@ function PaidMarketingBlock({
               <span className="truncate">
                 {ad.adName || ad.campaignName || "Ad"}
               </span>
+              {ad.creativeDate && (
+                <span
+                  className="shrink-0 text-warn-fg"
+                  title={`De creative noemt ${ad.creativeDate}, maar draait in de campagne van dit event. De spend telt hier mee.`}
+                >
+                  {ad.creativeDate}
+                </span>
+              )}
             </span>
             <span className="shrink-0 font-mono text-text-muted">
               {(ad.purchases ?? 0) > 0

@@ -180,7 +180,6 @@ export async function syncTikTokAdsReadOnly(options?: {
       );
       const result = await linkAdsToEditions({
         platform: "tiktok",
-        limit: 250,
       });
       linked = result.linked;
       if (linked > 0) notes.push(`${linked} ads → edities`);

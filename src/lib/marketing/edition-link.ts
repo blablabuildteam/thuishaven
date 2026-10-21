@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { editions, marketingPosts, raListings } from "@/lib/db/schema";
 import {
@@ -6,7 +6,7 @@ import {
   parseEditionLineup,
 } from "@/lib/editions/lineup";
 
-const MONTHS: Record<string, number> = {
+export const MONTHS: Record<string, number> = {
   jan: 1,
   januari: 1,
   feb: 2,
@@ -31,7 +31,22 @@ const MONTHS: Record<string, number> = {
   november: 11,
   dec: 12,
   december: 12,
+  // English, as used in RA-style captions and Google campaign names.
+  january: 1,
+  february: 2,
+  march: 3,
+  mar: 3,
+  may: 5,
+  june: 6,
+  july: 7,
+  august: 8,
+  oct: 10,
+  october: 10,
 };
+
+const MONTH_WORDS = Object.keys(MONTHS)
+  .sort((a, b) => b.length - a.length)
+  .join("|");
 
 export type PostEditionLink = {
   postId: string;
@@ -40,6 +55,14 @@ export type PostEditionLink = {
   editionId: string | null;
   editionName: string | null;
   confidence: number;
+  reasons: string[];
+};
+
+export type LinkChange = {
+  id: string;
+  title: string | null;
+  from: string | null;
+  to: string | null;
   reasons: string[];
 };
 
@@ -61,7 +84,10 @@ function extractMonthDayHints(
 
   const multi = [
     ...lower.matchAll(
-      /(\d{1,2})\s*[&/]\s*(\d{1,2})\s*(januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december|jan|feb|mrt|apr|jun|jul|aug|sep|sept|okt|nov|dec)\b/g,
+      new RegExp(
+        `(\\d{1,2})\\s*[&/]\\s*(\\d{1,2})\\s*(${MONTH_WORDS})\\b`,
+        "g",
+      ),
     ),
   ];
   for (const m of multi) {
@@ -73,7 +99,7 @@ function extractMonthDayHints(
 
   const single = [
     ...lower.matchAll(
-      /\b(\d{1,2})\s+(januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december|jan|feb|mrt|apr|jun|jul|aug|sep|sept|okt|nov|dec)\b/g,
+      new RegExp(`\\b(\\d{1,2})\\s+(${MONTH_WORDS})\\b`, "g"),
     ),
   ];
   for (const m of single) {
@@ -120,7 +146,7 @@ function offerWindow(offer: string | undefined, text: string): { before: number;
     offer === "aftermovie" ||
     offer === "recap" ||
     offer === "door" ||
-    /\b(set|aftermovie|recap|relive|full set|outdoor & indoor|throwback)\b/i.test(text)
+    /\b(set|aftermovie|recap|relive|full set|outdoor & indoor|throwback|liveset)\b/i.test(text)
   ) {
     return { before: 14, after: 150 };
   }
@@ -128,6 +154,68 @@ function offerWindow(offer: string | undefined, text: string): { before: number;
   if (offer === "sold_out") return { before: 60, after: 3 };
   return { before: 90, after: 14 };
 }
+
+/** Lowercase words, accents stripped, padded so `includes(" x ")` is a whole-word test. */
+function wordString(s: string): string {
+  const words = s
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  return ` ${words} `;
+}
+
+/** Day/night split of one date (ADE Friday Day vs Night, 10HRS vs Nachtshow). */
+const NIGHT_RE = /\b(nacht|nachtshow|night|afterjam)\b/i;
+const DAY_AND_NIGHT_RE = /\b(day|dag)\s*(&|\+|and|en)\s*(night|nacht)\b/i;
+
+/**
+ * Caption cues that a post looks back at a night (set on YouTube, aftermovie).
+ * Read from the caption, not the image analysis: that tags promos as recap too.
+ */
+const LOOKBACK_RE =
+  /\b(aftermovie|recap|relive|full set|throwback|liveset|youtube|terug te zien|out now|stream)\b/i;
+
+/** Lineup strings parsed from old edition names that aren't artists. */
+const NOT_ARTISTS = new Set([
+  "house",
+  "deep house",
+  "tech house",
+  "techhouse",
+  "techno",
+  "hard techno",
+  "melodic techno",
+  "trance",
+  "hard trance",
+  "hard house",
+  "afro house",
+  "minimal",
+  "disco",
+  "progressive",
+  "secret guest",
+  "special guest",
+  "friends",
+  "more",
+]);
+
+/** Recurring nights whose name alone identifies the edition. */
+const SERIES = [
+  "nieuwjaarsdans",
+  "zomerclosing",
+  "zomeropening",
+  "paasweekender",
+  "hollandse haven",
+  "technoweekender",
+];
+
+const ADE_WEEKDAYS: Array<{ re: RegExp; day: string }> = [
+  { re: /\b(woensdag|wednesday)\b/i, day: "wednesday" },
+  { re: /\b(donderdag|thursday)\b/i, day: "thursday" },
+  { re: /\b(vrijdag|friday)\b/i, day: "friday" },
+  { re: /\b(zaterdag|saturday)\b/i, day: "saturday" },
+  { re: /\b(zondag|sunday)\b/i, day: "sunday" },
+];
 
 export function scorePostAgainstEditions(input: {
   text: string;
@@ -138,22 +226,59 @@ export function scorePostAgainstEditions(input: {
   editionIndex: EditionIndex[];
 }): { editionId: string | null; confidence: number; reasons: string[] } {
   const scores = new Map<string, { score: number; reasons: string[] }>();
-  const bump = (editionId: string, add: number, reason: string) => {
+  /**
+   * Editions with a signal that names this event: a date, an edition guess,
+   * an artist, or a named series. Timing, "ADE" or a month alone fit any
+   * event that week, so they only add to editions that are already here.
+   */
+  const specific = new Set<string>();
+  const bump = (
+    editionId: string,
+    add: number,
+    reason: string,
+    isSpecific = false,
+  ) => {
     const cur = scores.get(editionId) ?? { score: 0, reasons: [] };
     cur.score += add;
     cur.reasons.push(reason);
     scores.set(editionId, cur);
+    if (isSpecific) specific.add(editionId);
   };
 
   const yearHint = (input.publishedAt ?? new Date()).getFullYear();
-  const textNorm = normalizeArtistKey(input.text);
+  const textWords = wordString(input.text);
+  // Hashtags and handles as one key: #diffrent, @lukefono, @realadambeyer.
+  const tokens = input.text.split(/\s+/);
+  const tokenKeys = new Set(tokens.map((t) => normalizeArtistKey(t)));
+  const handleKeys = tokens
+    .filter((t) => t.startsWith("@"))
+    .map((t) => normalizeArtistKey(t))
+    .filter((t) => t.length >= 4);
+  const taggedArtists = new Set(input.artists.map((a) => normalizeArtistKey(a)));
   const window = offerWindow(input.offer, input.text);
+  // "Day & Night" promotes both, so only a night-only text leans to the night edition.
+  const nightText =
+    NIGHT_RE.test(input.text) && !DAY_AND_NIGHT_RE.test(input.text);
+  const adeText = /\bADE\b/i.test(input.text);
+  const lookback = LOOKBACK_RE.test(input.text);
+
+  // Whole words only: "lens" must not hit Olivia Lensen, "special" not Special Request.
+  const mentionsArtist = (artist: string): boolean => {
+    const bare = artist.replace(/\([^)]*\)/g, " ");
+    const words = wordString(bare);
+    if (NOT_ARTISTS.has(words.trim())) return false;
+    const key = normalizeArtistKey(bare);
+    if (key.length < 4) return false;
+    if (taggedArtists.has(key) || tokenKeys.has(key)) return true;
+    if (key.length >= 5 && handleKeys.some((h) => h.includes(key))) return true;
+    return textWords.includes(words);
+  };
 
   for (const hint of extractMonthDayHints(input.text, yearHint)) {
     for (const ed of input.editionIndex) {
       for (const y of [hint.y, hint.y + 1]) {
         if (sameCalendarDay(ed.startsAt, { ...hint, y })) {
-          bump(ed.id, 0.7, `Datum in post ≈ ${y}-${hint.m}-${hint.d}`);
+          bump(ed.id, 0.7, `Datum in post ≈ ${y}-${hint.m}-${hint.d}`, true);
         }
       }
     }
@@ -164,18 +289,15 @@ export function scorePostAgainstEditions(input: {
     for (const ed of input.editionIndex) {
       const jac = jaccardTokens(guess, ed.name);
       if (jac >= 0.35) {
-        bump(ed.id, 0.55 * jac + 0.2, `editionGuess ≈ “${ed.name.slice(0, 40)}”`);
+        bump(
+          ed.id,
+          0.55 * jac + 0.2,
+          `editionGuess ≈ “${ed.name.slice(0, 40)}”`,
+          true,
+        );
       }
     }
   }
-
-  const artistPool = [
-    ...input.artists,
-    ...input.text
-      .split(/[^a-zA-Z0-9+]+/)
-      .map((t) => normalizeArtistKey(t))
-      .filter((t) => t.length >= 4),
-  ];
 
   for (const ed of input.editionIndex) {
     let inWindow = true;
@@ -199,36 +321,39 @@ export function scorePostAgainstEditions(input: {
       }
     }
 
-    for (const artist of ed.lineup.artists) {
-      const key = normalizeArtistKey(artist);
-      if (key.length < 4) continue;
-      if (
-        textNorm.includes(key) ||
-        artistPool.some((a) => a === key || a.includes(key) || key.includes(a))
-      ) {
+    // A recap or liveset is about a night that already happened: an artist
+    // only ties it to an edition around that night, not to their next booking.
+    const artistsCount = !lookback || inWindow;
+    for (const artist of artistsCount ? ed.lineup.artists : []) {
+      if (mentionsArtist(artist)) {
         const headliner = artist === ed.lineup.headliner;
         bump(
           ed.id,
           headliner ? 0.55 : 0.5,
           `Artiest “${artist}” in post`,
+          true,
         );
       }
     }
 
-    if (ed.lineup.kind === "ade" && /\bADE\b/i.test(input.text)) {
+    const adeEdition = ed.lineup.kind === "ade" || /\bADE\b/i.test(ed.name);
+    if (adeEdition && adeText) {
       bump(ed.id, 0.35, "ADE-post ↔ ADE-editie");
+      const edName = ed.name.toLowerCase();
+      for (const { re, day } of ADE_WEEKDAYS) {
+        if (re.test(input.text) && edName.includes(day)) {
+          bump(ed.id, 0.4, `ADE ${day}`, true);
+        }
+      }
     }
-    if (
-      ed.lineup.kind === "nachtshow" &&
-      /nachtshow/i.test(input.text)
-    ) {
-      bump(ed.id, 0.3, "Nachtshow-signaal");
+    if (nightText && NIGHT_RE.test(ed.name)) {
+      bump(ed.id, 0.3, "Nacht-signaal");
     }
-    if (
-      ed.lineup.kind === "hollandse_haven" &&
-      /hollandse\s+haven/i.test(input.text)
-    ) {
-      bump(ed.id, 0.4, "Hollandse Haven");
+    const edWords = wordString(ed.name);
+    for (const series of SERIES) {
+      if (textWords.includes(` ${series} `) && edWords.includes(` ${series} `)) {
+        bump(ed.id, 0.7, `Serie “${series}”`, true);
+      }
     }
   }
 
@@ -269,11 +394,29 @@ export function scorePostAgainstEditions(input: {
     }
   }
 
+  const byId = new Map(input.editionIndex.map((e) => [e.id, e]));
+  /** Ties: the day edition of one date, then the edition nearest the post. */
+  const tieRank = (id: string): [number, number] => {
+    const ed = byId.get(id)!;
+    const night = !nightText && NIGHT_RE.test(ed.name) ? 1 : 0;
+    const distance = input.publishedAt
+      ? Math.abs(ed.startsAt.getTime() - input.publishedAt.getTime())
+      : 0;
+    return [night, distance];
+  };
   let bestId: string | null = null;
   let bestScore = 0;
   let bestReasons: string[] = [];
   for (const [id, v] of scores) {
-    if (v.score > bestScore) {
+    if (!specific.has(id)) continue;
+    const better = v.score > bestScore + 1e-9;
+    let tieWins = false;
+    if (!better && bestId != null && Math.abs(v.score - bestScore) <= 1e-9) {
+      const [n, d] = tieRank(id);
+      const [bn, bd] = tieRank(bestId);
+      tieWins = n < bn || (n === bn && d < bd);
+    }
+    if (better || tieWins) {
       bestScore = v.score;
       bestId = id;
       bestReasons = v.reasons;
@@ -287,39 +430,9 @@ export function scorePostAgainstEditions(input: {
   };
 }
 
-/**
- * Link unlinked marketing posts → editions using caption, visual tags, and dates.
- * Same confidence style as Brevo campaign linker (≥0.55).
- */
-export async function linkPostsToEditions(options?: {
-  persist?: boolean;
-  minConfidence?: number;
-  limit?: number;
-  onlyUnlinked?: boolean;
-}): Promise<{
-  ok: boolean;
-  linked: number;
-  reviewed: number;
-  links: PostEditionLink[];
-  error?: string;
-}> {
-  if (!hasDatabase()) {
-    return {
-      ok: false,
-      linked: 0,
-      reviewed: 0,
-      links: [],
-      error: "DATABASE_URL ontbreekt",
-    };
-  }
-
-  const persist = options?.persist ?? true;
-  const minConfidence = options?.minConfidence ?? 0.55;
-  // High enough to clear backlog; sync used to pass 40 and starved older matches.
-  const limit = Math.min(Math.max(options?.limit ?? 250, 1), 500);
-  const onlyUnlinked = options?.onlyUnlinked !== false;
+/** Weeztix editions with their lineup (RA artists first), for scoring posts and ads. */
+export async function loadEditionIndex(): Promise<EditionIndex[]> {
   const db = getDb();
-
   const eds = await db
     .select({
       id: editions.id,
@@ -347,7 +460,7 @@ export async function linkPostsToEditions(options?: {
     raArtistsByEdition.set(row.editionId, existing);
   }
 
-  const editionIndex: EditionIndex[] = eds
+  return eds
     .filter((e) => !/TEMPLATE/i.test(e.name))
     .map((e) => {
       const parsed = parseEditionLineup(e.name);
@@ -379,6 +492,48 @@ export async function linkPostsToEditions(options?: {
         nameNorm: normalizeArtistKey(e.name),
       };
     });
+}
+
+/**
+ * Link unlinked marketing posts → editions using caption, visual tags, and dates.
+ * Same confidence style as Brevo campaign linker (≥0.55).
+ */
+export async function linkPostsToEditions(options?: {
+  persist?: boolean;
+  minConfidence?: number;
+  limit?: number;
+  onlyUnlinked?: boolean;
+  /** Also score posts already linked to an edition that hasn't happened yet. */
+  recheckUpcoming?: boolean;
+}): Promise<{
+  ok: boolean;
+  linked: number;
+  reviewed: number;
+  links: PostEditionLink[];
+  /** Existing links that moved to another edition or were dropped. */
+  changes: LinkChange[];
+  error?: string;
+}> {
+  if (!hasDatabase()) {
+    return {
+      ok: false,
+      linked: 0,
+      reviewed: 0,
+      links: [],
+      changes: [],
+      error: "DATABASE_URL ontbreekt",
+    };
+  }
+
+  const persist = options?.persist ?? true;
+  const minConfidence = options?.minConfidence ?? 0.55;
+  // High enough to clear backlog; sync used to pass 40 and starved older matches.
+  const limit = Math.min(Math.max(options?.limit ?? 250, 1), 2000);
+  const onlyUnlinked = options?.onlyUnlinked !== false;
+  const recheckUpcoming = options?.recheckUpcoming !== false;
+  const db = getDb();
+
+  const editionIndex = await loadEditionIndex();
 
   const posts = onlyUnlinked
     ? await (async () => {
@@ -409,9 +564,21 @@ export async function linkPostsToEditions(options?: {
             .orderBy(asc(marketingPosts.publishedAt))
             .limit(half),
         ]);
+        // Links to events still ahead get scored again: new editions and
+        // lineups land after a post was first linked.
+        const upcomingIds = editionIndex
+          .filter((e) => e.startsAt.getTime() >= Date.now() - 86400000)
+          .map((e) => e.id);
+        const linkedUpcoming =
+          recheckUpcoming && upcomingIds.length > 0
+            ? await db
+                .select()
+                .from(marketingPosts)
+                .where(inArray(marketingPosts.editionId, upcomingIds))
+            : [];
         const seen = new Set<string>();
         const merged = [];
-        for (const p of [...newest, ...oldest]) {
+        for (const p of [...newest, ...oldest, ...linkedUpcoming]) {
           if (seen.has(p.id)) continue;
           seen.add(p.id);
           merged.push(p);
@@ -425,10 +592,12 @@ export async function linkPostsToEditions(options?: {
         .limit(limit);
 
   const links: PostEditionLink[] = [];
+  const changes: LinkChange[] = [];
   let linked = 0;
+  const editionName = (id: string | null) =>
+    id ? (editionIndex.find((e) => e.id === id)?.name ?? id) : null;
 
   for (const post of posts) {
-    if (onlyUnlinked && post.editionId) continue;
 
     const text = [
       post.title ?? "",
@@ -469,14 +638,23 @@ export async function linkPostsToEditions(options?: {
     };
     links.push(link);
 
-    if (persist && link.editionId) {
+    if (link.editionId === post.editionId) continue;
+    if (post.editionId) {
+      changes.push({
+        id: post.id,
+        title: post.title,
+        from: editionName(post.editionId),
+        to: link.editionName,
+        reasons: link.reasons,
+      });
+    } else {
+      linked += 1;
+    }
+    if (persist) {
       await db
         .update(marketingPosts)
         .set({ editionId: link.editionId })
         .where(eq(marketingPosts.id, post.id));
-      linked += 1;
-    } else if (!persist && link.editionId) {
-      linked += 1;
     }
   }
 
@@ -484,6 +662,7 @@ export async function linkPostsToEditions(options?: {
     ok: true,
     linked,
     reviewed: posts.length,
+    changes,
     links: links
       .filter((l) => l.editionId || l.confidence > 0.3)
       .sort((a, b) => b.confidence - a.confidence)
