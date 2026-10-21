@@ -1594,7 +1594,6 @@ function EventDetail({ event }: { event: EventInsight }) {
     weather,
     socialPosts,
     emailCampaigns,
-    referrers,
     competingFestivals,
     demographics,
   } = event;
@@ -1698,64 +1697,6 @@ function EventDetail({ event }: { event: EventInsight }) {
                 );
               })}
             </div>
-
-            {referrers.length > 0 && (
-              <>
-                <SectionDivider label="Orderherkomst" />
-                <div className="space-y-2">
-                  {referrers.slice(0, 5).map((r, i) => {
-                    const total = referrers.reduce((s, x) => s + x.orders, 0);
-                    const pct = total > 0 ? (r.orders / total) * 100 : 0;
-                    return (
-                      <div key={r.channel} className="text-xs">
-                        <div className="mb-1 flex items-center gap-2">
-                          <div
-                            className={cn(
-                              "size-2 shrink-0",
-                              i === 0
-                                ? "bg-accent"
-                                : i === 1
-                                  ? "bg-info"
-                                  : "bg-text-dim",
-                            )}
-                          />
-                          <span className="flex flex-1 items-center gap-1.5 truncate">
-                            <SocialChannelIcon
-                              channel={r.channel}
-                              size={12}
-                              alt=""
-                            />
-                            {channelLabel(r.channel)}
-                          </span>
-                          <span className="font-mono text-text-muted">
-                            {formatNumber(r.orders)}
-                          </span>
-                          <span className="w-10 text-right text-text-dim">
-                            {formatPercent(pct, 0)}
-                          </span>
-                        </div>
-                        <div className="h-1 w-full bg-border">
-                          <div
-                            className={cn(
-                              "animate-bar-grow h-full",
-                              i === 0
-                                ? "bg-accent"
-                                : i === 1
-                                  ? "bg-info"
-                                  : "bg-text-dim",
-                            )}
-                            style={{
-                              width: `${pct}%`,
-                              animationDelay: `${0.12 + i * 0.05}s`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
 
             {demographics && (
               <>
