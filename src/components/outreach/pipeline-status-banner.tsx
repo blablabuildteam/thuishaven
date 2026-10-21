@@ -20,7 +20,7 @@ export function PipelineStatusBanner({ status }: Props) {
       key: "ready",
       count: status.readyToMail,
       label: "Klaar om te mailen",
-      href: "/outreach/emails",
+      href: "/outreach/crm?stap=nog",
       hint: "E-mail en invalshoek in orde, nog niet gemaild",
       primary: true,
     },
@@ -28,7 +28,7 @@ export function PipelineStatusBanner({ status }: Props) {
       key: "review",
       count: status.needsReview,
       label: "In de Wachtrij",
-      href: "/outreach/planning",
+      href: "/outreach/crm?stap=check",
       hint: "Lezen, testen en inplannen",
     },
     {

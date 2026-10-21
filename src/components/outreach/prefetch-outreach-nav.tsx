@@ -9,8 +9,6 @@ const OUTREACH_ROUTES = [
   "/outreach/juridisch",
   "/outreach/lijst-bijwerken",
   "/outreach/crm",
-  "/outreach/emails",
-  "/outreach/planning",
   "/outreach/analytics",
   "/outreach/leads",
   "/outreach/templates",

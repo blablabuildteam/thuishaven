@@ -35,8 +35,8 @@ export function QueueSchedule({ cadenceLabel, cadenceRationale, items }: Props) 
         <div>
           <h2 className="font-display text-xl tracking-[0.04em]">Planning</h2>
           <p className="mt-1 text-sm text-text-muted">
-            Wanneer ingeplande mails de deur uit gaan. Alleen mails met
-            “Activeer verzenden” worden echt verstuurd.
+            Wanneer ingeplande mails verstuurd worden. Mails met een verlopen
+            tijdstip gaan niet meer vanzelf; plan die opnieuw.
           </p>
         </div>
         <p className="text-sm text-text-dim">{plannedCount} ingepland</p>
@@ -54,8 +54,8 @@ export function QueueSchedule({ cadenceLabel, cadenceRationale, items }: Props) 
 
       {days.length === 0 ? (
         <p className="mt-4 text-sm text-text-muted">
-          Nog niets ingepland. Vink hierboven mails aan en kies “Plan in” — dan
-          zie je hier per dag wanneer ze verstuurd worden.
+          Nog niets ingepland. Vink mails aan en kies “Plan in”; dan zie je
+          hier per dag wanneer ze verstuurd worden.
         </p>
       ) : (
         <div className="mt-4 space-y-5">
@@ -87,7 +87,11 @@ export function QueueSchedule({ cadenceLabel, cadenceRationale, items }: Props) 
                     </span>
                     <span className="text-xs text-text-dim">
                       {item.senderProfileLabel}
-                      {item.statusLabel === "actief" ? " · actief" : " · nog niet geactiveerd"}
+                      {item.statusLabel === "verlopen" ? (
+                        <span className="text-warn-fg"> · tijdstip verlopen</span>
+                      ) : !item.armed ? (
+                        " · nog niet bevestigd, plan opnieuw"
+                      ) : null}
                     </span>
                   </li>
                 ))}

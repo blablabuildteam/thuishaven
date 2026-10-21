@@ -9,7 +9,7 @@ import {
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-const STORAGE_KEY = "thuishaven-outreach-tour-v5";
+const STORAGE_KEY = "thuishaven-outreach-tour-v6";
 
 type TourStep = {
   /** Matches data-tour on a real UI element */
@@ -29,23 +29,13 @@ const STEPS: TourStep[] = [
   {
     target: "nav-bedrijven",
     title: "2 · Bedrijven",
-    body: "Je werklijst. Bovenaan de signalen (jubileum, gereageerd). Klik een rij open voor notities en maillog.",
+    body: "Alle bedrijven, met grootte en de gevonden personen. Klik een naam voor het dossier. Lijkt niemand de juiste, voeg dan zelf iemand toe of zoek verder.",
   },
   {
-    target: "crm-mailen",
-    title: "Door naar Mailen",
-    body: "Filter wie je wilt, dan ‘Mail deze’ — die selectie staat klaar in Mailen.",
+    target: "crm-stages",
+    title: "Van bedrijf naar mail",
+    body: "Vink bedrijven aan en kies ‘Schrijf mails’. Ze komen bij ‘Te checken’: klik ‘Open mail’ om te lezen, een test te sturen en in te plannen. Ingeplande mails gaan op hun moment vanzelf, zolang echt versturen aan staat.",
     go: "/outreach/crm",
-  },
-  {
-    target: "nav-mailen",
-    title: "3 · Mailen",
-    body: "Kies een afzender en laat per bedrijf een persoonlijke mail schrijven (AI houdt de gevonden invalshoek aan). Ze komen in de Wachtrij.",
-  },
-  {
-    target: "nav-wachtrij",
-    title: "4 · Wachtrij",
-    body: "Lees en pas elke mail aan, stuur een test naar jezelf, en plan ze in. Pas na ‘Activeer verzenden’ gaan ze echt de deur uit.",
   },
   {
     target: "nav-templates",
@@ -54,7 +44,7 @@ const STEPS: TourStep[] = [
   },
   {
     target: "nav-resultaten",
-    title: "5 · Resultaten",
+    title: "3 · Resultaten",
     body: "Wie opende, klikte of reageerde — en welke invalshoek het best werkt.",
   },
 ];

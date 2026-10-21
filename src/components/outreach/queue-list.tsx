@@ -4,16 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { StatusBadge } from "@/components/ui/status-badge";
-import type { LiveSendQuota } from "@/lib/outreach/batches";
-import { LIVE_SEND_CONFIRM_PHRASE } from "@/lib/outreach/live-send-constants";
-import type { QueueItem } from "@/lib/outreach/queue";
 import {
-  applySenderSignature,
-  getSenderProfile,
-  OUTREACH_SENDER_PROFILES,
-  type OutreachSenderProfileId,
-} from "@/lib/outreach/sender-profiles";
-import { OUTREACH_VARIANTS } from "@/lib/outreach/tone";
+  QUEUE_STATUS_NL,
+  QUEUE_STATUS_TONE,
+  QueueMailPanel,
+} from "@/components/outreach/queue-mail-panel";
+import type { LiveSendQuota } from "@/lib/outreach/batches";
+import type { QueueItem } from "@/lib/outreach/queue";
 
 type Props = {
   items: QueueItem[];
@@ -25,27 +22,11 @@ type Props = {
   testSendBlockReason?: string | null;
 };
 
-const STATUS_TONE: Record<
-  QueueItem["statusLabel"],
-  "neutral" | "accent" | "success" | "warn" | "info"
-> = {
-  concept: "neutral",
-  review: "info",
-  gepland: "accent",
-  actief: "success",
-};
-
-const STATUS_NL: Record<QueueItem["statusLabel"], string> = {
-  concept: "Te checken",
-  review: "Te checken",
-  gepland: "Gepland",
-  actief: "Actief (stuurt)",
-};
+type Filter = "all" | "review" | "gepland" | "verlopen";
 
 export function QueueList({
   items,
   liveSendBlockReason,
-  liveSendQuota,
   aiConfigured = true,
   defaultTestTo = "team@blablabuild.com",
   testSendBlockReason = null,
@@ -54,30 +35,13 @@ export function QueueList({
   const [pending, startTransition] = useTransition();
   const [picked, setPicked] = useState<Set<string>>(() => new Set());
   const [openId, setOpenId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<"all" | "review" | "gepland" | "actief">(
-    "all",
-  );
+  const [filter, setFilter] = useState<Filter>("all");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [confirmArm, setConfirmArm] = useState(false);
-  const [confirmText, setConfirmText] = useState("");
+  const [confirmPlan, setConfirmPlan] = useState(false);
   const [testTo, setTestTo] = useState(defaultTestTo);
-  const [edits, setEdits] = useState<
-    Record<
-      string,
-      {
-        subject: string;
-        body: string;
-        senderProfileId: OutreachSenderProfileId;
-        variantKey: string;
-      }
-    >
-  >({});
 
-  const liveUnlocked = !liveSendBlockReason;
   const testUnlocked = !testSendBlockReason;
-  const dayCapHit =
-    liveSendQuota != null && liveSendQuota.remainingToday <= 0;
 
   const visible = useMemo(() => {
     if (filter === "all") return items;
@@ -90,7 +54,7 @@ export function QueueList({
   }, [items, filter]);
 
   const counts = useMemo(() => {
-    const c = { all: items.length, review: 0, gepland: 0, actief: 0 };
+    const c = { all: items.length, review: 0, gepland: 0, verlopen: 0 };
     for (const i of items) {
       c[i.statusLabel === "concept" ? "review" : i.statusLabel] += 1;
     }
@@ -104,21 +68,6 @@ export function QueueList({
       else next.add(id);
       return next;
     });
-  }
-
-  function selectVisible() {
-    setPicked(new Set(visible.map((i) => i.emailId)));
-  }
-
-  function editFor(item: QueueItem) {
-    return (
-      edits[item.emailId] ?? {
-        subject: item.subject,
-        body: item.body,
-        senderProfileId: item.senderProfileId,
-        variantKey: item.variantKey ?? "warm_tour",
-      }
-    );
   }
 
   async function post(
@@ -143,185 +92,49 @@ export function QueueList({
     return data;
   }
 
-  async function saveItem(item: QueueItem) {
-    const e = editFor(item);
-    const data = await post({
-      action: "update-queue-item",
-      emailId: item.emailId,
-      subject: e.subject,
-      body: e.body,
-      senderProfileId: e.senderProfileId,
-      variantKey: e.variantKey,
-    });
-    if (data) {
-      setMessage(`Opgeslagen · ${item.companyName}`);
-      setEdits((prev) => {
-        const next = { ...prev };
-        delete next[item.emailId];
-        return next;
-      });
-    }
-  }
-
   async function scheduleSelected() {
     const ids = [...picked];
     if (!ids.length) return;
-    const data = await post({
-      action: "schedule-queue",
-      emailIds: ids,
-    });
+    const data = await post({ action: "schedule-queue", emailIds: ids });
+    setConfirmPlan(false);
     if (data) {
       setMessage(
         `${data.scheduled} gepland` +
           (data.firstAt
-            ? ` · vanaf ${new Date(data.firstAt).toLocaleString("nl-NL")}`
+            ? `, vanaf ${new Date(data.firstAt).toLocaleString("nl-NL", {
+                timeZone: "Europe/Amsterdam",
+                weekday: "short",
+                day: "numeric",
+                month: "short",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}`
             : ""),
       );
-      setConfirmArm(false);
     }
   }
 
   async function clearScheduleSelected() {
     const ids = [...picked];
     if (!ids.length) return;
-    const data = await post({
-      action: "clear-queue-schedule",
-      emailIds: ids,
-    });
-    if (data) setMessage(`Planning gewist voor ${data.cleared} mails`);
-  }
-
-  async function armSelected() {
-    const ids = [...picked];
-    if (!ids.length) return;
-    const data = await post({
-      action: "arm-queue",
-      emailIds: ids,
-      confirmText,
-    });
-    if (data) {
-      setMessage(
-        `${data.armed} geactiveerd — cron stuurt op gepland moment` +
-          (data.skipped
-            ? ` · ${data.skipped} overgeslagen (nog niet gepland)`
-            : ""),
-      );
-      setConfirmArm(false);
-      setConfirmText("");
-    }
-  }
-
-  async function disarmSelected() {
-    const ids = [...picked];
-    if (!ids.length) return;
-    const data = await post({
-      action: "disarm-queue",
-      emailIds: ids,
-    });
-    if (data) {
-      setMessage(
-        `Auto-send uit voor ${data.disarmed} mails` +
-          (data.batchesDisarmed
-            ? ` · ook auto-send van ${data.batchesDisarmed} oude groep${data.batchesDisarmed === 1 ? "" : "en"} gestopt`
-            : ""),
-      );
-    }
-  }
-
-  async function regenerateItem(item: QueueItem) {
-    setError(null);
-    setMessage(null);
-    const e = editFor(item);
-    const data = await post({
-      action: "regenerate-queue",
-      emailId: item.emailId,
-      variantId: e.variantKey,
-    });
-    if (data) {
-      setEdits((prev) => ({
-        ...prev,
-        [item.emailId]: {
-          subject: data.subject ?? e.subject,
-          body: data.body ?? e.body,
-          senderProfileId: e.senderProfileId,
-          variantKey: data.variantId ?? e.variantKey,
-        },
-      }));
-      const src =
-        data.source === "ai"
-          ? "AI"
-          : data.source === "template_fallback"
-            ? "template (AI faalde)"
-            : "template";
-      setMessage(
-        `Opnieuw gegenereerd · ${src}` +
-          (data.fallbackReason ? ` — ${data.fallbackReason}` : ""),
-      );
-    }
-  }
-
-  /** Save open edits then send this exact mail as a test (never to the prospect). */
-  async function testItem(item: QueueItem) {
-    if (!testUnlocked) {
-      setError(testSendBlockReason ?? "Test versturen staat uit");
-      return;
-    }
-    setError(null);
-    setMessage(null);
-    if (edits[item.emailId]) {
-      const saved = await post(
-        {
-          action: "update-queue-item",
-          emailId: item.emailId,
-          subject: edits[item.emailId]!.subject,
-          body: edits[item.emailId]!.body,
-          senderProfileId: edits[item.emailId]!.senderProfileId,
-          variantKey: edits[item.emailId]!.variantKey,
-        },
-        { refresh: false },
-      );
-      if (!saved) return;
-      setEdits((prev) => {
-        const next = { ...prev };
-        delete next[item.emailId];
-        return next;
-      });
-    }
-    const data = await post({
-      action: "send-test",
-      emailId: item.emailId,
-      testTo,
-    });
-    if (data) {
-      const to = Array.isArray(data.deliveredTo)
-        ? data.deliveredTo.join(", ")
-        : testTo;
-      setMessage(
-        `Test verstuurd · ${item.companyName} → ${to} (prospect ziet dit niet)`,
-      );
-    }
+    const data = await post({ action: "clear-queue-schedule", emailIds: ids });
+    if (data) setMessage(`Planning geannuleerd voor ${data.cleared} mails`);
   }
 
   async function testSelected() {
     const ids = [...picked];
     if (!ids.length) return;
     if (!testUnlocked) {
-      setError(testSendBlockReason ?? "Test versturen staat uit");
+      setError(testSendBlockReason ?? "Testmail staat uit");
       return;
     }
-    setError(null);
-    setMessage(null);
-    const data = await post({
-      action: "send-test",
-      emailIds: ids,
-      testTo,
-    });
+    const data = await post({ action: "send-test", emailIds: ids, testTo });
     if (data) {
       const to = Array.isArray(data.deliveredTo)
         ? data.deliveredTo.join(", ")
         : testTo;
       setMessage(
-        `${data.ok ?? ids.length} testmail${(data.ok ?? ids.length) === 1 ? "" : "s"} → ${to}` +
+        `${data.ok ?? ids.length} testmail${(data.ok ?? ids.length) === 1 ? "" : "s"} naar ${to}` +
           (data.failed ? ` · ${data.failed} mislukt` : ""),
       );
     }
@@ -330,117 +143,49 @@ export function QueueList({
   async function regenerateSelected() {
     const ids = [...picked];
     if (!ids.length) return;
-    setError(null);
-    setMessage(null);
     let ok = 0;
     let failed = 0;
-    let ai = 0;
     for (const emailId of ids) {
       const item = items.find((i) => i.emailId === emailId);
-      if (!item) {
-        failed += 1;
-        continue;
-      }
-      const e = editFor(item);
       const data = await post(
         {
           action: "regenerate-queue",
           emailId,
-          variantId: e.variantKey,
+          variantId: item?.variantKey ?? "warm_tour",
         },
         { refresh: false },
       );
-      if (!data) {
-        failed += 1;
-        continue;
-      }
-      ok += 1;
-      if (data.source === "ai") ai += 1;
-      setEdits((prev) => ({
-        ...prev,
-        [emailId]: {
-          subject: data.subject ?? e.subject,
-          body: data.body ?? e.body,
-          senderProfileId: e.senderProfileId,
-          variantKey: data.variantId ?? e.variantKey,
-        },
-      }));
+      if (data) ok += 1;
+      else failed += 1;
     }
     startTransition(() => router.refresh());
     setMessage(
-      `${ok} opnieuw gegenereerd` +
-        (ai ? ` · ${ai} AI` : "") +
-        (failed ? ` · ${failed} mislukt` : ""),
+      `${ok} opnieuw geschreven` + (failed ? ` · ${failed} mislukt` : ""),
     );
   }
 
   if (!items.length) {
     return (
       <p className="border-y border-border py-6 text-sm text-text-muted">
-        Nog geen mails in de wachtrij. Genereer drafts via{" "}
-        <Link href="/outreach/emails" className="text-accent underline">
-          Mailen
-        </Link>{" "}
-        — die verschijnen hier automatisch als concept.
+        Nog geen mails in de wachtrij. Schrijf ze via{" "}
+        <Link href="/outreach/crm?stap=nog" className="text-accent underline">
+          Bedrijven
+        </Link>
+        ; ze verschijnen hier dan vanzelf.
       </p>
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3 border-b border-border pb-3">
-        <label className="min-w-[12rem] flex-1 text-xs text-text-dim sm:max-w-xs">
-          Test naar (nooit naar het bedrijf)
-          <input
-            className="mt-1 w-full border border-border bg-bg px-3 py-1.5 text-sm text-text"
-            value={testTo}
-            onChange={(e) => setTestTo(e.target.value)}
-            placeholder="team@blablabuild.com"
-            disabled={!testUnlocked}
-          />
-        </label>
-        {!testUnlocked && testSendBlockReason ? (
-          <p className="text-xs text-warn">{testSendBlockReason}</p>
-        ) : (
-          <p className="pb-1 text-xs text-text-dim">
-            Open een mail → <span className="text-text">Stuur test</span> om
-            precies te zien hoe die binnenkomt.
-          </p>
-        )}
-      </div>
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2 border-b border-border pb-3 text-sm">
-        {(
-          [
-            ["all", "Alles"],
-            ["review", "Te checken"],
-            ["gepland", "Gepland"],
-            ["actief", "Actief"],
-          ] as const
-        ).map(([key, label]) => {
-          const n = key === "all" ? counts.all : counts[key];
-          const on = filter === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setFilter(key)}
-              className={
-                on ? "text-text" : "text-text-muted hover:text-text"
-              }
-            >
-              <span className="font-display tabular-nums tracking-wide">{n}</span>
-              <span className="ml-1.5">{label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      <ol className="grid gap-2 text-sm sm:grid-cols-4">
+      <ol className="grid gap-2 text-sm sm:grid-cols-3">
         {[
-          ["Lees", "Klik op een bedrijf. Pas tekst of afzender aan en sla op."],
-          ["Test", "“Stuur test” — je krijgt precies die mail in je eigen inbox."],
-          ["Plan in", "Vink mails aan → “Plan in”. Ze krijgen een verzendmoment."],
-          ["Activeer", "“Activeer verzenden” → ze gaan vanzelf op dat moment de deur uit."],
+          ["Lees en pas aan", "Klik op een bedrijf. Pas tekst of afzender aan."],
+          ["Stuur een test", "Je krijgt precies die mail in je eigen inbox."],
+          [
+            "Plan in of verstuur nu",
+            "Plan een groep gespreid in, of kies per mail zelf een moment.",
+          ],
         ].map(([title, text], i) => (
           <li key={title} className="border border-border px-3 py-2">
             <span className="font-display tabular-nums text-text-dim">{i + 1}</span>{" "}
@@ -450,15 +195,55 @@ export function QueueList({
         ))}
       </ol>
 
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-3">
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2 text-sm">
+          {(
+            [
+              ["all", "Alles"],
+              ["review", "Te checken"],
+              ["gepland", "Gepland"],
+              ["verlopen", "Verlopen"],
+            ] as const
+          ).map(([key, label]) => {
+            const n = counts[key];
+            if (key === "verlopen" && n === 0) return null;
+            const on = filter === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setFilter(key)}
+                className={on ? "text-text" : "text-text-muted hover:text-text"}
+              >
+                <span className="font-display tabular-nums tracking-wide">{n}</span>
+                <span className="ml-1.5">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <label className="min-w-[12rem] text-xs text-text-dim sm:w-72">
+          Testmails naar (nooit naar het bedrijf)
+          <input
+            className="mt-1 w-full border border-border bg-bg px-3 py-1.5 text-sm text-text"
+            value={testTo}
+            onChange={(e) => setTestTo(e.target.value)}
+            placeholder="team@blablabuild.com"
+            disabled={!testUnlocked}
+          />
+        </label>
+      </div>
+      {!testUnlocked && testSendBlockReason ? (
+        <p className="text-xs text-warn-fg">{testSendBlockReason}</p>
+      ) : null}
+
       {!aiConfigured ? (
         <p
           className="border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-text"
           role="status"
         >
-          Geen AI-key gezet — opnieuw schrijven werkt niet. Zet
-          ANTHROPIC_API_KEY (aanbevolen) of GEMINI_API_KEY voor persoonlijke
-          AI-mails (invalshoek blijft
-          behouden). Of herschrijf handmatig / “Opnieuw laten schrijven” later.
+          Geen AI-key ingesteld, dus opnieuw laten schrijven vult alleen de
+          standaardtekst. Zet ANTHROPIC_API_KEY of GEMINI_API_KEY voor
+          persoonlijke mails.
         </p>
       ) : null}
 
@@ -475,87 +260,62 @@ export function QueueList({
           <button
             type="button"
             className="text-xs text-text-dim underline"
-            onClick={() => setPicked(new Set())}
+            onClick={() => {
+              setPicked(new Set());
+              setConfirmPlan(false);
+            }}
           >
             Wis
           </button>
-          {testUnlocked ? (
+          <button
+            type="button"
+            disabled={pending || !testUnlocked}
+            className="border border-border px-2 py-1 text-xs hover:border-accent disabled:opacity-50"
+            onClick={() => void testSelected()}
+            title={`Stuur de geselecteerde mails als test naar ${testTo}`}
+          >
+            Stuur test
+          </button>
+          {confirmPlan ? (
+            <span className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-text">
+                {picked.size} mail{picked.size === 1 ? "" : "s"} gespreid
+                inplannen op de vaste verzenddagen?
+              </span>
+              <button
+                type="button"
+                disabled={pending}
+                className="bg-accent px-2 py-1 text-accent-contrast disabled:opacity-50"
+                onClick={() => void scheduleSelected()}
+              >
+                Ja, plan in
+              </button>
+              <button
+                type="button"
+                className="underline"
+                onClick={() => setConfirmPlan(false)}
+              >
+                Nee
+              </button>
+            </span>
+          ) : (
             <button
               type="button"
               disabled={pending}
-              className="border border-border px-2 py-1 text-xs hover:border-accent"
-              onClick={() => void testSelected()}
-              title={`Stuur geselecteerde mails als test naar ${testTo}`}
+              className="bg-accent px-2 py-1 text-xs text-accent-contrast disabled:opacity-50"
+              onClick={() => setConfirmPlan(true)}
             >
-              Stuur test
+              Plan in
             </button>
-          ) : (
-            <span className="text-xs text-text-dim">Testsend uit</span>
           )}
           <button
             type="button"
             disabled={pending}
-            className="bg-accent px-2 py-1 text-xs text-accent-contrast disabled:opacity-50"
-            onClick={() => void scheduleSelected()}
+            className="text-xs underline"
+            onClick={() => void clearScheduleSelected()}
           >
-            Plan in
+            Planning annuleren
           </button>
-          {liveUnlocked ? (
-            confirmArm ? (
-              <span className="flex flex-wrap items-center gap-2">
-                <input
-                  value={confirmText}
-                  onChange={(e) => setConfirmText(e.target.value)}
-                  placeholder={`wachtrij of ${LIVE_SEND_CONFIRM_PHRASE}`}
-                  className="border border-border bg-bg px-2 py-1 text-xs"
-                />
-                <button
-                  type="button"
-                  disabled={pending || !confirmText.trim() || dayCapHit}
-                  className="bg-danger px-2 py-1 text-xs text-white disabled:opacity-50"
-                  onClick={() => void armSelected()}
-                >
-                  Activeer verzenden
-                </button>
-                <button
-                  type="button"
-                  className="text-xs underline"
-                  onClick={() => {
-                    setConfirmArm(false);
-                    setConfirmText("");
-                  }}
-                >
-                  Annuleer
-                </button>
-              </span>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  disabled={pending || dayCapHit}
-                  className="border border-danger/40 px-2 py-1 text-xs text-danger"
-                  onClick={() => setConfirmArm(true)}
-                >
-                  Activeer verzenden…
-                </button>
-                <button
-                  type="button"
-                  disabled={pending}
-                  className="text-xs underline"
-                  onClick={() => void disarmSelected()}
-                >
-                  Verzenden stoppen
-                </button>
-              </>
-            )
-          ) : (
-            <span
-              className="text-xs text-text-dim"
-              title={liveSendBlockReason ?? undefined}
-            >
-              Echt verzenden staat nog uit — testen kan wel
-            </span>
-          )}
           <details className="relative text-xs">
             <summary className="cursor-pointer text-text-dim hover:text-text">
               Meer
@@ -566,21 +326,8 @@ export function QueueList({
                 disabled={pending}
                 className="hover:text-accent"
                 onClick={() => void regenerateSelected()}
-                title={
-                  aiConfigured
-                    ? "Geselecteerde mails opnieuw persoonlijk laten schrijven"
-                    : "Zonder AI-key opnieuw vullen vanuit template"
-                }
               >
-                Opnieuw laten schrijven (AI)
-              </button>
-              <button
-                type="button"
-                disabled={pending}
-                className="hover:text-accent"
-                onClick={() => void clearScheduleSelected()}
-              >
-                Planning weghalen
+                Opnieuw laten schrijven
               </button>
             </div>
           </details>
@@ -589,7 +336,7 @@ export function QueueList({
         <button
           type="button"
           className="text-xs text-text-muted underline"
-          onClick={selectVisible}
+          onClick={() => setPicked(new Set(visible.map((i) => i.emailId)))}
         >
           Selecteer zichtbare ({visible.length})
         </button>
@@ -606,14 +353,14 @@ export function QueueList({
               <th className="py-2 pr-3 font-medium">Invalshoek</th>
               <th className="py-2 pr-3 font-medium">Afzender</th>
               <th className="py-2 pr-3 font-medium">Status</th>
-              <th className="py-2 font-medium">Gepland</th>
+              <th className="py-2 font-medium">Verzendmoment</th>
             </tr>
           </thead>
           <tbody>
             {visible.map((item) => {
               const on = picked.has(item.emailId);
               const open = openId === item.emailId;
-              const e = editFor(item);
+              const blocked = item.emailQuality.level === "block";
               return (
                 <tr
                   key={item.emailId}
@@ -651,202 +398,27 @@ export function QueueList({
                         .filter(Boolean)
                         .join(" · ")}
                       {!open ? ` · ${item.subject}` : ""}
-                      {item.generationSource === "template" ||
-                      item.generationSource === "template_fallback"
-                        ? " · template"
-                        : item.generationSource === "ai"
-                          ? " · AI"
-                          : ""}
                     </p>
-                    {item.emailQuality.issues.length > 0 ? (
+                    {!open && item.emailQuality.issues.length > 0 ? (
                       <p
                         className={`mt-0.5 text-[11px] ${
-                          item.emailQuality.level === "block"
-                            ? "text-danger"
-                            : "text-warn"
+                          blocked ? "text-danger" : "text-warn-fg"
                         }`}
                       >
-                        {item.emailQuality.level === "block"
-                          ? "Wordt niet verstuurd: "
-                          : ""}
+                        {blocked ? "Wordt niet verstuurd: " : ""}
                         {item.emailQuality.issues.map((i) => i.label).join(" · ")}
                       </p>
                     ) : null}
-
                     {open ? (
-                      <div className="mt-3 max-w-2xl space-y-3">
-                        <label className="block text-xs text-text-dim">
-                          Onderwerp
-                          <input
-                            className="mt-1 w-full border border-border bg-bg px-3 py-2 text-sm text-text"
-                            value={e.subject}
-                            onChange={(ev) =>
-                              setEdits((prev) => ({
-                                ...prev,
-                                [item.emailId]: {
-                                  ...e,
-                                  subject: ev.target.value,
-                                },
-                              }))
-                            }
-                          />
-                        </label>
-                        <label className="block text-xs text-text-dim">
-                          Tekst
-                          <textarea
-                            rows={10}
-                            className="mt-1 w-full border border-border bg-bg px-3 py-2 font-mono text-sm text-text"
-                            value={e.body}
-                            onChange={(ev) =>
-                              setEdits((prev) => ({
-                                ...prev,
-                                [item.emailId]: {
-                                  ...e,
-                                  body: ev.target.value,
-                                },
-                              }))
-                            }
-                          />
-                        </label>
-                        <div className="flex flex-wrap gap-3">
-                          <label className="block text-xs text-text-dim">
-                            Afzender
-                            <select
-                              className="mt-1 block border border-border bg-bg px-3 py-2 text-sm text-text"
-                              value={e.senderProfileId}
-                              onChange={(ev) =>
-                                setEdits((prev) => ({
-                                  ...prev,
-                                  [item.emailId]: {
-                                    ...e,
-                                    senderProfileId: ev.target
-                                      .value as OutreachSenderProfileId,
-                                    body: applySenderSignature(
-                                      e.body,
-                                      getSenderProfile(ev.target.value),
-                                    ),
-                                  },
-                                }))
-                              }
-                            >
-                              {OUTREACH_SENDER_PROFILES.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.label} · {p.email}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="block text-xs text-text-dim">
-                            Invalshoek
-                            <select
-                              className="mt-1 block border border-border bg-bg px-3 py-2 text-sm text-text"
-                              value={e.variantKey}
-                              onChange={(ev) =>
-                                setEdits((prev) => ({
-                                  ...prev,
-                                  [item.emailId]: {
-                                    ...e,
-                                    variantKey: ev.target.value,
-                                  },
-                                }))
-                              }
-                            >
-                              {OUTREACH_VARIANTS.filter(
-                                (v) =>
-                                  v.audience === "company" ||
-                                  v.audience === "both",
-                              ).map((v) => (
-                                <option key={v.id} value={v.id}>
-                                  {v.name}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        </div>
-                        {e.variantKey === "jubileum" ? (
-                          <p className="text-xs text-text-muted">
-                            Jubileum komt uit de KvK-inschrijving en klopt niet
-                            altijd met de echte oprichting. Noem daarom geen
-                            aantal jaren, tenzij je het zeker weet.
-                          </p>
-                        ) : null}
-                        {e.variantKey !== (item.variantKey ?? "warm_tour") ? (
-                          <p className="text-xs text-warn">
-                            Andere invalshoek gekozen — klik “Opnieuw laten
-                            schrijven” om de tekst daarop aan te passen.
-                          </p>
-                        ) : null}
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            disabled={pending}
-                            className="bg-accent px-3 py-1.5 text-sm text-accent-contrast disabled:opacity-50"
-                            onClick={() => void saveItem(item)}
-                          >
-                            Opslaan
-                          </button>
-                          <button
-                            type="button"
-                            disabled={pending || !testUnlocked}
-                            className="border border-border px-3 py-1.5 text-sm hover:border-accent disabled:opacity-50"
-                            onClick={() => void testItem(item)}
-                            title={
-                              testUnlocked
-                                ? `Stuur precies deze mail als test naar ${testTo}`
-                                : (testSendBlockReason ?? "Testsend uit")
-                            }
-                          >
-                            Stuur test
-                          </button>
-                          <button
-                            type="button"
-                            disabled={pending}
-                            className="border border-border px-3 py-1.5 text-sm hover:border-accent disabled:opacity-50"
-                            onClick={() => void regenerateItem(item)}
-                            title={
-                              aiConfigured
-                                ? "Nieuwe persoonlijke AI-draft"
-                                : "Zonder AI-key wordt de standaardtemplate opnieuw gevuld"
-                            }
-                          >
-                            Opnieuw laten schrijven
-                          </button>
-                          {item.generationSource ? (
-                            <StatusBadge
-                              tone={
-                                item.generationSource === "ai"
-                                  ? "success"
-                                  : "warn"
-                              }
-                            >
-                              {item.generationSource === "ai"
-                                ? "AI"
-                                : item.generationSource === "template_fallback"
-                                  ? "Template fallback"
-                                  : "Template"}
-                            </StatusBadge>
-                          ) : null}
-                          <button
-                            type="button"
-                            className="text-sm text-text-dim underline"
-                            onClick={() => setOpenId(null)}
-                          >
-                            Sluiten
-                          </button>
-                          <Link
-                            href={`/outreach/crm/${item.prospectId}`}
-                            className="text-sm text-accent underline"
-                          >
-                            Dossier →
-                          </Link>
-                        </div>
-                        {error ? (
-                          <p className="text-sm text-danger" role="alert">
-                            {error}
-                          </p>
-                        ) : message ? (
-                          <p className="text-sm text-success">{message}</p>
-                        ) : null}
+                      <div className="mt-3">
+                        <QueueMailPanel
+                          item={item}
+                          testTo={testTo}
+                          testSendBlockReason={testSendBlockReason}
+                          liveSendBlockReason={liveSendBlockReason}
+                          aiConfigured={aiConfigured}
+                          onClose={() => setOpenId(null)}
+                        />
                       </div>
                     ) : null}
                   </td>
@@ -859,11 +431,11 @@ export function QueueList({
                         {item.senderProfileLabel}
                       </td>
                       <td className="py-3 pr-3 align-top">
-                        <StatusBadge tone={STATUS_TONE[item.statusLabel]}>
-                          {STATUS_NL[item.statusLabel]}
+                        <StatusBadge tone={QUEUE_STATUS_TONE[item.statusLabel]}>
+                          {QUEUE_STATUS_NL[item.statusLabel]}
                         </StatusBadge>
                       </td>
-                      <td className="py-3 align-top font-mono text-xs text-text-dim">
+                      <td className="py-3 align-top text-xs tabular-nums text-text-dim">
                         {item.scheduledLabel ?? "—"}
                       </td>
                     </>

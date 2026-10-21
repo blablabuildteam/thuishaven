@@ -22,24 +22,17 @@ const FLOW = [
     title: "Lijst bijwerken",
     href: "/outreach/lijst-bijwerken",
     verb: "Ophalen & aanvullen",
-    body: "Apollo haalt mid-size bedrijven in de AMS-ring. Daarna automatisch: mdw → KvK (jubileum) → contacten → e-mail.",
+    body: "Bedrijven rond Amsterdam ophalen. Daarna vullen we automatisch het aantal medewerkers, het KvK-jubileum, de juiste contactpersoon en het e-mailadres aan.",
   },
   {
     n: "02",
     title: "Bedrijven",
     href: "/outreach/crm",
-    verb: "Kiezen & filteren",
-    body: "Je werklijst met invalshoeken. Open een dossier voor contacten, notities en geschiedenis.",
+    verb: "Kiezen, schrijven & plannen",
+    body: "Alle bedrijven met de beste kansen bovenaan. Vink aan en laat per contact een persoonlijke mail schrijven. Open de mail om hem te lezen, een test naar team@ te sturen en in te plannen of direct te versturen.",
   },
   {
     n: "03",
-    title: "Mailen",
-    href: "/outreach/emails",
-    verb: "Schrijven & testen",
-    body: "Bedrijf + invalshoek → draft in Reijner-toon → test naar team@. Live versturen blijft dicht.",
-  },
-  {
-    n: "04",
     title: "Resultaten",
     href: "/outreach/analytics",
     verb: "Meten & opvolgen",
@@ -119,7 +112,7 @@ export default async function OutreachUitlegPage() {
           Bedrijfsevent outreach · demo
         </p>
         <h1 className="mt-3 max-w-3xl font-display text-4xl leading-[1.05] tracking-[0.02em] text-text sm:text-5xl lg:text-6xl">
-          Lijst bijwerken → Bedrijven → Mailen → Resultaten
+          Lijst bijwerken → Bedrijven → Resultaten
         </h1>
         <p className="mt-5 max-w-2xl text-base leading-relaxed text-text-muted sm:text-lg">
           Mid-size bedrijven rond Amsterdam ophalen, een natuurlijke invalshoek
@@ -137,7 +130,7 @@ export default async function OutreachUitlegPage() {
             href="/outreach/crm"
             className="border border-border px-5 py-3 font-display text-sm tracking-[0.12em] hover:border-accent"
           >
-            Naar Bedrijven
+            Naar bedrijven
           </Link>
           <Link
             href="/outreach/juridisch"
@@ -159,7 +152,7 @@ export default async function OutreachUitlegPage() {
               Route
             </p>
             <h2 className="mt-1 font-display text-2xl tracking-[0.04em] sm:text-3xl">
-              Vier stappen
+              Drie stappen
             </h2>
           </div>
           <p className="hidden max-w-xs text-right text-xs text-text-dim sm:block">
@@ -331,8 +324,8 @@ export default async function OutreachUitlegPage() {
           <li>
             <span className="text-text">Bedrijven</span> — begin bij de
             signalen (jubileum, gereageerd, geopend zonder reply). Sorteer op
-            leadscore. Check contactrol; bij twijfel opnieuw Event Manager
-            zoeken op het dossier. “Mail deze →” neemt de selectie mee.
+            leadscore. Check de contactrol; bij twijfel opnieuw zoeken op het
+            dossier.
           </li>
           <li>
             <span className="text-text">Templates</span> — kies/pas aan (Zomer,
@@ -340,10 +333,10 @@ export default async function OutreachUitlegPage() {
             testmail naar team@.
           </li>
           <li>
-            <span className="text-text">Mailen</span> — selecteer een klein
-            setje (bijv. 5–10), suggested of override template, genereer
-            drafts, pas subject/body aan, stuur test. Live naar prospects staat
-            nog dicht.
+            <span className="text-text">Mails schrijven</span> — vink een klein
+            setje aan (bijv. 5–10) en kies “Schrijf mails”. Open elke mail,
+            pas hem aan, stuur een test en plan hem in. Live naar bedrijven
+            staat nog dicht.
           </li>
           <li>
             <span className="text-text">Resultaten</span> — opens (Brevo

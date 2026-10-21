@@ -62,6 +62,6 @@ export async function POST(req: Request) {
     ok: true,
     count,
     variantId: parsed.data.variantId ?? null,
-    redirectTo: "/outreach/emails",
+    redirectTo: "/outreach/crm",
   });
 }

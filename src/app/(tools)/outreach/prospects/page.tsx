@@ -187,7 +187,7 @@ export default async function ProspectsPage() {
       <SectionHeader
         eyebrow="Beheer"
         title="Lijst bijwerken (technisch)"
-        description="Admin-detail. Reijner/Yoram: Lijst bijwerken → Bedrijven → Mailen."
+        description="Admin-detail. Reijner/Yoram: Lijst bijwerken → Bedrijven → Resultaten."
         action={
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={apolloReady ? "success" : "danger"}>
