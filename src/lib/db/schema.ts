@@ -985,6 +985,8 @@ export const externalTicketEvents = pgTable("external_ticket_events", {
   sold: integer("sold"),
   /** Werkelijke check-ins na afloop — handmatig ingevuld. */
   scanned: integer("scanned"),
+  /** Link naar het event bij de externe organisator, voor de laatste stand. */
+  url: text("url"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

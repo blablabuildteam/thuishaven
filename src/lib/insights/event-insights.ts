@@ -413,6 +413,8 @@ export type EventInsight = {
     available: number | null;
     fillPct: number | null;
     avgPriceEur: number | null;
+    /** Weeztix-ticketomzet incl. btw (centen). Null zonder omzetdata. */
+    revenueCents: number | null;
     lastWeekSold: number | null;
     /** Tickets sold on the event day itself (inventory snapshot delta). */
     sameDaySold: number | null;
@@ -1384,6 +1386,7 @@ export async function loadEventInsightsFresh(options?: {
             avgPriceEur != null && Number.isFinite(avgPriceEur)
               ? avgPriceEur
               : null,
+          revenueCents: ticketRevenueCents > 0 ? ticketRevenueCents : null,
           lastWeekSold: lastWeekSold > 0 ? lastWeekSold : null,
           sameDaySold,
           salesByDay,

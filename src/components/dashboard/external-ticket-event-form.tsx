@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CalendarDays, CheckCircle2 } from "lucide-react";
+import { CalendarDays, CheckCircle2, ExternalLink, Trash2 } from "lucide-react";
 import { externalEventDayInput } from "@/lib/dashboard/external-ticket-events";
 import { cn, formatNumber } from "@/lib/utils";
 
@@ -20,6 +20,7 @@ type ExternalTicketEventFormProps = {
     endTime: string | null;
     sold: number | null;
     scanned: number | null;
+    url: string | null;
   };
 };
 
@@ -36,7 +37,10 @@ export function ExternalTicketEventForm({ event }: ExternalTicketEventFormProps)
   const [scanned, setScanned] = useState(
     event.scanned == null ? "" : String(event.scanned),
   );
+  const [url, setUrl] = useState(event.url ?? "");
+  const [savedUrl, setSavedUrl] = useState(event.url);
   const [pending, setPending] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
@@ -63,12 +67,20 @@ export function ExternalTicketEventForm({ event }: ExternalTicketEventFormProps)
           expectedAttendees: Number(attendees),
           sold: soldValue,
           scanned: scannedValue,
+          url,
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        event?: { url: string | null };
+      };
       if (!res.ok) {
         setError(data.error ?? "Opslaan mislukt");
         return;
+      }
+      if (data.event) {
+        setSavedUrl(data.event.url);
+        setUrl(data.event.url ?? "");
       }
       setSuccess(true);
       router.refresh();
@@ -76,6 +88,35 @@ export function ExternalTicketEventForm({ event }: ExternalTicketEventFormProps)
       setError("Opslaan mislukt");
     } finally {
       setPending(false);
+    }
+  }
+
+  async function onDelete() {
+    if (
+      !window.confirm(
+        `“${event.name}” verwijderen? Dit haalt het event van het ticketssheet en kan niet ongedaan worden gemaakt.`,
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    setSuccess(false);
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/dashboard/external-ticket-events/${event.id}`, {
+        method: "DELETE",
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Verwijderen mislukt");
+        setDeleting(false);
+        return;
+      }
+      router.push("/dashboard/tickets");
+      router.refresh();
+    } catch {
+      setError("Verwijderen mislukt");
+      setDeleting(false);
     }
   }
 
@@ -161,6 +202,32 @@ export function ExternalTicketEventForm({ event }: ExternalTicketEventFormProps)
             className={inputClassName}
           />
         </label>
+
+        <label className="block text-sm sm:col-span-2">
+          <span className="mb-1.5 flex items-center justify-between gap-3 text-[11px] tracking-wide text-text-dim uppercase">
+            Event-URL
+            {savedUrl ? (
+              <a
+                href={savedUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 normal-case tracking-normal text-text-muted underline underline-offset-2 hover:text-text"
+              >
+                Openen
+                <ExternalLink className="size-3" aria-hidden />
+              </a>
+            ) : null}
+          </span>
+          <input
+            type="text"
+            inputMode="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            maxLength={2000}
+            className={inputClassName}
+            placeholder="https://… — waar je de laatste stand vindt"
+          />
+        </label>
       </div>
 
       <section className="border border-border bg-surface/40 p-5">
@@ -227,7 +294,7 @@ export function ExternalTicketEventForm({ event }: ExternalTicketEventFormProps)
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="submit"
-          disabled={pending}
+          disabled={pending || deleting}
           className={cn(
             "border border-border bg-text px-5 py-2.5 text-sm text-bg hover:opacity-90",
             pending && "opacity-60",
@@ -238,6 +305,15 @@ export function ExternalTicketEventForm({ event }: ExternalTicketEventFormProps)
         <Link href="/dashboard/tickets" className="text-sm text-text-muted hover:text-text">
           Terug naar tickets
         </Link>
+        <button
+          type="button"
+          onClick={() => void onDelete()}
+          disabled={pending || deleting}
+          className="ml-auto inline-flex items-center gap-1.5 px-3 py-2.5 text-sm text-danger hover:underline disabled:opacity-50"
+        >
+          <Trash2 className="size-4" aria-hidden />
+          {deleting ? "Verwijderen…" : "Event verwijderen"}
+        </button>
       </div>
     </form>
   );

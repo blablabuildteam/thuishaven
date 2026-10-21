@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { LoaderCircle } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { RefreshControl } from "@/components/dashboard/refresh-control";
 
 const STALE_AFTER_MS = 15 * 60 * 1000;
 
@@ -30,7 +29,7 @@ type Props = {
   className?: string;
 };
 
-/** Stale-while-revalidate for paid channel pages. */
+/** Stale-while-revalidate for paid channel pages, plus a manual refresh button. */
 export function PaidAdsAutoSync({
   channel,
   lastSyncedAt,
@@ -39,11 +38,59 @@ export function PaidAdsAutoSync({
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [status, setStatus] = useState<"idle" | "syncing" | "error">("idle");
+  const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const lightRan = useRef(false);
   const backfillRan = useRef(false);
   const label = CHANNEL_LABEL[channel];
+
+  const runSync = useCallback(
+    async (backfill: boolean) => {
+      setSyncing(true);
+      setError(null);
+      setMessage(
+        backfill ? `${label} ads laden (6 maanden)…` : `${label} ads verversen…`,
+      );
+      try {
+        const res = await fetch(SYNC_PATH[channel], {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ light: !backfill }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+          upserted?: number;
+          fetched?: number;
+        };
+        if (!res.ok || data.ok === false) {
+          if (backfill) backfillRan.current = false;
+          else lightRan.current = false;
+          setMessage(null);
+          setError(data.error?.slice(0, 220) || `${label} ads sync mislukt`);
+          return;
+        }
+        setMessage(
+          data.fetched != null
+            ? `${label} ads bijgewerkt · ${data.fetched} ads opgehaald`
+            : `${label} ads bijgewerkt`,
+        );
+        startTransition(() => {
+          router.refresh();
+        });
+        window.setTimeout(() => setMessage(null), 3500);
+      } catch (e) {
+        if (backfill) backfillRan.current = false;
+        else lightRan.current = false;
+        setMessage(null);
+        setError(e instanceof Error ? e.message : `${label} ads sync mislukt`);
+      } finally {
+        setSyncing(false);
+      }
+    },
+    [channel, label, router],
+  );
 
   useEffect(() => {
     if (!enabled) return;
@@ -57,79 +104,20 @@ export function PaidAdsAutoSync({
 
     if (shouldBackfill) backfillRan.current = true;
     else lightRan.current = true;
+    void runSync(shouldBackfill);
+  }, [enabled, lastSyncedAt, runSync]);
 
-    const light = !shouldBackfill;
-    setStatus("syncing");
-    setMessage(
-      shouldBackfill
-        ? `${label} ads laden (6 maanden)…`
-        : `${label} ads verversen…`,
-    );
-
-    void (async () => {
-      try {
-        const res = await fetch(SYNC_PATH[channel], {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ light }),
-        });
-        const data = (await res.json().catch(() => ({}))) as {
-          ok?: boolean;
-          error?: string;
-          upserted?: number;
-          fetched?: number;
-        };
-        if (!res.ok || data.ok === false) {
-          if (shouldBackfill) backfillRan.current = false;
-          else lightRan.current = false;
-          setStatus("error");
-          setMessage(data.error?.slice(0, 220) || `${label} ads sync mislukt`);
-          return;
-        }
-        setMessage(
-          data.fetched != null
-            ? `${label} ads bijgewerkt · ${data.fetched} ads opgehaald`
-            : `${label} ads bijgewerkt`,
-        );
-        startTransition(() => {
-          router.refresh();
-        });
-        setStatus("idle");
-        window.setTimeout(() => setMessage(null), 3500);
-      } catch (e) {
-        if (shouldBackfill) backfillRan.current = false;
-        else lightRan.current = false;
-        setStatus("error");
-        setMessage(
-          e instanceof Error ? e.message : `${label} ads sync mislukt`,
-        );
-      }
-    })();
-  }, [channel, enabled, label, lastSyncedAt, router]);
-
-  if (status === "idle" && !message && !pending) return null;
-
-  const syncing = status === "syncing" || pending;
+  if (!enabled) return null;
 
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className={cn(
-        "mb-6 flex items-center gap-2 border px-4 py-3 text-sm",
-        status === "error"
-          ? "border-danger/50 text-danger"
-          : "border-border bg-surface text-text-muted",
-        className,
-      )}
-    >
-      {syncing && (
-        <LoaderCircle
-          className="size-4 shrink-0 animate-spin text-text"
-          aria-hidden
-        />
-      )}
-      <span>{message ?? `${label} ads verversen…`}</span>
-    </div>
+    <RefreshControl
+      onRefresh={() => void runSync(!lastSyncedAt)}
+      spinning={syncing || pending}
+      refreshedAt={lastSyncedAt}
+      label={`${label} ads verversen`}
+      message={message}
+      error={error}
+      className={className}
+    />
   );
 }

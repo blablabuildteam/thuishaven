@@ -1,14 +1,15 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ExternalLink } from "lucide-react";
+import { ChevronRight, ExternalLink } from "lucide-react";
 import {
   cpcCents,
   ctrPercent,
   type MarketingAdsBundle,
   type MarketingAdsCampaignGroup,
 } from "@/lib/marketing/ad-metrics";
+import { amsterdamDay } from "@/lib/time/amsterdam";
 import { cn, formatEuroFromCents, formatNumber, formatPercent } from "@/lib/utils";
 
 export function PaidAdsView({
@@ -18,6 +19,8 @@ export function PaidAdsView({
   bundle: MarketingAdsBundle;
   emptyMessage?: string;
 }) {
+  const [showLater, setShowLater] = useState(false);
+
   if (bundle.ads.length === 0) {
     return (
       <p className="border border-border bg-surface px-4 py-8 text-center text-sm text-text-muted">
@@ -27,6 +30,22 @@ export function PaidAdsView({
   }
 
   const currency = bundle.accountCurrency || "EUR";
+
+  /**
+   * Campagnes staan nieuwste event eerst. Events ná het eerstvolgende event
+   * klappen standaard in, zodat “next up” bovenaan staat.
+   */
+  const today = amsterdamDay(new Date());
+  const nextUpDay = bundle.campaigns
+    .map((c) => c.startsAt)
+    .filter((day): day is string => day != null && day >= today)
+    .sort()[0];
+  const later = nextUpDay
+    ? bundle.campaigns.filter((c) => c.startsAt != null && c.startsAt > nextUpDay)
+    : [];
+  const rest = bundle.campaigns.filter((c) => !later.includes(c));
+  const laterEvents = new Set(later.map((c) => c.startsAt)).size;
+  const laterSpend = later.reduce((sum, c) => sum + c.spendCents, 0);
 
   return (
     <div className="max-w-full overflow-x-auto border border-border">
@@ -59,7 +78,44 @@ export function PaidAdsView({
           </tr>
         </thead>
         <tbody>
-          {bundle.campaigns.map((campaign) => (
+          {later.length > 0 ? (
+            <tr className="border-t border-border bg-surface">
+              <td className="p-0" colSpan={2}>
+                <button
+                  type="button"
+                  onClick={() => setShowLater((open) => !open)}
+                  aria-expanded={showLater}
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-text hover:bg-surface-hover"
+                >
+                  <ChevronRight
+                    className={cn(
+                      "size-3.5 shrink-0 text-text-dim transition-transform",
+                      showLater && "rotate-90",
+                    )}
+                    aria-hidden
+                  />
+                  Komende events
+                  <span className="text-[11px] font-normal text-text-dim">
+                    {laterEvents} {laterEvents === 1 ? "event" : "events"} ·{" "}
+                    {later.length}{" "}
+                    {later.length === 1 ? "campagne" : "campagnes"}
+                  </span>
+                </button>
+              </td>
+              <MetricCell>{formatEuroFromCents(laterSpend, currency)}</MetricCell>
+              <td colSpan={5} />
+            </tr>
+          ) : null}
+          {showLater
+            ? later.map((campaign) => (
+                <CampaignRows
+                  key={campaign.campaignId ?? campaign.campaignName}
+                  campaign={campaign}
+                  currency={currency}
+                />
+              ))
+            : null}
+          {rest.map((campaign) => (
             <CampaignRows
               key={campaign.campaignId ?? campaign.campaignName}
               campaign={campaign}

@@ -6,7 +6,6 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { getChannelStats } from "@/lib/integrations/youtube/client";
 import { needsSocialHistoryBackfill } from "@/lib/integrations/social/history-coverage";
 import { loadMarketingPostsBundle } from "@/lib/cache/dashboard";
-import { formatNumber, formatPercent } from "@/lib/utils";
 
 export const metadata = { title: "YouTube" };
 export const dynamic = "force-dynamic";
@@ -46,12 +45,6 @@ export default async function YouTubePage() {
 
   const channel = channelResult.ok ? channelResult.channel : null;
   const posts = bundle.posts;
-  const totalEngagement = posts.reduce((s, p) => s + p.engagement, 0);
-  const totalViews = posts.reduce((s, p) => s + p.impressions, 0);
-  const totalLikes = posts.reduce((s, p) => s + p.likeCount, 0);
-  const totalComments = posts.reduce((s, p) => s + p.commentCount, 0);
-  const avgEngRate =
-    totalViews > 0 ? (totalEngagement / totalViews) * 100 : null;
 
   return (
     <div className="animate-fade-up">
@@ -84,21 +77,6 @@ export default async function YouTubePage() {
         </p>
       ) : (
         <>
-          <section className="mb-10 flex flex-wrap gap-8">
-            <Stat
-              value={formatNumber(channel.subscriberCount)}
-              label="subscribers"
-            />
-            <Stat value={formatNumber(totalViews)} label="views" />
-            <Stat value={formatNumber(totalLikes)} label="likes" />
-            <Stat value={formatNumber(totalComments)} label="comments" />
-            <Stat
-              value={avgEngRate != null ? formatPercent(avgEngRate, 1) : "—"}
-              label="eng. rate"
-            />
-            <Stat value={formatNumber(posts.length)} label="posts" />
-          </section>
-
           <ChannelPerformanceCharts
             channel="youtube"
             initialPosts={chartBundle.posts}
@@ -119,16 +97,5 @@ export default async function YouTubePage() {
         </>
       )}
     </div>
-  );
-}
-
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <p>
-      <span className="block break-words font-display text-2xl leading-none sm:text-3xl">{value}</span>
-      <span className="mt-1 block text-[11px] tracking-[0.12em] text-text-dim uppercase">
-        {label}
-      </span>
-    </p>
   );
 }

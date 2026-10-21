@@ -33,7 +33,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const { name, startsAt, expectedAttendees, startTime, endTime } = parsed.data;
+  const { name, startsAt, expectedAttendees, startTime, endTime, url } =
+    parsed.data;
   const db = getDb();
   const inserted = await db
     .insert(externalTicketEvents)
@@ -43,6 +44,7 @@ export async function POST(request: Request) {
       expectedAttendees,
       startTime,
       endTime,
+      url,
     })
     .returning({
       id: externalTicketEvents.id,
@@ -51,6 +53,7 @@ export async function POST(request: Request) {
       expectedAttendees: externalTicketEvents.expectedAttendees,
       startTime: externalTicketEvents.startTime,
       endTime: externalTicketEvents.endTime,
+      url: externalTicketEvents.url,
     });
 
   return NextResponse.json({ ok: true, event: inserted[0] });

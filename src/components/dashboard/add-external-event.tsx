@@ -17,6 +17,7 @@ export function AddExternalEvent() {
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [attendees, setAttendees] = useState("");
+  const [url, setUrl] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ name: string } | null>(null);
@@ -27,6 +28,7 @@ export function AddExternalEvent() {
     setStartTime("");
     setEndTime("");
     setAttendees("");
+    setUrl("");
     setError(null);
     setSuccess(null);
   }
@@ -65,6 +67,7 @@ export function AddExternalEvent() {
           startTime,
           endTime,
           expectedAttendees: Number(attendees),
+          url,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -141,8 +144,8 @@ export function AddExternalEvent() {
                       Add external event
                     </h2>
                     <p className="mt-2 text-sm leading-relaxed text-text-muted">
-                      Handmatig event toevoegen — naam, datum, tijden en verwachte
-                      bezoekers.
+                      Handmatig event toevoegen — naam, datum, tijden, verwachte
+                      bezoekers en een link naar de actuele stand.
                     </p>
                   </div>
                   <button
@@ -233,6 +236,21 @@ export function AddExternalEvent() {
                       required
                       className={inputClassName}
                       placeholder="250"
+                    />
+                  </label>
+
+                  <label className="block text-sm">
+                    <span className="mb-1.5 block text-[11px] tracking-wide text-text-dim uppercase">
+                      Event-URL (optioneel)
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="url"
+                      value={url}
+                      onChange={(e) => setUrl(e.target.value)}
+                      maxLength={2000}
+                      className={inputClassName}
+                      placeholder="https://… — waar je de laatste stand vindt"
                     />
                   </label>
 

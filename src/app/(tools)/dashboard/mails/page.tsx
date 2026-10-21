@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MailsRefresh } from "@/components/dashboard/mails-refresh";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { listRecentCampaigns } from "@/lib/insights/data";
@@ -32,6 +33,10 @@ type MailRow = {
   editionName: string | null;
   editionStartsAt: string | null;
   ordersAfter: number | null;
+  /** Orders via de trackinglink in de mail (Weeztix-referrer Arenametrix). */
+  clickOrders: number | null;
+  /** True als het event meerdere mails had en we op kliks hebben verdeeld. */
+  clickOrdersEstimated: boolean;
   signal: "measured" | "no_curve" | null;
 };
 
@@ -53,19 +58,38 @@ export default async function MailsPage() {
       editionName: string;
       startsAt: string;
       ordersAfter: number | null;
+      clickOrders: number;
+      clickOrdersEstimated: boolean;
       signal: "measured" | "no_curve";
     }
   >();
   for (const edition of mailLift?.editions ?? []) {
+    /**
+     * Weeztix geeft klik-orders per event, niet per mail. Eén mail voor het
+     * event → exact. Meerdere → verdeeld naar aandeel in de kliks.
+     */
+    const editionClicks = edition.campaigns.reduce((s, c) => s + c.clicks, 0);
+    const estimated = edition.campaigns.length > 1;
     for (const campaign of edition.campaigns) {
+      const share = !estimated
+        ? 1
+        : editionClicks > 0
+          ? campaign.clicks / editionClicks
+          : 1 / edition.campaigns.length;
       effectByCampaign.set(campaign.campaignId, {
         editionName: edition.editionName,
         startsAt: edition.startsAt,
         ordersAfter: campaign.ordersAfter,
+        clickOrders: Math.round(edition.brevoClickOrders * share),
+        clickOrdersEstimated: estimated,
         signal: campaign.signal,
       });
     }
   }
+  const refreshedAt = campaigns.reduce<string | null>((latest, c) => {
+    const at = c.syncedAt ? new Date(c.syncedAt).toISOString() : null;
+    return at && (!latest || at > latest) ? at : latest;
+  }, null);
 
   const rows: MailRow[] = campaigns
     .map((c) => {
@@ -83,6 +107,8 @@ export default async function MailsPage() {
         editionName: effect?.editionName ?? null,
         editionStartsAt: effect?.startsAt ?? null,
         ordersAfter: effect?.ordersAfter ?? null,
+        clickOrders: effect?.clickOrders ?? null,
+        clickOrdersEstimated: effect?.clickOrdersEstimated ?? false,
         signal: effect?.signal ?? null,
       };
     })
@@ -93,8 +119,10 @@ export default async function MailsPage() {
       <SectionHeader
         eyebrow="Mailings"
         title="Mail & ticket-effect"
-        description="Elke mailing op verzenddatum, nieuwste bovenaan. Per mail de tickets die in de 24 uur ná verzending verkocht werden (samenvallend, geen harde attributie)."
+        description="Elke mailing op verzenddatum, nieuwste bovenaan. Per mail de tickets via de link in de mail, en de tickets die in de 24 uur ná verzending verkocht werden."
       />
+
+      <MailsRefresh refreshedAt={refreshedAt} />
 
       <div className="mb-8 flex flex-wrap gap-8">
         <p>
@@ -150,7 +178,7 @@ export default async function MailsPage() {
       ) : (
         <>
           <div className="max-w-full overflow-x-auto border border-border">
-            <table className="w-full min-w-[820px] text-left text-sm">
+            <table className="w-full min-w-[900px] text-left text-sm">
               <thead className="border-b border-border text-[11px] tracking-wider text-text-dim uppercase">
                 <tr>
                   <th className="px-4 py-3 font-medium whitespace-nowrap">
@@ -161,6 +189,9 @@ export default async function MailsPage() {
                   <th className="px-4 py-3 font-medium text-right">Sent</th>
                   <th className="px-4 py-3 font-medium text-right">Open %</th>
                   <th className="px-4 py-3 font-medium text-right">Clicks</th>
+                  <th className="px-4 py-3 font-medium text-right whitespace-nowrap">
+                    Via mail
+                  </th>
                   <th className="px-4 py-3 font-medium text-right whitespace-nowrap">
                     Tickets 24u
                   </th>
@@ -212,6 +243,18 @@ export default async function MailsPage() {
                     <td className="px-4 py-3 text-right font-mono tabular-nums">
                       {formatNumber(row.clicks)}
                     </td>
+                    <td
+                      className="px-4 py-3 text-right font-mono tabular-nums whitespace-nowrap"
+                      title={
+                        row.clickOrdersEstimated
+                          ? "Geschat: dit event had meerdere mails, verdeeld naar aandeel in de kliks"
+                          : undefined
+                      }
+                    >
+                      {row.clickOrders != null
+                        ? `${row.clickOrdersEstimated ? "≈ " : ""}${formatNumber(row.clickOrders)}`
+                        : "—"}
+                    </td>
                     <td className="px-4 py-3 text-right font-mono tabular-nums">
                       {row.ordersAfter != null ? (
                         <StatusBadge tone="accent">
@@ -228,6 +271,11 @@ export default async function MailsPage() {
           </div>
 
           <p className="mt-3 max-w-2xl text-xs text-text-dim">
+            “Via mail” zijn orders die binnenkwamen via de trackinglink in de
+            mail. Weeztix telt die per event; had een event meerdere mails, dan
+            verdelen we ze naar aandeel in de kliks (≈).
+          </p>
+          <p className="mt-2 max-w-2xl text-xs text-text-dim">
             “Tickets 24u” is de verkoop in de 24 uur ná verzending, vanaf het uur
             van verzending. Dat is samenhang met de mail, geen harde toewijzing.
             Mailings zonder event zijn niet aan een editie gekoppeld, daar kunnen

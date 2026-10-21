@@ -48,6 +48,7 @@ export default async function ExternalTicketEventPage({
       endTime: externalTicketEvents.endTime,
       sold: externalTicketEvents.sold,
       scanned: externalTicketEvents.scanned,
+      url: externalTicketEvents.url,
     })
     .from(externalTicketEvents)
     .where(eq(externalTicketEvents.id, id))
@@ -84,6 +85,7 @@ export default async function ExternalTicketEventPage({
           endTime: event.endTime,
           sold: event.sold,
           scanned: event.scanned,
+          url: event.url,
         }}
       />
     </div>

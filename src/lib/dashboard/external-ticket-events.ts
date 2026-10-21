@@ -32,6 +32,24 @@ const clockTimeValue = z.union([z.string(), z.null()]).transform((value, ctx) =>
   return normalized;
 });
 
+/** Leeg → null; zonder schema → https:// ervoor; alleen http(s). */
+const eventUrlValue = z.union([z.string(), z.null()]).transform((value, ctx) => {
+  if (value == null || value.trim() === "") return null;
+  const trimmed = value.trim();
+  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+  try {
+    const url = new URL(withScheme);
+    if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error();
+    if (withScheme.length > 2000) throw new Error();
+    return url.toString();
+  } catch {
+    ctx.addIssue({ code: "custom", message: "Ongeldige URL" });
+    return z.NEVER;
+  }
+});
+
 export const createExternalTicketEventSchema = z.object({
   name: z.string().trim().min(1, "Naam is verplicht").max(200),
   startsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ongeldige datum"),
@@ -41,6 +59,7 @@ export const createExternalTicketEventSchema = z.object({
     .min(1, "Minimaal 1 bezoeker"),
   startTime: clockTimeValue.optional().transform((value) => value ?? null),
   endTime: clockTimeValue.optional().transform((value) => value ?? null),
+  url: eventUrlValue.optional().transform((value) => value ?? null),
 });
 
 export const updateExternalTicketEventSchema = z.object({
@@ -53,6 +72,7 @@ export const updateExternalTicketEventSchema = z.object({
     .optional(),
   startTime: clockTimeValue.optional(),
   endTime: clockTimeValue.optional(),
+  url: eventUrlValue.optional(),
   sold: z
     .union([
       z.coerce.number().int("Moet een heel getal zijn").min(0, "Minimaal 0"),
@@ -75,4 +95,5 @@ export type ExternalTicketEventRecord = {
   startTime: string | null;
   endTime: string | null;
   scanned: number | null;
+  url: string | null;
 };

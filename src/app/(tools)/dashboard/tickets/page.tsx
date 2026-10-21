@@ -98,6 +98,7 @@ const loadTicketsSheetRows = cache(async () => {
           endTime: externalTicketEvents.endTime,
           sold: externalTicketEvents.sold,
           scanned: externalTicketEvents.scanned,
+          url: externalTicketEvents.url,
         })
         .from(externalTicketEvents)
         .orderBy(desc(externalTicketEvents.startsAt)),
@@ -180,6 +181,7 @@ export default async function TicketsPage() {
     isExternal: true,
     externalAttendees: row.expectedAttendees,
     externalSold: row.sold,
+    externalUrl: row.url,
   }));
 
   const mapped: TicketChannelRow[] = [

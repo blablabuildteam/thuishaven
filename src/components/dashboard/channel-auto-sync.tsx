@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { LoaderCircle } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { RefreshControl } from "@/components/dashboard/refresh-control";
 
 export type SocialChannel = "instagram" | "tiktok" | "youtube";
 
@@ -34,7 +33,7 @@ type Props = {
 };
 
 /**
- * Stale-while-revalidate for channel pages.
+ * Stale-while-revalidate for channel pages, plus a manual refresh button.
  * When history is shallow, runs a full ~6-month sync (not the light 24-post refresh).
  */
 export function ChannelAutoSync({
@@ -46,10 +45,62 @@ export function ChannelAutoSync({
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [status, setStatus] = useState<"idle" | "syncing" | "error">("idle");
+  const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const lightRan = useRef(false);
   const backfillRan = useRef(false);
+  const label = CHANNEL_LABEL[channel];
+
+  const runSync = useCallback(
+    async (backfill: boolean) => {
+      setSyncing(true);
+      setError(null);
+      setMessage(
+        backfill
+          ? `${label}-geschiedenis laden (6 maanden)…`
+          : `${label}-posts verversen…`,
+      );
+      try {
+        const res = await fetch(SYNC_PATH[channel], {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ light: !backfill }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+          upserted?: number;
+          fetched?: number;
+        };
+        if (!res.ok || data.ok === false) {
+          // Allow retry on next mount/navigation.
+          if (backfill) backfillRan.current = false;
+          else lightRan.current = false;
+          setMessage(null);
+          setError(data.error?.slice(0, 160) || `${label} sync mislukt`);
+          return;
+        }
+        setMessage(
+          data.fetched != null
+            ? `${label} bijgewerkt · ${data.fetched} posts opgehaald`
+            : `${label} bijgewerkt`,
+        );
+        startTransition(() => {
+          router.refresh();
+        });
+        window.setTimeout(() => setMessage(null), 3500);
+      } catch (e) {
+        if (backfill) backfillRan.current = false;
+        else lightRan.current = false;
+        setMessage(null);
+        setError(e instanceof Error ? e.message : `${label} sync mislukt`);
+      } finally {
+        setSyncing(false);
+      }
+    },
+    [channel, label, router],
+  );
 
   useEffect(() => {
     if (!enabled) return;
@@ -64,85 +115,20 @@ export function ChannelAutoSync({
 
     if (shouldBackfill) backfillRan.current = true;
     else lightRan.current = true;
+    void runSync(shouldBackfill);
+  }, [backfillHistory, enabled, lastSyncedAt, runSync]);
 
-    const light = !shouldBackfill;
-    setStatus("syncing");
-    setMessage(
-      shouldBackfill
-        ? `${CHANNEL_LABEL[channel]}-geschiedenis laden (6 maanden)…`
-        : `${CHANNEL_LABEL[channel]}-posts verversen…`,
-    );
-
-    void (async () => {
-      try {
-        const res = await fetch(SYNC_PATH[channel], {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ light }),
-        });
-        const data = (await res.json().catch(() => ({}))) as {
-          ok?: boolean;
-          error?: string;
-          upserted?: number;
-          fetched?: number;
-        };
-        if (!res.ok || data.ok === false) {
-          // Allow retry on next mount/navigation.
-          if (shouldBackfill) backfillRan.current = false;
-          else lightRan.current = false;
-          setStatus("error");
-          setMessage(
-            data.error?.slice(0, 160) ||
-              `${CHANNEL_LABEL[channel]} sync mislukt`,
-          );
-          return;
-        }
-        setMessage(
-          data.fetched != null
-            ? `${CHANNEL_LABEL[channel]} bijgewerkt · ${data.fetched} posts opgehaald`
-            : `${CHANNEL_LABEL[channel]} bijgewerkt`,
-        );
-        startTransition(() => {
-          router.refresh();
-        });
-        setStatus("idle");
-        window.setTimeout(() => setMessage(null), 3500);
-      } catch (e) {
-        if (shouldBackfill) backfillRan.current = false;
-        else lightRan.current = false;
-        setStatus("error");
-        setMessage(
-          e instanceof Error
-            ? e.message
-            : `${CHANNEL_LABEL[channel]} sync mislukt`,
-        );
-      }
-    })();
-  }, [backfillHistory, channel, enabled, lastSyncedAt, router]);
-
-  if (status === "idle" && !message && !pending) return null;
-
-  const syncing = status === "syncing" || pending;
+  if (!enabled) return null;
 
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className={cn(
-        "mb-6 flex items-center gap-2 border px-4 py-3 text-sm",
-        status === "error"
-          ? "border-danger/50 text-danger"
-          : "border-border bg-surface text-text-muted",
-        className,
-      )}
-    >
-      {syncing && (
-        <LoaderCircle
-          className="size-4 shrink-0 animate-spin text-text"
-          aria-hidden
-        />
-      )}
-      <span>{message ?? `${CHANNEL_LABEL[channel]}-posts verversen…`}</span>
-    </div>
+    <RefreshControl
+      onRefresh={() => void runSync(false)}
+      spinning={syncing || pending}
+      refreshedAt={lastSyncedAt}
+      label={`${label}-posts verversen`}
+      message={message}
+      error={error}
+      className={className}
+    />
   );
 }

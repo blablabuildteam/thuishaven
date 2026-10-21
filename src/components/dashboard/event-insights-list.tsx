@@ -721,17 +721,30 @@ function TicketCompositionBar({
   );
 }
 
+function formatRevenueEur(cents: number): string {
+  return new Intl.NumberFormat("nl-NL", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
+}
+
+const REVENUE_HINT =
+  "Ticketomzet uit de Weeztix-shop, inclusief btw. Appic/RA/vriendenbarcodes tellen niet mee.";
+
 function CompactTicketMetrics({
   sold,
   capacity,
   scanned,
   openForSale,
+  revenueCents,
   animate = false,
 }: {
   sold: number;
   capacity: number | null;
   scanned: number;
   openForSale?: number | null;
+  revenueCents: number | null;
   animate?: boolean;
 }) {
   const { available } = ticketComposition(sold, capacity, scanned, openForSale);
@@ -740,7 +753,44 @@ function CompactTicketMetrics({
   }
 
   return (
-    <div className="w-full min-w-0">
+    <div className="flex w-full min-w-0 items-end gap-4 sm:gap-5">
+      <CompactTicketCounts
+        sold={sold}
+        capacity={capacity}
+        scanned={scanned}
+        openForSale={openForSale}
+        available={available}
+        animate={animate}
+      />
+      <div className="shrink-0 text-right" title={REVENUE_HINT}>
+        <p className="font-mono text-[13px] font-medium leading-none tabular-nums">
+          {revenueCents != null ? formatRevenueEur(revenueCents) : "—"}
+        </p>
+        <p className="mt-1 text-[10px] tracking-wide text-text-dim uppercase">
+          Omzet
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function CompactTicketCounts({
+  sold,
+  capacity,
+  scanned,
+  openForSale,
+  available,
+  animate,
+}: {
+  sold: number;
+  capacity: number | null;
+  scanned: number;
+  openForSale?: number | null;
+  available: number | null;
+  animate: boolean;
+}) {
+  return (
+    <div className="min-w-0 flex-1">
       <TicketCompositionBar
         sold={sold}
         capacity={capacity}
@@ -1067,6 +1117,7 @@ function TicketMetricsVisual({
   fillPct,
   scanRatePct,
   avgPriceEur,
+  revenueCents,
   lastWeekSold,
   sameDaySold,
   soldOutDaysBefore,
@@ -1086,6 +1137,7 @@ function TicketMetricsVisual({
   fillPct: number | null;
   scanRatePct: number | null;
   avgPriceEur: number | null;
+  revenueCents: number | null;
   lastWeekSold: number | null;
   sameDaySold: number | null;
   soldOutDaysBefore: number | null;
@@ -1109,6 +1161,11 @@ function TicketMetricsVisual({
       : "text-text";
 
   const miniStats = [
+    revenueCents != null && {
+      label: "Omzet",
+      value: formatRevenueEur(revenueCents),
+      hint: REVENUE_HINT,
+    },
     avgPriceEur != null && {
       label: "Gem. prijs",
       value: `€${avgPriceEur.toFixed(0)}`,
@@ -1489,6 +1546,7 @@ function EventRow({
               capacity={event.tickets.capacity}
               scanned={event.tickets.scanned}
               openForSale={event.tickets.available}
+              revenueCents={event.tickets.revenueCents ?? null}
               animate={open && phase === "ready"}
             />
           </button>
@@ -1573,6 +1631,7 @@ function EventDetail({ event }: { event: EventInsight }) {
           fillPct={tickets.fillPct}
           scanRatePct={tickets.scanRatePct}
           avgPriceEur={tickets.avgPriceEur}
+          revenueCents={tickets.revenueCents ?? null}
           lastWeekSold={tickets.lastWeekSold}
           sameDaySold={tickets.sameDaySold}
           soldOutDaysBefore={tickets.soldOutDaysBefore}

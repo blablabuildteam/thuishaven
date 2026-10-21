@@ -22,7 +22,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ticketRevenueExclBtwCents } from "@/lib/dashboard/ticket-btw";
 import { displayEditionName } from "@/lib/editions/lineup";
 import type {
   DailyTicketSales,
@@ -204,10 +203,6 @@ function DailySalesTooltip({
     );
   const totalPaid = rows.reduce((sum, row) => sum + row.paidSold, 0);
   const totalRevenue = rows.reduce((sum, row) => sum + row.revenueCents, 0);
-  const totalExcl = rows.reduce(
-    (sum, row) => sum + ticketRevenueExclBtwCents(row.revenueCents),
-    0,
-  );
 
   return createPortal(
     <div
@@ -233,7 +228,6 @@ function DailySalesTooltip({
               <th className="pb-1.5 pr-3 font-medium text-left">Datum · event</th>
               <th className="pb-1.5 pl-2 font-medium text-right">Betaald</th>
               <th className="pb-1.5 pl-2 font-medium text-right">Incl. btw</th>
-              <th className="pb-1.5 pl-2 font-medium text-right">Excl. btw</th>
             </tr>
           </thead>
           <tbody>
@@ -259,9 +253,6 @@ function DailySalesTooltip({
                 <td className="py-1 pl-2 text-right align-top font-mono tabular-nums whitespace-nowrap">
                   {formatEuroCents(row.revenueCents)}
                 </td>
-                <td className="py-1 pl-2 text-right align-top font-mono tabular-nums whitespace-nowrap">
-                  {formatEuroCents(ticketRevenueExclBtwCents(row.revenueCents))}
-                </td>
               </tr>
             ))}
           </tbody>
@@ -273,9 +264,6 @@ function DailySalesTooltip({
               </td>
               <td className="pt-1.5 pl-2 text-right font-mono font-medium tabular-nums whitespace-nowrap">
                 {formatEuroCents(totalRevenue)}
-              </td>
-              <td className="pt-1.5 pl-2 text-right font-mono font-medium tabular-nums whitespace-nowrap">
-                {formatEuroCents(totalExcl)}
               </td>
             </tr>
           </tfoot>

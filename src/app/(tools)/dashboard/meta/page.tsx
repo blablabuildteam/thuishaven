@@ -5,7 +5,6 @@ import { SocialPostsView } from "@/components/dashboard/social-posts-view";
 import { SectionHeader } from "@/components/ui/section-header";
 import { loadMarketingPostsBundle } from "@/lib/cache/dashboard";
 import { needsSocialHistoryBackfill } from "@/lib/integrations/social/history-coverage";
-import { formatNumber, formatPercent } from "@/lib/utils";
 
 export const metadata = { title: "Meta" };
 export const dynamic = "force-dynamic";
@@ -37,18 +36,7 @@ export default async function MetaPage() {
   ]);
 
   const posts = bundle.posts;
-  const totalReach = posts.reduce((s, p) => s + p.reach, 0);
-  const totalImpressions = posts.reduce((s, p) => s + p.impressions, 0);
-  const totalLikes = posts.reduce((s, p) => s + p.likeCount, 0);
-  const totalComments = posts.reduce((s, p) => s + p.commentCount, 0);
-  const totalEngagement = posts.reduce((s, p) => s + p.engagement, 0);
-  const avgEngRate =
-    totalImpressions > 0
-      ? (totalEngagement / totalImpressions) * 100
-      : totalReach > 0
-        ? (totalEngagement / totalReach) * 100
-        : null;
-  const impressionsLabel = totalImpressions > 0 ? "views" : "reach";
+  const impressionsLabel = posts.some((p) => p.impressions > 0) ? "views" : "reach";
 
   return (
     <div className="animate-fade-up">
@@ -90,24 +78,6 @@ export default async function MetaPage() {
             </p>
           )}
 
-          <section className="mb-10 flex flex-wrap gap-8">
-            <Stat value={formatNumber(posts.length)} label="posts" />
-            <Stat
-              value={formatNumber(totalImpressions || totalReach)}
-              label={impressionsLabel}
-            />
-            <Stat value={formatNumber(totalLikes)} label="likes" />
-            <Stat value={formatNumber(totalComments)} label="comments" />
-            <Stat
-              value={avgEngRate != null ? formatPercent(avgEngRate, 1) : "—"}
-              label="eng. rate"
-            />
-            <Stat
-              value={`${bundle.analyzedCount}/${posts.length}`}
-              label="geanalyseerd"
-            />
-          </section>
-
           <ChannelPerformanceCharts
             channel="instagram"
             initialPosts={chartBundle.posts}
@@ -131,16 +101,5 @@ export default async function MetaPage() {
         </>
       )}
     </div>
-  );
-}
-
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <p>
-      <span className="block break-words font-display text-2xl leading-none sm:text-3xl">{value}</span>
-      <span className="mt-1 block text-[11px] tracking-[0.12em] text-text-dim uppercase">
-        {label}
-      </span>
-    </p>
   );
 }

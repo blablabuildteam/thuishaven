@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { ExternalLink } from "lucide-react";
 import { DeurverkoopCell } from "@/components/dashboard/deurverkoop-cell";
 import { ExpectedCell } from "@/components/dashboard/expected-cell";
 import { ExternalEventCell } from "@/components/dashboard/external-event-cell";
@@ -37,6 +38,8 @@ export type TicketChannelRow = {
   externalAttendees?: number | null;
   /** Handmatig ingevulde sold voor externe events. */
   externalSold?: number | null;
+  /** Link naar het event bij de externe organisator. */
+  externalUrl?: string | null;
 };
 
 function channelIssued(value: number | TicketPoolCell | null): number | null {
@@ -332,16 +335,30 @@ function MonthBlock({
           >
             <td className="max-w-[280px] truncate px-4 py-3">
               {row.isExternal ? (
-                <Link
-                  href={`/dashboard/tickets/external/${row.id}`}
-                  className="flex items-center gap-2 hover:underline"
-                  title={row.name}
-                >
-                  <span className="truncate">{row.name}</span>
-                  <span className="shrink-0 text-[10px] tracking-wide text-text-dim uppercase">
-                    Extern
-                  </span>
-                </Link>
+                <span className="flex min-w-0 items-center gap-2">
+                  <Link
+                    href={`/dashboard/tickets/external/${row.id}`}
+                    className="flex min-w-0 items-center gap-2 hover:underline"
+                    title={row.name}
+                  >
+                    <span className="truncate">{row.name}</span>
+                    <span className="shrink-0 text-[10px] tracking-wide text-text-dim uppercase">
+                      Extern
+                    </span>
+                  </Link>
+                  {row.externalUrl ? (
+                    <a
+                      href={row.externalUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`${row.name} openen bij de organisator`}
+                      title="Laatste stand bij de organisator"
+                      className="shrink-0 text-text-dim hover:text-text"
+                    >
+                      <ExternalLink className="size-3.5" aria-hidden />
+                    </a>
+                  ) : null}
+                </span>
               ) : (
                 <Link
                   href={`/dashboard/tickets/${row.id}`}

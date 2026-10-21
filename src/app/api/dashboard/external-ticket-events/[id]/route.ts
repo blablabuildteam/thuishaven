@@ -71,6 +71,7 @@ export async function PATCH(
   if (updates.endTime !== undefined) patch.endTime = updates.endTime;
   if (updates.sold !== undefined) patch.sold = updates.sold;
   if (updates.scanned !== undefined) patch.scanned = updates.scanned;
+  if (updates.url !== undefined) patch.url = updates.url;
 
   const updated = await db
     .update(externalTicketEvents)
@@ -85,8 +86,30 @@ export async function PATCH(
       endTime: externalTicketEvents.endTime,
       sold: externalTicketEvents.sold,
       scanned: externalTicketEvents.scanned,
+      url: externalTicketEvents.url,
     });
 
   if (!updated[0]) return notFound();
   return NextResponse.json({ ok: true, event: updated[0] });
+}
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await auth();
+  if (!session?.user) return unauthorized();
+  if (!hasDatabase()) return notConfigured();
+
+  const { id } = await params;
+  if (!UUID_RE.test(id)) return badId();
+
+  const db = getDb();
+  const deleted = await db
+    .delete(externalTicketEvents)
+    .where(eq(externalTicketEvents.id, id))
+    .returning({ id: externalTicketEvents.id });
+
+  if (!deleted[0]) return notFound();
+  return NextResponse.json({ ok: true });
 }
