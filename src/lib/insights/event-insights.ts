@@ -312,7 +312,7 @@ export type SalesSourceId =
 export type SalesSourceRow = {
   id: SalesSourceId;
   label: string;
-  /** Issued tickets. Shop sales, or barcodes issued into a pool. */
+  /** Shop sales, or door scans out of a barcode pool. */
   sold: number | null;
   /** Reserved pool size for barcode channels. */
   reserved: number | null;
@@ -1015,14 +1015,14 @@ export async function loadEventInsightsFresh(options?: {
         {
           id: "appic",
           label: "Appic",
-          sold: appic != null ? appic.sold : null,
+          sold: appic != null ? (appic.scanned ?? 0) : null,
           reserved:
             appic != null
               ? (appic.capacity ?? appic.sold ?? 0) || null
               : null,
           available: appic != null ? (appic.available ?? 0) : null,
           status: appic != null ? "live" : "empty",
-          note: appic != null ? "Uitgegeven barcodes / pool" : undefined,
+          note: appic != null ? "Gescand / pool" : undefined,
         },
         {
           id: "wingame",
@@ -1036,7 +1036,7 @@ export async function loadEventInsightsFresh(options?: {
         {
           id: "vrienden",
           label: "Vriendentickets",
-          sold: vrienden != null ? vrienden.sold : null,
+          sold: vrienden != null ? (vrienden.scanned ?? 0) : null,
           reserved:
             vrienden != null
               ? (vrienden.capacity ?? vrienden.sold ?? 0) || null
@@ -1045,13 +1045,13 @@ export async function loadEventInsightsFresh(options?: {
           status: vrienden != null ? "live" : "empty",
           note:
             vrienden != null
-              ? "Vrienden daytickets · uitgegeven / pool"
+              ? "Vrienden daytickets · gescand / pool"
               : undefined,
         },
         {
           id: "resident_advisor",
           label: "Resident Advisor",
-          sold: raInv != null ? raInv.sold : null,
+          sold: raInv != null ? (raInv.scanned ?? 0) : null,
           reserved:
             raInv != null
               ? (raInv.capacity ?? raInv.sold ?? 0) || null
@@ -1059,7 +1059,7 @@ export async function loadEventInsightsFresh(options?: {
           available: raInv != null ? (raInv.available ?? 0) : null,
           status: raInv != null ? "live" : raListing ? "empty" : "empty",
           note: raInv
-            ? "RA daytickets · uitgegeven / pool"
+            ? "RA daytickets · gescand / pool"
             : raListing
               ? "Geen dayticket-pool op deze editie"
               : "Geen RA-listing gekoppeld",
@@ -1678,7 +1678,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v48"],
+  ["event-insights-upcoming-v49"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1694,7 +1694,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v48"],
+  ["event-insights-past-v49"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],
@@ -1743,7 +1743,7 @@ export const loadEventInsights = cache(async (options?: {
   }
 
   return rememberTtl(
-    `event-insights:v48:${limit}:${asOfDay}`,
+    `event-insights:v49:${limit}:${asOfDay}`,
     DASHBOARD_TTL_MS,
     async () => {
       // Outside Next data cache: recover empty DB / schedule list refresh
