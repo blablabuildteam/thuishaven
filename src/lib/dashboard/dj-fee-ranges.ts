@@ -281,6 +281,48 @@ export type DjFeeEventView = {
   spend: DjFeeSpend;
 };
 
+function csvCell(value: string | number): string {
+  // Keep Excel from evaluating names like "=foo" or "+bar" as formulas.
+  const text =
+    typeof value === "string" && /^[=+\-@]/.test(value) ? `'${value}` : String(value);
+  return /[";\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+/**
+ * One row per DJ, semicolon-separated with a BOM so Dutch Excel opens it
+ * with the right columns and accents. Fee is a plain number for sums.
+ */
+export function djFeesCsv(
+  events: ReadonlyArray<DjFeeEventView>,
+  eventName: (name: string) => string = (name) => name,
+): string {
+  const header = ["Datum", "Event", "DJ", "Fee (EUR)", "10HRS", "Bron"];
+  const source: Record<DjFeeArtistSource, string> = {
+    resident_advisor: "Resident Advisor",
+    edition_name: "Eventnaam",
+    custom: "Handmatig",
+  };
+  const rows: Array<Array<string | number>> = [];
+  for (const event of [...events].sort((a, b) => a.startsAt.localeCompare(b.startsAt))) {
+    const name = eventName(event.name);
+    if (event.artists.length === 0) {
+      rows.push([event.day, name, "", "", "", ""]);
+      continue;
+    }
+    for (const artist of event.artists) {
+      rows.push([
+        event.day,
+        name,
+        artist.name,
+        artist.feeAmount ?? "",
+        artist.isTenHour ? "ja" : "nee",
+        source[artist.source],
+      ]);
+    }
+  }
+  return `\uFEFF${[header, ...rows].map((row) => row.map(csvCell).join(";")).join("\r\n")}\r\n`;
+}
+
 export const DJ_FEES_CHANGED_EVENT = "thuishaven:dj-fees-changed";
 
 export function notifyDjFeesChanged() {
