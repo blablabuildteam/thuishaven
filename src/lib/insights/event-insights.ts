@@ -30,7 +30,7 @@ import {
   type DemographicBucket,
 } from "@/lib/db/schema";
 import {
-  addDjFeeRangeToSpend,
+  addDjFeeToSpend,
   emptyDjFeeSpend,
   formatDjFeeSpend,
   isDjFeeRangeId,
@@ -387,6 +387,7 @@ export type EventInsightPaid = {
 
 export type EventInsightDjFeeArtist = {
   name: string;
+  feeAmount: number | null;
   feeRange: DjFeeRangeId | null;
   isTenHour: boolean;
 };
@@ -468,7 +469,7 @@ export type EventInsight = {
   /** Combined organic promo impact (engagement + lift correlation). */
   organicImpactLevel: OrganicImpactLevel | null;
   organicImpactScore: number;
-  /** 1–5 vs other events with priced DJ-fees. Null without ranges. */
+  /** 1–5 vs other events with priced DJ-fees. Null without fees. */
   djFeeInvestmentLevel: DjFeeInvestmentLevel | null;
   /** 1–5 ad-aankopen vs other events with paid purchases. */
   paidSalesLevel: DjFeeInvestmentLevel | null;
@@ -487,7 +488,7 @@ function asDjFeeRange(value: string | null): DjFeeRangeId | null {
 
 function packDjFees(artists: EventInsightDjFeeArtist[]): EventInsightDjFees {
   const spend = emptyDjFeeSpend();
-  for (const artist of artists) addDjFeeRangeToSpend(spend, artist.feeRange);
+  for (const artist of artists) addDjFeeToSpend(spend, artist);
   return {
     artists,
     spend,
@@ -811,6 +812,7 @@ export async function loadEventInsightsFresh(options?: {
             .select({
               editionId: djFeeArtists.editionId,
               name: djFeeArtists.name,
+              feeAmount: djFeeArtists.feeAmount,
               feeRange: djFeeArtists.feeRange,
               isTenHour: djFeeArtists.isTenHour,
               sortOrder: djFeeArtists.sortOrder,
@@ -877,6 +879,7 @@ export async function loadEventInsightsFresh(options?: {
       const list = feesByEdition.get(row.editionId) ?? [];
       list.push({
         name: row.name,
+        feeAmount: row.feeAmount,
         feeRange: asDjFeeRange(row.feeRange),
         isTenHour: row.isTenHour,
       });

@@ -59,7 +59,7 @@ export async function PATCH(
     tool: "dashboard",
     meta: {
       artistId: id,
-      feeRange: parsed.data.feeRange,
+      feeAmount: parsed.data.feeAmount,
       isTenHour: parsed.data.isTenHour,
     },
   });

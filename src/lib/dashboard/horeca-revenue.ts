@@ -1,7 +1,7 @@
 import { and, asc, eq, ilike, isNotNull, isNull, not, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
-  addDjFeeRangeToSpend,
+  addDjFeeToSpend,
   emptyDjFeeSpend,
   isDjFeeRangeId,
   type DjFeeSpend,
@@ -95,6 +95,7 @@ export async function loadHorecaRevenueBoard(): Promise<HorecaRevenueEvent[]> {
     db
       .select({
         editionId: djFeeArtists.editionId,
+        feeAmount: djFeeArtists.feeAmount,
         feeRange: djFeeArtists.feeRange,
       })
       .from(djFeeArtists)
@@ -120,7 +121,7 @@ export async function loadHorecaRevenueBoard(): Promise<HorecaRevenueEvent[]> {
   for (const row of djRows) {
     const spend = djByEdition.get(row.editionId) ?? emptyDjFeeSpend();
     const range = row.feeRange && isDjFeeRangeId(row.feeRange) ? row.feeRange : null;
-    addDjFeeRangeToSpend(spend, range);
+    addDjFeeToSpend(spend, { feeAmount: row.feeAmount, feeRange: range });
     djByEdition.set(row.editionId, spend);
   }
 

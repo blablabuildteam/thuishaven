@@ -82,7 +82,7 @@ import { amsterdamDay, formatDayShort } from "@/lib/time/amsterdam";
 import { displayEditionName, normalizeArtistKey } from "@/lib/editions/lineup";
 import {
   djFeeInvestmentLevelLabel,
-  djFeeRangeDef,
+  djFeeLabel,
   formatDjFeeSpend,
   type DjFeeInvestmentLevel,
 } from "@/lib/dashboard/dj-fee-ranges";
@@ -2721,9 +2721,9 @@ function DjFeeInvestmentVerdict({
       <div className="min-w-0">
         <p className="text-xs font-medium capitalize text-text">{label}</p>
         <p className="text-[10px] text-text-dim">
-          Totaal bandbreedte {spendLabel} t.o.v. andere events
+          Totaal {spendLabel} t.o.v. andere events
           {missing > 0
-            ? ` · ${missing} DJ${missing === 1 ? "" : "s"} zonder range`
+            ? ` · ${missing} DJ${missing === 1 ? "" : "s"} zonder fee`
             : ""}
         </p>
       </div>
@@ -2958,7 +2958,7 @@ function LineupBlock({
         <p className="text-[11px] text-text-muted">
           Line-up spend {formatDjFeeSpend(djFees.spend)}
           {djFees.spend.missing > 0
-            ? ` · ${djFees.spend.missing} DJ${djFees.spend.missing === 1 ? "" : "s"} zonder range`
+            ? ` · ${djFees.spend.missing} DJ${djFees.spend.missing === 1 ? "" : "s"} zonder fee`
             : ""}
         </p>
       )}
@@ -2970,7 +2970,7 @@ function LineupBlock({
         <ul className="space-y-1.5">
           {names.slice(0, 10).map((name) => {
             const fee = feeByKey.get(normalizeArtistKey(name));
-            const rangeLabel = djFeeRangeDef(fee?.feeRange ?? null)?.label;
+            const rangeLabel = fee ? djFeeLabel(fee) : null;
             return (
               <li
                 key={name}

@@ -16,6 +16,7 @@
 
 import type { EditionFormat } from "@/lib/editions/lineup";
 import {
+  djFeeRangeNote,
   djFeeSpendMidpoint,
   formatDjFeeSpend,
   type DjFeeSpend,
@@ -1260,7 +1261,7 @@ function detectDjFees(
         tone: "positive",
         dimension: "dj_fees",
         significance: 0.5,
-        detail: `${investLabel.toLowerCase()} t.o.v. andere events (${spendLabel}, ${spend.priced} DJ${spend.priced === 1 ? "" : "s"} met range). Dit event was ${fmtPct(fill)} vol — de duurdere line-up werd dus gedragen. Fees zijn bandbreedtes, geen exacte bedragen.`,
+        detail: `${investLabel.toLowerCase()} t.o.v. andere events (${spendLabel}, ${spend.priced} DJ${spend.priced === 1 ? "" : "s"} met fee). Dit event was ${fmtPct(fill)} vol — de duurdere line-up werd dus gedragen.${djFeeRangeNote(spend)}`,
         facts: facts(
           ["Investering", `${level}/5`],
           ["DJ-fees", spendLabel],
@@ -1275,7 +1276,7 @@ function detectDjFees(
         tone: "caution",
         dimension: "dj_fees",
         significance: sigFromPp(highFill - fill, 22),
-        detail: `${investLabel.toLowerCase()} t.o.v. andere events (${spendLabel}). Dit event was ${fmtPct(fill)} vol; events met een vergelijkbare DJ-fee investering zitten meestal rond ${fmtPct(highFill)} vol. Fees zijn bandbreedtes, geen exacte bedragen.`,
+        detail: `${investLabel.toLowerCase()} t.o.v. andere events (${spendLabel}). Dit event was ${fmtPct(fill)} vol; events met een vergelijkbare DJ-fee investering zitten meestal rond ${fmtPct(highFill)} vol.${djFeeRangeNote(spend)}`,
         facts: facts(
           ["Investering", `${level}/5`],
           ["Dit event", fmtPct(fill)],
@@ -1293,7 +1294,7 @@ function detectDjFees(
       tone: "positive",
       dimension: "dj_fees",
       significance: 0.46,
-      detail: `Lage DJ-fee investering t.o.v. andere events (${spendLabel}). Dit event was ${fmtPct(fill)} vol${lowFill != null ? `; events met een lage investering zitten meestal rond ${fmtPct(lowFill)} vol` : ""}. Fees zijn bandbreedtes, geen exacte bedragen.`,
+      detail: `Lage DJ-fee investering t.o.v. andere events (${spendLabel}). Dit event was ${fmtPct(fill)} vol${lowFill != null ? `; events met een lage investering zitten meestal rond ${fmtPct(lowFill)} vol` : ""}.${djFeeRangeNote(spend)}`,
       facts: facts(
         ["Investering", `${level}/5`],
         ["DJ-fees", spendLabel],
@@ -1318,7 +1319,7 @@ function detectDjFees(
       tone: "caution",
       dimension: "dj_fees",
       significance: Math.max(significance, 0.4),
-      detail: `De DJ-fee bandbreedte was ${spendLabel} (midden ±${fmtEur(mid)}). Vergelijkbare ${cohort.label} zitten rond ${fmtEur(cohort.fee.median)}. Toch was dit event maar ${fmtPct(fill)} vol. Fees zijn bandbreedtes, geen exacte bedragen.`,
+      detail: `De DJ-fees waren ${spendLabel}${spend.ranged > 0 ? ` (midden ±${fmtEur(mid)})` : ""}. Vergelijkbare ${cohort.label} zitten rond ${fmtEur(cohort.fee.median)}. Toch was dit event maar ${fmtPct(fill)} vol.${djFeeRangeNote(spend)}`,
       facts: facts(
         ["DJ-fees dit event", spendLabel],
         ["Vergelijkbare " + cohort.label, fmtEur(cohort.fee.median)],
@@ -1615,7 +1616,7 @@ function detectInvestment(
         tone: "positive",
         dimension: "investment",
         significance: 0.54,
-        detail: `${investLabel.toLowerCase()} t.o.v. andere events (DJ-fees + ads ≈ ${fmtEur(combined)}). Dit event was ${fmtPct(fill)} vol — de inkoop en media werden dus gedragen. DJ-fees zijn bandbreedtes.`,
+        detail: `${investLabel.toLowerCase()} t.o.v. andere events (DJ-fees + ads ≈ ${fmtEur(combined)}). Dit event was ${fmtPct(fill)} vol — de inkoop en media werden dus gedragen.${e.djFees?.spend ? djFeeRangeNote(e.djFees.spend) : ""}`,
         facts: facts(
           ["Totale investering", `${level}/5`],
           ["DJ-fees + ads", fmtEur(combined)],

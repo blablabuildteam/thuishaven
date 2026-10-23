@@ -1,8 +1,8 @@
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, not } from "drizzle-orm";
 import { z } from "zod";
 import {
-  addDjFeeRangeToSpend,
-  DJ_FEE_RANGE_IDS,
+  addDjFeeToSpend,
+  DJ_FEE_AMOUNT_MAX,
   DJ_FEES_FROM_YEAR,
   djFeeSpendMidpoint,
   djFeesFromDate,
@@ -15,6 +15,7 @@ import {
   type DjFeeEventView,
   type DjFeeRangeId,
   type DjFeeSpend,
+  type DjFeeValue,
 } from "@/lib/dashboard/dj-fee-ranges";
 import { DASHBOARD_TTL_MS, rememberTtl } from "@/lib/cache/ttl";
 import { getDb } from "@/lib/db/client";
@@ -26,8 +27,6 @@ import {
 } from "@/lib/editions/lineup";
 import { amsterdamDay } from "@/lib/time/amsterdam";
 
-export const DJ_FEE_RANGE_ZOD = z.enum(DJ_FEE_RANGE_IDS);
-
 export const addDjFeeArtistSchema = z.object({
   editionId: z.string().uuid(),
   name: z.string().trim().min(1, "Naam ontbreekt").max(80, "Naam is te lang"),
@@ -35,10 +34,19 @@ export const addDjFeeArtistSchema = z.object({
 
 export const updateDjFeeArtistSchema = z
   .object({
-    feeRange: z.union([DJ_FEE_RANGE_ZOD, z.null()]).optional(),
+    feeAmount: z
+      .union([
+        z
+          .number()
+          .int("Fee moet een heel bedrag zijn")
+          .min(0, "Fee kan niet negatief zijn")
+          .max(DJ_FEE_AMOUNT_MAX, "Fee is te hoog"),
+        z.null(),
+      ])
+      .optional(),
     isTenHour: z.boolean().optional(),
   })
-  .refine((v) => v.feeRange !== undefined || v.isTenHour !== undefined, {
+  .refine((v) => v.feeAmount !== undefined || v.isTenHour !== undefined, {
     message: "Niets om bij te werken",
   });
 
@@ -68,9 +76,27 @@ function artistKey(name: string): string | null {
 function spendForArtists(artists: DjFeeArtistView[]): DjFeeSpend {
   const spend = emptyDjFeeSpend();
   for (const artist of artists) {
-    addDjFeeRangeToSpend(spend, artist.feeRange);
+    addDjFeeToSpend(spend, artist);
   }
   return spend;
+}
+
+function artistView(row: {
+  id: string;
+  name: string;
+  feeAmount: number | null;
+  feeRange: string | null;
+  isTenHour: boolean;
+  source: string;
+}): DjFeeArtistView {
+  return {
+    id: row.id,
+    name: row.name,
+    feeAmount: row.feeAmount,
+    feeRange: asRange(row.feeRange),
+    isTenHour: row.isTenHour,
+    source: asSource(row.source),
+  };
 }
 
 function raArtistsByEdition(
@@ -179,6 +205,7 @@ async function loadDjFeeBoardFresh(): Promise<DjFeeEventView[]> {
         editionId: djFeeArtists.editionId,
         name: djFeeArtists.name,
         nameKey: djFeeArtists.nameKey,
+        feeAmount: djFeeArtists.feeAmount,
         feeRange: djFeeArtists.feeRange,
         isTenHour: djFeeArtists.isTenHour,
         source: djFeeArtists.source,
@@ -214,13 +241,7 @@ async function loadDjFeeBoardFresh(): Promise<DjFeeEventView[]> {
   for (const row of merged) {
     if (row.removedAt) continue;
     const list = artistsByEdition.get(row.editionId) ?? [];
-    list.push({
-      id: row.id,
-      name: row.name,
-      feeRange: asRange(row.feeRange),
-      isTenHour: row.isTenHour,
-      source: asSource(row.source),
-    });
+    list.push(artistView(row));
     artistsByEdition.set(row.editionId, list);
   }
 
@@ -250,7 +271,7 @@ async function loadDjFeeBoardFresh(): Promise<DjFeeEventView[]> {
     });
 }
 
-/** 2026+ events that still have at least one DJ without a fee range. */
+/** 2026+ events that still have at least one DJ without a fee. */
 export async function countPendingDjFeeEvents(): Promise<number> {
   const db = getDb();
   const rows = await db
@@ -260,6 +281,7 @@ export async function countPendingDjFeeEvents(): Promise<number> {
     .where(
       and(
         isNull(djFeeArtists.removedAt),
+        isNull(djFeeArtists.feeAmount),
         isNull(djFeeArtists.feeRange),
         isNotNull(editions.weeztixEventId),
         gte(editions.startsAt, djFeesFromDate()),
@@ -333,6 +355,7 @@ export async function loadDjFeeInsightsSummary(): Promise<DjFeeInsightsSummary> 
   const artistRows = await db
     .select({
       editionId: djFeeArtists.editionId,
+      feeAmount: djFeeArtists.feeAmount,
       feeRange: djFeeArtists.feeRange,
     })
     .from(djFeeArtists)
@@ -340,10 +363,10 @@ export async function loadDjFeeInsightsSummary(): Promise<DjFeeInsightsSummary> 
       and(isNull(djFeeArtists.removedAt), inArray(djFeeArtists.editionId, ids)),
     );
 
-  const byEdition = new Map<string, Array<{ feeRange: DjFeeRangeId | null }>>();
+  const byEdition = new Map<string, DjFeeValue[]>();
   for (const row of artistRows) {
     const list = byEdition.get(row.editionId) ?? [];
-    list.push({ feeRange: asRange(row.feeRange) });
+    list.push({ feeAmount: row.feeAmount, feeRange: asRange(row.feeRange) });
     byEdition.set(row.editionId, list);
   }
 
@@ -358,8 +381,8 @@ export async function loadDjFeeInsightsSummary(): Promise<DjFeeInsightsSummary> 
     if (artists.length === 0) continue;
     const spend = emptyDjFeeSpend();
     for (const artist of artists) {
-      addDjFeeRangeToSpend(spend, artist.feeRange);
-      addDjFeeRangeToSpend(totalSpend, artist.feeRange);
+      addDjFeeToSpend(spend, artist);
+      addDjFeeToSpend(totalSpend, artist);
     }
     if (spend.priced > 0) eventsPriced += 1;
     if (spend.missing > 0) eventsIncomplete += 1;
@@ -446,27 +469,9 @@ export async function addDjFeeArtist(input: {
         .where(eq(djFeeArtists.id, row.id))
         .returning();
       if (!updated) return { ok: false, error: "not_found" };
-      return {
-        ok: true,
-        artist: {
-          id: updated.id,
-          name: updated.name,
-          feeRange: asRange(updated.feeRange),
-          isTenHour: updated.isTenHour,
-          source: asSource(updated.source),
-        },
-      };
+      return { ok: true, artist: artistView(updated) };
     }
-    return {
-      ok: true,
-      artist: {
-        id: row.id,
-        name: row.name,
-        feeRange: asRange(row.feeRange),
-        isTenHour: row.isTenHour,
-        source: asSource(row.source),
-      },
-    };
+    return { ok: true, artist: artistView(row) };
   }
 
   const last = await db
@@ -491,21 +496,12 @@ export async function addDjFeeArtist(input: {
 
   if (!inserted) return { ok: false, error: "not_found" };
 
-  return {
-    ok: true,
-    artist: {
-      id: inserted.id,
-      name: inserted.name,
-      feeRange: asRange(inserted.feeRange),
-      isTenHour: inserted.isTenHour,
-      source: asSource(inserted.source),
-    },
-  };
+  return { ok: true, artist: artistView(inserted) };
 }
 
 export async function updateDjFeeArtist(
   id: string,
-  patch: { feeRange?: DjFeeRangeId | null; isTenHour?: boolean },
+  patch: { feeAmount?: number | null; isTenHour?: boolean },
 ): Promise<
   | { ok: true; artist: DjFeeArtistView }
   | { ok: false; error: "not_found" }
@@ -521,7 +517,10 @@ export async function updateDjFeeArtist(
   const [updated] = await db
     .update(djFeeArtists)
     .set({
-      ...(patch.feeRange !== undefined ? { feeRange: patch.feeRange } : {}),
+      // An entered (or cleared) amount supersedes the legacy band.
+      ...(patch.feeAmount !== undefined
+        ? { feeAmount: patch.feeAmount, feeRange: null }
+        : {}),
       ...(patch.isTenHour !== undefined ? { isTenHour: patch.isTenHour } : {}),
       updatedAt: new Date(),
     })
@@ -530,16 +529,7 @@ export async function updateDjFeeArtist(
 
   if (!updated) return { ok: false, error: "not_found" };
 
-  return {
-    ok: true,
-    artist: {
-      id: updated.id,
-      name: updated.name,
-      feeRange: asRange(updated.feeRange),
-      isTenHour: updated.isTenHour,
-      source: asSource(updated.source),
-    },
-  };
+  return { ok: true, artist: artistView(updated) };
 }
 
 export async function removeDjFeeArtist(

@@ -103,6 +103,7 @@ export function sumDjFees(
     max: 0,
     openEnded: false,
     priced: 0,
+    ranged: 0,
     missing: 0,
   };
   for (const spend of present) {
@@ -110,6 +111,7 @@ export function sumDjFees(
     total.max += spend.max;
     total.openEnded = total.openEnded || spend.openEnded;
     total.priced += spend.priced;
+    total.ranged += spend.ranged;
     total.missing += spend.missing;
   }
   if (total.priced === 0 && total.missing === 0) return null;

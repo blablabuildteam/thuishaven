@@ -10,12 +10,13 @@ export type HorecaRevenueEvent = {
   kitchenCents: number | null;
   /** Weeztix-ticketomzet exclusief 9% btw. Null als er nog geen voorraadrij is. */
   ticketExclCents: number | null;
-  /** DJ-fee-bandbreedte in hele euro's. Null als er geen DJ-rijen zijn. */
+  /** DJ-fees in hele euro's (band zolang er nog oude ranges in zitten). Null als er geen DJ-rijen zijn. */
   djFees: {
     min: number;
     max: number;
     openEnded: boolean;
     priced: number;
+    ranged: number;
     missing: number;
   } | null;
   /** Gekoppelde paid-ads-spend (Meta, TikTok, YouTube) in centen. 0 als er geen ads aan het event hangen. */

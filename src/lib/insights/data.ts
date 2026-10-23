@@ -634,15 +634,15 @@ export function snapshotToPromptContext(snap: InsightsSnapshot): string {
   if (snap.djFees) {
     lines.push(
       "",
-      `=== DJ-fees vanaf ${snap.djFees.fromYear} (bandbreedtes, geen exacte bedragen) ===`,
-      `Events met DJs: ${snap.djFees.events} · met range: ${snap.djFees.eventsPriced} · incompleet: ${snap.djFees.eventsIncomplete}`,
-      `Som bandbreedte: ${snap.djFees.spendLabel}`,
+      `=== DJ-fees vanaf ${snap.djFees.fromYear} (exacte bedragen; oudere rijen kunnen nog een bandbreedte zijn) ===`,
+      `Events met DJs: ${snap.djFees.events} · met fees: ${snap.djFees.eventsPriced} · incompleet: ${snap.djFees.eventsIncomplete}`,
+      `Som DJ-fees: ${snap.djFees.spendLabel}`,
       "Investering 1–5 = quintiel t.o.v. andere events met ingevulde DJ-fees (1 laag, 5 zeer hoog).",
       "Per event (recent):",
     );
     for (const row of snap.djFees.rows) {
       lines.push(
-        `- ${row.day} ${displayEditionName(row.name)} | ${row.status} | investment=${row.investmentLevel != null ? `${row.investmentLevel}/5` : "n/a"} | spend=${row.spendLabel} | DJs ${row.priced} met range / ${row.missing} open | sold=${row.sold} | fill=${row.fillPct != null ? `${Math.round(row.fillPct)}%` : "n/a"}`,
+        `- ${row.day} ${displayEditionName(row.name)} | ${row.status} | investment=${row.investmentLevel != null ? `${row.investmentLevel}/5` : "n/a"} | spend=${row.spendLabel} | DJs ${row.priced} met fee / ${row.missing} open | sold=${row.sold} | fill=${row.fillPct != null ? `${Math.round(row.fillPct)}%` : "n/a"}`,
       );
     }
   }

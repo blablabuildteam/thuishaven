@@ -25,7 +25,10 @@ export type DjFeeRangeDef = {
   className: string;
 };
 
-/** Same bands as the Google Sheets DJ-fee overview. */
+/**
+ * Legacy bands from the Google Sheets DJ-fee overview. New entries are exact
+ * amounts (`feeAmount`); a band only counts while no amount is filled in.
+ */
 export const DJ_FEE_RANGES: readonly DjFeeRangeDef[] = [
   {
     id: "0",
@@ -98,32 +101,62 @@ export function formatEuroAmount(value: number): string {
   return `€${formatNumber(value)}`;
 }
 
+export const DJ_FEE_AMOUNT_MAX = 1_000_000;
+
+/** Parse a typed fee ("1.250", "€ 800", "1250,00") to whole euros. */
+export function parseDjFeeAmount(raw: string): number | null | "invalid" {
+  const cleaned = raw.replace(/[€\s]/g, "").replace(/[.,]\d{1,2}$/, "");
+  if (cleaned === "") return null;
+  const digits = cleaned.replace(/[.,]/g, "");
+  if (!/^\d+$/.test(digits)) return "invalid";
+  const value = Number(digits);
+  if (value > DJ_FEE_AMOUNT_MAX) return "invalid";
+  return value;
+}
+
 export type DjFeeSpend = {
   min: number;
   max: number;
   openEnded: boolean;
   priced: number;
+  /** DJs counted via a legacy band instead of an exact amount. */
+  ranged: number;
   missing: number;
 };
 
 export function emptyDjFeeSpend(): DjFeeSpend {
-  return { min: 0, max: 0, openEnded: false, priced: 0, missing: 0 };
+  return { min: 0, max: 0, openEnded: false, priced: 0, ranged: 0, missing: 0 };
 }
 
-export function addDjFeeRangeToSpend(
-  spend: DjFeeSpend,
-  rangeId: DjFeeRangeId | null,
-): void {
-  if (!rangeId) {
-    spend.missing += 1;
+export type DjFeeValue = {
+  feeAmount: number | null;
+  feeRange: DjFeeRangeId | null;
+};
+
+export function hasDjFee(fee: DjFeeValue): boolean {
+  return fee.feeAmount != null || fee.feeRange != null;
+}
+
+/** Display label for one DJ: the exact amount, else the legacy band. */
+export function djFeeLabel(fee: DjFeeValue): string | null {
+  if (fee.feeAmount != null) return formatEuroAmount(fee.feeAmount);
+  return djFeeRangeDef(fee.feeRange)?.label ?? null;
+}
+
+export function addDjFeeToSpend(spend: DjFeeSpend, fee: DjFeeValue): void {
+  if (fee.feeAmount != null) {
+    spend.priced += 1;
+    spend.min += fee.feeAmount;
+    spend.max += fee.feeAmount;
     return;
   }
-  const def = RANGE_BY_ID.get(rangeId);
+  const def = fee.feeRange ? RANGE_BY_ID.get(fee.feeRange) : undefined;
   if (!def) {
     spend.missing += 1;
     return;
   }
   spend.priced += 1;
+  spend.ranged += 1;
   spend.min += def.min;
   if (def.max == null) {
     spend.openEnded = true;
@@ -143,19 +176,23 @@ export function formatDjFeeSpend(spend: DjFeeSpend): string {
   return `${formatEuroAmount(spend.min)}–${formatEuroAmount(spend.max)}`;
 }
 
-export function countMissingDjFeeRanges(
-  artists: ReadonlyArray<{ feeRange: DjFeeRangeId | null }>,
-): number {
-  return artists.filter((artist) => !artist.feeRange).length;
+/** Caveat for copy: empty when every priced DJ has an exact amount. */
+export function djFeeRangeNote(spend: DjFeeSpend): string {
+  if (spend.ranged === 0) return "";
+  return spend.ranged === spend.priced
+    ? " Fees zijn bandbreedtes, geen exacte bedragen."
+    : " Een deel van de fees is nog een bandbreedte.";
 }
 
-export function eventNeedsDjFees(
-  artists: ReadonlyArray<{ feeRange: DjFeeRangeId | null }>,
-): boolean {
-  return countMissingDjFeeRanges(artists) > 0;
+export function countMissingDjFees(artists: ReadonlyArray<DjFeeValue>): number {
+  return artists.filter((artist) => !hasDjFee(artist)).length;
 }
 
-/** Midpoint of the combined band — for cohort compare, not a real fee. */
+export function eventNeedsDjFees(artists: ReadonlyArray<DjFeeValue>): boolean {
+  return countMissingDjFees(artists) > 0;
+}
+
+/** Exact total when every fee is an amount; band midpoint when legacy ranges are in. */
 export function djFeeSpendMidpoint(spend: DjFeeSpend): number | null {
   if (spend.priced === 0) return null;
   return Math.round((spend.min + spend.max) / 2);
@@ -226,6 +263,8 @@ export function monthNameFromDay(day: string): string {
 export type DjFeeArtistView = {
   id: string;
   name: string;
+  feeAmount: number | null;
+  /** Legacy band, only shown while feeAmount is empty. */
   feeRange: DjFeeRangeId | null;
   isTenHour: boolean;
   source: DjFeeArtistSource;
