@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Search, Trash2 } from "lucide-react";
-import { DjFeeRangeSelect } from "@/components/dashboard/dj-fee-range-select";
+import { DjFeeAmountInput } from "@/components/dashboard/dj-fee-amount-input";
 import { MetricCard } from "@/components/ui/metric-card";
 import { SectionHeader } from "@/components/ui/section-header";
 import {
-  addDjFeeRangeToSpend,
-  countMissingDjFeeRanges,
+  addDjFeeToSpend,
+  countMissingDjFees,
   emptyDjFeeSpend,
   eventNeedsDjFees,
   formatDjFeeSpend,
@@ -17,7 +17,6 @@ import {
   notifyDjFeesChanged,
   type DjFeeArtistView,
   type DjFeeEventView,
-  type DjFeeRangeId,
   type DjFeeSpend,
 } from "@/lib/dashboard/dj-fee-ranges";
 import { displayEditionName } from "@/lib/editions/lineup";
@@ -30,12 +29,12 @@ const DJ_FEE_ROW = "flex w-full min-w-[44rem] items-center";
 
 function spendFor(artists: DjFeeArtistView[]): DjFeeSpend {
   const spend = emptyDjFeeSpend();
-  for (const artist of artists) addDjFeeRangeToSpend(spend, artist.feeRange);
+  for (const artist of artists) addDjFeeToSpend(spend, artist);
   return spend;
 }
 
 function eventMissingCount(event: DjFeeEventView): number {
-  return countMissingDjFeeRanges(event.artists);
+  return countMissingDjFees(event.artists);
 }
 
 function eventNeedsFees(event: DjFeeEventView): boolean {
@@ -205,6 +204,7 @@ export function DjFeesWorkbench({
       spend.min += event.spend.min;
       spend.max += event.spend.max;
       spend.priced += event.spend.priced;
+      spend.ranged += event.spend.ranged;
       spend.missing += event.spend.missing;
       if (event.spend.openEnded) spend.openEnded = true;
     }
@@ -246,12 +246,13 @@ export function DjFeesWorkbench({
   async function patchArtist(
     editionId: string,
     artist: DjFeeArtistView,
-    body: { feeRange?: DjFeeRangeId | null; isTenHour?: boolean },
+    body: { feeAmount?: number | null; isTenHour?: boolean },
   ) {
     const previous = artist;
     const optimistic: DjFeeArtistView = {
       ...artist,
       ...body,
+      ...(body.feeAmount !== undefined ? { feeRange: null } : {}),
     };
     replaceArtist(editionId, artist.id, optimistic);
     setBusyId(artist.id);
@@ -338,7 +339,7 @@ export function DjFeesWorkbench({
       <SectionHeader
         eyebrow="Alerts"
         title="DJ-fees"
-        description="Prijsrange per DJ, plus of het een 10HRS-set was. Line-up komt uit Resident Advisor; je kunt DJs zelf toevoegen of weghalen. Bedragen zijn bandbreedtes, geen exacte fees."
+        description="Fee per DJ in hele euro's, plus of het een 10HRS-set was. Line-up komt uit Resident Advisor; je kunt DJs zelf toevoegen of weghalen. Oude ranges tellen mee tot je het bedrag invult."
         action={
           <div className="relative w-full sm:w-72">
             <Search
@@ -363,14 +364,14 @@ export function DjFeesWorkbench({
           value={formatDjFeeSpend(monthSpend)}
           hint={
             monthSpend.priced === 0
-              ? "Nog geen ranges ingevuld"
-              : `${monthSpend.priced} DJ${monthSpend.priced === 1 ? "" : "s"} met range`
+              ? "Nog geen fees ingevuld"
+              : `${monthSpend.priced} DJ${monthSpend.priced === 1 ? "" : "s"} met fee${monthSpend.ranged > 0 ? ` · ${monthSpend.ranged} nog als range` : ""}`
           }
         />
         <MetricCard
           label="Nog in te vullen"
           value={String(monthSpend.missing)}
-          hint="DJs zonder prijsrange"
+          hint="DJs zonder fee"
         />
       </div>
 
@@ -463,8 +464,8 @@ export function DjFeesWorkbench({
               event={event}
               focused={event.id === focusEditionId}
               busyId={busyId}
-              onFeeChange={(artist, feeRange) =>
-                void patchArtist(event.id, artist, { feeRange })
+              onFeeChange={(artist, feeAmount) =>
+                void patchArtist(event.id, artist, { feeAmount })
               }
               onTenHourToggle={(artist) =>
                 void patchArtist(event.id, artist, {
@@ -493,7 +494,7 @@ function EventCard({
   event: DjFeeEventView;
   focused?: boolean;
   busyId: string | null;
-  onFeeChange: (artist: DjFeeArtistView, feeRange: DjFeeRangeId | null) => void;
+  onFeeChange: (artist: DjFeeArtistView, feeAmount: number | null) => void;
   onTenHourToggle: (artist: DjFeeArtistView) => void;
   onRemove: (artist: DjFeeArtistView) => void;
   onAdd: (name: string) => Promise<boolean>;
@@ -552,7 +553,7 @@ function EventCard({
                 DJ_FEE_CONTROLS_W,
               )}
             >
-              <div className="w-[14rem] px-4 py-2 font-medium">Prijs</div>
+              <div className="w-[14rem] px-4 py-2 font-medium">Fee</div>
               <div className="w-[9.5rem] px-4 py-2 font-medium">10HRS</div>
               <div className="w-[4.75rem] px-4 py-2">
                 <span className="sr-only">Acties</span>
@@ -589,10 +590,12 @@ function EventCard({
                   )}
                 >
                   <div className="w-[14rem] px-4 py-2.5">
-                    <DjFeeRangeSelect
-                      value={artist.feeRange}
+                    <DjFeeAmountInput
+                      value={artist.feeAmount}
+                      legacyRange={artist.feeRange}
                       disabled={busy}
-                      onChange={(feeRange) => onFeeChange(artist, feeRange)}
+                      label={`Fee voor ${artist.name}`}
+                      onChange={(feeAmount) => onFeeChange(artist, feeAmount)}
                     />
                   </div>
                   <div className="w-[9.5rem] px-4 py-2.5">

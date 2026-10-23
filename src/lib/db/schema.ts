@@ -809,7 +809,7 @@ export const alerts = pgTable("alerts", {
   resolvedAt: timestamp("resolved_at", { withTimezone: true }),
 });
 
-/** DJ-fee bandbreedtes, gelijk aan het Google Sheets-overzicht. */
+/** Legacy DJ-fee bandbreedtes (Google Sheets); nieuwe fees zijn exacte bedragen. */
 export const djFeeRangeEnum = pgEnum("dj_fee_range", [
   "0",
   "0_600",
@@ -833,6 +833,9 @@ export const djFeeArtists = pgTable(
       .references(() => editions.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     nameKey: text("name_key").notNull(),
+    /** Exact fee in whole euros. Wins over the legacy feeRange band. */
+    feeAmount: integer("fee_amount"),
+    /** Legacy band from before exact amounts; cleared once an amount is set. */
     feeRange: djFeeRangeEnum("fee_range"),
     isTenHour: boolean("is_ten_hour").notNull().default(false),
     source: text("source").notNull().default("resident_advisor"),

@@ -250,7 +250,7 @@ function DjFeeValue({
         "inline-flex items-center justify-end gap-1.5 whitespace-nowrap",
         spend.missing > 0 && "text-text-muted",
       )}
-      title={spend.missing > 0 ? undefined : "DJ-fee-bandbreedte"}
+      title={spend.missing > 0 ? undefined : "DJ-fees"}
     >
       <span>{formatDjFeeSpend(spend)}</span>
       {spend.missing > 0 && (
@@ -936,7 +936,7 @@ export function OmzetBoard({ past }: { past: HorecaRevenueEvent[] }) {
 
       <p className="mt-3 text-xs text-text-dim">
         Bedragen voor tickets, bar en keuken zijn exclusief btw. Horeca = bar + keuken.
-        Omzet = tickets + horeca. DJ-fees zijn de bandbreedte uit DJ-fees. Ads zijn de
+        Omzet = tickets + horeca. DJ-fees zijn de bedragen uit DJ-fees. Ads zijn de
         betaalde ad-spend (Meta, TikTok, YouTube) die aan het event hangt; geen ads telt als €0. Kosten =
         DJ-fees + ads. Resultaat = omzet − kosten; bij een DJ-range is dat zelf een
         range. Onvolledig betekent dat bar, keuken of DJ-fees nog missen. Leeg laten

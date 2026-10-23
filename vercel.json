@@ -51,6 +51,10 @@
     {
       "path": "/api/cron/outreach-send",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/sales-digest",
+      "schedule": "5 16,17 * * *"
     }
   ]
 }
