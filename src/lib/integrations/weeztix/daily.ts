@@ -277,6 +277,76 @@ export async function fetchWeeztixHourlyTickets(input: {
   return hourlyTicketsFromOrderAggregations(input.eventGuid, res.data);
 }
 
+export type HourlySalesPoint = { at: number; sold: number; revenueCents: number };
+
+/**
+ * Tickets + omzet per uur voor meerdere events in één aggregatie-call.
+ * Strikt op guid: geen fallback naar "eerste event" zoals bij `eventAggNode`.
+ */
+export function hourlySalesFromOrderAggregations(
+  eventGuids: string[],
+  data: unknown,
+): Map<string, HourlySalesPoint[]> {
+  const aggs = asRecord(asRecord(data)?.aggregations);
+  const counts = asRecord(aggs?.eventCounts);
+  const revenues = asRecord(aggs?.eventRevenues);
+  const out = new Map<string, HourlySalesPoint[]>();
+  const epoch = (key: unknown) => {
+    const n = Number(key);
+    if (!Number.isFinite(n)) return null;
+    return n < 1e12 ? n * 1000 : n;
+  };
+
+  for (const guid of eventGuids) {
+    const revenueByHour = new Map<number, number>();
+    for (const bucket of histogramBuckets(asRecord(revenues?.[guid]))) {
+      const at = epoch(bucket.key);
+      const value = asRecord(bucket.statistics)?.value;
+      if (at == null || typeof value !== "number") continue;
+      revenueByHour.set(at, Math.max(0, Math.round(value)));
+    }
+    const points: HourlySalesPoint[] = [];
+    for (const bucket of histogramBuckets(asRecord(counts?.[guid]))) {
+      const at = epoch(bucket.key);
+      const sold = typeof bucket.doc_count === "number" ? bucket.doc_count : 0;
+      if (at == null || sold <= 0) continue;
+      points.push({ at, sold, revenueCents: revenueByHour.get(at) ?? 0 });
+    }
+    out.set(guid, points);
+  }
+  return out;
+}
+
+/** Uurcurve (tickets + omzet) voor een set events; één Weeztix-call. */
+export async function fetchWeeztixHourlySales(input: {
+  eventGuids: string[];
+  start: Date;
+  end: Date;
+}): Promise<
+  { ok: true; byEvent: Map<string, HourlySalesPoint[]> } | { ok: false; error: string }
+> {
+  if (input.eventGuids.length === 0) return { ok: true, byEvent: new Map() };
+  const companyId = await resolveWeeztixCompanyId(input.eventGuids[0]!);
+  if (!companyId) return { ok: false, error: "geen company id" };
+  const res = await weeztixPost({
+    path: `/statistics/orders/${companyId}`,
+    companyGuid: companyId,
+    body: {
+      offset: 0,
+      limit: 0,
+      start: isoOffset(input.start),
+      end: isoOffset(input.end),
+      timeunit: "hour",
+      events: input.eventGuids,
+    },
+  });
+  if (!res.ok) return { ok: false, error: res.error ?? "uurcurve mislukt" };
+  return {
+    ok: true,
+    byEvent: hourlySalesFromOrderAggregations(input.eventGuids, res.data),
+  };
+}
+
 async function upsertDailySalesCurve(input: {
   editionId: string;
   points: Array<{ day: string; sold: number; revenueCents: number }>;
@@ -609,7 +679,7 @@ export async function syncWeeztixDailySales(options?: {
  */
 /** Events that can still sell: started within 14 days, or still upcoming. */
 export async function listOnSaleWeeztixEditions(limit = 120): Promise<
-  Array<{ id: string; name: string; guid: string }>
+  Array<{ id: string; name: string; guid: string; startsAt: Date }>
 > {
   if (!hasDatabase()) return [];
   const db = getDb();
@@ -623,6 +693,7 @@ export async function listOnSaleWeeztixEditions(limit = 120): Promise<
       id: editions.id,
       name: editions.name,
       guid: editions.weeztixEventId,
+      startsAt: editions.startsAt,
     })
     .from(editions)
     .where(
@@ -636,7 +707,7 @@ export async function listOnSaleWeeztixEditions(limit = 120): Promise<
     .limit(limit);
 
   return rows.filter(
-    (row): row is { id: string; name: string; guid: string } =>
+    (row): row is { id: string; name: string; guid: string; startsAt: Date } =>
       Boolean(row.guid) && !/TEMPLATE/i.test(row.name),
   );
 }
