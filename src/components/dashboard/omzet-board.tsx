@@ -862,7 +862,7 @@ function OmzetCards({
                         {formatTicketSheetDate(row.day)}
                       </p>
                     </div>
-                    <div className={cn("grid grid-cols-2 gap-3 px-3 py-3", revenueCol)}>
+                    <div className={cn("grid grid-cols-2 gap-3 px-3 py-3 [&_label]:ml-0", revenueCol)}>
                       {(
                         [
                           ["barCents", "Bar", row.barCents],
@@ -884,7 +884,7 @@ function OmzetCards({
                         </div>
                       ))}
                     </div>
-                    <dl className="py-1.5">
+                    <dl>
                       <CardLine label="Tickets (excl. btw)" tone={revenueCol}>
                         {euroOrDash(row.ticketExclCents)}
                       </CardLine>

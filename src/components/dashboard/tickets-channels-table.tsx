@@ -376,7 +376,7 @@ function TicketsCards({
                       </p>
                     </div>
                   </div>
-                  <dl className="grid grid-cols-2 gap-x-4 gap-y-2 px-3 py-2.5 text-sm">
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-2 px-3 py-2.5 text-sm [&_label]:ml-0">
                     {showExpected ? (
                       <div>
                         <dt className="text-[11px] tracking-wider text-text-dim uppercase">

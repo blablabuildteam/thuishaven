@@ -1442,10 +1442,12 @@ const CompanyRow = memo(function CompanyRow({
           {groups.length > 0 ? (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               {groups.map((g) => (
-                <StatusBadge key={g.id} tone={QUEUE_STATUS_TONE[g.status]}>
-                  {g.items.length > 1 ? `${g.items.length}× ` : ""}
-                  {QUEUE_STATUS_NL[g.status]}
-                </StatusBadge>
+                <span key={g.id} className="whitespace-nowrap">
+                  <StatusBadge tone={QUEUE_STATUS_TONE[g.status]}>
+                    {g.items.length > 1 ? `${g.items.length}× ` : ""}
+                    {QUEUE_STATUS_NL[g.status]}
+                  </StatusBadge>
+                </span>
               ))}
               {planned[0]?.scheduledLabel ? (
                 <span className="tabular-nums text-text-dim">

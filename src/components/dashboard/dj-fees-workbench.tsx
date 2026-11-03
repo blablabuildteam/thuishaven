@@ -603,6 +603,9 @@ function EventCard({
                     />
                   </div>
                   <div className="shrink-0 px-2 py-2.5 md:w-[9.5rem] md:px-4">
+                    <span className="block text-[10px] tracking-wider text-text-dim uppercase md:hidden">
+                      10HRS
+                    </span>
                     <TenHourToggle
                       value={artist.isTenHour}
                       disabled={busy}
