@@ -25,8 +25,8 @@ import { formatTicketSheetDate } from "@/lib/time/amsterdam";
 import { cn } from "@/lib/utils";
 
 /** Fixed control columns — pinned to the card's right edge so they align across events. */
-const DJ_FEE_CONTROLS_W = "w-[28.25rem]"; // 14 + 9.5 + 4.75 rem
-const DJ_FEE_ROW = "flex w-full min-w-[44rem] items-center";
+const DJ_FEE_CONTROLS_W = "w-full md:w-[28.25rem]"; // 14 + 9.5 + 4.75 rem
+const DJ_FEE_ROW = "flex w-full flex-wrap items-center md:min-w-[44rem] md:flex-nowrap";
 
 function spendFor(artists: DjFeeArtistView[]): DjFeeSpend {
   const spend = emptyDjFeeSpend();
@@ -542,12 +542,12 @@ function EventCard({
         </div>
       </header>
 
-      <div className="max-w-full overflow-x-auto">
-        <div className="w-full min-w-[44rem]">
+      <div className="max-w-full md:overflow-x-auto">
+        <div className="w-full md:min-w-[44rem]">
           <div
             className={cn(
               DJ_FEE_ROW,
-              "text-[11px] tracking-wider text-text-dim uppercase",
+              "hidden text-[11px] tracking-wider text-text-dim uppercase md:flex",
             )}
           >
             <div className="min-w-0 flex-1 px-4 py-2 font-medium">DJ</div>
@@ -577,7 +577,7 @@ function EventCard({
                 key={artist.id}
                 className={cn(DJ_FEE_ROW, "border-t border-border/70 text-sm")}
               >
-                <div className="min-w-0 flex-1 px-4 py-2.5">
+                <div className="min-w-0 basis-full px-4 pt-2.5 md:flex-1 md:basis-auto md:py-2.5">
                   <div className="flex min-w-0 items-baseline gap-2">
                     <span className="truncate font-medium">{artist.name}</span>
                     {hint && (
@@ -593,7 +593,7 @@ function EventCard({
                     DJ_FEE_CONTROLS_W,
                   )}
                 >
-                  <div className="w-[14rem] px-4 py-2.5">
+                  <div className="min-w-0 flex-1 px-4 py-2.5 md:w-[14rem] md:flex-none">
                     <DjFeeAmountInput
                       value={artist.feeAmount}
                       legacyRange={artist.feeRange}
@@ -602,14 +602,14 @@ function EventCard({
                       onChange={(feeAmount) => onFeeChange(artist, feeAmount)}
                     />
                   </div>
-                  <div className="w-[9.5rem] px-4 py-2.5">
+                  <div className="shrink-0 px-2 py-2.5 md:w-[9.5rem] md:px-4">
                     <TenHourToggle
                       value={artist.isTenHour}
                       disabled={busy}
                       onToggle={() => onTenHourToggle(artist)}
                     />
                   </div>
-                  <div className="w-[4.75rem] px-4 py-2.5 text-right">
+                  <div className="shrink-0 px-4 py-2.5 text-right md:w-[4.75rem]">
                     <button
                       type="button"
                       disabled={busy}

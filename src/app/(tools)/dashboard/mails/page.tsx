@@ -177,7 +177,52 @@ export default async function MailsPage() {
         </p>
       ) : (
         <>
-          <div className="max-w-full overflow-x-auto border border-border">
+          <ul className="space-y-3 md:hidden">
+            {rows.map((row) => (
+              <li key={row.campaignId} className="border border-border px-3 py-2.5">
+                <p className="text-xs text-text-muted">
+                  {row.sentAt
+                    ? format(new Date(row.sentAt), "d MMM yyyy", { locale: nl })
+                    : "—"}
+                  <span className="text-text-dim">
+                    {" "}
+                    · {coverageLabel(row.signal, row.sentAt)}
+                  </span>
+                </p>
+                <p className="mt-0.5 font-medium leading-snug">{row.campaignName}</p>
+                {row.editionName ? (
+                  <p className="text-xs text-text-muted">{row.editionName}</p>
+                ) : null}
+                <dl className="mt-2 grid grid-cols-3 gap-x-3 gap-y-2 text-sm">
+                  {(
+                    [
+                      ["Sent", formatNumber(row.sent)],
+                      ["Open %", row.openRate != null ? formatPercent(row.openRate) : "—"],
+                      ["Clicks", formatNumber(row.clicks)],
+                      [
+                        "Via mail",
+                        row.clickOrders != null
+                          ? `${row.clickOrdersEstimated ? "≈ " : ""}${formatNumber(row.clickOrders)}`
+                          : "—",
+                      ],
+                      [
+                        "Tickets 24u",
+                        row.ordersAfter != null ? formatNumber(row.ordersAfter) : "—",
+                      ],
+                    ] as const
+                  ).map(([label, value]) => (
+                    <div key={label}>
+                      <dt className="text-[10px] tracking-wider text-text-dim uppercase">
+                        {label}
+                      </dt>
+                      <dd className="font-mono tabular-nums">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden max-w-full overflow-x-auto border border-border md:block">
             <table className="w-full min-w-[900px] text-left text-sm">
               <thead className="border-b border-border text-[11px] tracking-wider text-text-dim uppercase">
                 <tr>

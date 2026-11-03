@@ -888,7 +888,6 @@ export function CrmCompaniesTable({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Zoek bedrijf…"
-              autoFocus
               className="block w-full border border-border bg-bg px-3 py-2 text-sm text-text"
             />
           </label>
@@ -945,7 +944,7 @@ export function CrmCompaniesTable({
       </div>
 
       {picked.size > 0 ? (
-        <div className="sticky top-0 z-10 mb-4 flex flex-wrap items-center gap-2 border border-border bg-bg px-3 py-2 text-sm">
+        <div className="sticky top-[3.75rem] z-20 mb-4 flex flex-wrap items-center gap-2 border border-border bg-bg px-3 py-2 text-sm lg:top-0">
           <span className="text-text-dim">{picked.size} aangevinkt</span>
           <button
             type="button"
@@ -1186,17 +1185,17 @@ export function CrmCompaniesTable({
         </p>
       ) : (
         <div className="max-w-full overflow-x-auto border-y border-border">
-          <table className="w-full min-w-[860px] text-left text-sm">
+          <table className="w-full text-left text-sm md:min-w-[860px]">
             <thead className="border-b border-border text-[11px] uppercase tracking-wider text-text-dim">
               <tr>
-                <th className="w-10 py-2 pr-2 font-medium">
+                <th className="w-8 py-2 pr-2 font-medium md:w-10">
                   <span className="sr-only">Selecteer</span>
                 </th>
                 <th className="px-0 py-2 pr-4 font-medium">Bedrijf</th>
-                <th className="px-3 py-2 font-medium">Grootte</th>
-                <th className="px-3 py-2 font-medium">Beste persoon</th>
-                <th className="px-3 py-2 font-medium">Score</th>
-                <th className="px-3 py-2 font-medium">Waarom nu</th>
+                <th className="hidden px-3 py-2 font-medium md:table-cell">Grootte</th>
+                <th className="hidden px-3 py-2 font-medium md:table-cell">Beste persoon</th>
+                <th className="hidden px-3 py-2 font-medium md:table-cell">Score</th>
+                <th className="hidden px-3 py-2 font-medium md:table-cell">Waarom nu</th>
                 <th className="px-3 py-2 font-medium">Mail</th>
               </tr>
             </thead>
@@ -1342,7 +1341,7 @@ const CompanyRow = memo(function CompanyRow({
             aria-label={`Selecteer ${row.companyName}`}
           />
         </td>
-        <td className="max-w-[16rem] px-0 py-2 pr-4">
+        <td className="max-w-[16rem] px-0 py-2 pr-3 md:pr-4">
           <button
             type="button"
             onClick={() => onToggleOpen(row.id)}
@@ -1378,9 +1377,27 @@ const CompanyRow = memo(function CompanyRow({
               </span>
             ) : null}
           </p>
+          <div className="mt-1 space-y-1 pl-[1.125rem] md:hidden">
+            <p className="text-xs text-text-muted">
+              {row.employeeCount != null ? `${fmtEmployees(row.employeeCount)} mdw · ` : ""}
+              score {score.score}
+            </p>
+            {best ? (
+              <p className="truncate text-xs">
+                <span className="text-text">{best.name}</span>
+                <span className={best.tone}> · {best.label}</span>
+                {m.people.length > 1 ? (
+                  <span className="text-text-dim"> · +{m.people.length - 1}</span>
+                ) : null}
+              </p>
+            ) : (
+              <p className="text-xs text-warn-fg">Nog niemand gevonden</p>
+            )}
+            <StatusBadge tone={mailAngleTone(angle.id)}>{angle.label}</StatusBadge>
+          </div>
         </td>
         <td
-          className="px-3 py-2 tabular-nums text-text"
+          className="hidden px-3 py-2 tabular-nums text-text md:table-cell"
           title={
             row.employeeCount == null
               ? "Aantal medewerkers nog niet bekend"
@@ -1389,7 +1406,7 @@ const CompanyRow = memo(function CompanyRow({
         >
           {fmtEmployees(row.employeeCount)}
         </td>
-        <td className="max-w-[15rem] px-3 py-2">
+        <td className="hidden max-w-[15rem] px-3 py-2 md:table-cell">
           {best ? (
             <>
               <p className="truncate text-text" title={best.title ?? undefined}>
@@ -1412,13 +1429,13 @@ const CompanyRow = memo(function CompanyRow({
             <p className="text-xs text-warn-fg">Nog niemand gevonden</p>
           )}
         </td>
-        <td className="px-3 py-2 whitespace-nowrap">
+        <td className="hidden px-3 py-2 whitespace-nowrap md:table-cell">
           <span className="font-display text-sm tabular-nums tracking-wide text-text">
             {score.score}
           </span>{" "}
           <StatusBadge tone={leadTierTone(score.tier)}>{score.tier}</StatusBadge>
         </td>
-        <td className="px-3 py-2">
+        <td className="hidden px-3 py-2 md:table-cell">
           <StatusBadge tone={mailAngleTone(angle.id)}>{angle.label}</StatusBadge>
         </td>
         <td className="px-3 py-2 text-xs text-text-muted">
@@ -1478,7 +1495,7 @@ const CompanyRow = memo(function CompanyRow({
       {open ? (
         <tr className="border-b border-border/70 bg-surface/40">
           <td />
-          <td colSpan={6} className="py-4 pr-4">
+          <td colSpan={6} className="py-4 pr-3 md:pr-4">
             <div className="grid gap-6 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
               <div>
                 <h4 className="text-[11px] font-medium uppercase tracking-wider text-text-dim">

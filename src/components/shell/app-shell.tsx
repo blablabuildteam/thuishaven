@@ -632,7 +632,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       ) : null}
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
+      {/* relative: absolutely positioned bits inside wide tables (sr-only) must not widen the page */}
+      <div className="relative flex min-w-0 flex-1 flex-col overflow-x-clip">
         <header className="sticky top-0 z-30 flex items-center justify-between gap-2 border-b border-border bg-bg/95 px-3 py-3 backdrop-blur-md sm:px-4 lg:hidden">
           <Link href="/" className="flex min-w-0 items-center gap-2">
             <Image
@@ -644,6 +645,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             />
             <span className="truncate font-display text-lg tracking-[0.04em]">
               Thuishaven
+            </span>
+            <span className="truncate text-xs tracking-[0.12em] text-text-dim uppercase">
+              {isOutreach ? "Outreach" : "Dashboard"}
             </span>
           </Link>
           <div className="flex shrink-0 items-center gap-1">

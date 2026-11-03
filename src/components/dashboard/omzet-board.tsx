@@ -782,6 +782,198 @@ function MonthRows({
   );
 }
 
+function CardLine({
+  label,
+  children,
+  strong,
+  tone,
+}: {
+  label: string;
+  children: React.ReactNode;
+  strong?: boolean;
+  tone?: string;
+}) {
+  return (
+    <div className={cn("flex items-center justify-between gap-3 px-3 py-1.5", tone)}>
+      <dt className={cn("text-xs", strong ? "font-medium text-text" : "text-text-muted")}>
+        {label}
+      </dt>
+      <dd className={cn("font-mono text-sm", strong ? "font-semibold" : partValue)}>
+        {children}
+      </dd>
+    </div>
+  );
+}
+
+/** Phone layout: one card per event, inputs first. */
+function OmzetCards({
+  rows,
+  onChange,
+}: {
+  rows: HorecaRevenueEvent[];
+  onChange: (
+    id: string,
+    field: "barCents" | "kitchenCents",
+    cents: number | null,
+  ) => void;
+}) {
+  const months = groupByMonth(rows);
+  const picture = pictureFor(rows);
+  const gaps = describePictureGaps(rows);
+  const djHref = rows.some(needsDjFees) ? djFeesHref() : undefined;
+
+  return (
+    <div className="space-y-6">
+      {months.map((month) => {
+        const monthPicture = pictureFor(month.rows);
+        const monthGaps = describePictureGaps(month.rows);
+        return (
+          <div key={month.key}>
+            <div className="mb-2 flex items-baseline justify-between gap-3">
+              <h3 className="text-sm font-medium text-text-muted capitalize">
+                {month.label}
+              </h3>
+              <span className="font-mono text-xs text-text-muted">
+                <BandValue
+                  band={monthPicture.result}
+                  open="atMost"
+                  title="Resultaat deze maand"
+                  missing={monthGaps.result}
+                />
+              </span>
+            </div>
+            <ul className="space-y-3">
+              {month.rows.map((row) => {
+                const name = displayEditionName(row.name);
+                const horeca = rowHorecaCents(row.barCents, row.kitchenCents);
+                const revenue = revenueBand(row);
+                const costs = costBand(row);
+                const rowDjHref = needsDjFees(row) ? djFeesHref(row.id) : undefined;
+                return (
+                  <li key={row.id} className="border border-border bg-bg">
+                    <div className="border-b border-border px-3 py-2.5">
+                      <Link
+                        href={`/dashboard/tickets/${row.id}`}
+                        className="block font-medium leading-snug hover:underline"
+                      >
+                        {name}
+                      </Link>
+                      <p className="mt-0.5 text-xs text-text-muted">
+                        {formatTicketSheetDate(row.day)}
+                      </p>
+                    </div>
+                    <div className={cn("grid grid-cols-2 gap-3 px-3 py-3", revenueCol)}>
+                      {(
+                        [
+                          ["barCents", "Bar", row.barCents],
+                          ["kitchenCents", "Keuken", row.kitchenCents],
+                        ] as const
+                      ).map(([field, label, value]) => (
+                        <div key={field}>
+                          <p className="mb-1 text-[11px] tracking-wider text-text-dim uppercase">
+                            {label} <span className="normal-case">ex btw</span>
+                          </p>
+                          <AmountCell
+                            editionId={row.id}
+                            editionName={name}
+                            field={field}
+                            label={label}
+                            value={value}
+                            onSaved={(cents) => onChange(row.id, field, cents)}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <dl className="py-1.5">
+                      <CardLine label="Tickets (excl. btw)" tone={revenueCol}>
+                        {euroOrDash(row.ticketExclCents)}
+                      </CardLine>
+                      <CardLine label="Horeca" tone={revenueCol}>
+                        {euroOrDash(horeca.cents)}
+                      </CardLine>
+                      <CardLine label="Omzet" strong tone={revenueCol}>
+                        <BandValue
+                          band={revenue}
+                          open="atLeast"
+                          title="Tickets exclusief btw plus horeca"
+                          missing={revenueGap(row)}
+                          emphasis
+                        />
+                      </CardLine>
+                      <CardLine label="DJ-fees" tone={costCol}>
+                        <DjFeeValue spend={row.djFees} href={rowDjHref} />
+                      </CardLine>
+                      <CardLine label="Ads" tone={costCol}>
+                        {euroOrDash(row.adsCents)}
+                      </CardLine>
+                      <CardLine label="Kosten" strong tone={costCol}>
+                        <BandValue
+                          band={costs}
+                          open="atLeast"
+                          title="DJ-fees plus betaalde ads"
+                          missing={costGap(row)}
+                          href={rowDjHref}
+                          emphasis
+                        />
+                      </CardLine>
+                      <CardLine label="Resultaat" strong tone={resultCol}>
+                        <BandValue
+                          band={resultBand(revenue, costs)}
+                          open="atMost"
+                          title="Omzet minus kosten"
+                          missing={resultGap(row)}
+                          href={rowDjHref}
+                          emphasis
+                        />
+                      </CardLine>
+                    </dl>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      })}
+      {rows.length > 0 ? (
+        <dl className="border border-text">
+          <p className="border-b border-border px-3 py-2 text-sm font-medium">
+            Totaal ({rows.length} events)
+          </p>
+          <CardLine label="Omzet" strong tone={revenueCol}>
+            <BandValue
+              band={picture.revenue}
+              open="atLeast"
+              title="Tickets exclusief btw plus horeca"
+              missing={gaps.revenue}
+              emphasis
+            />
+          </CardLine>
+          <CardLine label="Kosten" strong tone={costCol}>
+            <BandValue
+              band={picture.costs}
+              open="atLeast"
+              title="DJ-fees plus betaalde ads"
+              missing={gaps.costs}
+              href={djHref}
+              emphasis
+            />
+          </CardLine>
+          <CardLine label="Resultaat" strong tone={resultCol}>
+            <BandValue
+              band={picture.result}
+              open="atMost"
+              title="Omzet minus kosten"
+              missing={gaps.result}
+              href={djHref}
+              emphasis
+            />
+          </CardLine>
+        </dl>
+      ) : null}
+    </div>
+  );
+}
+
 function SectionHeading({
   id,
   eyebrow,
@@ -928,7 +1120,12 @@ export function OmzetBoard({ past }: { past: HorecaRevenueEvent[] }) {
                 title="Afgelopen events"
                 count={filteredPast.length}
               />
-              <OmzetTable rows={filteredPast} onChange={onChange} />
+              <div className="md:hidden">
+                <OmzetCards rows={filteredPast} onChange={onChange} />
+              </div>
+              <div className="hidden md:block">
+                <OmzetTable rows={filteredPast} onChange={onChange} />
+              </div>
             </section>
           )}
         </div>
