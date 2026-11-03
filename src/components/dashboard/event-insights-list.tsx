@@ -1210,7 +1210,7 @@ function TicketMetricsVisual({
         </div>
 
         <div
-          title="Weeztix-shop plus de barcodes die naar Appic, RA en vrienden zijn uitgegeven"
+          title="Weeztix-shop plus Appic-, RA- en vriendentickets die echt gebruikt zijn — gereserveerde barcodes tellen niet mee"
           className="min-w-0 text-center"
         >
           <p className="truncate text-[9px] font-medium tracking-normal text-text-dim uppercase sm:text-[10px] sm:tracking-[0.12em]">

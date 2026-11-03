@@ -15,7 +15,7 @@ export type TicketPoolCell = {
   used: number;
   /** Pool allotment (gereserveerd). */
   reserved: number;
-  /** Issued into pool — for event total math. */
+  /** Issued into the pool. The event total counts `used`, not this. */
   issued: number;
 } | null;
 
@@ -42,10 +42,10 @@ export type TicketChannelRow = {
   externalUrl?: string | null;
 };
 
-function channelIssued(value: number | TicketPoolCell | null): number | null {
+function channelUsed(value: number | TicketPoolCell | null): number | null {
   if (value == null) return null;
   if (typeof value === "number") return value;
-  return value.issued;
+  return value.used;
 }
 
 export function totalTicketsSold(row: TicketChannelRow): number | null {
@@ -56,10 +56,10 @@ export function totalTicketsSold(row: TicketChannelRow): number | null {
   const parts = [
     row.weeztix,
     row.deurverkoop,
-    channelIssued(row.ra),
-    channelIssued(row.appic),
-    channelIssued(row.wingame),
-    channelIssued(row.vrienden),
+    channelUsed(row.ra),
+    channelUsed(row.appic),
+    channelUsed(row.wingame),
+    channelUsed(row.vrienden),
   ];
   if (parts.every((n) => n == null)) return null;
   return parts.reduce<number>((sum, n) => sum + (n ?? 0), 0);

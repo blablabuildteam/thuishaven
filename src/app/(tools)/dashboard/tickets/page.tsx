@@ -245,8 +245,9 @@ export default async function TicketsPage() {
         is handmatig — typ het aantal van de deurlijst in de kolom. Expected is
         een handmatige forecast voor komende events. Tijd komt uit Weeztix, of
         handmatig bij externe events. Game Appic volgt nog. Externe events zijn
-        handmatig (verwachte bezoekers in Expected/Totaal). Totaal = som van de
-        kanalen. Gescand = Weeztix check-in. De dagcurve telt tickets die op die
+        handmatig (verwachte bezoekers in Expected/Totaal). Totaal = shop +
+        deurverkoop + gebruikt uit de pools, niet de gereserveerde poolgrootte.
+        Gescand = Weeztix check-in. De dagcurve telt tickets die op die
         kalenderdag zijn verkocht, gestapeld per event — niet het eventtotaal op
         de eventdag. Historie komt uit de Weeztix order-histogram (zelfde bron
         als Insights), aangevuld met dagelijkse snapshots voor vandaag.

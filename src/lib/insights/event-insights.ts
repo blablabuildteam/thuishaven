@@ -1003,13 +1003,14 @@ export async function loadEventInsightsFresh(options?: {
       const raListing = raByEdition.get(e.id);
       /**
        * Weeztix counts a barcode as sold the moment it is issued into the
-       * Appic/RA/vrienden pool. Door scans stay on `scanned`; swapping them
-       * in after the night made Verkocht disagree with the Weeztix total.
+       * Appic/RA/vrienden pool. An untouched barcode is not a sale: Verkocht
+       * is shop sales plus door scans out of those pools.
        */
       const pools = [appic, raInv, vrienden];
       const splitIssued = pools.reduce((sum, p) => sum + (p?.sold ?? 0), 0);
+      const poolUsed = pools.reduce((sum, p) => sum + (p?.scanned ?? 0), 0);
       const shopSold = Math.max(0, inv.sold - splitIssued);
-      const sold = inv.sold;
+      const sold = shopSold + poolUsed;
       const capacity = inv.capacity;
       const fillPct =
         capacity != null && capacity > 0 ? (sold / capacity) * 100 : null;
@@ -1693,7 +1694,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v50"],
+  ["event-insights-upcoming-v51"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1709,7 +1710,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v50"],
+  ["event-insights-past-v51"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],
@@ -1758,7 +1759,7 @@ export const loadEventInsights = cache(async (options?: {
   }
 
   return rememberTtl(
-    `event-insights:v50:${limit}:${asOfDay}`,
+    `event-insights:v51:${limit}:${asOfDay}`,
     DASHBOARD_TTL_MS,
     async () => {
       // Outside Next data cache: recover empty DB / schedule list refresh
