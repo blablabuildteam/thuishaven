@@ -131,6 +131,16 @@ export function checkLabel(check: EmailCheck | undefined): string {
   }
 }
 
+/** Tier of the best usable address, ignoring who was already mailed. */
+export function bestTargetTier(input: {
+  contacts: RankableContact[];
+  company?: CompanyRef;
+  companyEmail?: string | null;
+  checks?: Record<string, EmailCheck>;
+}): TargetTier | null {
+  return rankMailTargets({ ...input, max: 1 }).targets[0]?.tier ?? null;
+}
+
 export function rankMailTargets(input: {
   contacts: RankableContact[];
   company?: CompanyRef;

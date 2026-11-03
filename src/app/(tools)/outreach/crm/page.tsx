@@ -10,7 +10,7 @@ import { hasOutreachAiConfigured } from "@/lib/integrations/outreach";
 import { loadLiveSendOverview } from "@/lib/outreach/batches";
 import { listCrmRecords, type CrmRecord } from "@/lib/outreach/crm";
 import { mailAngleFor } from "@/lib/outreach/mail-angle";
-import { leadScore } from "@/lib/outreach/lead-score";
+import { leadScoreForRecord } from "@/lib/outreach/lead-score";
 import { listQueueItems } from "@/lib/outreach/queue";
 import {
   outreachTestSendBlockReason,
@@ -110,17 +110,7 @@ export default async function OutreachCrmPage({
       return {
         row: toClientRow(row),
         angle,
-        score: leadScore({
-          doelgroepFit: row.doelgroepFit,
-          angleId: angle.id,
-          jubileeYearsAway: angle.jubileeYearsAway,
-          hasEmail: Boolean(row.email),
-          hasContact: Boolean(row.decisionMakerName),
-          openCount: row.openCount,
-          clickCount: row.clickCount,
-          replyCount: row.replyCount,
-          status: row.status,
-        }),
+        score: leadScoreForRecord(row, angle),
       };
     });
   const initialProspectId =
