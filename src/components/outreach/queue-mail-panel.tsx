@@ -24,12 +24,12 @@ type Props = {
 
 export const QUEUE_STATUS_TONE: Record<
   QueueItem["statusLabel"],
-  "neutral" | "accent" | "success" | "warn" | "info"
+  "neutral" | "accent" | "success" | "warn" | "info" | "danger"
 > = {
-  concept: "info",
-  review: "info",
-  gepland: "accent",
-  verlopen: "neutral",
+  concept: "accent",
+  review: "accent",
+  gepland: "success",
+  verlopen: "danger",
 };
 
 export const QUEUE_STATUS_NL: Record<QueueItem["statusLabel"], string> = {

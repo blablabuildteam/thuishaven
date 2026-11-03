@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { memo, useCallback, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { MailDrawer } from "@/components/outreach/mail-drawer";
+import { QueueSchedule } from "@/components/outreach/queue-schedule";
 import {
   QUEUE_STATUS_NL,
   QUEUE_STATUS_TONE,
@@ -61,7 +62,7 @@ const COMPANY_HANDOFF_VARIANTS = OUTREACH_VARIANTS.filter(
 );
 
 /** Client-safe shape — avoid importing server crm.ts (postgres) into the browser. */
-type CrmRow = {
+export type CrmRow = {
   id: string;
   companyName: string;
   website?: string | null;
@@ -117,10 +118,6 @@ function openMailTargets(row: CrmRow) {
   }).targets;
 }
 
-function hasOpenMailTarget(row: CrmRow): boolean {
-  return openMailTargets(row).length > 0;
-}
-
 const PERSON_VERDICT: Record<TargetTier, { label: string; tone: string }> = {
   0: { label: "Lijkt de juiste", tone: "text-text" },
   1: { label: "Lijkt de juiste", tone: "text-text" },
@@ -166,7 +163,14 @@ function foundPeople(row: CrmRow): FoundPerson[] {
         label: verdict.label,
         tone: verdict.tone,
       };
-    });
+    })
+    .sort((a, b) => (a.email ? a.tier : 10) - (b.email ? b.tier : 10));
+}
+
+function websiteHref(website: string | null | undefined): string | null {
+  const w = website?.trim();
+  if (!w) return null;
+  return /^https?:\/\//i.test(w) ? w : `https://${w}`;
 }
 
 function fmtEmployees(count: number | null): string {
@@ -207,7 +211,11 @@ type Props = {
   initialStage?: WerklijstStage;
   /** Preselect + show this company (e.g. from a dossier link). */
   initialProspectId?: string | null;
+  cadenceLabel?: string;
+  cadenceRationale?: string;
 };
+
+const PAGE_SIZE = 60;
 
 const STAGES: { id: WerklijstStage; label: string; hint: string }[] = [
   { id: "all", label: "Alles", hint: "Alle bedrijven in dit filter" },
@@ -218,19 +226,40 @@ const STAGES: { id: WerklijstStage; label: string; hint: string }[] = [
   { id: "verstuurd", label: "Verstuurd", hint: "Minstens één echte mail" },
 ];
 
-function rowStage(
-  row: CrmRow,
-  pending: QueueItem[],
-  canMail: boolean,
-): Exclude<WerklijstStage, "all"> | null {
-  if (pending.some((i) => i.statusLabel === "verlopen")) return "verlopen";
-  if (pending.some((i) => i.statusLabel === "review" || i.statusLabel === "concept")) {
-    return "check";
+type Stage = Exclude<WerklijstStage, "all">;
+
+/** A company with several mails can sit in several tabs (e.g. one planned, one to check). */
+function rowStages(row: CrmRow, pending: QueueItem[], canMail: boolean): Set<Stage> {
+  const out = new Set<Stage>();
+  for (const i of pending) {
+    if (i.statusLabel === "verlopen") out.add("verlopen");
+    else if (i.statusLabel === "gepland") out.add("gepland");
+    else out.add("check");
   }
-  if (pending.some((i) => i.statusLabel === "gepland")) return "gepland";
-  if (row.mailCount > 0) return "verstuurd";
-  if (canMail) return "nog";
-  return null;
+  if (row.mailCount > 0) out.add("verstuurd");
+  if (canMail && out.size === 0) out.add("nog");
+  return out;
+}
+
+type RowMeta = {
+  canMail: boolean;
+  pending: QueueItem[];
+  stages: Set<Stage>;
+  people: FoundPerson[];
+  hasRightPerson: boolean;
+};
+
+async function postEmails(body: Record<string, unknown>) {
+  const res = await fetch("/api/outreach/emails", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { error: (data.error as string | undefined) ?? "Actie mislukt" };
+  }
+  return data as Record<string, unknown>;
 }
 
 type MailFilter =
@@ -252,14 +281,19 @@ type SortKey = "score" | "name" | "last";
 
 type SignalId = Extract<MailFilter, `sig_${string}`>;
 
-function signalMatch(id: SignalId, row: CrmRow, angle: Angle): boolean {
+function signalMatch(
+  id: SignalId,
+  row: CrmRow,
+  angle: Angle,
+  canMail: boolean,
+): boolean {
   switch (id) {
     case "sig_jub_now":
       return angle.id === "jubileum" && angle.jubileeYearsAway === 0 && row.mailCount === 0;
     case "sig_jub_soon":
       return angle.id === "jubileum" && (angle.jubileeYearsAway ?? 0) >= 1 && row.mailCount === 0;
     case "sig_fresh":
-      return isMailableAngle(angle.id) && hasOpenMailTarget(row);
+      return canMail;
     case "sig_followup":
       return (
         row.openCount > 0 &&
@@ -306,6 +340,8 @@ export function CrmCompaniesTable({
   aiConfigured = true,
   initialStage = "all",
   initialProspectId = null,
+  cadenceLabel = "",
+  cadenceRationale = "",
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -335,8 +371,9 @@ export function CrmCompaniesTable({
   const [picked, setPicked] = useState<Set<string>>(
     () => new Set(initialProspectId ? [initialProspectId] : []),
   );
-  const [addingId, setAddingId] = useState<string | null>(null);
-  const [addForm, setAddForm] = useState({ name: "", title: "", email: "" });
+  const [expanded, setExpanded] = useState<Set<string>>(
+    () => new Set(initialProspectId ? [initialProspectId] : []),
+  );
   const closeDrawer = useCallback(() => setDrawerId(null), []);
 
   const pendingByProspect = useMemo(() => {
@@ -350,21 +387,18 @@ export function CrmCompaniesTable({
   }, [queueItems]);
 
   const meta = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        canMail: boolean;
-        pending: QueueItem[];
-        stage: Exclude<WerklijstStage, "all"> | null;
-      }
-    >();
+    const map = new Map<string, RowMeta>();
     for (const { row, angle } of rows) {
-      const canMail = isMailableAngle(angle.id) && hasOpenMailTarget(row);
+      const canMail =
+        isMailableAngle(angle.id) && openMailTargets(row).length > 0;
       const pendingMails = pendingByProspect.get(row.id) ?? [];
+      const people = foundPeople(row);
       map.set(row.id, {
         canMail,
         pending: pendingMails,
-        stage: rowStage(row, pendingMails, canMail),
+        stages: rowStages(row, pendingMails, canMail),
+        people,
+        hasRightPerson: people.some((p) => p.tier === 0 || p.tier === 1),
       });
     }
     return map;
@@ -379,7 +413,7 @@ export function CrmCompaniesTable({
       verlopen: 0,
       verstuurd: 0,
     };
-    for (const m of meta.values()) if (m.stage) c[m.stage] += 1;
+    for (const m of meta.values()) for (const s of m.stages) c[s] += 1;
     return c;
   }, [rows.length, meta]);
 
@@ -393,10 +427,12 @@ export function CrmCompaniesTable({
   const signalCounts = useMemo(() => {
     const out = {} as Record<SignalId, number>;
     for (const s of SIGNALS) {
-      out[s.id] = rows.filter(({ row, angle }) => signalMatch(s.id, row, angle)).length;
+      out[s.id] = rows.filter(({ row, angle }) =>
+        signalMatch(s.id, row, angle, meta.get(row.id)?.canMail ?? false),
+      ).length;
     }
     return out;
-  }, [rows]);
+  }, [rows, meta]);
 
   const counts = useMemo(() => {
     const c = {
@@ -458,10 +494,19 @@ export function CrmCompaniesTable({
         return false;
       }
 
-      if (stage !== "all" && meta.get(row.id)?.stage !== stage) return false;
+      if (stage !== "all" && !meta.get(row.id)?.stages.has(stage)) return false;
 
       if (mail.startsWith("sig_")) {
-        if (!signalMatch(mail as SignalId, row, angle)) return false;
+        if (
+          !signalMatch(
+            mail as SignalId,
+            row,
+            angle,
+            meta.get(row.id)?.canMail ?? false,
+          )
+        ) {
+          return false;
+        }
       }
 
       switch (mail) {
@@ -541,6 +586,10 @@ export function CrmCompaniesTable({
       return true;
     });
     return [...list].sort((a, b) => {
+      if (initialProspectId) {
+        if (a.row.id === initialProspectId) return -1;
+        if (b.row.id === initialProspectId) return 1;
+      }
       if (sort === "name") {
         return a.row.companyName.localeCompare(b.row.companyName, "nl");
       }
@@ -552,7 +601,19 @@ export function CrmCompaniesTable({
         a.row.companyName.localeCompare(b.row.companyName, "nl")
       );
     });
-  }, [rows, q, mail, region, completeness, sort, stage, meta]);
+  }, [rows, q, mail, region, completeness, sort, stage, meta, initialProspectId]);
+
+  const filterKey = `${q}|${mail}|${region}|${completeness}|${sort}|${stage}`;
+  const [shown, setShown] = useState({ key: filterKey, n: PAGE_SIZE });
+  const shownN = shown.key === filterKey ? shown.n : PAGE_SIZE;
+  const visible = filtered.slice(0, shownN);
+  const plannedItems = useMemo(
+    () => queueItems.filter((i) => i.scheduledAt),
+    [queueItems],
+  );
+  const nextPlanned = plannedItems
+    .filter((i) => i.statusLabel === "gepland")
+    .sort((a, b) => a.scheduledAt!.localeCompare(b.scheduledAt!))[0];
 
   const byId = useMemo(
     () => new Map(rows.map((r) => [r.row.id, r])),
@@ -567,7 +628,7 @@ export function CrmCompaniesTable({
   );
   const drawerRow = drawerId ? byId.get(drawerId) : undefined;
 
-  function togglePick(id: string) {
+  const togglePick = useCallback((id: string) => {
     setConfirmPlan(false);
     setPicked((prev) => {
       const next = new Set(prev);
@@ -575,90 +636,63 @@ export function CrmCompaniesTable({
       else next.add(id);
       return next;
     });
-  }
+  }, []);
+
+  const toggleExpand = useCallback((id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const onPersonSaved = useCallback(
+    (text: string) => {
+      setError(null);
+      setMessage(text);
+      startTransition(() => router.refresh());
+    },
+    [router],
+  );
+
+  const cancelPlanning = useCallback(
+    async (emailIds: string[]) => {
+      if (!emailIds.length) return;
+      setError(null);
+      setMessage(null);
+      setBusy(true);
+      try {
+        const data = await postEmails({
+          action: "clear-queue-schedule",
+          emailIds,
+        });
+        if (typeof data.error === "string") {
+          setError(data.error);
+          return;
+        }
+        const n = typeof data.cleared === "number" ? data.cleared : emailIds.length;
+        setMessage(
+          `Planning geannuleerd voor ${n} mail${n === 1 ? "" : "s"}. Ze staan weer bij Te checken.`,
+        );
+        startTransition(() => router.refresh());
+      } finally {
+        setBusy(false);
+      }
+    },
+    [router],
+  );
 
   function pickTopMailable() {
     setPicked(
       new Set(
         filtered
-          .filter(({ row }) => meta.get(row.id)?.stage === "nog")
+          .filter(({ row }) => meta.get(row.id)?.stages.has("nog"))
           .slice(0, PICK_TOP)
           .map(({ row }) => row.id),
       ),
     );
   }
-
-  async function post(body: Record<string, unknown>) {
-    const res = await fetch("/api/outreach/emails", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      return { error: (data.error as string | undefined) ?? "Actie mislukt" };
-    }
-    return data as Record<string, unknown>;
-  }
-
-  async function addPerson(row: CrmRow) {
-    const name = addForm.name.trim();
-    const email = addForm.email.trim();
-    const title = addForm.title.trim();
-    if (name.length < 2) {
-      setError("Vul minimaal een naam in");
-      return;
-    }
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError("Dit e-mailadres klopt niet");
-      return;
-    }
-    const existing = row.contacts
-      .filter((c) => c.name.trim().length >= 2)
-      .map((c) => ({
-        name: c.name.trim(),
-        ...(c.title?.trim() ? { title: c.title.trim() } : {}),
-        ...(c.email?.trim() ? { email: c.email.trim() } : {}),
-        ...(c.linkedinUrl?.trim() ? { linkedinUrl: c.linkedinUrl.trim() } : {}),
-      }));
-    const matched = existing.findIndex(
-      (c) => c.email?.toLowerCase() === row.email?.trim().toLowerCase(),
-    );
-    const primaryIndex = matched >= 0 ? matched : existing.length;
-    setError(null);
-    setMessage(null);
-    setBusy(true);
-    try {
-      const res = await fetch("/api/outreach/crm/contacts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prospectId: row.id,
-          contacts: [
-            ...existing,
-            {
-              name,
-              ...(title ? { title } : {}),
-              ...(email ? { email } : {}),
-            },
-          ],
-          primaryIndex,
-        }),
-      });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        setError(data.error ?? "Opslaan mislukt");
-        return;
-      }
-      setMessage(`${name} toegevoegd bij ${row.companyName}`);
-      setAddingId(null);
-      setAddForm({ name: "", title: "", email: "" });
-      startTransition(() => router.refresh());
-    } finally {
-      setBusy(false);
-    }
-  }
-
   function variantForRow(r: Row): OutreachVariantId {
     if (writeVariant !== "auto") return writeVariant;
     return (
@@ -699,7 +733,7 @@ export function CrmCompaniesTable({
         if (items.length > WRITE_CHUNK) {
           setMessage(`Bezig met schrijven… ${i} van ${items.length} mails`);
         }
-        const data = await post({ items: chunk, senderProfileId });
+        const data = await postEmails({ items: chunk, senderProfileId });
         if (typeof data.error === "string") {
           failures.push(data.error);
           continue;
@@ -747,7 +781,7 @@ export function CrmCompaniesTable({
     setConfirmPlan(false);
     setBusy(true);
     try {
-      const data = await post(
+      const data = await postEmails(
         action === "send-test"
           ? { action, emailIds: pickedEmailIds.slice(0, 40), testTo: defaultTestTo }
           : { action, emailIds: pickedEmailIds },
@@ -1110,11 +1144,36 @@ export function CrmCompaniesTable({
         </div>
       ) : null}
 
+      {stage === "gepland" || stage === "verlopen" ? (
+        <QueueSchedule
+          cadenceLabel={cadenceLabel}
+          cadenceRationale={cadenceRationale}
+          items={plannedItems}
+          onOpen={setDrawerId}
+          onCancel={(ids) => void cancelPlanning(ids)}
+          busy={busy || pending}
+        />
+      ) : nextPlanned ? (
+        <p className="mb-3 text-sm text-text-muted">
+          {stageCounts.gepland === 1
+            ? "1 bedrijf heeft een geplande mail"
+            : `${stageCounts.gepland} bedrijven hebben een geplande mail`}
+          , eerstvolgende {nextPlanned.scheduledLabel} ({nextPlanned.companyName}).{" "}
+          <button
+            type="button"
+            onClick={() => pickStage("gepland")}
+            className="text-accent underline-offset-2 hover:underline"
+          >
+            Bekijk of annuleer planning
+          </button>
+        </p>
+      ) : null}
+
       <p className="mb-3 text-xs text-text-dim">
         {filtered.length} van {rows.length}
         {mail === "kans" ? " · mailkans" : ""}
         {picked.size > 0 ? ` · ${picked.size} aangevinkt` : ""}
-        {" · vink aan om mails te schrijven of in te plannen, klik de naam voor het dossier"}
+        {" · klik op een rij voor alle personen en details"}
       </p>
 
       {filtered.length === 0 ? (
@@ -1130,282 +1189,50 @@ export function CrmCompaniesTable({
           <table className="w-full min-w-[860px] text-left text-sm">
             <thead className="border-b border-border text-[11px] uppercase tracking-wider text-text-dim">
               <tr>
-                <th className="w-10 py-2.5 pr-2 font-medium">
+                <th className="w-10 py-2 pr-2 font-medium">
                   <span className="sr-only">Selecteer</span>
                 </th>
-                <th className="px-0 py-2.5 pr-4 font-medium">Bedrijf</th>
-                <th className="px-4 py-2.5 font-medium">Grootte</th>
-                <th className="px-4 py-2.5 font-medium">Personen</th>
-                <th className="px-4 py-2.5 font-medium">Score</th>
-                <th className="px-4 py-2.5 font-medium">Waarom nu</th>
-                <th className="px-4 py-2.5 font-medium">Mail</th>
+                <th className="px-0 py-2 pr-4 font-medium">Bedrijf</th>
+                <th className="px-3 py-2 font-medium">Grootte</th>
+                <th className="px-3 py-2 font-medium">Beste persoon</th>
+                <th className="px-3 py-2 font-medium">Score</th>
+                <th className="px-3 py-2 font-medium">Waarom nu</th>
+                <th className="px-3 py-2 font-medium">Mail</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map(({ row, angle, score }) => {
-                const on = picked.has(row.id);
-                const rowMeta = meta.get(row.id);
-                const canMail = rowMeta?.canMail ?? false;
-                const pendingMails = rowMeta?.pending ?? [];
-                const headMail =
-                  pendingMails.find((i) => i.statusLabel === "verlopen") ??
-                  pendingMails.find(
-                    (i) => i.statusLabel === "review" || i.statusLabel === "concept",
-                  ) ??
-                  pendingMails[0];
-                const topReason =
-                  score.reasons[0]?.replace(/^\+\d+\s*/, "") ?? null;
-                const missing = missingDataLabels(row);
-                const showIncompleteBadge =
-                  row.incomplete && row.mailCount === 0;
-                const people = foundPeople(row);
-                const shownPeople = people.slice(0, 3);
-                const hasRightPerson = people.some(
-                  (p) => p.tier === 0 || p.tier === 1,
-                );
+              {visible.map((item) => {
+                const m = meta.get(item.row.id);
+                if (!m) return null;
                 return (
-                  <tr
-                    key={row.id}
-                    className={`border-b border-border/70 last:border-0 hover:bg-surface/60 ${
-                      on ? "bg-accent/5" : ""
-                    }`}
-                  >
-                    <td className="py-3 pr-2 align-middle">
-                      <input
-                        type="checkbox"
-                        checked={on}
-                        disabled={!canMail && pendingMails.length === 0 && !on}
-                        title={
-                          pendingMails.length > 0
-                            ? "Selecteer om te testen of in te plannen"
-                            : canMail
-                              ? "Selecteer om een mail te laten schrijven"
-                              : row.mailCount > 0
-                                ? "Al verstuurd"
-                                : !row.email
-                                  ? "Geen e-mail"
-                                  : "Geen mailkans"
-                        }
-                        onChange={() => togglePick(row.id)}
-                        aria-label={`Selecteer ${row.companyName}`}
-                      />
-                    </td>
-                    <td className="px-0 py-3 pr-4">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => router.push(`/outreach/crm/${row.id}`)}
-                          className="text-left font-medium text-text hover:text-accent"
-                        >
-                          {row.companyName}
-                        </button>
-                        {showIncompleteBadge ? (
-                          <span
-                            title={
-                              missing.length
-                                ? `Ontbreekt: ${missing.join(" / ")}`
-                                : "Gegevens ontbreken"
-                            }
-                            className="inline-flex border border-warn/50 bg-warn/15 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-warn-fg"
-                          >
-                            gegevens ontbreken
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="text-xs text-text-dim">
-                        {row.apolloCity && row.inRegion
-                          ? row.apolloCity
-                          : row.city ?? row.kvkCity ?? "plaats?"}
-                        {!row.inRegion &&
-                        (row.city || row.kvkCity || row.apolloCity)
-                          ? " · buiten regio"
-                          : ""}
-                      </p>
-                    </td>
-                    <td
-                      className="px-4 py-3 tabular-nums text-text"
-                      title={
-                        row.employeeCount == null
-                          ? "Aantal medewerkers nog niet bekend"
-                          : "Aantal medewerkers"
-                      }
-                    >
-                      {fmtEmployees(row.employeeCount)}
-                    </td>
-                    <td className="px-4 py-3">
-                      {shownPeople.length > 0 ? (
-                        <ul className="space-y-2">
-                          {shownPeople.map((person, personIndex) => (
-                            <li key={`${person.name}-${person.email ?? personIndex}`}>
-                              <p className="font-medium text-text">
-                                {person.name}
-                              </p>
-                              <p className="max-w-[16rem] text-xs text-text-muted">
-                                {person.title ?? "Functie onbekend"}
-                                {person.email ? ` · ${person.email}` : ""}
-                              </p>
-                              <p className={`text-xs ${person.tone}`}>
-                                {person.label}
-                              </p>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-xs text-warn-fg">
-                          Nog niemand gevonden
-                        </p>
-                      )}
-                      {people.length > shownPeople.length ? (
-                        <p className="mt-1 text-[11px] text-text-dim">
-                          +{people.length - shownPeople.length} andere
-                        </p>
-                      ) : null}
-                      {!hasRightPerson ? (
-                        <p className="mt-1 text-xs text-warn-fg">
-                          Verder zoeken
-                        </p>
-                      ) : null}
-                      {addingId === row.id ? (
-                        <form
-                          className="mt-2 space-y-1.5"
-                          onSubmit={(ev) => {
-                            ev.preventDefault();
-                            void addPerson(row);
-                          }}
-                        >
-                          <input
-                            required
-                            aria-label="Naam"
-                            placeholder="Naam"
-                            value={addForm.name}
-                            onChange={(ev) =>
-                              setAddForm((f) => ({ ...f, name: ev.target.value }))
-                            }
-                            className="block w-full max-w-[16rem] border border-border bg-bg px-2 py-1 text-xs text-text"
-                          />
-                          <input
-                            aria-label="Functie"
-                            placeholder="Functie"
-                            value={addForm.title}
-                            onChange={(ev) =>
-                              setAddForm((f) => ({
-                                ...f,
-                                title: ev.target.value,
-                              }))
-                            }
-                            className="block w-full max-w-[16rem] border border-border bg-bg px-2 py-1 text-xs text-text"
-                          />
-                          <input
-                            aria-label="E-mail"
-                            placeholder="E-mail"
-                            value={addForm.email}
-                            onChange={(ev) =>
-                              setAddForm((f) => ({
-                                ...f,
-                                email: ev.target.value,
-                              }))
-                            }
-                            className="block w-full max-w-[16rem] border border-border bg-bg px-2 py-1 text-xs text-text"
-                          />
-                          <div className="flex gap-2">
-                            <button
-                              type="submit"
-                              disabled={busy}
-                              className="bg-accent px-2 py-1 text-xs text-accent-contrast disabled:opacity-50"
-                            >
-                              Opslaan
-                            </button>
-                            <button
-                              type="button"
-                              className="text-xs text-text-dim underline"
-                              onClick={() => setAddingId(null)}
-                            >
-                              Annuleer
-                            </button>
-                          </div>
-                        </form>
-                      ) : (
-                        <button
-                          type="button"
-                          className="mt-1 text-xs text-text-muted underline-offset-2 hover:text-text hover:underline"
-                          onClick={() => {
-                            setAddingId(row.id);
-                            setAddForm({ name: "", title: "", email: "" });
-                            setError(null);
-                          }}
-                        >
-                          Persoon toevoegen
-                        </button>
-                      )}
-                    </td>
-                    <td
-                      className="px-4 py-3"
-                      title={score.reasons.join("\n")}
-                    >
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="font-display text-sm tabular-nums tracking-wide text-text">
-                          {score.score}
-                        </span>
-                        <StatusBadge tone={leadTierTone(score.tier)}>
-                          {score.tier}
-                        </StatusBadge>
-                      </div>
-                      {topReason ? (
-                        <p className="mt-1 max-w-[10rem] text-xs text-text-dim">
-                          {topReason}
-                        </p>
-                      ) : null}
-                    </td>
-                    <td className="px-4 py-3" title={score.reasons.join("\n")}>
-                      <StatusBadge tone={mailAngleTone(angle.id)}>
-                        {angle.label}
-                      </StatusBadge>
-                      <p className="mt-1 max-w-sm text-xs text-text-muted">
-                        {angle.detail}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-text-muted">
-                      {headMail ? (
-                        <button
-                          type="button"
-                          onClick={() => setDrawerId(row.id)}
-                          className="group block text-left"
-                          title="Open de mail om te lezen, testen of plannen"
-                        >
-                          <StatusBadge tone={QUEUE_STATUS_TONE[headMail.statusLabel]}>
-                            {QUEUE_STATUS_NL[headMail.statusLabel]}
-                          </StatusBadge>
-                          {headMail.statusLabel === "gepland" &&
-                          headMail.scheduledLabel ? (
-                            <span className="mt-1 block tabular-nums text-text-dim">
-                              {headMail.scheduledLabel}
-                            </span>
-                          ) : null}
-                          <span className="mt-1 block text-accent group-hover:underline">
-                            {pendingMails.length > 1
-                              ? `Open ${pendingMails.length} mails`
-                              : "Open mail"}
-                          </span>
-                        </button>
-                      ) : null}
-                      {row.lastSentAt ? (
-                        <div className={headMail ? "mt-2" : undefined}>
-                          Verstuurd {fmt(row.lastSentAt)}
-                          <p className="text-text-dim">
-                            {row.openCount} open · {row.replyCount} reply
-                          </p>
-                        </div>
-                      ) : !headMail ? (
-                        <span className="text-text-dim">Nog niet</span>
-                      ) : null}
-                    </td>
-                  </tr>
+                  <CompanyRow
+                    key={item.row.id}
+                    item={item}
+                    meta={m}
+                    on={picked.has(item.row.id)}
+                    open={expanded.has(item.row.id)}
+                    disabled={busy || pending}
+                    onTogglePick={togglePick}
+                    onToggleOpen={toggleExpand}
+                    onOpenMail={setDrawerId}
+                    onCancelPlanning={cancelPlanning}
+                    onPersonSaved={onPersonSaved}
+                  />
                 );
               })}
             </tbody>
           </table>
         </div>
       )}
+      {filtered.length > visible.length ? (
+        <button
+          type="button"
+          onClick={() => setShown({ key: filterKey, n: shownN + PAGE_SIZE })}
+          className="mt-3 border border-border px-3 py-1.5 text-sm text-text-muted hover:border-text-dim hover:text-text"
+        >
+          Toon meer ({filtered.length - visible.length} over)
+        </button>
+      ) : null}
 
       {drawerRow ? (
         <MailDrawer
@@ -1420,5 +1247,439 @@ export function CrmCompaniesTable({
         />
       ) : null}
     </div>
+  );
+}
+
+const MAIL_GROUPS: {
+  id: "verlopen" | "check" | "gepland";
+  match: (i: QueueItem) => boolean;
+  status: QueueItem["statusLabel"];
+}[] = [
+  { id: "verlopen", match: (i) => i.statusLabel === "verlopen", status: "verlopen" },
+  {
+    id: "check",
+    match: (i) => i.statusLabel === "review" || i.statusLabel === "concept",
+    status: "review",
+  },
+  { id: "gepland", match: (i) => i.statusLabel === "gepland", status: "gepland" },
+];
+
+type CompanyRowProps = {
+  item: Row;
+  meta: RowMeta;
+  on: boolean;
+  open: boolean;
+  disabled: boolean;
+  onTogglePick: (id: string) => void;
+  onToggleOpen: (id: string) => void;
+  onOpenMail: (id: string) => void;
+  onCancelPlanning: (emailIds: string[]) => Promise<void>;
+  onPersonSaved: (message: string) => void;
+};
+
+const CompanyRow = memo(function CompanyRow({
+  item: { row, angle, score },
+  meta: m,
+  on,
+  open,
+  disabled,
+  onTogglePick,
+  onToggleOpen,
+  onOpenMail,
+  onCancelPlanning,
+  onPersonSaved,
+}: CompanyRowProps) {
+  const pendingMails = m.pending;
+  const best = m.people[0];
+  const groups = MAIL_GROUPS.map((g) => ({
+    ...g,
+    items: pendingMails.filter(g.match),
+  })).filter((g) => g.items.length > 0);
+  const planned = groups.find((g) => g.id === "gepland")?.items ?? [];
+  const missing = missingDataLabels(row);
+  const city =
+    row.apolloCity && row.inRegion
+      ? row.apolloCity
+      : (row.city ?? row.kvkCity ?? "plaats?");
+  const outside =
+    !row.inRegion && Boolean(row.city || row.kvkCity || row.apolloCity);
+  const site = websiteHref(row.website);
+
+  return (
+    <>
+      <tr
+        onClick={(ev) => {
+          if (
+            (ev.target as HTMLElement).closest(
+              "a,button,input,select,textarea,label",
+            )
+          ) {
+            return;
+          }
+          onToggleOpen(row.id);
+        }}
+        className={`cursor-pointer border-b border-border/70 hover:bg-surface/60 ${
+          on ? "bg-accent/5" : ""
+        } ${open ? "bg-surface/60" : ""}`}
+      >
+        <td className="py-2 pr-2 align-middle">
+          <input
+            type="checkbox"
+            checked={on}
+            disabled={!m.canMail && pendingMails.length === 0 && !on}
+            title={
+              pendingMails.length > 0
+                ? "Selecteer om te testen of in te plannen"
+                : m.canMail
+                  ? "Selecteer om een mail te laten schrijven"
+                  : row.mailCount > 0
+                    ? "Al verstuurd"
+                    : !row.email
+                      ? "Geen e-mail"
+                      : "Geen mailkans"
+            }
+            onChange={() => onTogglePick(row.id)}
+            aria-label={`Selecteer ${row.companyName}`}
+          />
+        </td>
+        <td className="max-w-[16rem] px-0 py-2 pr-4">
+          <button
+            type="button"
+            onClick={() => onToggleOpen(row.id)}
+            aria-expanded={open}
+            className="flex max-w-full items-center gap-1.5 text-left"
+          >
+            <span
+              aria-hidden
+              className={`inline-block w-3 shrink-0 text-[10px] text-text-dim transition-transform ${
+                open ? "rotate-90" : ""
+              }`}
+            >
+              ▶
+            </span>
+            <span className="truncate font-medium text-text">
+              {row.companyName}
+            </span>
+          </button>
+          <p className="truncate pl-[1.125rem] text-xs text-text-dim">
+            {city}
+            {outside ? " · buiten regio" : ""}
+            {row.incomplete && row.mailCount === 0 ? (
+              <span
+                className="text-warn-fg"
+                title={
+                  missing.length
+                    ? `Ontbreekt: ${missing.join(" / ")}`
+                    : "Gegevens ontbreken"
+                }
+              >
+                {" "}
+                · gegevens ontbreken
+              </span>
+            ) : null}
+          </p>
+        </td>
+        <td
+          className="px-3 py-2 tabular-nums text-text"
+          title={
+            row.employeeCount == null
+              ? "Aantal medewerkers nog niet bekend"
+              : "Aantal medewerkers"
+          }
+        >
+          {fmtEmployees(row.employeeCount)}
+        </td>
+        <td className="max-w-[15rem] px-3 py-2">
+          {best ? (
+            <>
+              <p className="truncate text-text" title={best.title ?? undefined}>
+                {best.name}
+              </p>
+              <p className="truncate text-xs">
+                <span className={best.tone}>{best.label}</span>
+                {m.people.length > 1 ? (
+                  <span className="text-text-dim">
+                    {" "}
+                    · +{m.people.length - 1}
+                  </span>
+                ) : null}
+                {!m.hasRightPerson ? (
+                  <span className="text-warn-fg"> · verder zoeken</span>
+                ) : null}
+              </p>
+            </>
+          ) : (
+            <p className="text-xs text-warn-fg">Nog niemand gevonden</p>
+          )}
+        </td>
+        <td className="px-3 py-2 whitespace-nowrap">
+          <span className="font-display text-sm tabular-nums tracking-wide text-text">
+            {score.score}
+          </span>{" "}
+          <StatusBadge tone={leadTierTone(score.tier)}>{score.tier}</StatusBadge>
+        </td>
+        <td className="px-3 py-2">
+          <StatusBadge tone={mailAngleTone(angle.id)}>{angle.label}</StatusBadge>
+        </td>
+        <td className="px-3 py-2 text-xs text-text-muted">
+          {groups.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              {groups.map((g) => (
+                <StatusBadge key={g.id} tone={QUEUE_STATUS_TONE[g.status]}>
+                  {g.items.length > 1 ? `${g.items.length}× ` : ""}
+                  {QUEUE_STATUS_NL[g.status]}
+                </StatusBadge>
+              ))}
+              {planned[0]?.scheduledLabel ? (
+                <span className="tabular-nums text-text-dim">
+                  {planned[0].scheduledLabel}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          {groups.length > 0 ? (
+            <div className="mt-1 flex flex-wrap gap-x-3">
+              <button
+                type="button"
+                onClick={() => onOpenMail(row.id)}
+                className="text-accent underline-offset-2 hover:underline"
+                title="Open de mail om te lezen, testen of plannen"
+              >
+                {pendingMails.length > 1
+                  ? `Open ${pendingMails.length} mails`
+                  : "Open mail"}
+              </button>
+              {planned.length > 0 ? (
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() =>
+                    void onCancelPlanning(planned.map((i) => i.emailId))
+                  }
+                  className="text-text-muted underline-offset-2 hover:text-danger hover:underline disabled:opacity-50"
+                >
+                  Annuleer planning
+                </button>
+              ) : null}
+            </div>
+          ) : row.lastSentAt ? (
+            <span>
+              Verstuurd {fmt(row.lastSentAt)}
+              <span className="text-text-dim">
+                {" "}
+                · {row.openCount} open · {row.replyCount} reply
+              </span>
+            </span>
+          ) : (
+            <span className="text-text-dim">Nog niet</span>
+          )}
+        </td>
+      </tr>
+      {open ? (
+        <tr className="border-b border-border/70 bg-surface/40">
+          <td />
+          <td colSpan={6} className="py-4 pr-4">
+            <div className="grid gap-6 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+              <div>
+                <h4 className="text-[11px] font-medium uppercase tracking-wider text-text-dim">
+                  Personen
+                </h4>
+                {m.people.length > 0 ? (
+                  <ul className="mt-2 space-y-2">
+                    {m.people.map((person, i) => (
+                      <li key={`${person.name}-${person.email ?? i}`}>
+                        <p className="text-text">
+                          <span className="font-medium">{person.name}</span>
+                          <span className={`ml-2 text-xs ${person.tone}`}>
+                            {person.label}
+                          </span>
+                        </p>
+                        <p className="text-xs text-text-muted">
+                          {person.title ?? "Functie onbekend"}
+                          {person.email ? ` · ${person.email}` : ""}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-xs text-text-muted">
+                    Nog niemand gevonden.
+                  </p>
+                )}
+                {!m.hasRightPerson ? (
+                  <p className="mt-2 text-xs text-warn-fg">
+                    Nog geen duidelijke beslisser (events, office of HR).
+                    Zoek verder via LinkedIn of de website.
+                  </p>
+                ) : null}
+                <AddPersonForm row={row} onSaved={onPersonSaved} />
+              </div>
+              <div className="space-y-4 text-sm">
+                <div>
+                  <h4 className="text-[11px] font-medium uppercase tracking-wider text-text-dim">
+                    Waarom nu
+                  </h4>
+                  <p className="mt-1 text-text-muted">{angle.detail}</p>
+                </div>
+                {score.reasons.length > 0 ? (
+                  <div>
+                    <h4 className="text-[11px] font-medium uppercase tracking-wider text-text-dim">
+                      Score {score.score}
+                    </h4>
+                    <ul className="mt-1 space-y-0.5 text-xs text-text-muted">
+                      {score.reasons.map((r) => (
+                        <li key={r}>{r}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                <div className="flex flex-wrap gap-x-4 text-xs">
+                  <Link
+                    href={`/outreach/crm/${row.id}`}
+                    className="text-accent underline-offset-2 hover:underline"
+                  >
+                    Open dossier
+                  </Link>
+                  {site ? (
+                    <a
+                      href={site}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-text-muted underline-offset-2 hover:text-text hover:underline"
+                    >
+                      Website
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+      ) : null}
+    </>
+  );
+});
+
+function AddPersonForm({
+  row,
+  onSaved,
+}: {
+  row: CrmRow;
+  onSaved: (message: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", title: "", email: "" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    const name = form.name.trim();
+    const email = form.email.trim();
+    const title = form.title.trim();
+    if (name.length < 2) {
+      setError("Vul minimaal een naam in");
+      return;
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError("Dit e-mailadres klopt niet");
+      return;
+    }
+    const existing = row.contacts
+      .filter((c) => c.name.trim().length >= 2)
+      .map((c) => ({
+        name: c.name.trim(),
+        ...(c.title?.trim() ? { title: c.title.trim() } : {}),
+        ...(c.email?.trim() ? { email: c.email.trim() } : {}),
+        ...(c.linkedinUrl?.trim() ? { linkedinUrl: c.linkedinUrl.trim() } : {}),
+      }));
+    const matched = existing.findIndex(
+      (c) => c.email?.toLowerCase() === row.email?.trim().toLowerCase(),
+    );
+    const primaryIndex = matched >= 0 ? matched : existing.length;
+    setError(null);
+    setSaving(true);
+    try {
+      const res = await fetch("/api/outreach/crm/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prospectId: row.id,
+          contacts: [
+            ...existing,
+            { name, ...(title ? { title } : {}), ...(email ? { email } : {}) },
+          ],
+          primaryIndex,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Opslaan mislukt");
+        return;
+      }
+      setOpen(false);
+      setForm({ name: "", title: "", email: "" });
+      onSaved(`${name} toegevoegd bij ${row.companyName}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-3 text-xs text-text-muted underline-offset-2 hover:text-text hover:underline"
+      >
+        + Persoon toevoegen
+      </button>
+    );
+  }
+
+  return (
+    <form
+      className="mt-3 flex flex-wrap items-center gap-2"
+      onSubmit={(ev) => {
+        ev.preventDefault();
+        void save();
+      }}
+    >
+      {(
+        [
+          ["name", "Naam"],
+          ["title", "Functie"],
+          ["email", "E-mail"],
+        ] as const
+      ).map(([key, label]) => (
+        <input
+          key={key}
+          required={key === "name"}
+          aria-label={label}
+          placeholder={label}
+          value={form[key]}
+          onChange={(ev) => setForm((f) => ({ ...f, [key]: ev.target.value }))}
+          className="w-40 border border-border bg-bg px-2 py-1 text-xs text-text"
+        />
+      ))}
+      <button
+        type="submit"
+        disabled={saving}
+        className="bg-accent px-2 py-1 text-xs text-accent-contrast disabled:opacity-50"
+      >
+        {saving ? "Opslaan…" : "Opslaan"}
+      </button>
+      <button
+        type="button"
+        className="text-xs text-text-dim underline"
+        onClick={() => setOpen(false)}
+      >
+        Annuleer
+      </button>
+      {error ? (
+        <p className="w-full text-xs text-danger" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </form>
   );
 }

@@ -3,12 +3,12 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   CrmCompaniesTable,
+  type CrmRow,
   type WerklijstStage,
 } from "@/components/outreach/crm-companies-table";
-import { QueueSchedule } from "@/components/outreach/queue-schedule";
 import { hasOutreachAiConfigured } from "@/lib/integrations/outreach";
-import { listBatchesWithEmails } from "@/lib/outreach/batches";
-import { listCrmRecords } from "@/lib/outreach/crm";
+import { loadLiveSendOverview } from "@/lib/outreach/batches";
+import { listCrmRecords, type CrmRecord } from "@/lib/outreach/crm";
 import { mailAngleFor } from "@/lib/outreach/mail-angle";
 import { leadScore } from "@/lib/outreach/lead-score";
 import { listQueueItems } from "@/lib/outreach/queue";
@@ -29,6 +29,49 @@ const STAGE_IDS: WerklijstStage[] = [
   "verstuurd",
 ];
 
+/** Only what the table needs — the full record is several times larger. */
+function toClientRow(r: CrmRecord): CrmRow {
+  return {
+    id: r.id,
+    companyName: r.companyName,
+    website: r.website,
+    status: r.status,
+    email: r.email,
+    city: r.city,
+    kvkCity: r.kvkCity,
+    apolloCity: r.apolloCity,
+    inRegion: r.inRegion,
+    employeeCount: r.employeeCount,
+    apolloEmployeeCount: r.apolloEmployeeCount,
+    linkedinEmployeeEstimate: r.linkedinEmployeeEstimate,
+    kvkEmployeeCount: r.kvkEmployeeCount,
+    anniversaryYears: r.anniversaryYears,
+    lastTouchAt: r.lastTouchAt,
+    kvkHeadcountOff: r.kvkHeadcountOff,
+    mailCount: r.mailCount,
+    queuedCount: r.queuedCount,
+    draftCount: r.draftCount,
+    openCount: r.openCount,
+    clickCount: r.clickCount,
+    replyCount: r.replyCount,
+    lastSentAt: r.lastSentAt,
+    lastVariantKey: r.lastVariantKey,
+    searchLabel: r.searchLabel,
+    incomplete: r.incomplete,
+    decisionMakerName: r.decisionMakerName,
+    contacts: r.contacts.map((c) => ({
+      name: c.name,
+      title: c.title,
+      email: c.email,
+      linkedinUrl: c.linkedinUrl,
+      emailSource: c.emailSource,
+    })),
+    emailChecks: r.emailChecks,
+    mailedEmails: r.mailedEmails,
+    pendingEmails: r.pendingEmails,
+  };
+}
+
 export default async function OutreachCrmPage({
   searchParams,
 }: {
@@ -43,7 +86,7 @@ export default async function OutreachCrmPage({
   ] = await Promise.all([
     listCrmRecords(),
     listQueueItems(),
-    listBatchesWithEmails(),
+    loadLiveSendOverview(),
     resolveOutreachTestRecipient(),
     searchParams,
   ]);
@@ -65,7 +108,7 @@ export default async function OutreachCrmPage({
         nonMailing: row.nonMailing,
       });
       return {
-        row,
+        row: toClientRow(row),
         angle,
         score: leadScore({
           doelgroepFit: row.doelgroepFit,
@@ -87,9 +130,6 @@ export default async function OutreachCrmPage({
 
   const liveUnlocked = !liveSendBlockReason;
   const bouncePaused = Boolean(liveSendQuota?.bouncePause);
-  const plannedCount = queueItems.filter(
-    (i) => i.statusLabel === "gepland",
-  ).length;
 
   return (
     <div>
@@ -158,25 +198,11 @@ export default async function OutreachCrmPage({
             aiConfigured={hasOutreachAiConfigured()}
             initialStage={initialStage}
             initialProspectId={initialProspectId}
+            cadenceLabel={cadenceLabel}
+            cadenceRationale={cadenceRationale}
           />
         )}
       </section>
-
-      <details className="mb-10" open={initialStage === "gepland"}>
-        <summary className="cursor-pointer font-display text-lg tracking-[0.06em] text-text">
-          Planning per dag
-          <span className="ml-2 font-sans text-sm tracking-normal text-text-dim">
-            {plannedCount} ingepland
-          </span>
-        </summary>
-        <div className="mt-4">
-          <QueueSchedule
-            cadenceLabel={cadenceLabel}
-            cadenceRationale={cadenceRationale}
-            items={queueItems}
-          />
-        </div>
-      </details>
 
       {existingCustomers.length > 0 ? (
         <section className="border-t border-border pt-10">

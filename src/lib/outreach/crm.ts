@@ -338,43 +338,35 @@ export async function listCrmRecords(): Promise<{
   if (!hasDatabase()) return { rows: [], source: "empty" };
 
   const db = getDb();
-  const people = await db.select().from(prospects).orderBy(prospects.companyName);
-
-  const mailStats = await db
-    .select({
-      prospectId: outreachEmails.prospectId,
-      // Truly sent (or later lifecycle). Queued bakje mails do NOT count as mailed.
-      mailCount: sql<number>`count(*) filter (where ${outreachEmails.status} in ('sent','opened','clicked','replied','bounced','opted_out'))::int`,
-      queuedCount: sql<number>`count(*) filter (where ${outreachEmails.status} = 'queued')::int`,
-      draftCount: sql<number>`count(*) filter (where ${outreachEmails.status} = 'draft')::int`,
-      openCount: sql<number>`count(*) filter (where ${outreachEmails.openedAt} is not null)::int`,
-      clickCount: sql<number>`count(*) filter (where ${outreachEmails.clickedAt} is not null)::int`,
-      lastSent: sql<Date | null>`max(${outreachEmails.sentAt}) filter (where ${outreachEmails.sentAt} is not null)`,
-      lastVariantKey: sql<string | null>`(array_agg(${outreachEmails.variantKey} order by ${outreachEmails.sentAt} desc nulls last) filter (where ${outreachEmails.sentAt} is not null))[1]`,
-    })
-    .from(outreachEmails)
-    .groupBy(outreachEmails.prospectId);
-
-  const replyStats = await db
-    .select({
-      prospectId: inboundReplies.prospectId,
-      replyCount: sql<number>`count(*)::int`,
-      lastReply: sql<Date | null>`max(${inboundReplies.receivedAt})`,
-    })
-    .from(inboundReplies)
-    .groupBy(inboundReplies.prospectId);
-
-  const recipientStats = await db
-    .select({
-      prospectId: outreachEmails.prospectId,
-      mailedEmails: sql<string[]>`coalesce(array_agg(distinct lower(${outreachEmails.recipientEmail})) filter (where ${outreachEmails.status} in ('sent','opened','clicked','replied','bounced','opted_out') and ${outreachEmails.recipientEmail} is not null), '{}')`,
-      pendingEmails: sql<string[]>`coalesce(array_agg(distinct lower(${outreachEmails.recipientEmail})) filter (where ${outreachEmails.status} in ('draft','queued') and ${outreachEmails.recipientEmail} is not null), '{}')`,
-    })
-    .from(outreachEmails)
-    .groupBy(outreachEmails.prospectId);
+  const [people, mailStats, replyStats] = await Promise.all([
+    db.select().from(prospects).orderBy(prospects.companyName),
+    db
+      .select({
+        prospectId: outreachEmails.prospectId,
+        // Truly sent (or later lifecycle). Queued bakje mails do NOT count as mailed.
+        mailCount: sql<number>`count(*) filter (where ${outreachEmails.status} in ('sent','opened','clicked','replied','bounced','opted_out'))::int`,
+        queuedCount: sql<number>`count(*) filter (where ${outreachEmails.status} = 'queued')::int`,
+        draftCount: sql<number>`count(*) filter (where ${outreachEmails.status} = 'draft')::int`,
+        openCount: sql<number>`count(*) filter (where ${outreachEmails.openedAt} is not null)::int`,
+        clickCount: sql<number>`count(*) filter (where ${outreachEmails.clickedAt} is not null)::int`,
+        lastSent: sql<Date | null>`max(${outreachEmails.sentAt}) filter (where ${outreachEmails.sentAt} is not null)`,
+        lastVariantKey: sql<string | null>`(array_agg(${outreachEmails.variantKey} order by ${outreachEmails.sentAt} desc nulls last) filter (where ${outreachEmails.sentAt} is not null))[1]`,
+        mailedEmails: sql<string[]>`coalesce(array_agg(distinct lower(${outreachEmails.recipientEmail})) filter (where ${outreachEmails.status} in ('sent','opened','clicked','replied','bounced','opted_out') and ${outreachEmails.recipientEmail} is not null), '{}')`,
+        pendingEmails: sql<string[]>`coalesce(array_agg(distinct lower(${outreachEmails.recipientEmail})) filter (where ${outreachEmails.status} in ('draft','queued') and ${outreachEmails.recipientEmail} is not null), '{}')`,
+      })
+      .from(outreachEmails)
+      .groupBy(outreachEmails.prospectId),
+    db
+      .select({
+        prospectId: inboundReplies.prospectId,
+        replyCount: sql<number>`count(*)::int`,
+        lastReply: sql<Date | null>`max(${inboundReplies.receivedAt})`,
+      })
+      .from(inboundReplies)
+      .groupBy(inboundReplies.prospectId),
+  ]);
 
   const mailMap = new Map(mailStats.map((s) => [s.prospectId, s]));
-  const recipientMap = new Map(recipientStats.map((s) => [s.prospectId, s]));
   const replyMap = new Map(
     replyStats.filter((s) => s.prospectId).map((s) => [s.prospectId!, s]),
   );
@@ -387,7 +379,6 @@ export async function listCrmRecords(): Promise<{
     })
     .map((p) => {
     const mail = mailMap.get(p.id);
-    const recipients = recipientMap.get(p.id);
     const reply = replyMap.get(p.id);
     const toDate = (d: unknown): Date | null => {
       if (!d) return null;
@@ -408,8 +399,8 @@ export async function listCrmRecords(): Promise<{
       lastTouchAt: last?.toISOString() ?? null,
       lastSentAt: toDate(mail?.lastSent)?.toISOString() ?? null,
       lastVariantKey: mail?.lastVariantKey ?? null,
-      mailedEmails: recipients?.mailedEmails ?? [],
-      pendingEmails: recipients?.pendingEmails ?? [],
+      mailedEmails: mail?.mailedEmails ?? [],
+      pendingEmails: mail?.pendingEmails ?? [],
     });
   });
 
