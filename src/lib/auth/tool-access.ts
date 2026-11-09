@@ -1,9 +1,24 @@
 /**
  * Per-user tool access: which apps they may open, and which areas inside.
- * Admins always get full access (role wins over stored toggles).
+ * Admins always get full access (role wins over stored toggles), except Radar
+ * which stays in blablabuild-only preview until we open it for Thuishaven.
  */
 
 export type ToolId = "dashboard" | "outreach" | "radar";
+
+/** Preview gate: Radar UI/API only for these domains (comma-separated override via env). */
+export function isRadarPreviewViewer(email?: string | null): boolean {
+  const normalized = email?.trim().toLowerCase() ?? "";
+  if (!normalized.includes("@")) return false;
+  const domain = normalized.split("@").pop() ?? "";
+  const raw =
+    process.env.RADAR_PREVIEW_DOMAINS?.trim() || "blablabuild.com";
+  const allowed = raw
+    .split(",")
+    .map((d) => d.trim().toLowerCase())
+    .filter(Boolean);
+  return allowed.includes(domain);
+}
 
 export type DashboardArea = "overzicht" | "omzet" | "marketing";
 export type OutreachArea = "stappen" | "uitleg";
@@ -69,12 +84,15 @@ export const TOOL_LABEL: Record<ToolId, string> = {
 export function normalizeToolAccess(
   raw: unknown,
   role: "admin" | "member" = "member",
+  email?: string | null,
 ): ToolAccess {
+  const preview = isRadarPreviewViewer(email);
+
   if (role === "admin") {
     return {
       dashboard: true,
       outreach: true,
-      radar: true,
+      radar: preview,
       dashboardAreas: { ...DEFAULT_TOOL_ACCESS.dashboardAreas },
       outreachAreas: { ...DEFAULT_TOOL_ACCESS.outreachAreas },
       radarAreas: { ...DEFAULT_TOOL_ACCESS.radarAreas },
@@ -104,7 +122,7 @@ export function normalizeToolAccess(
   return {
     dashboard: typeof obj.dashboard === "boolean" ? obj.dashboard : true,
     outreach: typeof obj.outreach === "boolean" ? obj.outreach : true,
-    radar: typeof obj.radar === "boolean" ? obj.radar : false,
+    radar: preview && (typeof obj.radar === "boolean" ? obj.radar : false),
     dashboardAreas: areas(
       obj.dashboardAreas,
       DEFAULT_TOOL_ACCESS.dashboardAreas,
@@ -138,7 +156,7 @@ export function toolForPath(path: string): ToolId | "admin" | "other" {
   }
   if (path.startsWith("/dashboard")) return "dashboard";
   if (path.startsWith("/outreach")) return "outreach";
-  if (path.startsWith("/radar")) return "radar";
+  if (path.startsWith("/radar") || path.startsWith("/api/radar")) return "radar";
   return "other";
 }
 
@@ -217,10 +235,15 @@ export function canAccessPath(
   path: string,
   access: ToolAccess,
   role: "admin" | "member",
+  email?: string | null,
 ): boolean {
+  const tool = toolForPath(path);
+
+  // Radar stays blablabuild-only while in preview — also for Thuishaven admins.
+  if (tool === "radar" && !isRadarPreviewViewer(email)) return false;
+
   if (role === "admin") return true;
 
-  const tool = toolForPath(path);
   if (tool === "admin") return false;
   if (tool === "other") return true; // hub `/`, account, etc.
 
@@ -251,7 +274,13 @@ export function canAccessPath(
 
   if (tool === "radar") {
     if (!access.radar) return false;
-    if (path.startsWith("/radar/instellingen")) return false;
+    if (
+      path.startsWith("/radar/instellingen") ||
+      path.startsWith("/api/radar/settings") ||
+      path.startsWith("/api/radar/sync")
+    ) {
+      return false;
+    }
     return radarItemAllowed(path, access);
   }
 

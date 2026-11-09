@@ -145,6 +145,10 @@ function ToolAccessEditor({
         />
         <span className="font-medium text-text">Radar</span>
       </label>
+      <p className="ml-6 text-[11px] leading-snug text-text-dim">
+        Preview: alleen zichtbaar voor @blablabuild.com, ook als deze toggle
+        aan staat.
+      </p>
       {value.radar ? (
         <div className="ml-6 space-y-1.5 border-l border-border pl-3">
           {(Object.keys(RADAR_AREA_LABELS) as RadarArea[]).map((key) => (

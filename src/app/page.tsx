@@ -19,6 +19,7 @@ export default async function HubPage() {
   const access = normalizeToolAccess(
     session.user.toolAccess,
     session.user.role,
+    session.user.email,
   );
   const tools = [
     access.dashboard

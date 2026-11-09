@@ -641,6 +641,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const toolAccess = normalizeToolAccess(
     data?.user?.toolAccess,
     data?.user?.role === "admin" ? "admin" : "member",
+    data?.user?.email,
   );
   const djFeesPending = useDjFeesPendingCount(activeTool === "dashboard");
   const omzetPending = useOmzetPendingCount(activeTool === "dashboard");

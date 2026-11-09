@@ -59,7 +59,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: user.email,
           name: user.name,
           role: user.role,
-          toolAccess: normalizeToolAccess(user.toolAccess, user.role),
+          toolAccess: normalizeToolAccess(
+            user.toolAccess,
+            user.role,
+            user.email,
+          ),
           remember: parsed.data.remember === "true",
         };
       },
@@ -76,6 +80,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.toolAccess = normalizeToolAccess(
           (user as { toolAccess?: unknown }).toolAccess,
           (token.role as "admin" | "member") ?? "member",
+          user.email,
         );
         const remember =
           "remember" in user
@@ -97,6 +102,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.toolAccess = normalizeToolAccess(
           token.toolAccess,
           session.user.role,
+          session.user.email,
         );
       }
       session.sessionId =
