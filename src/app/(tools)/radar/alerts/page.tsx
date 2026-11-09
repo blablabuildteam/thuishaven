@@ -25,7 +25,7 @@ export default async function RadarAlertsPage() {
         items={[
           { label: "Open", value: stats.unreadAlerts },
           { label: "Op de radar", value: stats.artists },
-          { label: "Kortlijst", value: stats.shortlist },
+          { label: "Shortlist", value: stats.shortlist },
         ]}
       />
       <AlertsWorkbench

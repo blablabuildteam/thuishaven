@@ -1,7 +1,7 @@
 export const RADAR_ARTIST_STATUS_NL = {
   new: "Nieuw",
   watching: "Volgen",
-  shortlist: "Kortlijst",
+  shortlist: "Shortlist",
   contacted: "Gesproken",
   booked: "Geboekt",
   passed: "Gepasseerd",

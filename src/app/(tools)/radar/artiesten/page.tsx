@@ -26,7 +26,7 @@ export default async function RadarArtistsPage() {
       <RadarStatStrip
         items={[
           { label: "Op de radar", value: stats.artists },
-          { label: "Kortlijst", value: stats.shortlist },
+          { label: "Shortlist", value: stats.shortlist },
           { label: "Startvenues", value: stats.venuesSeed },
           { label: "Venue-suggesties", value: stats.venuesSuggested },
           { label: "Alerts open", value: stats.unreadAlerts },
