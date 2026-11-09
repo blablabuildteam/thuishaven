@@ -11,6 +11,7 @@ import {
 import { createRadarAlert } from "@/lib/radar/alerts";
 import { upsertRadarGig } from "@/lib/radar/gigs";
 import { loadRadarSettings } from "@/lib/radar/settings";
+import { maybeAlertForScore } from "@/lib/radar/alerts";
 import { recomputeArtistScoreV2 } from "@/lib/radar/score-v2";
 import { normalizeArtistName } from "@/lib/radar/types";
 import {
@@ -95,11 +96,14 @@ export async function discoverArtistsFromSeedVenues(options?: {
   snowballArtists?: number;
   /** Cap venues per run (cron-vriendelijk). */
   venueLimit?: number;
+  /** Explicit venue id batch (rotation). */
+  venueIds?: string[];
 }): Promise<DiscoveryResult> {
   const settings = await loadRadarSettings();
   const allVenues = await listActiveSeedVenues();
-  const venueLimit = options?.venueLimit ?? allVenues.length;
-  const venues = allVenues.slice(0, venueLimit);
+  const venues = options?.venueIds?.length
+    ? allVenues.filter((v) => options.venueIds!.includes(v.id))
+    : allVenues.slice(0, options?.venueLimit ?? allVenues.length);
   const historyYears = options?.historyYears ?? 2;
   const limitPerVenue = options?.limitPerVenue ?? 40;
   const result: DiscoveryResult = {
@@ -273,7 +277,19 @@ export async function discoverArtistsFromSeedVenues(options?: {
   for (const artistId of touchedArtistIds) {
     if (scored >= scoreLimit) break;
     const score = await recomputeArtistScoreV2(artistId);
-    if (score) scored += 1;
+    if (!score) continue;
+    scored += 1;
+    const artist = [...artistCache.values()].find((a) => a.id === artistId);
+    await maybeAlertForScore({
+      artistId,
+      artistName: artist?.name ?? "Artiest",
+      score: score.total,
+      velocity: score.velocity,
+      created: false,
+      momentum: score.momentum,
+      bookability: score.bookability,
+      reasons: score.reasons,
+    });
   }
   result.scored = scored;
 

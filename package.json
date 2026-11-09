@@ -12,6 +12,7 @@
     "db:studio": "drizzle-kit studio",
     "seed:outreach": "tsx scripts/seed-outreach.ts",
     "seed:radar-venues": "tsx --env-file=.env.local scripts/seed-radar-venues.ts",
+    "radar:batch": "tsx --env-file=.env.local scripts/radar-batch-discovery.ts",
     "env:push:weeztix": "bash scripts/push-weeztix-env-to-vercel.sh"
   },
   "dependencies": {

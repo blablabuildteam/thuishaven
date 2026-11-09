@@ -45,19 +45,20 @@ export function RadarSettingsForm({
     setMessage("Opgeslagen.");
   }
 
-  async function runSync() {
+  async function runSync(extra?: Record<string, unknown>) {
     setSyncNote(null);
     setError(null);
     const res = await fetch("/api/radar/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
+      body: JSON.stringify(extra ?? {}),
     });
     const data = (await res.json()) as {
       error?: string;
       notes?: string[];
       discovery?: { artistsCreated?: number; venuesScanned?: number };
       spotify?: { matched?: number; attempted?: number };
+      digest?: { emailed?: boolean; recipients?: string[]; error?: string };
     };
     if (!res.ok) {
       setError(data.error ?? "Sync mislukt");
@@ -69,6 +70,11 @@ export function RadarSettingsForm({
         data.spotify
           ? `Spotify: ${data.spotify.matched}/${data.spotify.attempted} gematcht`
           : null,
+        data.digest?.emailed
+          ? `Digest → ${(data.digest.recipients ?? []).join(", ")}`
+          : data.digest?.error
+            ? `Digest: ${data.digest.error}`
+            : null,
         ...(data.notes ?? []),
       ]
         .filter(Boolean)
@@ -83,13 +89,29 @@ export function RadarSettingsForm({
         <p className="mt-1 text-sm text-text-muted">
           Haalt line-ups van de startlijst op en ververst Spotify-metrics.
         </p>
-        <button
-          type="button"
-          onClick={runSync}
-          className="mt-3 border border-border px-3 py-2 text-sm hover:border-accent"
-        >
-          Pipeline nu draaien
-        </button>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void runSync()}
+            className="border border-border px-3 py-2 text-sm hover:border-accent"
+          >
+            Pipeline nu draaien
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              void runSync({
+                skipDiscovery: true,
+                skipSpotify: true,
+                skipSocial: true,
+                forceDigest: true,
+              })
+            }
+            className="border border-border px-3 py-2 text-sm hover:border-accent"
+          >
+            Test-digest naar team@
+          </button>
+        </div>
         {syncNote ? (
           <p className="mt-2 text-sm text-text-muted">{syncNote}</p>
         ) : null}
@@ -216,7 +238,8 @@ export function RadarSettingsForm({
               })
             }
           />
-          Wekelijkse e-maildigest aan (maandag — verzenden volgt later)
+          Wekelijkse e-maildigest aan (maandagochtend; zonder RADAR_LIVE_DIGEST
+          alleen team@)
         </label>
       </section>
 

@@ -11,8 +11,10 @@
  * 2. snowball   — artist pages → venue suggestions (hop 2)
  * 3. score v2   — momentum / fit / bookability + NL reasons
  * 4. spotify    — optional match → snapshots (bevestiging)
- * 5. alerts     — velocity + new_on_radar (later: breakthrough / window_closing)
- * 6. (later)    — Apify IG/TikTok, SoundCloud, Monday digest mail, feedback loop
+ * 5. alerts     — velocity, new_on_radar, breakthrough, window_closing
+ * 6. digest     — maandag Brevo-mail (test → team@ tot RADAR_LIVE_DIGEST)
+ * 7. social     — Apify layered refresh (no-op zonder token/actors)
+ * 8. feedback   — reden bij gepasseerd → radar_feedback
  *
  * Shared with the rest of Thuishaven Tools (acceptable coupling):
  * - auth / toolAccess.radar (+ @blablabuild.com preview gate)

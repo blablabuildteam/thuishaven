@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { RADAR_ARTIST_STATUS_NL, type RadarArtistStatus } from "@/lib/radar/types";
+import {
+  RADAR_ARTIST_STATUS_NL,
+  RADAR_FEEDBACK_REASON_NL,
+  type RadarArtistStatus,
+  type RadarFeedbackReason,
+} from "@/lib/radar/types";
 
 type Props = {
   artist: {
@@ -61,6 +66,8 @@ export function ArtistDossier({
   const [notes, setNotes] = useState(artist.notes ?? "");
   const [status, setStatus] = useState(artist.status);
   const [genre, setGenre] = useState(artist.primaryGenre ?? "");
+  const [feedbackReason, setFeedbackReason] =
+    useState<RadarFeedbackReason>("no_fit");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -157,6 +164,13 @@ export function ArtistDossier({
               onChange={(e) => {
                 const next = e.target.value as RadarArtistStatus;
                 setStatus(next);
+                if (next === "passed" || next === "not_relevant") {
+                  void save({
+                    status: next,
+                    feedbackReason,
+                  });
+                  return;
+                }
                 void save({ status: next });
               }}
               className="w-full border border-border bg-bg px-2 py-2"
@@ -168,6 +182,34 @@ export function ArtistDossier({
               ))}
             </select>
           </label>
+          {status === "passed" || status === "not_relevant" ? (
+            <label className="block text-sm">
+              <span className="mb-1 block text-[10px] tracking-[0.12em] text-text-dim uppercase">
+                Waarom gepasseerd?
+              </span>
+              <select
+                value={feedbackReason}
+                disabled={busy}
+                onChange={(e) => {
+                  const reason = e.target.value as RadarFeedbackReason;
+                  setFeedbackReason(reason);
+                  void save({
+                    status,
+                    feedbackReason: reason,
+                  });
+                }}
+                className="w-full border border-border bg-bg px-2 py-2"
+              >
+                {(
+                  Object.keys(RADAR_FEEDBACK_REASON_NL) as RadarFeedbackReason[]
+                ).map((r) => (
+                  <option key={r} value={r}>
+                    {RADAR_FEEDBACK_REASON_NL[r]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label className="block text-sm">
             <span className="mb-1 block text-[10px] tracking-[0.12em] text-text-dim uppercase">
               Primair genre

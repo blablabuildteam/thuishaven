@@ -29,6 +29,16 @@ export const RADAR_VENUE_TIER_NL = {
 
 export type RadarVenueTier = keyof typeof RADAR_VENUE_TIER_NL;
 
+export const RADAR_FEEDBACK_REASON_NL = {
+  too_big: "Te groot / te duur",
+  wrong_genre: "Verkeerd genre",
+  too_unknown: "Te onbekend",
+  no_fit: "Geen fit met Thuishaven",
+  other: "Anders",
+} as const;
+
+export type RadarFeedbackReason = keyof typeof RADAR_FEEDBACK_REASON_NL;
+
 export function normalizeArtistName(name: string): string {
   return name
     .normalize("NFKD")

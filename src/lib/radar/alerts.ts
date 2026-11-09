@@ -69,47 +69,106 @@ export async function createRadarAlert(input: {
   });
 }
 
-/** Deduped velocity / new-on-radar alerts based on latest score. */
+async function hasUnread(
+  artistId: string,
+  kind: RadarAlertRow["kind"],
+): Promise<boolean> {
+  if (!hasDatabase()) return false;
+  const db = getDb();
+  const [existing] = await db
+    .select({ id: radarAlerts.id })
+    .from(radarAlerts)
+    .where(
+      and(
+        eq(radarAlerts.artistId, artistId),
+        eq(radarAlerts.kind, kind),
+        isNull(radarAlerts.readAt),
+      ),
+    )
+    .limit(1);
+  return Boolean(existing);
+}
+
+/** Deduped alerts based on latest score v2. */
 export async function maybeAlertForScore(input: {
   artistId: string;
   artistName: string;
   score: number;
   velocity: number;
   created: boolean;
+  momentum?: number;
+  bookability?: number;
+  reasons?: string[];
 }): Promise<void> {
   const settings = await loadRadarSettings();
+  const reasons = input.reasons ?? [];
+
   if (input.created && input.score >= settings.alerts.newOnRadarMinScore) {
     await createRadarAlert({
       kind: "new_on_radar",
       artistId: input.artistId,
       title: `Nieuw op de radar: ${input.artistName}`,
-      body: `Groeiscore ${input.score}. Relatief onbekend + genoeg signaal om te volgen.`,
-      payload: { score: input.score, velocity: input.velocity },
+      body: `Score ${input.score}. ${reasons[0] ?? "Genoeg signaal om te volgen."}`,
+      payload: { score: input.score, velocity: input.velocity, reasons },
     });
   }
+
   if (input.velocity >= settings.alerts.velocityThreshold) {
-    // Avoid spamming: only if no unread velocity alert for this artist.
-    if (!hasDatabase()) return;
-    const db = getDb();
-    const [existing] = await db
-      .select({ id: radarAlerts.id })
-      .from(radarAlerts)
-      .where(
-        and(
-          eq(radarAlerts.artistId, input.artistId),
-          eq(radarAlerts.kind, "velocity"),
-          isNull(radarAlerts.readAt),
-        ),
-      )
-      .limit(1);
-    if (existing) return;
-    await createRadarAlert({
-      kind: "velocity",
-      artistId: input.artistId,
-      title: `Snelle groei: ${input.artistName}`,
-      body: `Velocity ${input.velocity} (drempel ${settings.alerts.velocityThreshold}). Score nu ${input.score}.`,
-      payload: { score: input.score, velocity: input.velocity },
-    });
+    if (!(await hasUnread(input.artistId, "velocity"))) {
+      await createRadarAlert({
+        kind: "velocity",
+        artistId: input.artistId,
+        title: `Snelle groei: ${input.artistName}`,
+        body: `Velocity ${input.velocity} (drempel ${settings.alerts.velocityThreshold}). Score nu ${input.score}.`,
+        payload: { score: input.score, velocity: input.velocity, reasons },
+      });
+    }
+  }
+
+  // Breakthrough: sterke momentum-sprong
+  if ((input.momentum ?? 0) >= 70 && input.velocity >= 25) {
+    if (!(await hasUnread(input.artistId, "breakthrough"))) {
+      await createRadarAlert({
+        kind: "breakthrough",
+        artistId: input.artistId,
+        title: `Doorbraak-signaal: ${input.artistName}`,
+        body:
+          reasons[0] ??
+          `Momentum ${input.momentum}, velocity ${input.velocity}.`,
+        payload: {
+          score: input.score,
+          momentum: input.momentum,
+          velocity: input.velocity,
+          reasons,
+        },
+      });
+    }
+  }
+
+  // Window closing: nog relevant maar bookability daalt
+  const closingReason = reasons.find((r) => /venster sluit/i.test(r));
+  if (
+    closingReason ||
+    ((input.bookability ?? 100) < 40 &&
+      input.score >= 45 &&
+      (input.momentum ?? 0) >= 55)
+  ) {
+    if (!(await hasUnread(input.artistId, "window_closing"))) {
+      await createRadarAlert({
+        kind: "window_closing",
+        artistId: input.artistId,
+        title: `Venster sluit: ${input.artistName}`,
+        body:
+          closingReason ??
+          `Bookability ${input.bookability}. Prijs/beschikbaarheid dreigt te stijgen.`,
+        payload: {
+          score: input.score,
+          bookability: input.bookability,
+          momentum: input.momentum,
+          reasons,
+        },
+      });
+    }
   }
 }
 

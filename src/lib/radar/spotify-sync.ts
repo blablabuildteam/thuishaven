@@ -65,6 +65,9 @@ async function applySpotifyToArtist(
       score: score.total,
       velocity: score.velocity,
       created: Boolean(opts?.created),
+      momentum: score.momentum,
+      bookability: score.bookability,
+      reasons: score.reasons,
     });
   }
 }

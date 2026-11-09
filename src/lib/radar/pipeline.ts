@@ -1,10 +1,17 @@
 /**
- * Radar orchestration — RA discovery/history → score v2 → Spotify (optioneel).
- * Social (Apify) en SoundCloud haken hier later op dezelfde sync-loop in.
+ * Radar orchestration — RA discovery → score v2 → Spotify → social → digest.
  */
 import { discoverArtistsFromSeedVenues } from "@/lib/radar/discovery";
 import { syncSpotifyForRadarArtists } from "@/lib/radar/spotify-sync";
+import { syncSocialForTopArtists } from "@/lib/radar/social-sync";
+import { nextVenueBatch } from "@/lib/radar/rotation";
 import { isSpotifyConfigured } from "@/lib/integrations/spotify/client";
+import {
+  amsterdamIsoWeekday,
+  sendRadarDigest,
+} from "@/lib/radar/digest";
+import { amsterdamHour } from "@/lib/integrations/cron";
+import { loadRadarSettings } from "@/lib/radar/settings";
 
 export type RadarPipelineResult = {
   ok: boolean;
@@ -12,37 +19,50 @@ export type RadarPipelineResult = {
   finishedAt: string;
   discovery: Awaited<ReturnType<typeof discoverArtistsFromSeedVenues>>;
   spotify: Awaited<ReturnType<typeof syncSpotifyForRadarArtists>> | null;
+  social: Awaited<ReturnType<typeof syncSocialForTopArtists>> | null;
+  digest: Awaited<ReturnType<typeof sendRadarDigest>> | null;
   notes: string[];
 };
 
 export async function runRadarPipeline(options?: {
   skipDiscovery?: boolean;
   skipSpotify?: boolean;
+  skipSocial?: boolean;
+  skipDigest?: boolean;
   spotifyLimit?: number;
   historyYears?: number;
+  venueLimit?: number;
+  forceDigest?: boolean;
 }): Promise<RadarPipelineResult> {
   const startedAt = new Date();
   const notes: string[] = [];
+  const settings = await loadRadarSettings();
 
-  const discovery = options?.skipDiscovery
-    ? {
-        venuesScanned: 0,
-        eventsSeen: 0,
-        artistsUpserted: 0,
-        artistsCreated: 0,
-        gigsUpserted: 0,
-        venuesSuggested: 0,
-        scored: 0,
-        skippedNoRaId: 0,
-        errors: [] as string[],
-      }
-    : await discoverArtistsFromSeedVenues({
-        historyYears: options?.historyYears ?? 2,
-        limitPerVenue: 35,
-        venueLimit: 12,
-        scoreLimit: 50,
-        snowballArtists: 8,
-      });
+  let discovery: RadarPipelineResult["discovery"] = {
+    venuesScanned: 0,
+    eventsSeen: 0,
+    artistsUpserted: 0,
+    artistsCreated: 0,
+    gigsUpserted: 0,
+    venuesSuggested: 0,
+    scored: 0,
+    skippedNoRaId: 0,
+    errors: [],
+  };
+
+  if (!options?.skipDiscovery) {
+    const batch = await nextVenueBatch(options?.venueLimit ?? 12);
+    notes.push(
+      `Venue-rotatie: offset ${batch.offset}/${batch.total} → ${batch.venueIds.length} venues.`,
+    );
+    discovery = await discoverArtistsFromSeedVenues({
+      historyYears: options?.historyYears ?? 2,
+      limitPerVenue: 35,
+      venueIds: batch.venueIds,
+      scoreLimit: 50,
+      snowballArtists: 8,
+    });
+  }
 
   if (discovery.skippedNoRaId > 0) {
     notes.push(
@@ -66,16 +86,47 @@ export async function runRadarPipeline(options?: {
     }
   }
 
-  notes.push(
-    "Instagram/TikTok (Apify) en SoundCloud volgen in de volgende datapipeline-sprint.",
-  );
+  let social: RadarPipelineResult["social"] = null;
+  if (!options?.skipSocial) {
+    social = await syncSocialForTopArtists({ limit: 30 });
+    if (social.note) notes.push(social.note);
+  }
+
+  let digest: RadarPipelineResult["digest"] = null;
+  if (!options?.skipDigest) {
+    const now = new Date();
+    const weekday = amsterdamIsoWeekday(now);
+    const hour = amsterdamHour(now);
+    const due =
+      options?.forceDigest ||
+      (settings.digest.enabled &&
+        weekday === settings.digest.weekday &&
+        hour === settings.digest.hourAmsterdam);
+    if (due) {
+      digest = await sendRadarDigest({ force: options?.forceDigest });
+      if (digest.skipped) {
+        notes.push(`Digest overgeslagen: ${digest.reason}`);
+      } else if (digest.ok) {
+        notes.push(
+          `Digest verstuurd naar ${(digest.recipients ?? []).join(", ") || "—"}.`,
+        );
+      } else {
+        notes.push(`Digest mislukt: ${digest.error}`);
+      }
+    }
+  }
 
   return {
-    ok: discovery.errors.length === 0 && (spotify?.errors.length ?? 0) === 0,
+    ok:
+      discovery.errors.length === 0 &&
+      (spotify?.errors.length ?? 0) === 0 &&
+      (digest?.ok !== false),
     startedAt: startedAt.toISOString(),
     finishedAt: new Date().toISOString(),
     discovery,
     spotify,
+    social,
+    digest,
     notes,
   };
 }

@@ -9,7 +9,11 @@ export const maxDuration = 300;
 const bodySchema = z.object({
   skipDiscovery: z.boolean().optional(),
   skipSpotify: z.boolean().optional(),
+  skipSocial: z.boolean().optional(),
+  skipDigest: z.boolean().optional(),
+  forceDigest: z.boolean().optional(),
   spotifyLimit: z.number().int().min(1).max(200).optional(),
+  venueLimit: z.number().int().min(1).max(40).optional(),
 });
 
 export async function POST(request: Request) {

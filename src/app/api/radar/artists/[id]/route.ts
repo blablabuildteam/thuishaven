@@ -7,6 +7,7 @@ import {
   setRadarArtistStatus,
   updateRadarArtist,
 } from "@/lib/radar/artists";
+import { recordRadarFeedback } from "@/lib/radar/feedback";
 import { RADAR_ARTIST_STATUS_NL } from "@/lib/radar/types";
 import { linkArtistToSpotifyBySearch } from "@/lib/radar/spotify-sync";
 
@@ -32,6 +33,11 @@ const patchSchema = z.object({
   secondaryGenres: z.array(z.string().max(80)).max(12).optional(),
   genreManual: z.boolean().optional(),
   syncSpotify: z.boolean().optional(),
+  feedbackReason: z
+    .enum(["too_big", "wrong_genre", "too_unknown", "no_fit", "other"])
+    .nullable()
+    .optional(),
+  feedbackNote: z.string().max(1000).nullable().optional(),
 });
 
 export async function GET(
@@ -85,6 +91,7 @@ export async function PATCH(
   }
 
   if (parsed.data.status) {
+    const before = await getRadarArtist(id);
     const result = await setRadarArtistStatus(
       id,
       parsed.data.status,
@@ -92,6 +99,19 @@ export async function PATCH(
     );
     if ("error" in result) {
       return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+    if (
+      parsed.data.status === "passed" ||
+      parsed.data.status === "not_relevant"
+    ) {
+      await recordRadarFeedback({
+        artistId: id,
+        userId: session.user.id,
+        fromStatus: before?.artist.status ?? null,
+        toStatus: parsed.data.status,
+        reason: parsed.data.feedbackReason ?? null,
+        note: parsed.data.feedbackNote ?? null,
+      });
     }
   }
 

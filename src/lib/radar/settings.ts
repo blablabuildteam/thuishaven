@@ -71,7 +71,8 @@ export const DEFAULT_RADAR_SETTINGS: RadarSettingsValue = {
     enabled: true,
     weekday: 1,
     hourAmsterdam: 8,
-    recipients: [],
+    /** Zonder RADAR_LIVE_DIGEST gaat mail altijd naar team@. */
+    recipients: ["team@blablabuild.com"],
   },
   refresh: {
     spotifyHours: 24,
