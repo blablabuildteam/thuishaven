@@ -12,6 +12,7 @@ import {
   Disc3,
   Euro,
   Home,
+  MapPin,
   Menu,
   Plug,
   ScrollText,
@@ -45,7 +46,12 @@ import {
   dashboardSectionAllowed,
   normalizeToolAccess,
   outreachSectionAllowed,
+  radarItemAllowed,
+  radarSectionAllowed,
+  TOOL_HOME,
+  TOOL_LABEL,
   type ToolAccess,
+  type ToolId,
 } from "@/lib/auth/tool-access";
 
 type NavItem = {
@@ -229,11 +235,53 @@ const outreachSystemNav: NavItem[] = [
   { href: "/koppelingen", label: "Bronnen", icon: Plug, adminOnly: true },
 ];
 
+const radarSections: NavSection[] = [
+  {
+    id: "scout",
+    label: "Scouten",
+    items: [
+      { href: "/radar/artiesten", label: "Artiesten", icon: Disc3 },
+      { href: "/radar/alerts", label: "Alerts", icon: Bell },
+    ],
+  },
+  {
+    id: "curatie",
+    label: "Curatie",
+    items: [
+      { href: "/radar/venues", label: "Venues", icon: MapPin },
+    ],
+  },
+  {
+    id: "beheer",
+    label: "Alleen admin",
+    adminOnly: true,
+    items: [
+      {
+        href: "/radar/instellingen",
+        label: "Instellingen",
+        icon: Settings,
+        adminOnly: true,
+      },
+    ],
+  },
+];
+
+const radarSystemNav: NavItem[] = [
+  { href: "/koppelingen", label: "Bronnen", icon: Plug, adminOnly: true },
+];
+
+function toolFromPath(pathname: string): ToolId {
+  if (pathname.startsWith("/outreach")) return "outreach";
+  if (pathname.startsWith("/radar")) return "radar";
+  return "dashboard";
+}
+
 function isNavActive(pathname: string, href: string) {
   return (
     pathname === href ||
     (href !== "/dashboard" &&
       href !== "/outreach" &&
+      href !== "/radar" &&
       pathname.startsWith(href))
   );
 }
@@ -246,24 +294,37 @@ function filterSections(
   sections: NavSection[],
   isAdmin: boolean,
   access: ToolAccess,
-  isOutreach: boolean,
+  tool: ToolId,
 ) {
   return sections
     .filter((s) => isAdmin || !s.adminOnly)
-    .filter((s) =>
-      isOutreach
-        ? outreachSectionAllowed(s.id, access)
-        : dashboardSectionAllowed(s.id, access),
-    )
+    .filter((s) => {
+      if (tool === "outreach") return outreachSectionAllowed(s.id, access);
+      if (tool === "radar") return radarSectionAllowed(s.id, access);
+      return dashboardSectionAllowed(s.id, access);
+    })
     .map((s) => ({
       ...s,
-      items: filterNav(s.items, isAdmin).filter((item) =>
-        isOutreach || item.adminOnly
-          ? true
-          : dashboardItemAllowed(item.href, access),
-      ),
+      items: filterNav(s.items, isAdmin).filter((item) => {
+        if (item.adminOnly) return true;
+        if (tool === "outreach") return true;
+        if (tool === "radar") return radarItemAllowed(item.href, access);
+        return dashboardItemAllowed(item.href, access);
+      }),
     }))
     .filter((s) => s.items.length > 0);
+}
+
+function sectionsForTool(tool: ToolId): NavSection[] {
+  if (tool === "outreach") return outreachSections;
+  if (tool === "radar") return radarSections;
+  return dashboardSections;
+}
+
+function systemNavForTool(tool: ToolId): NavItem[] {
+  if (tool === "outreach") return outreachSystemNav;
+  if (tool === "radar") return radarSystemNav;
+  return dashboardSystemNav;
 }
 
 function NavItemIcon({ item, active }: { item: NavItem; active: boolean }) {
@@ -358,7 +419,7 @@ function NavLink({
 
 function ShellNav({
   pathname,
-  isOutreach,
+  activeTool,
   sections,
   systemNav,
   djFeesPending,
@@ -369,9 +430,10 @@ function ShellNav({
   onClose,
   showDashboard,
   showOutreach,
+  showRadar,
 }: {
   pathname: string;
-  isOutreach: boolean;
+  activeTool: ToolId;
   sections: NavSection[];
   systemNav: NavItem[];
   djFeesPending: number | null;
@@ -382,7 +444,34 @@ function ShellNav({
   onClose?: () => void;
   showDashboard: boolean;
   showOutreach: boolean;
+  showRadar: boolean;
 }) {
+  const toolSwitches = (
+    [
+      showDashboard
+        ? {
+            id: "dashboard" as const,
+            href: TOOL_HOME.dashboard,
+            label: TOOL_LABEL.dashboard,
+          }
+        : null,
+      showOutreach
+        ? {
+            id: "outreach" as const,
+            href: TOOL_HOME.outreach,
+            label: TOOL_LABEL.outreach,
+          }
+        : null,
+      showRadar
+        ? {
+            id: "radar" as const,
+            href: TOOL_HOME.radar,
+            label: TOOL_LABEL.radar,
+          }
+        : null,
+    ] as const
+  ).filter(Boolean) as Array<{ id: ToolId; href: string; label: string }>;
+
   return (
     <>
       <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-4">
@@ -419,24 +508,26 @@ function ShellNav({
       </div>
 
       <div className="border-b border-border px-3 py-3">
-        {showDashboard && showOutreach ? (
-          <div className="grid grid-cols-2 gap-1 bg-bg-elevated p-1">
-            <ToolSwitch
-              href="/dashboard/inzichten"
-              active={!isOutreach}
-              label="Dashboard"
-              onNavigate={onNavigate}
-            />
-            <ToolSwitch
-              href="/outreach/crm"
-              active={isOutreach}
-              label="Outreach"
-              onNavigate={onNavigate}
-            />
+        {toolSwitches.length > 1 ? (
+          <div
+            className={cn(
+              "grid gap-1 bg-bg-elevated p-1",
+              toolSwitches.length === 2 ? "grid-cols-2" : "grid-cols-3",
+            )}
+          >
+            {toolSwitches.map((tool) => (
+              <ToolSwitch
+                key={tool.id}
+                href={tool.href}
+                active={activeTool === tool.id}
+                label={tool.label}
+                onNavigate={onNavigate}
+              />
+            ))}
           </div>
         ) : (
           <p className="px-1 py-1 font-display text-xs tracking-[0.12em] text-text-dim">
-            {isOutreach ? "Outreach" : "Dashboard"}
+            {TOOL_LABEL[activeTool]}
           </p>
         )}
       </div>
@@ -545,23 +636,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.dispatchEvent(new Event(VIEW_AS_EVENT));
   }
   const showAdminNav = Boolean(isAdmin) && !viewAsStaff;
-  const isOutreach = pathname.startsWith("/outreach");
+  const activeTool = toolFromPath(pathname);
+  const isOutreach = activeTool === "outreach";
   const toolAccess = normalizeToolAccess(
     data?.user?.toolAccess,
     data?.user?.role === "admin" ? "admin" : "member",
   );
-  const djFeesPending = useDjFeesPendingCount(!isOutreach);
-  const omzetPending = useOmzetPendingCount(!isOutreach);
+  const djFeesPending = useDjFeesPendingCount(activeTool === "dashboard");
+  const omzetPending = useOmzetPendingCount(activeTool === "dashboard");
   const sections = filterSections(
-    isOutreach ? outreachSections : dashboardSections,
+    sectionsForTool(activeTool),
     showAdminNav,
     toolAccess,
-    isOutreach,
+    activeTool,
   );
-  const systemNav = filterNav(
-    isOutreach ? outreachSystemNav : dashboardSystemNav,
-    showAdminNav,
-  );
+  const systemNav = filterNav(systemNavForTool(activeTool), showAdminNav);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -596,7 +685,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const closeMenu = () => setMenuOpen(false);
   const navProps = {
     pathname,
-    isOutreach,
+    activeTool,
     sections,
     systemNav,
     djFeesPending,
@@ -605,6 +694,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     onToggleViewAsStaff: isAdmin ? toggleViewAsStaff : undefined,
     showDashboard: toolAccess.dashboard,
     showOutreach: toolAccess.outreach,
+    showRadar: toolAccess.radar,
   };
 
   return (
@@ -647,7 +737,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               Thuishaven
             </span>
             <span className="truncate text-xs tracking-[0.12em] text-text-dim uppercase">
-              {isOutreach ? "Outreach" : "Dashboard"}
+              {TOOL_LABEL[activeTool]}
             </span>
           </Link>
           <div className="flex shrink-0 items-center gap-1">

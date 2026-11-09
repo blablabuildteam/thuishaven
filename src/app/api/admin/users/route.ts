@@ -43,6 +43,7 @@ export async function GET() {
 const toolAccessSchema = z.object({
   dashboard: z.boolean(),
   outreach: z.boolean(),
+  radar: z.boolean(),
   dashboardAreas: z.object({
     overzicht: z.boolean(),
     omzet: z.boolean(),
@@ -51,6 +52,10 @@ const toolAccessSchema = z.object({
   outreachAreas: z.object({
     stappen: z.boolean(),
     uitleg: z.boolean(),
+  }),
+  radarAreas: z.object({
+    overzicht: z.boolean(),
+    curatie: z.boolean(),
   }),
 });
 

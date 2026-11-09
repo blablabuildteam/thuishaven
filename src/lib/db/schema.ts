@@ -28,6 +28,7 @@ export const appUsers = pgTable("app_users", {
   toolAccess: jsonb("tool_access").$type<{
     dashboard: boolean;
     outreach: boolean;
+    radar: boolean;
     dashboardAreas: {
       overzicht: boolean;
       omzet: boolean;
@@ -36,6 +37,10 @@ export const appUsers = pgTable("app_users", {
     outreachAreas: {
       stappen: boolean;
       uitleg: boolean;
+    };
+    radarAreas: {
+      overzicht: boolean;
+      curatie: boolean;
     };
   }>(),
   emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
@@ -1034,3 +1039,20 @@ export const outreachTemplateOverrides = pgTable("outreach_template_overrides", 
     .defaultNow()
     .notNull(),
 });
+
+/** DJ Talenten Radar — see src/lib/radar/schema.ts (extractable module). */
+export {
+  radarArtistStatusEnum,
+  radarVenueKindEnum,
+  radarVenueStatusEnum,
+  radarPlatformEnum,
+  radarDiscoverySourceEnum,
+  radarAlertKindEnum,
+  radarVenues,
+  radarArtists,
+  radarArtistProfiles,
+  radarMetricSnapshots,
+  radarGigs,
+  radarAlerts,
+  radarSettings,
+} from "@/lib/radar/schema";

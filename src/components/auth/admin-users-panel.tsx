@@ -7,8 +7,10 @@ import {
   DASHBOARD_AREA_LABELS,
   DEFAULT_TOOL_ACCESS,
   OUTREACH_AREA_LABELS,
+  RADAR_AREA_LABELS,
   type DashboardArea,
   type OutreachArea,
+  type RadarArea,
   type ToolAccess,
 } from "@/lib/auth/tool-access";
 
@@ -46,7 +48,7 @@ function ToolAccessEditor({
   disabled?: boolean;
   onChange: (next: ToolAccess) => void;
 }) {
-  function setTool(key: "dashboard" | "outreach", on: boolean) {
+  function setTool(key: "dashboard" | "outreach" | "radar", on: boolean) {
     onChange({ ...value, [key]: on });
   }
 
@@ -61,6 +63,13 @@ function ToolAccessEditor({
     onChange({
       ...value,
       outreachAreas: { ...value.outreachAreas, [key]: on },
+    });
+  }
+
+  function setRadarArea(key: RadarArea, on: boolean) {
+    onChange({
+      ...value,
+      radarAreas: { ...value.radarAreas, [key]: on },
     });
   }
 
@@ -126,6 +135,32 @@ function ToolAccessEditor({
           ))}
         </div>
       ) : null}
+
+      <label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={value.radar}
+          disabled={disabled}
+          onChange={(e) => setTool("radar", e.target.checked)}
+        />
+        <span className="font-medium text-text">Radar</span>
+      </label>
+      {value.radar ? (
+        <div className="ml-6 space-y-1.5 border-l border-border pl-3">
+          {(Object.keys(RADAR_AREA_LABELS) as RadarArea[]).map((key) => (
+            <label key={key} className="flex items-start gap-2 text-text-muted">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={value.radarAreas[key]}
+                disabled={disabled}
+                onChange={(e) => setRadarArea(key, e.target.checked)}
+              />
+              <span>{RADAR_AREA_LABELS[key]}</span>
+            </label>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -135,6 +170,7 @@ function accessSummary(u: UserRow): string {
   const parts: string[] = [];
   if (u.toolAccess.dashboard) parts.push("Dashboard");
   if (u.toolAccess.outreach) parts.push("Outreach");
+  if (u.toolAccess.radar) parts.push("Radar");
   return parts.length ? parts.join(" · ") : "Geen tools";
 }
 
