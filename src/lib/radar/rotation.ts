@@ -5,6 +5,41 @@ import { listActiveSeedVenues } from "@/lib/radar/venues";
 
 const CURSOR_KEY = "discovery_cursor";
 
+async function readOffset(): Promise<number> {
+  if (!hasDatabase()) return 0;
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(radarSettings)
+    .where(eq(radarSettings.key, CURSOR_KEY))
+    .limit(1);
+  const raw = row?.value as { offset?: number } | undefined;
+  return Number.isFinite(raw?.offset) ? Number(raw?.offset) : 0;
+}
+
+async function writeOffset(offset: number): Promise<void> {
+  if (!hasDatabase()) return;
+  const db = getDb();
+  const value = { offset, updatedAt: new Date().toISOString() };
+  const [existing] = await db
+    .select({ id: radarSettings.id })
+    .from(radarSettings)
+    .where(eq(radarSettings.key, CURSOR_KEY))
+    .limit(1);
+  if (existing) {
+    await db
+      .update(radarSettings)
+      .set({ value, updatedAt: new Date() })
+      .where(eq(radarSettings.key, CURSOR_KEY));
+    return;
+  }
+  await db.insert(radarSettings).values({
+    key: CURSOR_KEY,
+    value,
+    updatedAt: new Date(),
+  });
+}
+
 /**
  * Round-robin over seed/accepted venues zodat cron alle clubs bereikt
  * zonder de 300s Vercel-limiet te knallen.
@@ -18,18 +53,7 @@ export async function nextVenueBatch(limit: number): Promise<{
   const total = venues.length;
   if (total === 0) return { venueIds: [], offset: 0, total: 0 };
 
-  let offset = 0;
-  if (hasDatabase()) {
-    const db = getDb();
-    const [row] = await db
-      .select()
-      .from(radarSettings)
-      .where(eq(radarSettings.key, CURSOR_KEY))
-      .limit(1);
-    const raw = row?.value as { offset?: number } | undefined;
-    offset = Number.isFinite(raw?.offset) ? Number(raw?.offset) : 0;
-  }
-
+  const offset = await readOffset();
   const start = ((offset % total) + total) % total;
   const batch: string[] = [];
   for (let i = 0; i < Math.min(limit, total); i += 1) {
@@ -37,24 +61,6 @@ export async function nextVenueBatch(limit: number): Promise<{
     if (v) batch.push(v.id);
   }
 
-  const nextOffset = (start + batch.length) % Math.max(total, 1);
-  if (hasDatabase()) {
-    const db = getDb();
-    await db
-      .insert(radarSettings)
-      .values({
-        key: CURSOR_KEY,
-        value: { offset: nextOffset, updatedAt: new Date().toISOString() },
-        updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: radarSettings.key,
-        set: {
-          value: { offset: nextOffset, updatedAt: new Date().toISOString() },
-          updatedAt: new Date(),
-        },
-      });
-  }
-
+  await writeOffset((start + batch.length) % Math.max(total, 1));
   return { venueIds: batch, offset: start, total };
 }
