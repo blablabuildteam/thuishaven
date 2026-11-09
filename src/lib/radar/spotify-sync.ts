@@ -13,7 +13,7 @@ import {
   upsertRadarArtist,
 } from "@/lib/radar/artists";
 import { maybeAlertForScore } from "@/lib/radar/alerts";
-import { recomputeArtistGrowthScore } from "@/lib/radar/score";
+import { recomputeArtistScoreV2 } from "@/lib/radar/score-v2";
 
 function pickPrimaryGenre(genres: string[]): string | null {
   if (!genres.length) return null;
@@ -57,12 +57,12 @@ async function applySpotifyToArtist(
     });
   }
 
-  const score = await recomputeArtistGrowthScore(artistId);
+  const score = await recomputeArtistScoreV2(artistId);
   if (score) {
     await maybeAlertForScore({
       artistId,
       artistName: opts?.artistName ?? spotify.name,
-      score: score.score,
+      score: score.total,
       velocity: score.velocity,
       created: Boolean(opts?.created),
     });

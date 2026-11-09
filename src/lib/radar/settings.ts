@@ -47,11 +47,12 @@ export type RadarSettingsValue = {
 
 export const DEFAULT_RADAR_SETTINGS: RadarSettingsValue = {
   weights: {
-    spotify: 0.35,
-    instagram: 0.2,
-    tiktok: 0.2,
-    soundcloud: 0.1,
-    resident_advisor: 0.15,
+    /** RA-first: Spotify/social bevestigen, boeken niet sturen. */
+    spotify: 0.15,
+    instagram: 0.1,
+    tiktok: 0.1,
+    soundcloud: 0.05,
+    resident_advisor: 0.6,
   },
   velocityShare: 0.7,
   unknownCeilings: {

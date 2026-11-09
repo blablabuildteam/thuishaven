@@ -3,6 +3,7 @@ import { getDb, hasDatabase } from "@/lib/db/client";
 import {
   radarArtistProfiles,
   radarArtists,
+  radarGigs,
   radarMetricSnapshots,
 } from "@/lib/radar/schema";
 import { normalizeArtistName, type RadarArtistStatus } from "@/lib/radar/types";
@@ -62,6 +63,7 @@ export async function getRadarArtist(id: string): Promise<{
   artist: RadarArtistRow;
   profiles: RadarArtistProfile[];
   recentMetrics: Array<typeof radarMetricSnapshots.$inferSelect>;
+  recentGigs: Array<typeof radarGigs.$inferSelect>;
 } | null> {
   if (!hasDatabase()) return null;
   const db = getDb();
@@ -81,7 +83,13 @@ export async function getRadarArtist(id: string): Promise<{
     .where(eq(radarMetricSnapshots.artistId, id))
     .orderBy(desc(radarMetricSnapshots.capturedAt))
     .limit(40);
-  return { artist, profiles, recentMetrics };
+  const recentGigs = await db
+    .select()
+    .from(radarGigs)
+    .where(eq(radarGigs.artistId, id))
+    .orderBy(desc(radarGigs.startsAt))
+    .limit(30);
+  return { artist, profiles, recentMetrics, recentGigs };
 }
 
 export async function upsertRadarArtist(input: {
@@ -202,6 +210,7 @@ export async function upsertArtistProfile(input: {
   externalId?: string | null;
   url?: string | null;
   handle?: string | null;
+  matchConfidence?: "high" | "medium" | "low" | "unmatched";
   raw?: Record<string, unknown> | null;
 }): Promise<void> {
   if (!hasDatabase()) return;
@@ -214,6 +223,7 @@ export async function upsertArtistProfile(input: {
       externalId: input.externalId ?? null,
       url: input.url ?? null,
       handle: input.handle ?? null,
+      matchConfidence: input.matchConfidence ?? "medium",
       raw: input.raw ?? null,
       lastSyncedAt: new Date(),
       updatedAt: new Date(),
@@ -224,6 +234,7 @@ export async function upsertArtistProfile(input: {
         externalId: input.externalId ?? null,
         url: input.url ?? null,
         handle: input.handle ?? null,
+        matchConfidence: input.matchConfidence ?? "medium",
         raw: input.raw ?? null,
         lastSyncedAt: new Date(),
         updatedAt: new Date(),

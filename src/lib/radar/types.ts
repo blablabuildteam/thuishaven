@@ -19,6 +19,16 @@ export const RADAR_VENUE_STATUS_NL = {
 
 export type RadarVenueStatus = keyof typeof RADAR_VENUE_STATUS_NL;
 
+export const RADAR_VENUE_TIER_NL = {
+  early: "Early",
+  mid: "Mid",
+  major: "Major",
+  festival: "Festival",
+  series: "Series",
+} as const;
+
+export type RadarVenueTier = keyof typeof RADAR_VENUE_TIER_NL;
+
 export function normalizeArtistName(name: string): string {
   return name
     .normalize("NFKD")

@@ -12,6 +12,10 @@ type Artist = {
   primaryGenre: string | null;
   growthScore: string | null;
   growthVelocity: string | null;
+  momentumScore: string | null;
+  fitScore: string | null;
+  bookabilityScore: string | null;
+  scoreReasons: string[];
   discoverySource: string;
   imageUrl: string | null;
 };
@@ -190,6 +194,7 @@ export function ArtistsWorkbench({
                     </Link>
                     <p className="text-[11px] text-text-dim">
                       {a.discoverySource}
+                      {a.scoreReasons?.[0] ? ` · ${a.scoreReasons[0]}` : ""}
                     </p>
                   </td>
                   <td className="px-3 py-2.5 text-right font-mono tabular-nums">

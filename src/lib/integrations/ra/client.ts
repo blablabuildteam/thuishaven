@@ -17,6 +17,14 @@ export type RaVenue = {
   address?: string;
 };
 
+export type RaLineupArtist = {
+  id: string | null;
+  name: string;
+  contentUrl: string | null;
+  /** 0 = first billed on the RA line-up. */
+  billingIndex: number;
+};
+
 export type RaEvent = {
   id: string;
   title: string;
@@ -26,7 +34,18 @@ export type RaEvent = {
   isTicketed: boolean;
   ticketsAvailable: boolean;
   contentUrl: string | null;
+  /** Convenience: artist names in billing order. */
   artists: string[];
+  lineup: RaLineupArtist[];
+};
+
+export type RaArtistEvent = {
+  id: string;
+  title: string;
+  date: string | null;
+  attending: number;
+  contentUrl: string | null;
+  venue: { id: string; name: string; contentUrl: string | null } | null;
 };
 
 function venueId(): string {
@@ -120,7 +139,7 @@ export async function listRaVenueEvents(options?: {
   const id = options?.venueId?.trim() || venueId();
   const withYear = type === "ARCHIVE" && year != null;
   const eventFields = `id title date startTime attending isTicketed contentUrl
-              artists { name }
+              artists { id name contentUrl }
               ticketing { isAnyTicketTierAvailable }`;
   type VenueEventRaw = {
     id: string;
@@ -130,7 +149,11 @@ export async function listRaVenueEvents(options?: {
     attending: number;
     isTicketed: boolean;
     contentUrl: string | null;
-    artists?: Array<{ name?: string | null } | null> | null;
+    artists?: Array<{
+      id?: string | null;
+      name?: string | null;
+      contentUrl?: string | null;
+    } | null> | null;
     ticketing?: { isAnyTicketTierAvailable?: boolean };
   };
   const res = withYear
@@ -159,18 +182,102 @@ export async function listRaVenueEvents(options?: {
         { id, type, limit },
       );
   if (!res.ok) return res;
-  const events: RaEvent[] = (res.data.venue?.events ?? []).map((ev) => ({
+  const events: RaEvent[] = (res.data.venue?.events ?? []).map((ev) => {
+    const lineup: RaLineupArtist[] = (ev.artists ?? [])
+      .map((a, billingIndex) => {
+        const name = a?.name?.trim();
+        if (!name) return null;
+        return {
+          id: a?.id?.trim() || null,
+          name,
+          contentUrl: a?.contentUrl?.trim() || null,
+          billingIndex,
+        };
+      })
+      .filter((a): a is RaLineupArtist => Boolean(a));
+    return {
+      id: ev.id,
+      title: ev.title,
+      date: ev.date,
+      startTime: ev.startTime,
+      attending: ev.attending,
+      isTicketed: ev.isTicketed,
+      ticketsAvailable: Boolean(ev.ticketing?.isAnyTicketTierAvailable),
+      contentUrl: ev.contentUrl,
+      artists: lineup.map((a) => a.name),
+      lineup,
+    };
+  });
+  return { ok: true, events };
+}
+
+/** Recent / archive gigs for one RA artist (snowball + scoring). */
+export async function listRaArtistEvents(options: {
+  artistId: string;
+  type?: "LATEST" | "ARCHIVE";
+  year?: number;
+  limit?: number;
+}): Promise<
+  | { ok: true; events: RaArtistEvent[] }
+  | { ok: false; error: string; status: number }
+> {
+  const type = options.type ?? "LATEST";
+  const limit = options.limit ?? 40;
+  const withYear = type === "ARCHIVE" && options.year != null;
+  type ArtistEventRaw = {
+    id: string;
+    title: string;
+    date: string | null;
+    attending: number;
+    contentUrl: string | null;
+    venue?: {
+      id?: string | null;
+      name?: string | null;
+      contentUrl?: string | null;
+    } | null;
+  };
+  const fields = `id title date attending contentUrl
+            venue { id name contentUrl }`;
+  const res = withYear
+    ? await raGraphql<{
+        artist: { events: ArtistEventRaw[] | null } | null;
+      }>(
+        `query ArtistEvents($id: ID!, $type: EventQueryType!, $limit: Int, $year: Int) {
+          artist(id: $id) {
+            events(type: $type, limit: $limit, year: $year) { ${fields} }
+          }
+        }`,
+        {
+          id: options.artistId,
+          type,
+          limit,
+          year: options.year,
+        },
+      )
+    : await raGraphql<{
+        artist: { events: ArtistEventRaw[] | null } | null;
+      }>(
+        `query ArtistEvents($id: ID!, $type: EventQueryType!, $limit: Int) {
+          artist(id: $id) {
+            events(type: $type, limit: $limit) { ${fields} }
+          }
+        }`,
+        { id: options.artistId, type, limit },
+      );
+  if (!res.ok) return res;
+  const events: RaArtistEvent[] = (res.data.artist?.events ?? []).map((ev) => ({
     id: ev.id,
     title: ev.title,
     date: ev.date,
-    startTime: ev.startTime,
-    attending: ev.attending,
-    isTicketed: ev.isTicketed,
-    ticketsAvailable: Boolean(ev.ticketing?.isAnyTicketTierAvailable),
+    attending: ev.attending ?? 0,
     contentUrl: ev.contentUrl,
-    artists: (ev.artists ?? [])
-      .map((a) => a?.name?.trim())
-      .filter((n): n is string => Boolean(n)),
+    venue: ev.venue?.id
+      ? {
+          id: ev.venue.id,
+          name: ev.venue.name ?? "Unknown",
+          contentUrl: ev.venue.contentUrl ?? null,
+        }
+      : null,
   }));
   return { ok: true, events };
 }

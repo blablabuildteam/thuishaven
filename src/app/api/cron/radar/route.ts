@@ -29,9 +29,11 @@ export async function GET(request: Request) {
   }
 
   const eveningOnly = hour === 20 && !force;
+  // Ochtend: max ~20 venues + 2y history (Vercel 300s). Force = zelfde pad.
   const result = await runRadarPipeline({
     skipDiscovery: eveningOnly,
-    spotifyLimit: eveningOnly ? 120 : 80,
+    spotifyLimit: eveningOnly ? 120 : 60,
+    historyYears: 2,
   });
 
   return NextResponse.json({ ok: true, amsterdamHour: hour, result });

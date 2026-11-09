@@ -32,9 +32,14 @@ export default async function RadarArtistDetailPage({
         name: dossier.artist.name,
         status: dossier.artist.status,
         primaryGenre: dossier.artist.primaryGenre,
-        secondaryGenres: (dossier.artist.secondaryGenres as string[] | null) ?? [],
+        secondaryGenres:
+          (dossier.artist.secondaryGenres as string[] | null) ?? [],
         growthScore: dossier.artist.growthScore,
         growthVelocity: dossier.artist.growthVelocity,
+        momentumScore: dossier.artist.momentumScore,
+        fitScore: dossier.artist.fitScore,
+        bookabilityScore: dossier.artist.bookabilityScore,
+        scoreReasons: (dossier.artist.scoreReasons as string[] | null) ?? [],
         notes: dossier.artist.notes,
         discoverySource: dossier.artist.discoverySource,
         imageUrl: dossier.artist.imageUrl,
@@ -54,6 +59,17 @@ export default async function RadarArtistDetailPage({
         platform: m.platform,
         capturedAt: m.capturedAt,
         metrics: m.metrics,
+      }))}
+      recentGigs={dossier.recentGigs.map((g) => ({
+        id: g.id,
+        eventName: g.eventName,
+        startsAt: g.startsAt,
+        city: g.city,
+        country: g.country,
+        attending: g.attending,
+        billingIndex: g.billingIndex,
+        isHeadliner: g.isHeadliner,
+        sourceUrl: g.sourceUrl,
       }))}
     />
   );

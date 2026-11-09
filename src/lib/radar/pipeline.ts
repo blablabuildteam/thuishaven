@@ -1,5 +1,5 @@
 /**
- * Radar orchestration — discovery → Spotify metrics → scores → alerts.
+ * Radar orchestration — RA discovery/history → score v2 → Spotify (optioneel).
  * Social (Apify) en SoundCloud haken hier later op dezelfde sync-loop in.
  */
 import { discoverArtistsFromSeedVenues } from "@/lib/radar/discovery";
@@ -19,6 +19,7 @@ export async function runRadarPipeline(options?: {
   skipDiscovery?: boolean;
   skipSpotify?: boolean;
   spotifyLimit?: number;
+  historyYears?: number;
 }): Promise<RadarPipelineResult> {
   const startedAt = new Date();
   const notes: string[] = [];
@@ -29,14 +30,28 @@ export async function runRadarPipeline(options?: {
         eventsSeen: 0,
         artistsUpserted: 0,
         artistsCreated: 0,
+        gigsUpserted: 0,
+        venuesSuggested: 0,
+        scored: 0,
         skippedNoRaId: 0,
         errors: [] as string[],
       }
-    : await discoverArtistsFromSeedVenues();
+    : await discoverArtistsFromSeedVenues({
+        historyYears: options?.historyYears ?? 2,
+        limitPerVenue: 35,
+        venueLimit: 12,
+        scoreLimit: 50,
+        snowballArtists: 8,
+      });
 
   if (discovery.skippedNoRaId > 0) {
     notes.push(
       `${discovery.skippedNoRaId} venue(s) zonder RA-id overgeslagen — vul een ra.co/clubs/… URL in.`,
+    );
+  }
+  if (!options?.skipDiscovery) {
+    notes.push(
+      `RA: ${discovery.eventsSeen} events, ${discovery.gigsUpserted} gigs, ${discovery.artistsCreated} nieuwe artiesten, ${discovery.venuesSuggested} venue-suggesties, ${discovery.scored} gescoord.`,
     );
   }
 

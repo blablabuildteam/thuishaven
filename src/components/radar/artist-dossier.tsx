@@ -14,6 +14,10 @@ type Props = {
     secondaryGenres: string[] | null;
     growthScore: string | null;
     growthVelocity: string | null;
+    momentumScore: string | null;
+    fitScore: string | null;
+    bookabilityScore: string | null;
+    scoreReasons: string[];
     notes: string | null;
     discoverySource: string;
     imageUrl: string | null;
@@ -32,11 +36,27 @@ type Props = {
     capturedAt: string | Date;
     metrics: Record<string, number | string | null>;
   }>;
+  recentGigs: Array<{
+    id: string;
+    eventName: string | null;
+    startsAt: string | Date | null;
+    city: string | null;
+    country: string | null;
+    attending: number | null;
+    billingIndex: number | null;
+    isHeadliner: boolean;
+    sourceUrl: string | null;
+  }>;
 };
 
 const STATUSES = Object.keys(RADAR_ARTIST_STATUS_NL) as RadarArtistStatus[];
 
-export function ArtistDossier({ artist, profiles, recentMetrics }: Props) {
+export function ArtistDossier({
+  artist,
+  profiles,
+  recentMetrics,
+  recentGigs,
+}: Props) {
   const router = useRouter();
   const [notes, setNotes] = useState(artist.notes ?? "");
   const [status, setStatus] = useState(artist.status);
@@ -78,11 +98,18 @@ export function ArtistDossier({ artist, profiles, recentMetrics }: Props) {
             via {artist.discoverySource}
             {artist.primaryGenre ? ` · ${artist.primaryGenre}` : ""}
           </p>
+          {artist.scoreReasons.length > 0 ? (
+            <ul className="mt-3 space-y-1 text-sm text-text-muted">
+              {artist.scoreReasons.map((r) => (
+                <li key={r}>· {r}</li>
+              ))}
+            </ul>
+          ) : null}
         </div>
-        <dl className="grid grid-cols-2 gap-px border border-border bg-border">
+        <dl className="grid grid-cols-2 gap-px border border-border bg-border sm:grid-cols-4">
           <div className="bg-surface px-4 py-3">
             <dt className="text-[10px] tracking-[0.12em] text-text-dim uppercase">
-              Groeiscore
+              Totaal
             </dt>
             <dd className="font-display text-3xl tabular-nums">
               {artist.growthScore ?? "—"}
@@ -90,10 +117,26 @@ export function ArtistDossier({ artist, profiles, recentMetrics }: Props) {
           </div>
           <div className="bg-surface px-4 py-3">
             <dt className="text-[10px] tracking-[0.12em] text-text-dim uppercase">
-              Velocity
+              Momentum
             </dt>
             <dd className="font-display text-3xl tabular-nums">
-              {artist.growthVelocity ?? "—"}
+              {artist.momentumScore ?? "—"}
+            </dd>
+          </div>
+          <div className="bg-surface px-4 py-3">
+            <dt className="text-[10px] tracking-[0.12em] text-text-dim uppercase">
+              Fit
+            </dt>
+            <dd className="font-display text-3xl tabular-nums">
+              {artist.fitScore ?? "—"}
+            </dd>
+          </div>
+          <div className="bg-surface px-4 py-3">
+            <dt className="text-[10px] tracking-[0.12em] text-text-dim uppercase">
+              Bookable
+            </dt>
+            <dd className="font-display text-3xl tabular-nums">
+              {artist.bookabilityScore ?? "—"}
             </dd>
           </div>
         </dl>
@@ -101,7 +144,7 @@ export function ArtistDossier({ artist, profiles, recentMetrics }: Props) {
 
       {error ? <p className="text-sm text-warn">{error}</p> : null}
 
-      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+      <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
         <section className="space-y-4 border border-border bg-surface p-4">
           <h2 className="font-display text-lg tracking-[0.04em]">Workflow</h2>
           <label className="block text-sm">
@@ -182,7 +225,50 @@ export function ArtistDossier({ artist, profiles, recentMetrics }: Props) {
         </section>
 
         <section className="space-y-4 border border-border bg-surface p-4">
-          <h2 className="font-display text-lg tracking-[0.04em]">Profielen</h2>
+          <h2 className="font-display text-lg tracking-[0.04em]">RA gigs</h2>
+          {recentGigs.length === 0 ? (
+            <p className="text-sm text-text-muted">
+              Nog geen gigs — run discovery zodra seed venues staan.
+            </p>
+          ) : (
+            <ul className="max-h-72 space-y-2 overflow-y-auto text-sm">
+              {recentGigs.map((g) => (
+                <li key={g.id} className="border-b border-border/60 py-2">
+                  <p className="font-medium">
+                    {g.sourceUrl ? (
+                      <a
+                        href={g.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hover:underline"
+                      >
+                        {g.eventName ?? "Event"}
+                      </a>
+                    ) : (
+                      (g.eventName ?? "Event")
+                    )}
+                  </p>
+                  <p className="text-xs text-text-dim">
+                    {g.startsAt
+                      ? new Date(g.startsAt).toLocaleDateString("nl-NL")
+                      : "—"}
+                    {g.city ? ` · ${g.city}` : ""}
+                    {g.country ? `, ${g.country}` : ""}
+                    {g.attending != null ? ` · ${g.attending} attending` : ""}
+                    {g.isHeadliner
+                      ? " · headliner"
+                      : g.billingIndex != null
+                        ? ` · #${g.billingIndex + 1}`
+                        : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <h2 className="pt-2 font-display text-lg tracking-[0.04em]">
+            Profielen
+          </h2>
           {profiles.length === 0 ? (
             <p className="text-sm text-text-muted">Nog geen platformprofielen.</p>
           ) : (
@@ -216,8 +302,8 @@ export function ArtistDossier({ artist, profiles, recentMetrics }: Props) {
           {recentMetrics.length === 0 ? (
             <p className="text-sm text-text-muted">Nog geen snapshots.</p>
           ) : (
-            <ul className="max-h-64 space-y-2 overflow-y-auto text-xs">
-              {recentMetrics.slice(0, 12).map((m) => (
+            <ul className="max-h-48 space-y-2 overflow-y-auto text-xs">
+              {recentMetrics.slice(0, 10).map((m) => (
                 <li key={m.id} className="border border-border/70 px-2 py-1.5">
                   <p className="text-text-dim">
                     {m.platform} ·{" "}

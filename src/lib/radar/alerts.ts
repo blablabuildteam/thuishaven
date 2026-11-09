@@ -42,7 +42,14 @@ export async function markRadarAlertRead(
 }
 
 export async function createRadarAlert(input: {
-  kind: "velocity" | "new_on_radar" | "venue_suggestion" | "lineup" | "digest";
+  kind:
+    | "velocity"
+    | "new_on_radar"
+    | "venue_suggestion"
+    | "lineup"
+    | "digest"
+    | "breakthrough"
+    | "window_closing";
   title: string;
   body?: string | null;
   artistId?: string | null;

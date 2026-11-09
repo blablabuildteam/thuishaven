@@ -2,19 +2,25 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { RADAR_VENUE_STATUS_NL } from "@/lib/radar/types";
+import {
+  RADAR_VENUE_STATUS_NL,
+  RADAR_VENUE_TIER_NL,
+  type RadarVenueTier,
+} from "@/lib/radar/types";
 
 type Venue = {
   id: string;
   name: string;
   kind: "club" | "festival" | "other";
   status: "seed" | "suggested" | "accepted" | "rejected";
+  tier: RadarVenueTier;
   city: string | null;
   country: string | null;
   raUrl: string | null;
   websiteUrl: string | null;
   notes: string | null;
   venueScore: string | null;
+  curatorScore: string | null;
 };
 
 export function VenuesWorkbench({ initial }: { initial: Venue[] }) {
@@ -225,6 +231,7 @@ function VenueTable({
                 <p className="font-medium">{v.name}</p>
                 <p className="text-xs text-text-muted">
                   {v.kind}
+                  {v.tier ? ` · ${RADAR_VENUE_TIER_NL[v.tier]}` : ""}
                   {v.city ? ` · ${v.city}` : ""}
                   {v.country ? `, ${v.country}` : ""}
                 </p>
@@ -233,7 +240,7 @@ function VenueTable({
                 {RADAR_VENUE_STATUS_NL[v.status]}
               </td>
               <td className="px-3 py-2.5 font-mono tabular-nums">
-                {v.venueScore ?? "—"}
+                {v.curatorScore ?? v.venueScore ?? "—"}
               </td>
               <td className="px-3 py-2.5 text-xs text-text-muted">
                 {v.raUrl ? (

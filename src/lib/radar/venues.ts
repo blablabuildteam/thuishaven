@@ -1,18 +1,24 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { radarVenues } from "@/lib/radar/schema";
 
 export type RadarVenueRow = typeof radarVenues.$inferSelect;
 
+export type RadarVenueTier = "early" | "mid" | "major" | "festival" | "series";
+
 export type CreateVenueInput = {
   name: string;
   kind?: "club" | "festival" | "other";
   status?: "seed" | "suggested" | "accepted" | "rejected";
+  tier?: RadarVenueTier;
   city?: string | null;
   country?: string | null;
   raUrl?: string | null;
+  raExternalId?: string | null;
   websiteUrl?: string | null;
   notes?: string | null;
+  curatorScore?: number | null;
+  discoveryHops?: number;
 };
 
 /** Extract RA club/venue id from ra.co/clubs/123 or plain digits. */
@@ -35,7 +41,11 @@ export async function listRadarVenues(options?: {
       .select()
       .from(radarVenues)
       .where(inArray(radarVenues.status, statuses))
-      .orderBy(desc(radarVenues.venueScore), asc(radarVenues.name));
+      .orderBy(
+        desc(radarVenues.curatorScore),
+        desc(radarVenues.venueScore),
+        asc(radarVenues.name),
+      );
   }
   return db
     .select()
@@ -51,25 +61,50 @@ export async function createRadarVenue(
   if (!name) return { error: "Naam is verplicht" };
 
   const status = input.status ?? "seed";
+  const raExternalId =
+    input.raExternalId?.trim() || parseRaVenueId(input.raUrl) || null;
+  const raUrl =
+    input.raUrl?.trim() ||
+    (raExternalId ? `https://ra.co/clubs/${raExternalId}` : null);
+  const curator =
+    input.curatorScore != null && Number.isFinite(input.curatorScore)
+      ? String(input.curatorScore)
+      : null;
+
   const db = getDb();
-  const [venue] = await db
-    .insert(radarVenues)
-    .values({
-      name,
-      kind: input.kind ?? "club",
-      status,
-      city: input.city?.trim() || null,
-      country: input.country?.trim() || "NL",
-      raUrl: input.raUrl?.trim() || null,
-      websiteUrl: input.websiteUrl?.trim() || null,
-      notes: input.notes?.trim() || null,
-      discoveryHops: status === "seed" || status === "accepted" ? 0 : 1,
-      acceptedAt: status === "accepted" || status === "seed" ? new Date() : null,
-      updatedAt: new Date(),
-    })
-    .returning();
-  if (!venue) return { error: "Opslaan mislukt" };
-  return { ok: true, venue };
+  try {
+    const [venue] = await db
+      .insert(radarVenues)
+      .values({
+        name,
+        kind: input.kind ?? "club",
+        status,
+        tier: input.tier ?? "mid",
+        city: input.city?.trim() || null,
+        country: input.country?.trim() || "NL",
+        raUrl,
+        raExternalId,
+        websiteUrl: input.websiteUrl?.trim() || null,
+        notes: input.notes?.trim() || null,
+        curatorScore: curator,
+        venueScore: curator,
+        discoveryHops:
+          input.discoveryHops ??
+          (status === "seed" || status === "accepted" ? 0 : 1),
+        acceptedAt:
+          status === "accepted" || status === "seed" ? new Date() : null,
+        updatedAt: new Date(),
+      })
+      .returning();
+    if (!venue) return { error: "Opslaan mislukt" };
+    return { ok: true, venue };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Opslaan mislukt";
+    if (/unique|duplicate/i.test(msg)) {
+      return { error: "Venue met dit RA-id bestaat al" };
+    }
+    return { error: msg };
+  }
 }
 
 export async function updateRadarVenue(
@@ -89,13 +124,29 @@ export async function updateRadarVenue(
     values.name = name;
   }
   if (patch.kind) values.kind = patch.kind;
+  if (patch.tier) values.tier = patch.tier;
   if (patch.city !== undefined) values.city = patch.city?.trim() || null;
   if (patch.country !== undefined) values.country = patch.country?.trim() || null;
-  if (patch.raUrl !== undefined) values.raUrl = patch.raUrl?.trim() || null;
+  if (patch.raUrl !== undefined) {
+    values.raUrl = patch.raUrl?.trim() || null;
+    const parsed = parseRaVenueId(patch.raUrl);
+    if (parsed) values.raExternalId = parsed;
+  }
+  if (patch.raExternalId !== undefined) {
+    values.raExternalId = patch.raExternalId?.trim() || null;
+  }
   if (patch.websiteUrl !== undefined) {
     values.websiteUrl = patch.websiteUrl?.trim() || null;
   }
   if (patch.notes !== undefined) values.notes = patch.notes?.trim() || null;
+  if (patch.curatorScore !== undefined) {
+    values.curatorScore =
+      patch.curatorScore == null ? null : String(patch.curatorScore);
+    values.venueScore = values.curatorScore;
+  }
+  if (patch.discoveryHops !== undefined) {
+    values.discoveryHops = patch.discoveryHops;
+  }
   if (patch.status) {
     values.status = patch.status;
     if (patch.status === "accepted" || patch.status === "seed") {
@@ -145,4 +196,34 @@ export async function countVenuesByStatus(): Promise<Record<string, number>> {
     .from(radarVenues)
     .groupBy(radarVenues.status);
   return Object.fromEntries(rows.map((r) => [r.status, r.n]));
+}
+
+/** Upsert seed list by raExternalId (idempotent). */
+export async function upsertSeedVenue(
+  input: CreateVenueInput & { raExternalId: string },
+): Promise<{ ok: true; venue: RadarVenueRow; created: boolean } | { error: string }> {
+  if (!hasDatabase()) return { error: "DATABASE_URL ontbreekt" };
+  const db = getDb();
+  const raExternalId = input.raExternalId.trim();
+  const [existing] = await db
+    .select()
+    .from(radarVenues)
+    .where(eq(radarVenues.raExternalId, raExternalId))
+    .limit(1);
+  if (existing) {
+    const updated = await updateRadarVenue(existing.id, {
+      ...input,
+      status: existing.status === "rejected" ? existing.status : input.status ?? "seed",
+      raExternalId,
+    });
+    if ("error" in updated) return updated;
+    return { ok: true, venue: updated.venue, created: false };
+  }
+  const created = await createRadarVenue({
+    ...input,
+    raExternalId,
+    status: input.status ?? "seed",
+  });
+  if ("error" in created) return created;
+  return { ok: true, venue: created.venue, created: true };
 }

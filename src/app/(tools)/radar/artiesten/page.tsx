@@ -20,7 +20,7 @@ export default async function RadarArtistsPage() {
     <div>
       <RadarPageHeader
         title="Artiesten"
-        description="Groeiscore weegt recente groei zwaarder dan absolute omvang. Zet statussen om je scout-workflow vast te leggen."
+        description="Score = momentum × fit × bookability, vooral uit RA-boekingen. Redenen staan onder de naam."
       />
 
       <RadarStatStrip
@@ -41,6 +41,10 @@ export default async function RadarArtistsPage() {
           primaryGenre: a.primaryGenre,
           growthScore: a.growthScore,
           growthVelocity: a.growthVelocity,
+          momentumScore: a.momentumScore,
+          fitScore: a.fitScore,
+          bookabilityScore: a.bookabilityScore,
+          scoreReasons: (a.scoreReasons as string[] | null) ?? [],
           discoverySource: a.discoverySource,
           imageUrl: a.imageUrl,
         }))}

@@ -34,12 +34,14 @@ export default async function RadarVenuesPage() {
           name: v.name,
           kind: v.kind,
           status: v.status,
+          tier: v.tier,
           city: v.city,
           country: v.country,
           raUrl: v.raUrl,
           websiteUrl: v.websiteUrl,
           notes: v.notes,
           venueScore: v.venueScore,
+          curatorScore: v.curatorScore,
         }))}
       />
     </div>
