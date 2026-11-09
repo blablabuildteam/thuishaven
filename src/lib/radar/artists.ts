@@ -126,24 +126,37 @@ export async function upsertRadarArtist(input: {
     return { ok: true, artist: existing, created: false };
   }
 
-  const [artist] = await db
-    .insert(radarArtists)
-    .values({
-      name,
-      normalizedName,
-      discoverySource: input.discoverySource ?? "manual",
-      discoveryHops: input.discoveryHops ?? 0,
-      discoveredViaVenueId: input.discoveredViaVenueId ?? null,
-      primaryGenre: input.primaryGenre ?? null,
-      secondaryGenres: input.secondaryGenres ?? [],
-      country: input.country ?? null,
-      city: input.city ?? null,
-      imageUrl: input.imageUrl ?? null,
-      updatedAt: new Date(),
-    })
-    .returning();
-  if (!artist) return { error: "Opslaan mislukt" };
-  return { ok: true, artist, created: true };
+  try {
+    const [artist] = await db
+      .insert(radarArtists)
+      .values({
+        name,
+        normalizedName,
+        discoverySource: input.discoverySource ?? "manual",
+        discoveryHops: input.discoveryHops ?? 0,
+        discoveredViaVenueId: input.discoveredViaVenueId ?? null,
+        primaryGenre: input.primaryGenre ?? null,
+        secondaryGenres: input.secondaryGenres ?? [],
+        country: input.country ?? null,
+        city: input.city ?? null,
+        imageUrl: input.imageUrl ?? null,
+        updatedAt: new Date(),
+      })
+      .returning();
+    if (!artist) return { error: "Opslaan mislukt" };
+    return { ok: true, artist, created: true };
+  } catch (e) {
+    // Parallel discovery/import can race on normalized_name.
+    const [again] = await db
+      .select()
+      .from(radarArtists)
+      .where(eq(radarArtists.normalizedName, normalizedName))
+      .limit(1);
+    if (again) return { ok: true, artist: again, created: false };
+    return {
+      error: e instanceof Error ? e.message : "Opslaan mislukt",
+    };
+  }
 }
 
 export async function setRadarArtistStatus(
