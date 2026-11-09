@@ -1,23 +1,26 @@
 import {
-  RadarEmptyState,
   RadarPageHeader,
   RadarStatStrip,
 } from "@/components/radar/radar-page-header";
+import { VenuesWorkbench } from "@/components/radar/venues-workbench";
 import { loadRadarOverviewStats } from "@/lib/radar/stats";
+import { listRadarVenues } from "@/lib/radar/venues";
 
 export const metadata = { title: "Venues · Radar" };
 export const dynamic = "force-dynamic";
 
 export default async function RadarVenuesPage() {
-  const stats = await loadRadarOverviewStats();
+  const [stats, venues] = await Promise.all([
+    loadRadarOverviewStats(),
+    listRadarVenues(),
+  ]);
 
   return (
     <div>
       <RadarPageHeader
         title="Venues"
-        description="Startlijst van clubs en festivals. Suggesties uit de sneeuwbal verschijnen hier ter goedkeuring."
+        description="Startlijst voedt de sneeuwbal. Zonder RA-club-id kunnen we geen line-ups ophalen voor die venue."
       />
-
       <RadarStatStrip
         items={[
           { label: "Startlijst", value: stats.venuesSeed },
@@ -25,18 +28,20 @@ export default async function RadarVenuesPage() {
           { label: "Artiesten", value: stats.artists },
         ]}
       />
-
-      {stats.venuesSeed === 0 && stats.venuesSuggested === 0 ? (
-        <RadarEmptyState
-          title="Startlijst is leeg"
-          body="Voeg de clubs en festivals toe waar jullie talent willen spotten. Dat wordt het vertrekpunt van de sneeuwbal — niet de harde grens."
-        />
-      ) : (
-        <div className="border border-border px-3 py-8 text-sm text-text-muted sm:px-4">
-          Venue-tabel volgt in de volgende stap, inclusief toevoegen en
-          suggesties accepteren.
-        </div>
-      )}
+      <VenuesWorkbench
+        initial={venues.map((v) => ({
+          id: v.id,
+          name: v.name,
+          kind: v.kind,
+          status: v.status,
+          city: v.city,
+          country: v.country,
+          raUrl: v.raUrl,
+          websiteUrl: v.websiteUrl,
+          notes: v.notes,
+          venueScore: v.venueScore,
+        }))}
+      />
     </div>
   );
 }

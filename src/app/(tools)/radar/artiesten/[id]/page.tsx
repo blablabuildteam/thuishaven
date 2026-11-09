@@ -1,0 +1,60 @@
+import { notFound } from "next/navigation";
+import { ArtistDossier } from "@/components/radar/artist-dossier";
+import { getRadarArtist } from "@/lib/radar/artists";
+
+export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const dossier = await getRadarArtist(id);
+  return {
+    title: dossier ? `${dossier.artist.name} · Radar` : "Artiest · Radar",
+  };
+}
+
+export default async function RadarArtistDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const dossier = await getRadarArtist(id);
+  if (!dossier) notFound();
+
+  return (
+    <ArtistDossier
+      artist={{
+        id: dossier.artist.id,
+        name: dossier.artist.name,
+        status: dossier.artist.status,
+        primaryGenre: dossier.artist.primaryGenre,
+        secondaryGenres: (dossier.artist.secondaryGenres as string[] | null) ?? [],
+        growthScore: dossier.artist.growthScore,
+        growthVelocity: dossier.artist.growthVelocity,
+        notes: dossier.artist.notes,
+        discoverySource: dossier.artist.discoverySource,
+        imageUrl: dossier.artist.imageUrl,
+        growthBreakdown:
+          (dossier.artist.growthBreakdown as Record<string, unknown> | null) ??
+          null,
+      }}
+      profiles={dossier.profiles.map((p) => ({
+        platform: p.platform,
+        url: p.url,
+        handle: p.handle,
+        externalId: p.externalId,
+        lastSyncedAt: p.lastSyncedAt,
+      }))}
+      recentMetrics={dossier.recentMetrics.map((m) => ({
+        id: m.id,
+        platform: m.platform,
+        capturedAt: m.capturedAt,
+        metrics: m.metrics,
+      }))}
+    />
+  );
+}

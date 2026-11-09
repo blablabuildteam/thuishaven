@@ -1,4 +1,4 @@
-import { count, eq, isNull, sql } from "drizzle-orm";
+import { count, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import { radarAlerts, radarArtists, radarVenues } from "@/lib/radar/schema";
 
@@ -36,7 +36,7 @@ export async function loadRadarOverviewStats(): Promise<RadarOverviewStats> {
     db
       .select({ n: count() })
       .from(radarVenues)
-      .where(eq(radarVenues.status, "seed")),
+      .where(inArray(radarVenues.status, ["seed", "accepted"])),
     db
       .select({ n: count() })
       .from(radarVenues)

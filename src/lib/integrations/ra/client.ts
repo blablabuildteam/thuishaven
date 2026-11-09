@@ -106,6 +106,8 @@ export async function getRaVenue(): Promise<
 }
 
 export async function listRaVenueEvents(options?: {
+  /** Defaults to RA_VENUE_ID / Thuishaven. Radar passes seed venue ids. */
+  venueId?: string;
   type?: "LATEST" | "ARCHIVE";
   year?: number;
   limit?: number;
@@ -115,6 +117,7 @@ export async function listRaVenueEvents(options?: {
   const type = options?.type ?? "LATEST";
   const limit = options?.limit ?? 40;
   const year = options?.year;
+  const id = options?.venueId?.trim() || venueId();
   const withYear = type === "ARCHIVE" && year != null;
   const eventFields = `id title date startTime attending isTicketed contentUrl
               artists { name }
@@ -141,7 +144,7 @@ export async function listRaVenueEvents(options?: {
             }
           }
         }`,
-        { id: venueId(), type, limit, year },
+        { id, type, limit, year },
       )
     : await raGraphql<{
         venue: { events: VenueEventRaw[] | null } | null;
@@ -153,7 +156,7 @@ export async function listRaVenueEvents(options?: {
             }
           }
         }`,
-        { id: venueId(), type, limit },
+        { id, type, limit },
       );
   if (!res.ok) return res;
   const events: RaEvent[] = (res.data.venue?.events ?? []).map((ev) => ({

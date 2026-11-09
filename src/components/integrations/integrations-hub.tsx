@@ -76,7 +76,7 @@ const statusLabel: Record<StatusRow["status"], string> = {
 };
 
 const SECTIONS: Array<{
-  id: "dashboard" | "outreach" | "shared";
+  id: "dashboard" | "outreach" | "radar" | "shared";
   title: string;
   description: string;
 }> = [
@@ -93,10 +93,16 @@ const SECTIONS: Array<{
       "Apollo haalt de doelgroep. KvK keurt. LinkedIn is extra: zoeken + headcount in het CRM.",
   },
   {
+    id: "radar",
+    title: "DJ Talenten Radar",
+    description:
+      "Spotify voor Groeiscore, Apify voor social signals, RA line-ups voor discovery.",
+  },
+  {
     id: "shared",
     title: "Beide tools",
     description:
-      "Login, database, e-mail en AI — gedeelde basis voor dashboard en outreach.",
+      "Login, database, e-mail en AI — gedeelde basis voor dashboard, outreach en radar.",
   },
 ];
 
@@ -614,6 +620,15 @@ export function IntegrationsHub() {
         .filter((r) => r.tool === "outreach")
         .sort((a, b) => {
           const order = ["apollo", "kvk", "linkedin", "sales_notify"];
+          return (
+            (order.indexOf(a.id) === -1 ? 99 : order.indexOf(a.id)) -
+            (order.indexOf(b.id) === -1 ? 99 : order.indexOf(b.id))
+          );
+        }),
+      radar: rows
+        .filter((r) => r.tool === "radar")
+        .sort((a, b) => {
+          const order = ["spotify", "apify"];
           return (
             (order.indexOf(a.id) === -1 ? 99 : order.indexOf(a.id)) -
             (order.indexOf(b.id) === -1 ? 99 : order.indexOf(b.id))

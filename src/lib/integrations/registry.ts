@@ -1,4 +1,4 @@
-export type IntegrationTool = "shared" | "dashboard" | "outreach";
+export type IntegrationTool = "shared" | "dashboard" | "outreach" | "radar";
 
 export type IntegrationStatus =
   | "missing"
@@ -141,7 +141,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     name: "Resident Advisor",
     tool: "dashboard",
     description:
-      "Venue listings + Amsterdam concurrenten (genres). Sync 4× per dag via cron (08:00, 13:00, 19:00, 23:00 Amsterdam). Alert als Weeztix uitverkocht is terwijl RA nog verkoopt.",
+      "Venue listings + Amsterdam concurrenten (genres). Sync 4× per dag via cron (08:00, 13:00, 19:00, 23:00 Amsterdam). Alert als Weeztix uitverkocht is terwijl RA nog verkoopt. Radar hergebruikt dezelfde GraphQL voor seed-venue line-ups.",
     envKeys: [],
     optionalEnvKeys: ["RA_VENUE_ID", "RA_API_KEY"],
     askFromClient: [
@@ -150,6 +150,37 @@ export const INTEGRATIONS: IntegrationDef[] = [
     ],
     verifyHint: "GraphQL venue + listings (read-only)",
     docsUrl: "https://ra.co/clubs/109027",
+    priority: "high",
+  },
+  {
+    id: "spotify",
+    name: "Spotify (Radar)",
+    tool: "radar",
+    description:
+      "Artiest zoeken, genres, followers en popularity voor de Groeiscore. Client-credentials (geen user-login).",
+    envKeys: ["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET"],
+    askFromClient: [
+      "Spotify Developer app op naam van Thuishaven",
+      "Client ID + Client Secret (Dashboard → Settings)",
+    ],
+    verifyHint: "Token + artist search",
+    docsUrl: "https://developer.spotify.com/dashboard",
+    priority: "high",
+  },
+  {
+    id: "apify",
+    name: "Apify (Radar social)",
+    tool: "radar",
+    description:
+      "Instagram/TikTok publieke metrics via managed actors + proxies. Kosten op Thuishaven-account.",
+    envKeys: ["APIFY_TOKEN"],
+    optionalEnvKeys: ["APIFY_INSTAGRAM_ACTOR_ID", "APIFY_TIKTOK_ACTOR_ID"],
+    askFromClient: [
+      "Apify-account + token",
+      "Welke Instagram/TikTok actors jullie willen (of wij kiezen een default)",
+    ],
+    verifyHint: "GET /v2/user/me",
+    docsUrl: "https://console.apify.com/",
     priority: "high",
   },
   {
