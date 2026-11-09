@@ -122,7 +122,8 @@ export function normalizeToolAccess(
   return {
     dashboard: typeof obj.dashboard === "boolean" ? obj.dashboard : true,
     outreach: typeof obj.outreach === "boolean" ? obj.outreach : true,
-    radar: preview && (typeof obj.radar === "boolean" ? obj.radar : false),
+    // Preview: iedereen @blablabuild.com ziet Radar, ook zonder DB-toggle.
+    radar: preview,
     dashboardAreas: areas(
       obj.dashboardAreas,
       DEFAULT_TOOL_ACCESS.dashboardAreas,
@@ -131,10 +132,12 @@ export function normalizeToolAccess(
       obj.outreachAreas,
       DEFAULT_TOOL_ACCESS.outreachAreas,
     ) as ToolAccess["outreachAreas"],
-    radarAreas: areas(
-      obj.radarAreas,
-      DEFAULT_TOOL_ACCESS.radarAreas,
-    ) as ToolAccess["radarAreas"],
+    radarAreas: preview
+      ? { ...DEFAULT_TOOL_ACCESS.radarAreas }
+      : (areas(
+          obj.radarAreas,
+          DEFAULT_TOOL_ACCESS.radarAreas,
+        ) as ToolAccess["radarAreas"]),
   };
 }
 

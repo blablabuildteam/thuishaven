@@ -77,11 +77,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.name = user.name;
         token.sub = user.id;
         token.role = (user as { role?: string }).role ?? "member";
-        token.toolAccess = normalizeToolAccess(
-          (user as { toolAccess?: unknown }).toolAccess,
-          (token.role as "admin" | "member") ?? "member",
-          user.email,
-        );
         const remember =
           "remember" in user
             ? Boolean((user as { remember?: boolean }).remember)
@@ -90,6 +85,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const days = remember ? SESSION_DAYS_REMEMBER : SESSION_DAYS_DEFAULT;
         token.exp = Math.floor(Date.now() / 1000) + days * 24 * 60 * 60;
       }
+      // Elke request: Radar-preview gate opnieuw toepassen (ook zonder herlogin).
+      token.toolAccess = normalizeToolAccess(
+        user
+          ? (user as { toolAccess?: unknown }).toolAccess
+          : token.toolAccess,
+        (token.role as "admin" | "member") ?? "member",
+        (token.email as string | undefined) ?? null,
+      );
       return token;
     },
     async session({ session, token }) {
