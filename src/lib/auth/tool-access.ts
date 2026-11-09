@@ -19,12 +19,16 @@ export function isRadarPreviewViewer(email?: string | null): boolean {
       .filter(Boolean),
   );
   if (allowed.has(domain)) return true;
-  // Optioneel: exacte e-mails, bv. RADAR_PREVIEW_EMAILS=kevin@x.com,other@y.com
-  const emails = (process.env.RADAR_PREVIEW_EMAILS?.trim() ?? "")
-    .split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
-  return emails.includes(normalized);
+  // Exacte e-mails (env + vaste BlaBlaBuild-admins die ook via thuishaven.nl inloggen)
+  const emails = new Set(
+    [
+      "kevin@thuishaven.nl",
+      ...(process.env.RADAR_PREVIEW_EMAILS?.trim() ?? "").split(","),
+    ]
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  return emails.has(normalized);
 }
 
 export type DashboardArea = "overzicht" | "omzet" | "marketing";
