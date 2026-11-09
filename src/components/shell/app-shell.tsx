@@ -3,7 +3,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  startTransition,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useSession } from "next-auth/react";
 import {
   BarChart3,
@@ -794,6 +800,13 @@ function ToolPicker({
   const rootRef = useRef<HTMLDivElement>(null);
   const active = tools.find((t) => t.id === activeTool) ?? tools[0];
 
+  // Prefetch andere tools zodat switchen sneller voelt.
+  useEffect(() => {
+    for (const tool of tools) {
+      if (tool.id !== activeTool) router.prefetch(tool.href);
+    }
+  }, [tools, activeTool, router]);
+
   useEffect(() => {
     if (!open) return;
     const onPointer = (event: MouseEvent) => {
@@ -851,8 +864,14 @@ function ToolPicker({
                   onClick={() => {
                     setOpen(false);
                     onNavigate?.();
-                    if (tool.id !== active.id) router.push(tool.href);
+                    if (tool.id !== active.id) {
+                      startTransition(() => {
+                        router.push(tool.href);
+                      });
+                    }
                   }}
+                  onMouseEnter={() => router.prefetch(tool.href)}
+                  onFocus={() => router.prefetch(tool.href)}
                   className={cn(
                     "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors",
                     selected

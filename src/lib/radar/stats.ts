@@ -1,6 +1,5 @@
-import { count, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
-import { radarAlerts, radarArtists, radarVenues } from "@/lib/radar/schema";
+import { sql } from "drizzle-orm";
 
 export type RadarOverviewStats = {
   artists: number;
@@ -18,55 +17,41 @@ const EMPTY: RadarOverviewStats = {
   unreadAlerts: 0,
 };
 
+/** One round-trip instead of five count queries. */
 export async function loadRadarOverviewStats(): Promise<RadarOverviewStats> {
   if (!hasDatabase()) return EMPTY;
   const db = getDb();
-  const [
-    [artists],
-    [shortlist],
-    [venuesSeed],
-    [venuesSuggested],
-    [unreadAlerts],
-  ] = await Promise.all([
-    db.select({ n: count() }).from(radarArtists),
-    db
-      .select({ n: count() })
-      .from(radarArtists)
-      .where(eq(radarArtists.status, "shortlist")),
-    db
-      .select({ n: count() })
-      .from(radarVenues)
-      .where(inArray(radarVenues.status, ["seed", "accepted"])),
-    db
-      .select({ n: count() })
-      .from(radarVenues)
-      .where(eq(radarVenues.status, "suggested")),
-    db
-      .select({ n: count() })
-      .from(radarAlerts)
-      .where(isNull(radarAlerts.readAt)),
-  ]);
+  const [row] = await db.execute<{
+    artists: number;
+    shortlist: number;
+    venues_seed: number;
+    venues_suggested: number;
+    unread_alerts: number;
+  }>(sql`
+    select
+      (select count(*)::int from radar_artists) as artists,
+      (select count(*)::int from radar_artists where status = 'shortlist') as shortlist,
+      (select count(*)::int from radar_venues where status in ('seed', 'accepted')) as venues_seed,
+      (select count(*)::int from radar_venues where status = 'suggested') as venues_suggested,
+      (select count(*)::int from radar_alerts where read_at is null) as unread_alerts
+  `);
 
   return {
-    artists: artists?.n ?? 0,
-    shortlist: shortlist?.n ?? 0,
-    venuesSeed: venuesSeed?.n ?? 0,
-    venuesSuggested: venuesSuggested?.n ?? 0,
-    unreadAlerts: unreadAlerts?.n ?? 0,
+    artists: Number(row?.artists ?? 0),
+    shortlist: Number(row?.shortlist ?? 0),
+    venuesSeed: Number(row?.venues_seed ?? 0),
+    venuesSuggested: Number(row?.venues_suggested ?? 0),
+    unreadAlerts: Number(row?.unread_alerts ?? 0),
   };
 }
 
 export async function radarHasAnyData(): Promise<boolean> {
   if (!hasDatabase()) return false;
   const db = getDb();
-  const [row] = await db
-    .select({ n: sql<number>`1` })
-    .from(radarArtists)
-    .limit(1);
-  if (row) return true;
-  const [venue] = await db
-    .select({ n: sql<number>`1` })
-    .from(radarVenues)
-    .limit(1);
-  return Boolean(venue);
+  const [row] = await db.execute<{ ok: number }>(sql`
+    select 1::int as ok
+    where exists (select 1 from radar_artists limit 1)
+       or exists (select 1 from radar_venues limit 1)
+  `);
+  return Boolean(row?.ok);
 }

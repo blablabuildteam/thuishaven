@@ -11,6 +11,22 @@ import { normalizeArtistName, type RadarArtistStatus } from "@/lib/radar/types";
 export type RadarArtistRow = typeof radarArtists.$inferSelect;
 export type RadarArtistProfile = typeof radarArtistProfiles.$inferSelect;
 
+export type RadarArtistListItem = Pick<
+  RadarArtistRow,
+  | "id"
+  | "name"
+  | "status"
+  | "primaryGenre"
+  | "growthScore"
+  | "growthVelocity"
+  | "momentumScore"
+  | "fitScore"
+  | "bookabilityScore"
+  | "scoreReasons"
+  | "discoverySource"
+  | "imageUrl"
+>;
+
 export async function listRadarArtists(options?: {
   q?: string;
   status?: RadarArtistStatus | "all";
@@ -18,10 +34,12 @@ export async function listRadarArtists(options?: {
   sort?: "score" | "name" | "newest";
   limit?: number;
   offset?: number;
-}): Promise<{ rows: RadarArtistRow[]; total: number }> {
+  /** Skip expensive count(*) when the UI already has an overview total. */
+  includeTotal?: boolean;
+}): Promise<{ rows: RadarArtistListItem[]; total: number }> {
   if (!hasDatabase()) return { rows: [], total: 0 };
   const db = getDb();
-  const limit = Math.min(options?.limit ?? 80, 200);
+  const limit = Math.min(options?.limit ?? 60, 120);
   const offset = options?.offset ?? 0;
   const filters = [];
   if (options?.q?.trim()) {
@@ -37,25 +55,48 @@ export async function listRadarArtists(options?: {
     filters.push(eq(radarArtists.primaryGenre, options.genre.trim()));
   }
   const where = filters.length ? and(...filters) : undefined;
+  const needsCount = options?.includeTotal !== false && Boolean(where);
 
-  const order =
-    options?.sort === "name"
-      ? asc(radarArtists.name)
-      : options?.sort === "newest"
-        ? desc(radarArtists.firstSeenAt)
-        : desc(radarArtists.growthScore);
+  const listQuery = db
+    .select({
+      id: radarArtists.id,
+      name: radarArtists.name,
+      status: radarArtists.status,
+      primaryGenre: radarArtists.primaryGenre,
+      growthScore: radarArtists.growthScore,
+      growthVelocity: radarArtists.growthVelocity,
+      momentumScore: radarArtists.momentumScore,
+      fitScore: radarArtists.fitScore,
+      bookabilityScore: radarArtists.bookabilityScore,
+      scoreReasons: radarArtists.scoreReasons,
+      discoverySource: radarArtists.discoverySource,
+      imageUrl: radarArtists.imageUrl,
+    })
+    .from(radarArtists)
+    .where(where)
+    .orderBy(
+      ...(options?.sort === "name"
+        ? [asc(radarArtists.name)]
+        : options?.sort === "newest"
+          ? [desc(radarArtists.firstSeenAt), asc(radarArtists.name)]
+          : [
+              sql`${radarArtists.growthScore} desc nulls last`,
+              asc(radarArtists.name),
+            ]),
+    )
+    .limit(limit)
+    .offset(offset);
+
+  if (!needsCount) {
+    const rows = await listQuery;
+    return { rows, total: rows.length };
+  }
 
   const [countRow] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(radarArtists)
     .where(where);
-  const rows = await db
-    .select()
-    .from(radarArtists)
-    .where(where)
-    .orderBy(order, asc(radarArtists.name))
-    .limit(limit)
-    .offset(offset);
+  const rows = await listQuery;
   return { rows, total: countRow?.n ?? 0 };
 }
 

@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function RadarArtistsPage() {
   const [stats, list] = await Promise.all([
     loadRadarOverviewStats(),
-    listRadarArtists({ sort: "score", limit: 120 }),
+    listRadarArtists({ sort: "score", limit: 50, includeTotal: false }),
   ]);
 
   return (
@@ -48,7 +48,7 @@ export default async function RadarArtistsPage() {
           discoverySource: a.discoverySource,
           imageUrl: a.imageUrl,
         }))}
-        total={list.total}
+        total={stats.artists}
         spotifyReady={isSpotifyConfigured()}
       />
     </div>
