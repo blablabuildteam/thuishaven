@@ -3,12 +3,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useSession } from "next-auth/react";
 import {
   BarChart3,
   Bell,
   CalendarDays,
+  ChevronDown,
   Disc3,
   Euro,
   Home,
@@ -509,24 +510,13 @@ function ShellNav({
 
       <div className="border-b border-border px-3 py-3">
         {toolSwitches.length > 1 ? (
-          <div
-            className={cn(
-              "grid gap-1 bg-bg-elevated p-1",
-              toolSwitches.length === 2 ? "grid-cols-2" : "grid-cols-3",
-            )}
-          >
-            {toolSwitches.map((tool) => (
-              <ToolSwitch
-                key={tool.id}
-                href={tool.href}
-                active={activeTool === tool.id}
-                label={tool.label}
-                onNavigate={onNavigate}
-              />
-            ))}
-          </div>
+          <ToolPicker
+            tools={toolSwitches}
+            activeTool={activeTool}
+            onNavigate={onNavigate}
+          />
         ) : (
-          <p className="px-1 py-1 font-display text-xs tracking-[0.12em] text-text-dim">
+          <p className="px-1 py-1.5 font-display text-sm tracking-[0.04em] text-text">
             {TOOL_LABEL[activeTool]}
           </p>
         )}
@@ -779,29 +769,88 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ToolSwitch({
-  href,
-  active,
-  label,
+function ToolPicker({
+  tools,
+  activeTool,
   onNavigate,
 }: {
-  href: string;
-  active: boolean;
-  label: string;
+  tools: Array<{ id: ToolId; href: string; label: string }>;
+  activeTool: ToolId;
   onNavigate?: () => void;
 }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const active = tools.find((t) => t.id === activeTool) ?? tools[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  if (!active) return null;
+
   return (
-    <Link
-      href={href}
-      onClick={onNavigate}
-      className={cn(
-        "px-2 py-1.5 text-center text-sm transition-colors",
-        active
-          ? "bg-accent text-accent-contrast"
-          : "text-text-muted hover:bg-surface hover:text-text",
-      )}
-    >
-      {label}
-    </Link>
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Kies tool"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 bg-accent px-3 py-2 text-left text-sm text-accent-contrast transition-colors"
+      >
+        <span className="font-display tracking-[0.04em]">{active.label}</span>
+        <ChevronDown
+          className={cn(
+            "size-4 shrink-0 opacity-80 transition-transform",
+            open && "rotate-180",
+          )}
+          strokeWidth={1.75}
+        />
+      </button>
+      {open ? (
+        <ul
+          role="listbox"
+          aria-label="Tools"
+          className="absolute inset-x-0 top-full z-40 mt-1 border border-border bg-bg py-1 shadow-sm"
+        >
+          {tools.map((tool) => {
+            const selected = tool.id === active.id;
+            return (
+              <li key={tool.id} role="option" aria-selected={selected}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    onNavigate?.();
+                    if (tool.id !== active.id) router.push(tool.href);
+                  }}
+                  className={cn(
+                    "flex w-full items-center px-3 py-2 text-left text-sm transition-colors",
+                    selected
+                      ? "bg-accent text-accent-contrast"
+                      : "text-text-muted hover:bg-surface hover:text-text",
+                  )}
+                >
+                  {tool.label}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
   );
 }
