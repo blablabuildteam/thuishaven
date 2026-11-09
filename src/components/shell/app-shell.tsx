@@ -10,13 +10,16 @@ import {
   Bell,
   CalendarDays,
   ChevronDown,
+  Crosshair,
   Disc3,
   Euro,
   Home,
+  LayoutDashboard,
   MapPin,
   Menu,
   Plug,
   ScrollText,
+  Send,
   Ticket,
   Users,
   Sparkles,
@@ -454,6 +457,7 @@ function ShellNav({
             id: "dashboard" as const,
             href: TOOL_HOME.dashboard,
             label: TOOL_LABEL.dashboard,
+            icon: LayoutDashboard,
           }
         : null,
       showOutreach
@@ -461,6 +465,7 @@ function ShellNav({
             id: "outreach" as const,
             href: TOOL_HOME.outreach,
             label: TOOL_LABEL.outreach,
+            icon: Send,
           }
         : null,
       showRadar
@@ -468,10 +473,16 @@ function ShellNav({
             id: "radar" as const,
             href: TOOL_HOME.radar,
             label: TOOL_LABEL.radar,
+            icon: Crosshair,
           }
         : null,
     ] as const
-  ).filter(Boolean) as Array<{ id: ToolId; href: string; label: string }>;
+  ).filter(Boolean) as Array<{
+    id: ToolId;
+    href: string;
+    label: string;
+    icon: LucideIcon;
+  }>;
 
   return (
     <>
@@ -774,7 +785,7 @@ function ToolPicker({
   activeTool,
   onNavigate,
 }: {
-  tools: Array<{ id: ToolId; href: string; label: string }>;
+  tools: Array<{ id: ToolId; href: string; label: string; icon: LucideIcon }>;
   activeTool: ToolId;
   onNavigate?: () => void;
 }) {
@@ -800,6 +811,7 @@ function ToolPicker({
   }, [open]);
 
   if (!active) return null;
+  const ActiveIcon = active.icon;
 
   return (
     <div ref={rootRef} className="relative">
@@ -811,7 +823,10 @@ function ToolPicker({
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between gap-2 bg-accent px-3 py-2 text-left text-sm text-accent-contrast transition-colors"
       >
-        <span className="font-display tracking-[0.04em]">{active.label}</span>
+        <span className="flex min-w-0 items-center gap-2">
+          <ActiveIcon className="size-4 shrink-0" strokeWidth={1.75} />
+          <span className="font-display tracking-[0.04em]">{active.label}</span>
+        </span>
         <ChevronDown
           className={cn(
             "size-4 shrink-0 opacity-80 transition-transform",
@@ -828,6 +843,7 @@ function ToolPicker({
         >
           {tools.map((tool) => {
             const selected = tool.id === active.id;
+            const Icon = tool.icon;
             return (
               <li key={tool.id} role="option" aria-selected={selected}>
                 <button
@@ -838,13 +854,16 @@ function ToolPicker({
                     if (tool.id !== active.id) router.push(tool.href);
                   }}
                   className={cn(
-                    "flex w-full items-center px-3 py-2 text-left text-sm transition-colors",
+                    "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors",
                     selected
                       ? "bg-accent text-accent-contrast"
                       : "text-text-muted hover:bg-surface hover:text-text",
                   )}
                 >
-                  {tool.label}
+                  <Icon className="size-4 shrink-0" strokeWidth={1.75} />
+                  <span className="font-display tracking-[0.04em]">
+                    {tool.label}
+                  </span>
                 </button>
               </li>
             );

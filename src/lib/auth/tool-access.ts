@@ -11,13 +11,20 @@ export function isRadarPreviewViewer(email?: string | null): boolean {
   const normalized = email?.trim().toLowerCase() ?? "";
   if (!normalized.includes("@")) return false;
   const domain = normalized.split("@").pop() ?? "";
-  const raw =
-    process.env.RADAR_PREVIEW_DOMAINS?.trim() || "blablabuild.com";
-  const allowed = raw
+  // blablabuild.com blijft altijd toegestaan — env kan alleen uitbreiden, niet uitsluiten.
+  const raw = process.env.RADAR_PREVIEW_DOMAINS?.trim() ?? "";
+  const allowed = new Set(
+    ["blablabuild.com", ...raw.split(",")]
+      .map((d) => d.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  if (allowed.has(domain)) return true;
+  // Optioneel: exacte e-mails, bv. RADAR_PREVIEW_EMAILS=kevin@x.com,other@y.com
+  const emails = (process.env.RADAR_PREVIEW_EMAILS?.trim() ?? "")
     .split(",")
-    .map((d) => d.trim().toLowerCase())
+    .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
-  return allowed.includes(domain);
+  return emails.includes(normalized);
 }
 
 export type DashboardArea = "overzicht" | "omzet" | "marketing";
