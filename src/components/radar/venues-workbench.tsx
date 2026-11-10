@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
+  countryLabel,
+  countrySortKey,
   RADAR_VENUE_STATUS_NL,
   RADAR_VENUE_TIER_NL,
   type RadarVenueTier,
@@ -24,6 +26,34 @@ type Venue = {
   curatorScore: string | null;
 };
 
+function sortVenues(rows: Venue[]) {
+  return [...rows].sort((a, b) => {
+    const c = countrySortKey(a.country) - countrySortKey(b.country);
+    if (c !== 0) return c;
+    const kindRank = (k: Venue["kind"]) =>
+      k === "festival" ? 0 : k === "club" ? 1 : 2;
+    const k = kindRank(a.kind) - kindRank(b.kind);
+    if (k !== 0) return k;
+    return (
+      Number(b.curatorScore ?? b.venueScore ?? 0) -
+      Number(a.curatorScore ?? a.venueScore ?? 0)
+    );
+  });
+}
+
+function groupByCountry(rows: Venue[]) {
+  const map = new Map<string, Venue[]>();
+  for (const v of sortVenues(rows)) {
+    const key = (v.country ?? "").toUpperCase() || "—";
+    const list = map.get(key) ?? [];
+    list.push(v);
+    map.set(key, list);
+  }
+  return [...map.entries()].sort(
+    (a, b) => countrySortKey(a[0]) - countrySortKey(b[0]),
+  );
+}
+
 export function VenuesWorkbench({ initial }: { initial: Venue[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -31,6 +61,7 @@ export function VenuesWorkbench({ initial }: { initial: Venue[] }) {
   const [name, setName] = useState("");
   const [kind, setKind] = useState<"club" | "festival" | "other">("club");
   const [city, setCity] = useState("");
+  const [country, setCountry] = useState("NL");
   const [raUrl, setRaUrl] = useState("");
 
   function refresh() {
@@ -47,8 +78,10 @@ export function VenuesWorkbench({ initial }: { initial: Venue[] }) {
         name,
         kind,
         city: city || null,
+        country: country || null,
         raUrl: raUrl || null,
         status: "seed",
+        tier: kind === "festival" ? "festival" : "mid",
       }),
     });
     const data = (await res.json()) as { error?: string };
@@ -88,19 +121,33 @@ export function VenuesWorkbench({ initial }: { initial: Venue[] }) {
     refresh();
   }
 
-  const suggested = initial
-    .filter((v) => v.status === "suggested")
-    .sort(
-      (a, b) =>
-        Number(b.venueScore ?? b.curatorScore ?? 0) -
-        Number(a.venueScore ?? a.curatorScore ?? 0),
-    );
-  const active = initial.filter(
-    (v) => v.status === "seed" || v.status === "accepted",
+  const suggested = useMemo(
+    () =>
+      sortVenues(initial.filter((v) => v.status === "suggested")).sort(
+        (a, b) =>
+          Number(b.venueScore ?? b.curatorScore ?? 0) -
+          Number(a.venueScore ?? a.curatorScore ?? 0),
+      ),
+    [initial],
   );
-  const other = initial.filter(
-    (v) => v.status !== "suggested" && v.status !== "seed" && v.status !== "accepted",
+  const active = useMemo(
+    () =>
+      initial.filter((v) => v.status === "seed" || v.status === "accepted"),
+    [initial],
   );
+  const other = useMemo(
+    () =>
+      initial.filter(
+        (v) =>
+          v.status !== "suggested" &&
+          v.status !== "seed" &&
+          v.status !== "accepted",
+      ),
+    [initial],
+  );
+  const activeByCountry = useMemo(() => groupByCountry(active), [active]);
+  const festivals = active.filter((v) => v.kind === "festival").length;
+  const clubs = active.filter((v) => v.kind === "club").length;
 
   async function acceptTop5() {
     const top = suggested.slice(0, 5);
@@ -120,35 +167,36 @@ export function VenuesWorkbench({ initial }: { initial: Venue[] }) {
     <div className="space-y-8">
       <form
         onSubmit={addVenue}
-        className="grid gap-3 border border-border bg-surface p-4 sm:grid-cols-[1.4fr_7rem_8rem_1.2fr_auto]"
+        className="grid gap-3 border border-border bg-surface p-3 sm:grid-cols-2 lg:grid-cols-6"
       >
-        <label className="block text-sm">
+        <label className="text-sm lg:col-span-2">
           <span className="mb-1 block text-[10px] tracking-[0.12em] text-text-dim uppercase">
-            Venue
+            Naam
           </span>
           <input
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Thuishaven, Awakenings…"
             className="w-full border border-border bg-bg px-2 py-2"
           />
         </label>
-        <label className="block text-sm">
+        <label className="text-sm">
           <span className="mb-1 block text-[10px] tracking-[0.12em] text-text-dim uppercase">
             Type
           </span>
           <select
             value={kind}
-            onChange={(e) => setKind(e.target.value as typeof kind)}
+            onChange={(e) =>
+              setKind(e.target.value as "club" | "festival" | "other")
+            }
             className="w-full border border-border bg-bg px-2 py-2"
           >
             <option value="club">Club</option>
             <option value="festival">Festival</option>
-            <option value="other">Anders</option>
+            <option value="other">Overig</option>
           </select>
         </label>
-        <label className="block text-sm">
+        <label className="text-sm">
           <span className="mb-1 block text-[10px] tracking-[0.12em] text-text-dim uppercase">
             Stad
           </span>
@@ -158,29 +206,95 @@ export function VenuesWorkbench({ initial }: { initial: Venue[] }) {
             className="w-full border border-border bg-bg px-2 py-2"
           />
         </label>
-        <label className="block text-sm">
+        <label className="text-sm">
           <span className="mb-1 block text-[10px] tracking-[0.12em] text-text-dim uppercase">
-            RA URL / id
+            Land
+          </span>
+          <select
+            value={country}
+            onChange={(e) => setCountry(e.target.value)}
+            className="w-full border border-border bg-bg px-2 py-2"
+          >
+            <option value="NL">NL</option>
+            <option value="DE">DE</option>
+            <option value="UK">UK</option>
+            <option value="FR">FR</option>
+            <option value="HR">HR</option>
+            <option value="BE">BE</option>
+            <option value="ES">ES</option>
+          </select>
+        </label>
+        <label className="text-sm lg:col-span-2">
+          <span className="mb-1 block text-[10px] tracking-[0.12em] text-text-dim uppercase">
+            RA-link (club of promoter)
           </span>
           <input
             value={raUrl}
             onChange={(e) => setRaUrl(e.target.value)}
-            placeholder="ra.co/clubs/109027"
+            placeholder="https://ra.co/clubs/… of /promoters/…"
             className="w-full border border-border bg-bg px-2 py-2"
           />
         </label>
-        <div className="flex items-end">
+        <div className="flex items-end lg:col-span-6">
           <button
             type="submit"
             disabled={pending}
-            className="w-full border border-accent bg-accent px-3 py-2 text-sm text-accent-contrast disabled:opacity-60"
+            className="border border-accent bg-accent px-3 py-2 text-sm text-accent-contrast disabled:opacity-60"
           >
-            Toevoegen
+            Toevoegen aan startlijst
           </button>
         </div>
       </form>
 
       {error ? <p className="text-sm text-warn">{error}</p> : null}
+
+      <section className="space-y-6">
+        <div>
+          <h2 className="font-display text-xl tracking-[0.04em]">Startlijst</h2>
+          <p className="mt-1 text-sm text-text-muted">
+            {clubs} clubs · {festivals} festivals — gegroepeerd per land. Klik
+            door voor parties en line-ups.
+          </p>
+        </div>
+
+        {active.length === 0 ? (
+          <p className="border border-dashed border-border px-4 py-8 text-sm text-text-muted">
+            Nog geen venues. Voeg clubs/festivals toe met een RA-link.
+          </p>
+        ) : (
+          activeByCountry.map(([code, rows]) => {
+            const fest = rows.filter((v) => v.kind === "festival");
+            const clubRows = rows.filter((v) => v.kind !== "festival");
+            return (
+              <div key={code} className="space-y-3">
+                <h3 className="text-[11px] tracking-[0.14em] text-text-dim uppercase">
+                  {countryLabel(code)} · {rows.length}
+                </h3>
+                {fest.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-text-muted">Festivals</p>
+                    <VenueTable
+                      rows={fest}
+                      onDelete={remove}
+                      showCountry={false}
+                    />
+                  </div>
+                ) : null}
+                {clubRows.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-text-muted">Clubs</p>
+                    <VenueTable
+                      rows={clubRows}
+                      onDelete={remove}
+                      showCountry={false}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            );
+          })
+        )}
+      </section>
 
       {suggested.length > 0 ? (
         <section>
@@ -218,20 +332,6 @@ export function VenuesWorkbench({ initial }: { initial: Venue[] }) {
         </section>
       ) : null}
 
-      <section>
-        <h2 className="mb-3 font-display text-xl tracking-[0.04em]">
-          Startlijst
-        </h2>
-        {active.length === 0 ? (
-          <p className="border border-dashed border-border px-4 py-8 text-sm text-text-muted">
-            Nog geen venues. Voeg clubs/festivals toe met een RA-link zodat
-            discovery line-ups kan ophalen.
-          </p>
-        ) : (
-          <VenueTable rows={active} onDelete={remove} />
-        )}
-      </section>
-
       {other.length > 0 ? (
         <section>
           <h2 className="mb-3 font-display text-xl tracking-[0.04em]">
@@ -249,11 +349,13 @@ function VenueTable({
   onAccept,
   onReject,
   onDelete,
+  showCountry = true,
 }: {
   rows: Venue[];
   onAccept?: (id: string) => void;
   onReject?: (id: string) => void;
   onDelete: (id: string) => void;
+  showCountry?: boolean;
 }) {
   return (
     <div className="overflow-x-auto border border-border">
@@ -278,11 +380,10 @@ function VenueTable({
                   {v.name}
                 </Link>
                 <p className="text-xs text-text-muted">
-                  {v.kind}
+                  {v.kind === "festival" ? "festival" : v.kind}
                   {v.tier ? ` · ${RADAR_VENUE_TIER_NL[v.tier]}` : ""}
-                  {v.city || v.country
-                    ? ` · ${[v.city, v.country].filter(Boolean).join(", ")}`
-                    : " · locatie onbekend"}
+                  {v.city ? ` · ${v.city}` : ""}
+                  {showCountry && v.country ? `, ${v.country}` : ""}
                 </p>
               </td>
               <td className="px-3 py-2.5 text-text-muted">
@@ -294,7 +395,11 @@ function VenueTable({
               <td className="px-3 py-2.5 text-xs text-text-muted">
                 {v.raUrl ? (
                   <a
-                    href={v.raUrl.startsWith("http") ? v.raUrl : `https://${v.raUrl}`}
+                    href={
+                      v.raUrl.startsWith("http")
+                        ? v.raUrl
+                        : `https://${v.raUrl}`
+                    }
                     target="_blank"
                     rel="noreferrer"
                     className="underline hover:text-text"
@@ -328,9 +433,9 @@ function VenueTable({
                   <button
                     type="button"
                     onClick={() => onDelete(v.id)}
-                    className="border border-border px-2 py-1 text-xs text-text-muted hover:border-warn hover:text-warn"
+                    className="border border-border px-2 py-1 text-xs text-warn hover:border-warn"
                   >
-                    Weg
+                    Verwijder
                   </button>
                 </div>
               </td>

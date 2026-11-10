@@ -29,6 +29,39 @@ export const RADAR_VENUE_TIER_NL = {
 
 export type RadarVenueTier = keyof typeof RADAR_VENUE_TIER_NL;
 
+const COUNTRY_ORDER = ["NL", "DE", "UK", "FR", "HR", "BE", "ES"];
+
+export function countrySortKey(country: string | null | undefined): number {
+  if (!country) return 99;
+  const i = COUNTRY_ORDER.indexOf(country.toUpperCase());
+  return i >= 0 ? i : 50;
+}
+
+export function countryLabel(country: string | null | undefined): string {
+  switch ((country ?? "").toUpperCase()) {
+    case "NL":
+      return "Nederland";
+    case "DE":
+      return "Duitsland";
+    case "UK":
+    case "GB":
+      return "Verenigd Koninkrijk";
+    case "FR":
+      return "Frankrijk";
+    case "HR":
+      return "Kroatië";
+    case "BE":
+      return "België";
+    case "ES":
+      return "Spanje";
+    case "—":
+    case "":
+      return "Onbekend";
+    default:
+      return country?.trim() || "Onbekend";
+  }
+}
+
 export const RADAR_FEEDBACK_REASON_NL = {
   too_big: "Te groot / te duur",
   wrong_genre: "Verkeerd genre",

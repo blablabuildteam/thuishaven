@@ -22,6 +22,7 @@ export async function GET(request: Request) {
 const createSchema = z.object({
   name: z.string().min(1).max(200),
   kind: z.enum(["club", "festival", "other"]).optional(),
+  tier: z.enum(["early", "mid", "major", "festival", "series"]).optional(),
   status: z.enum(["seed", "suggested", "accepted", "rejected"]).optional(),
   city: z.string().max(120).nullable().optional(),
   country: z.string().max(80).nullable().optional(),

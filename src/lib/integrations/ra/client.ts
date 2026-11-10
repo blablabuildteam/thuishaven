@@ -300,6 +300,98 @@ export async function listRaVenueEvents(options?: {
   return { ok: true, events };
 }
 
+/** Festival / series line-ups live on promoters more often than venues. */
+export async function listRaPromoterEvents(options: {
+  promoterId: string;
+  type?: "LATEST" | "ARCHIVE";
+  year?: number;
+  limit?: number;
+}): Promise<
+  { ok: true; events: RaEvent[] } | { ok: false; error: string; status: number }
+> {
+  const type = options.type ?? "LATEST";
+  const limit = options.limit ?? 40;
+  const withYear = type === "ARCHIVE" && options.year != null;
+  type PromoterEventRaw = {
+    id: string;
+    title: string;
+    date: string | null;
+    startTime?: string | null;
+    attending: number;
+    isTicketed?: boolean;
+    contentUrl: string | null;
+    artists?: Array<{
+      id?: string | null;
+      name?: string | null;
+      contentUrl?: string | null;
+    } | null> | null;
+    venue?: {
+      id?: string | null;
+      name?: string | null;
+      contentUrl?: string | null;
+    } | null;
+    ticketing?: { isAnyTicketTierAvailable?: boolean };
+  };
+  const eventFields = `id title date startTime attending isTicketed contentUrl
+              artists { id name contentUrl }
+              venue { id name contentUrl }
+              ticketing { isAnyTicketTierAvailable }`;
+  const res = withYear
+    ? await raGraphql<{
+        promoter: { events: PromoterEventRaw[] | null } | null;
+      }>(
+        `query PromoterEvents($id: ID!, $type: EventQueryType!, $limit: Int, $year: Int) {
+          promoter(id: $id) {
+            events(type: $type, limit: $limit, year: $year) { ${eventFields} }
+          }
+        }`,
+        {
+          id: options.promoterId,
+          type,
+          limit,
+          year: options.year,
+        },
+      )
+    : await raGraphql<{
+        promoter: { events: PromoterEventRaw[] | null } | null;
+      }>(
+        `query PromoterEvents($id: ID!, $type: EventQueryType!, $limit: Int) {
+          promoter(id: $id) {
+            events(type: $type, limit: $limit) { ${eventFields} }
+          }
+        }`,
+        { id: options.promoterId, type, limit },
+      );
+  if (!res.ok) return res;
+  const events: RaEvent[] = (res.data.promoter?.events ?? []).map((ev) => {
+    const lineup: RaLineupArtist[] = (ev.artists ?? [])
+      .map((a, billingIndex) => {
+        const name = a?.name?.trim();
+        if (!name) return null;
+        return {
+          id: a?.id?.trim() || null,
+          name,
+          contentUrl: a?.contentUrl?.trim() || null,
+          billingIndex,
+        };
+      })
+      .filter((a): a is RaLineupArtist => Boolean(a));
+    return {
+      id: ev.id,
+      title: ev.title,
+      date: ev.date,
+      startTime: ev.startTime ?? null,
+      attending: ev.attending ?? 0,
+      isTicketed: Boolean(ev.isTicketed),
+      ticketsAvailable: Boolean(ev.ticketing?.isAnyTicketTierAvailable),
+      contentUrl: ev.contentUrl,
+      artists: lineup.map((a) => a.name),
+      lineup,
+    };
+  });
+  return { ok: true, events };
+}
+
 /** Full artist profile: socials, followers, agency, related. */
 export async function getRaArtistProfile(
   artistId: string,

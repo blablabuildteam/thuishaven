@@ -1,5 +1,6 @@
 import {
   listRaArtistEvents,
+  listRaPromoterEvents,
   listRaVenueEvents,
   type RaEvent,
 } from "@/lib/integrations/ra/client";
@@ -52,8 +53,10 @@ function raContentUrl(path: string | null | undefined): string | null {
   return `https://ra.co${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-async function collectVenueEvents(
-  raId: string,
+async function collectRaEvents(
+  source:
+    | { kind: "venue"; id: string }
+    | { kind: "promoter"; id: string },
   historyYears: number,
   limitPerBatch: number,
 ): Promise<{ events: RaEvent[]; errors: string[] }> {
@@ -68,14 +71,24 @@ async function collectVenueEvents(
   }
 
   for (const batch of batches) {
-    const res = await listRaVenueEvents({
-      venueId: raId,
-      type: batch.type,
-      year: batch.year,
-      limit: limitPerBatch,
-    });
+    const res =
+      source.kind === "promoter"
+        ? await listRaPromoterEvents({
+            promoterId: source.id,
+            type: batch.type,
+            year: batch.year,
+            limit: limitPerBatch,
+          })
+        : await listRaVenueEvents({
+            venueId: source.id,
+            type: batch.type,
+            year: batch.year,
+            limit: limitPerBatch,
+          });
     if (!res.ok) {
-      errors.push(`venue ${raId} ${batch.type}${batch.year ?? ""}: ${res.error}`);
+      errors.push(
+        `${source.kind} ${source.id} ${batch.type}${batch.year ?? ""}: ${res.error}`,
+      );
       continue;
     }
     for (const ev of res.events) {
@@ -126,12 +139,23 @@ export async function discoverArtistsFromSeedVenues(options?: {
   const seenGigKeys = new Set<string>();
 
   for (const venue of venues) {
+    const promoterId =
+      venue.raPromoterId ||
+      (venue.kind === "festival" && /promoter/i.test(venue.raUrl ?? "")
+        ? venue.raUrl?.match(/promoters\/(\d+)/i)?.[1]
+        : null) ||
+      null;
     const raId = venue.raExternalId || parseRaVenueId(venue.raUrl);
-    if (!raId) {
+    if (!promoterId && !raId) {
       result.skippedNoRaId += 1;
       continue;
     }
-    if (!venue.raExternalId) {
+    if (promoterId && !venue.raPromoterId) {
+      await updateRadarVenue(venue.id, {
+        raUrl: venue.raUrl || `https://ra.co/promoters/${promoterId}`,
+        raPromoterId: promoterId,
+      });
+    } else if (raId && !venue.raExternalId && !promoterId) {
       await updateRadarVenue(venue.id, {
         raUrl: venue.raUrl || `https://ra.co/clubs/${raId}`,
         raExternalId: raId,
@@ -139,7 +163,13 @@ export async function discoverArtistsFromSeedVenues(options?: {
     }
 
     result.venuesScanned += 1;
-    const collected = await collectVenueEvents(raId, historyYears, limitPerVenue);
+    const collected = await collectRaEvents(
+      promoterId
+        ? { kind: "promoter", id: promoterId }
+        : { kind: "venue", id: raId! },
+      historyYears,
+      limitPerVenue,
+    );
     result.errors.push(...collected.errors.map((e) => `${venue.name}: ${e}`));
     result.eventsSeen += collected.events.length;
 

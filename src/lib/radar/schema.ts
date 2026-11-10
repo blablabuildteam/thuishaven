@@ -107,6 +107,8 @@ export const radarVenues = pgTable(
     raUrl: text("ra_url"),
     /** Cached RA club id (digits). */
     raExternalId: text("ra_external_id"),
+    /** RA promoter id — festivals live here more often than as clubs. */
+    raPromoterId: text("ra_promoter_id"),
     websiteUrl: text("website_url"),
     /** 0–100: early-breakout curator quality. */
     venueScore: numeric("venue_score", { precision: 6, scale: 2 }),
@@ -127,6 +129,7 @@ export const radarVenues = pgTable(
     index("radar_venues_score_idx").on(table.venueScore),
     index("radar_venues_curator_idx").on(table.curatorScore),
     uniqueIndex("radar_venues_ra_external_uidx").on(table.raExternalId),
+    uniqueIndex("radar_venues_ra_promoter_uidx").on(table.raPromoterId),
   ],
 );
 

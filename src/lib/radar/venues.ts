@@ -15,6 +15,7 @@ export type CreateVenueInput = {
   country?: string | null;
   raUrl?: string | null;
   raExternalId?: string | null;
+  raPromoterId?: string | null;
   websiteUrl?: string | null;
   notes?: string | null;
   curatorScore?: number | null;
@@ -30,18 +31,45 @@ export function parseRaVenueId(input: string | null | undefined): string | null 
   return m?.[1] ?? null;
 }
 
+/** Extract RA promoter id from ra.co/promoters/123 or plain digits. */
+export function parseRaPromoterId(
+  input: string | null | undefined,
+): string | null {
+  if (!input) return null;
+  const trimmed = input.trim();
+  const m = trimmed.match(/ra\.co\/promoters\/(\d+)/i);
+  if (m?.[1]) return m[1];
+  if (/^\d+$/.test(trimmed)) return trimmed;
+  return null;
+}
+
 export async function listRadarVenues(options?: {
   status?: Array<"seed" | "suggested" | "accepted" | "rejected">;
 }): Promise<RadarVenueRow[]> {
   if (!hasDatabase()) return [];
   const db = getDb();
   const statuses = options?.status;
+  const countryOrd = sql`case
+    when ${radarVenues.country} = 'NL' then 0
+    when ${radarVenues.country} = 'DE' then 1
+    when ${radarVenues.country} in ('UK','GB') then 2
+    when ${radarVenues.country} = 'FR' then 3
+    when ${radarVenues.country} = 'HR' then 4
+    when ${radarVenues.country} is null then 99
+    else 50 end`;
+  const kindOrd = sql`case
+    when ${radarVenues.kind} = 'festival' then 0
+    when ${radarVenues.kind} = 'club' then 1
+    else 2 end`;
+
   if (statuses?.length) {
     return db
       .select()
       .from(radarVenues)
       .where(inArray(radarVenues.status, statuses))
       .orderBy(
+        countryOrd,
+        kindOrd,
         desc(radarVenues.curatorScore),
         desc(radarVenues.venueScore),
         asc(radarVenues.name),
@@ -50,7 +78,12 @@ export async function listRadarVenues(options?: {
   return db
     .select()
     .from(radarVenues)
-    .orderBy(asc(radarVenues.status), asc(radarVenues.name));
+    .orderBy(
+      asc(radarVenues.status),
+      countryOrd,
+      kindOrd,
+      asc(radarVenues.name),
+    );
 }
 
 export async function createRadarVenue(
@@ -61,11 +94,22 @@ export async function createRadarVenue(
   if (!name) return { error: "Naam is verplicht" };
 
   const status = input.status ?? "seed";
+  const kind = input.kind ?? "club";
+  const raPromoterId =
+    input.raPromoterId?.trim() ||
+    (kind === "festival" ? parseRaPromoterId(input.raUrl) : null) ||
+    null;
   const raExternalId =
-    input.raExternalId?.trim() || parseRaVenueId(input.raUrl) || null;
+    input.raExternalId?.trim() ||
+    (raPromoterId ? null : parseRaVenueId(input.raUrl)) ||
+    null;
   const raUrl =
     input.raUrl?.trim() ||
-    (raExternalId ? `https://ra.co/clubs/${raExternalId}` : null);
+    (raPromoterId
+      ? `https://ra.co/promoters/${raPromoterId}`
+      : raExternalId
+        ? `https://ra.co/clubs/${raExternalId}`
+        : null);
   const curator =
     input.curatorScore != null && Number.isFinite(input.curatorScore)
       ? String(input.curatorScore)
@@ -77,13 +121,14 @@ export async function createRadarVenue(
       .insert(radarVenues)
       .values({
         name,
-        kind: input.kind ?? "club",
+        kind,
         status,
-        tier: input.tier ?? "mid",
+        tier: input.tier ?? (kind === "festival" ? "festival" : "mid"),
         city: input.city?.trim() || null,
         country: input.country?.trim() || null,
         raUrl,
         raExternalId,
+        raPromoterId,
         websiteUrl: input.websiteUrl?.trim() || null,
         notes: input.notes?.trim() || null,
         curatorScore: curator,
@@ -129,11 +174,19 @@ export async function updateRadarVenue(
   if (patch.country !== undefined) values.country = patch.country?.trim() || null;
   if (patch.raUrl !== undefined) {
     values.raUrl = patch.raUrl?.trim() || null;
-    const parsed = parseRaVenueId(patch.raUrl);
-    if (parsed) values.raExternalId = parsed;
+    const promoter = parseRaPromoterId(patch.raUrl);
+    const club = parseRaVenueId(patch.raUrl);
+    if (promoter && /promoter/i.test(patch.raUrl ?? "")) {
+      values.raPromoterId = promoter;
+    } else if (club) {
+      values.raExternalId = club;
+    }
   }
   if (patch.raExternalId !== undefined) {
     values.raExternalId = patch.raExternalId?.trim() || null;
+  }
+  if (patch.raPromoterId !== undefined) {
+    values.raPromoterId = patch.raPromoterId?.trim() || null;
   }
   if (patch.websiteUrl !== undefined) {
     values.websiteUrl = patch.websiteUrl?.trim() || null;
@@ -394,23 +447,42 @@ export async function refreshSuggestedVenueScores(): Promise<{
   return { scored, rejected };
 }
 
-/** Upsert seed list by raExternalId (idempotent). */
+/** Upsert seed list by club id or promoter id (idempotent). */
 export async function upsertSeedVenue(
-  input: CreateVenueInput & { raExternalId: string },
+  input: CreateVenueInput & {
+    raExternalId?: string | null;
+    raPromoterId?: string | null;
+  },
 ): Promise<{ ok: true; venue: RadarVenueRow; created: boolean } | { error: string }> {
   if (!hasDatabase()) return { error: "DATABASE_URL ontbreekt" };
   const db = getDb();
-  const raExternalId = input.raExternalId.trim();
-  const [existing] = await db
-    .select()
-    .from(radarVenues)
-    .where(eq(radarVenues.raExternalId, raExternalId))
-    .limit(1);
+  const raPromoterId = input.raPromoterId?.trim() || null;
+  const raExternalId = input.raExternalId?.trim() || null;
+  if (!raPromoterId && !raExternalId) {
+    return { error: "raExternalId of raPromoterId is verplicht" };
+  }
+
+  const [existing] = raPromoterId
+    ? await db
+        .select()
+        .from(radarVenues)
+        .where(eq(radarVenues.raPromoterId, raPromoterId))
+        .limit(1)
+    : await db
+        .select()
+        .from(radarVenues)
+        .where(eq(radarVenues.raExternalId, raExternalId!))
+        .limit(1);
+
   if (existing) {
     const updated = await updateRadarVenue(existing.id, {
       ...input,
-      status: existing.status === "rejected" ? existing.status : input.status ?? "seed",
+      status:
+        existing.status === "rejected"
+          ? existing.status
+          : (input.status ?? "seed"),
       raExternalId,
+      raPromoterId,
     });
     if ("error" in updated) return updated;
     return { ok: true, venue: updated.venue, created: false };
@@ -418,6 +490,7 @@ export async function upsertSeedVenue(
   const created = await createRadarVenue({
     ...input,
     raExternalId,
+    raPromoterId,
     status: input.status ?? "seed",
   });
   if ("error" in created) return created;

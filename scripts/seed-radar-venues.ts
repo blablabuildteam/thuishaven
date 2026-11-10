@@ -1,5 +1,5 @@
 /**
- * Idempotent seed van early-signal venues.
+ * Idempotent seed van early-signal venues + festivals.
  * Usage: npx tsx --env-file=.env.local scripts/seed-radar-venues.ts
  */
 import { endDb } from "../src/lib/db/client";
@@ -12,10 +12,17 @@ async function main() {
   const errors: string[] = [];
 
   for (const seed of RADAR_SEED_VENUES) {
+    if (!seed.raId && !seed.raPromoterId) {
+      errors.push(`${seed.name}: raId of raPromoterId verplicht`);
+      continue;
+    }
     const res = await upsertSeedVenue({
       name: seed.name,
-      raExternalId: seed.raId,
-      raUrl: `https://ra.co/clubs/${seed.raId}`,
+      raExternalId: seed.raId ?? null,
+      raPromoterId: seed.raPromoterId ?? null,
+      raUrl: seed.raPromoterId
+        ? `https://ra.co/promoters/${seed.raPromoterId}`
+        : `https://ra.co/clubs/${seed.raId}`,
       city: seed.city,
       country: seed.country,
       kind: seed.kind,
