@@ -134,6 +134,34 @@ export function ArtistDossier({
               ))}
             </ul>
           ) : null}
+          {profiles.length > 0 ? (
+            <ul className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-sm">
+              {profiles.map((p) => (
+                <li key={`${p.platform}-${p.handle ?? p.url}`}>
+                  {p.url ? (
+                    <a
+                      href={p.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline hover:text-text"
+                    >
+                      {p.platform}
+                      {p.handle ? ` @${p.handle}` : ""}
+                    </a>
+                  ) : (
+                    <span className="text-text-muted">
+                      {p.platform}
+                      {p.handle ? ` @${p.handle}` : ""}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-xs text-text-dim">
+              Nog geen socials — RA-enrich draait nog over de catalogus.
+            </p>
+          )}
         </div>
         <dl className="grid grid-cols-2 gap-px border border-border bg-border sm:grid-cols-4">
           <div className="bg-surface px-4 py-3">

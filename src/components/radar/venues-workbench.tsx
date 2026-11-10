@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
@@ -270,12 +271,18 @@ function VenueTable({
           {rows.map((v) => (
             <tr key={v.id} className="border-b border-border/70">
               <td className="px-3 py-2.5">
-                <p className="font-medium">{v.name}</p>
+                <Link
+                  href={`/radar/venues/${v.id}`}
+                  className="font-medium hover:underline"
+                >
+                  {v.name}
+                </Link>
                 <p className="text-xs text-text-muted">
                   {v.kind}
                   {v.tier ? ` · ${RADAR_VENUE_TIER_NL[v.tier]}` : ""}
-                  {v.city ? ` · ${v.city}` : ""}
-                  {v.country ? `, ${v.country}` : ""}
+                  {v.city || v.country
+                    ? ` · ${[v.city, v.country].filter(Boolean).join(", ")}`
+                    : " · locatie onbekend"}
                 </p>
               </td>
               <td className="px-3 py-2.5 text-text-muted">

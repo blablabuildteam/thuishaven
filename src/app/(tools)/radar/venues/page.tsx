@@ -19,7 +19,7 @@ export default async function RadarVenuesPage() {
     <div>
       <RadarPageHeader
         title="Venues"
-        description="Startlijst voedt de sneeuwbal. Zonder RA-club-id kunnen we geen line-ups ophalen voor die venue."
+        description="Startlijst = clubs die we volgen. Klik een club voor parties en line-ups. Curator-score is onze handmatige early-signal inschatting (0–100), geen RA-cijfer."
       />
       <RadarStatStrip
         items={[

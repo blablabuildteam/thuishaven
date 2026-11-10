@@ -130,25 +130,87 @@ async function raGraphql<T>(
   }
 }
 
-export async function getRaVenue(): Promise<
-  { ok: true; venue: RaVenue } | { ok: false; error: string; status: number }
+export type RaVenueDetails = RaVenue & {
+  city: string | null;
+  country: string | null;
+  countryIso: string | null;
+};
+
+/** Map RA country name / ISO to short code used in Radar seeds. */
+export function shortCountryCode(
+  name: string | null | undefined,
+  iso: string | null | undefined,
+): string | null {
+  const iso3 = (iso ?? "").toUpperCase();
+  if (iso3.startsWith("NL")) return "NL";
+  if (iso3.startsWith("DE")) return "DE";
+  if (iso3.startsWith("GB") || iso3.startsWith("UK")) return "UK";
+  if (iso3.startsWith("FR")) return "FR";
+  if (iso3.startsWith("BE")) return "BE";
+  if (iso3.startsWith("ES")) return "ES";
+  if (iso3.startsWith("PT")) return "PT";
+  if (iso3.startsWith("IT")) return "IT";
+  if (iso3.startsWith("US")) return "US";
+  const n = (name ?? "").toLowerCase();
+  if (/netherland|holland/.test(n)) return "NL";
+  if (/german|deutschland/.test(n)) return "DE";
+  if (/united kingdom|england|scotland|wales/.test(n)) return "UK";
+  if (/france|frankrijk/.test(n)) return "FR";
+  if (/belgium|belgi/.test(n)) return "BE";
+  return name?.trim() || null;
+}
+
+export async function getRaVenue(options?: {
+  venueId?: string;
+}): Promise<
+  | { ok: true; venue: RaVenueDetails }
+  | { ok: false; error: string; status: number }
 > {
-  const res = await raGraphql<{ venue: RaVenue | null }>(
+  const id = options?.venueId?.trim() || venueId();
+  const res = await raGraphql<{
+    venue: {
+      id: string;
+      name: string;
+      contentUrl?: string;
+      address?: string;
+      area?: {
+        name?: string | null;
+        country?: { name?: string | null; isoCode?: string | null } | null;
+      } | null;
+      country?: { name?: string | null; isoCode?: string | null } | null;
+    } | null;
+  }>(
     `query Venue($id: ID!) {
       venue(id: $id) {
         id
         name
         contentUrl
         address
+        area { name country { name isoCode } }
+        country { name isoCode }
       }
     }`,
-    { id: venueId() },
+    { id },
   );
   if (!res.ok) return res;
   if (!res.data.venue) {
     return { ok: false, error: "RA venue niet gevonden", status: 404 };
   }
-  return { ok: true, venue: res.data.venue };
+  const v = res.data.venue;
+  const countryName = v.area?.country?.name ?? v.country?.name ?? null;
+  const countryIso = v.area?.country?.isoCode ?? v.country?.isoCode ?? null;
+  return {
+    ok: true,
+    venue: {
+      id: v.id,
+      name: v.name,
+      contentUrl: v.contentUrl,
+      address: v.address,
+      city: v.area?.name ?? null,
+      country: shortCountryCode(countryName, countryIso),
+      countryIso,
+    },
+  };
 }
 
 export async function listRaVenueEvents(options?: {

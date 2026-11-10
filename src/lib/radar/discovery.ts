@@ -14,6 +14,7 @@ import { loadRadarSettings } from "@/lib/radar/settings";
 import { maybeAlertForScore } from "@/lib/radar/alerts";
 import { recomputeArtistScoreV2 } from "@/lib/radar/score-v2";
 import { normalizeArtistName } from "@/lib/radar/types";
+import { getRaVenue } from "@/lib/integrations/ra/client";
 import {
   createRadarVenue,
   listActiveSeedVenues,
@@ -250,11 +251,21 @@ export async function discoverArtistsFromSeedVenues(options?: {
       const v = ev.venue;
       if (!v?.id || knownRaIds.has(v.id)) continue;
       knownRaIds.add(v.id);
+      let city: string | null = null;
+      let country: string | null = null;
+      const details = await getRaVenue({ venueId: v.id });
+      await sleep(60);
+      if (details.ok) {
+        city = details.venue.city;
+        country = details.venue.country;
+      }
       const created = await createRadarVenue({
         name: v.name,
         status: "suggested",
         kind: "club",
         tier: "mid",
+        city,
+        country,
         raUrl: raContentUrl(v.contentUrl) ?? `https://ra.co/clubs/${v.id}`,
         raExternalId: v.id,
         notes: `Snowball via artiest ${item.raId}`,

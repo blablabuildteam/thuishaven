@@ -103,7 +103,7 @@ export const radarVenues = pgTable(
     status: radarVenueStatusEnum("status").notNull().default("seed"),
     tier: radarVenueTierEnum("tier").notNull().default("mid"),
     city: text("city"),
-    country: text("country").default("NL"),
+    country: text("country"),
     raUrl: text("ra_url"),
     /** Cached RA club id (digits). */
     raExternalId: text("ra_external_id"),

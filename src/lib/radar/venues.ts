@@ -81,7 +81,7 @@ export async function createRadarVenue(
         status,
         tier: input.tier ?? "mid",
         city: input.city?.trim() || null,
-        country: input.country?.trim() || "NL",
+        country: input.country?.trim() || null,
         raUrl,
         raExternalId,
         websiteUrl: input.websiteUrl?.trim() || null,
@@ -183,6 +183,127 @@ export async function deleteRadarVenue(
 /** Venues that feed discovery (startlijst + geaccepteerde suggesties). */
 export async function listActiveSeedVenues(): Promise<RadarVenueRow[]> {
   return listRadarVenues({ status: ["seed", "accepted"] });
+}
+
+export async function getRadarVenue(
+  id: string,
+): Promise<RadarVenueRow | null> {
+  if (!hasDatabase()) return null;
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(radarVenues)
+    .where(eq(radarVenues.id, id))
+    .limit(1);
+  return row ?? null;
+}
+
+export type VenueParty = {
+  externalEventId: string | null;
+  eventName: string | null;
+  startsAt: Date | null;
+  attending: number | null;
+  artistCount: number;
+  artists: Array<{
+    id: string;
+    name: string;
+    growthScore: string | null;
+    homeGigCount: number;
+  }>;
+};
+
+/** Parties (events) seen at this venue via radar_gigs. */
+export async function listVenueParties(
+  venueId: string,
+  options?: { limit?: number },
+): Promise<VenueParty[]> {
+  if (!hasDatabase()) return [];
+  const db = getDb();
+  const limit = Math.min(options?.limit ?? 60, 120);
+  const rows = await db.execute(sql`
+    select
+      coalesce(g.external_event_id, g.event_name, g.id::text) as event_key,
+      max(g.external_event_id) as "externalEventId",
+      max(g.event_name) as "eventName",
+      max(g.starts_at) as "startsAt",
+      max(g.attending) as attending,
+      count(distinct g.artist_id)::int as "artistCount",
+      json_agg(
+        json_build_object(
+          'id', a.id,
+          'name', a.name,
+          'growthScore', a.growth_score,
+          'homeGigCount', a.home_gig_count
+        )
+        order by coalesce(g.billing_index, 999), a.name
+      ) as artists
+    from radar_gigs g
+    join radar_artists a on a.id = g.artist_id
+    where g.venue_id = ${venueId}::uuid
+    group by coalesce(g.external_event_id, g.event_name, g.id::text)
+    order by max(g.starts_at) desc nulls last
+    limit ${limit}
+  `);
+  return (rows as unknown as Array<{
+    externalEventId: string | null;
+    eventName: string | null;
+    startsAt: string | Date | null;
+    attending: number | null;
+    artistCount: number;
+    artists: VenueParty["artists"];
+  }>).map((r) => ({
+    externalEventId: r.externalEventId,
+    eventName: r.eventName,
+    startsAt: r.startsAt ? new Date(r.startsAt) : null,
+    attending: r.attending,
+    artistCount: Number(r.artistCount) || 0,
+    artists: Array.isArray(r.artists) ? r.artists : [],
+  }));
+}
+
+/** Backfill city/country for venues missing them, via RA. */
+export async function backfillVenueLocations(options?: {
+  limit?: number;
+}): Promise<{ updated: number; errors: string[] }> {
+  const { getRaVenue } = await import("@/lib/integrations/ra/client");
+  const result = { updated: 0, errors: [] as string[] };
+  if (!hasDatabase()) return result;
+  const db = getDb();
+  const limit = Math.min(options?.limit ?? 80, 200);
+  const rows = await db
+    .select()
+    .from(radarVenues)
+    .where(
+      sql`${radarVenues.raExternalId} is not null and (${radarVenues.city} is null or ${radarVenues.country} is null or ${radarVenues.country} = 'NL' and ${radarVenues.city} is null)`,
+    )
+    .limit(limit);
+
+  for (const row of rows) {
+    const raId = row.raExternalId;
+    if (!raId) continue;
+    try {
+      const res = await getRaVenue({ venueId: raId });
+      if (!res.ok) {
+        result.errors.push(`${row.name}: ${res.error}`);
+        continue;
+      }
+      await db
+        .update(radarVenues)
+        .set({
+          city: res.venue.city ?? row.city,
+          country: res.venue.country ?? row.country,
+          updatedAt: new Date(),
+        })
+        .where(eq(radarVenues.id, row.id));
+      result.updated += 1;
+      await new Promise((r) => setTimeout(r, 80));
+    } catch (e) {
+      result.errors.push(
+        `${row.name}: ${e instanceof Error ? e.message : "fail"}`,
+      );
+    }
+  }
+  return result;
 }
 
 export async function countVenuesByStatus(): Promise<Record<string, number>> {
