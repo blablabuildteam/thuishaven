@@ -46,6 +46,10 @@ export default async function RadarArtistDetailPage({
         growthBreakdown:
           (dossier.artist.growthBreakdown as Record<string, unknown> | null) ??
           null,
+        homeGigCount: dossier.artist.homeGigCount,
+        hasAgency: dossier.artist.hasAgency,
+        raFollowerCount: dossier.artist.raFollowerCount,
+        residentCountry: dossier.artist.residentCountry,
       }}
       profiles={dossier.profiles.map((p) => ({
         platform: p.platform,

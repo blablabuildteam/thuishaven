@@ -289,6 +289,8 @@ export async function discoverArtistsFromSeedVenues(options?: {
       momentum: score.momentum,
       bookability: score.bookability,
       reasons: score.reasons,
+      homeGigCount: artist?.homeGigCount ?? 0,
+      status: artist?.status,
     });
   }
   result.scored = scored;

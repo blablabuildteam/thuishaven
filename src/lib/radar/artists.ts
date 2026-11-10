@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, or, sql } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import {
   radarArtistProfiles,
@@ -25,13 +25,29 @@ export type RadarArtistListItem = Pick<
   | "scoreReasons"
   | "discoverySource"
   | "imageUrl"
+  | "country"
+  | "residentCountry"
+  | "raFollowerCount"
+  | "homeGigCount"
+  | "hasAgency"
 >;
+
+export type RadarArtistListSort =
+  | "score"
+  | "momentum"
+  | "bookability"
+  | "ra_followers"
+  | "newest"
+  | "name";
 
 export async function listRadarArtists(options?: {
   q?: string;
   status?: RadarArtistStatus | "all";
   genre?: string;
-  sort?: "score" | "name" | "newest";
+  country?: string;
+  /** Default true: only artists never booked at Thuishaven. */
+  nieuw?: boolean;
+  sort?: RadarArtistListSort;
   limit?: number;
   offset?: number;
   /** Skip expensive count(*) when the UI already has an overview total. */
@@ -39,13 +55,16 @@ export async function listRadarArtists(options?: {
 }): Promise<{ rows: RadarArtistListItem[]; total: number }> {
   if (!hasDatabase()) return { rows: [], total: 0 };
   const db = getDb();
-  const limit = Math.min(options?.limit ?? 60, 120);
+  const limit = Math.min(options?.limit ?? 50, 120);
   const offset = options?.offset ?? 0;
   const filters = [];
   if (options?.q?.trim()) {
-    const q = `%${options.q.trim()}%`;
+    const q = `%${options.q.trim().toLowerCase()}%`;
     filters.push(
-      or(ilike(radarArtists.name, q), ilike(radarArtists.normalizedName, q)),
+      or(
+        sql`lower(${radarArtists.name}) like ${q}`,
+        sql`${radarArtists.normalizedName} like ${q}`,
+      ),
     );
   }
   if (options?.status && options.status !== "all") {
@@ -54,8 +73,45 @@ export async function listRadarArtists(options?: {
   if (options?.genre?.trim()) {
     filters.push(eq(radarArtists.primaryGenre, options.genre.trim()));
   }
+  if (options?.country?.trim()) {
+    const c = options.country.trim();
+    filters.push(
+      or(
+        eq(radarArtists.residentCountry, c),
+        eq(radarArtists.country, c),
+      ),
+    );
+  }
+  if (options?.nieuw !== false) {
+    filters.push(eq(radarArtists.homeGigCount, 0));
+  }
   const where = filters.length ? and(...filters) : undefined;
-  const needsCount = options?.includeTotal !== false && Boolean(where);
+  const needsCount = options?.includeTotal !== false;
+
+  const orderBy =
+    options?.sort === "name"
+      ? [asc(radarArtists.name)]
+      : options?.sort === "newest"
+        ? [desc(radarArtists.firstSeenAt), asc(radarArtists.name)]
+        : options?.sort === "momentum"
+          ? [
+              sql`${radarArtists.momentumScore} desc nulls last`,
+              asc(radarArtists.name),
+            ]
+          : options?.sort === "bookability"
+            ? [
+                sql`${radarArtists.bookabilityScore} desc nulls last`,
+                asc(radarArtists.name),
+              ]
+            : options?.sort === "ra_followers"
+              ? [
+                  sql`${radarArtists.raFollowerCount} desc nulls last`,
+                  asc(radarArtists.name),
+                ]
+              : [
+                  sql`${radarArtists.growthScore} desc nulls last`,
+                  asc(radarArtists.name),
+                ];
 
   const listQuery = db
     .select({
@@ -71,19 +127,15 @@ export async function listRadarArtists(options?: {
       scoreReasons: radarArtists.scoreReasons,
       discoverySource: radarArtists.discoverySource,
       imageUrl: radarArtists.imageUrl,
+      country: radarArtists.country,
+      residentCountry: radarArtists.residentCountry,
+      raFollowerCount: radarArtists.raFollowerCount,
+      homeGigCount: radarArtists.homeGigCount,
+      hasAgency: radarArtists.hasAgency,
     })
     .from(radarArtists)
     .where(where)
-    .orderBy(
-      ...(options?.sort === "name"
-        ? [asc(radarArtists.name)]
-        : options?.sort === "newest"
-          ? [desc(radarArtists.firstSeenAt), asc(radarArtists.name)]
-          : [
-              sql`${radarArtists.growthScore} desc nulls last`,
-              asc(radarArtists.name),
-            ]),
-    )
+    .orderBy(...orderBy)
     .limit(limit)
     .offset(offset);
 
@@ -187,7 +239,6 @@ export async function upsertRadarArtist(input: {
     if (!artist) return { error: "Opslaan mislukt" };
     return { ok: true, artist, created: true };
   } catch (e) {
-    // Parallel discovery/import can race on normalized_name.
     const [again] = await db
       .select()
       .from(radarArtists)

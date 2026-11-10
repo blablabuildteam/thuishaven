@@ -21,23 +21,17 @@ async function writeOffset(offset: number): Promise<void> {
   if (!hasDatabase()) return;
   const db = getDb();
   const value = { offset, updatedAt: new Date().toISOString() };
-  const [existing] = await db
-    .select({ id: radarSettings.id })
-    .from(radarSettings)
-    .where(eq(radarSettings.key, CURSOR_KEY))
-    .limit(1);
-  if (existing) {
-    await db
-      .update(radarSettings)
-      .set({ value, updatedAt: new Date() })
-      .where(eq(radarSettings.key, CURSOR_KEY));
-    return;
-  }
-  await db.insert(radarSettings).values({
-    key: CURSOR_KEY,
-    value,
-    updatedAt: new Date(),
-  });
+  await db
+    .insert(radarSettings)
+    .values({
+      key: CURSOR_KEY,
+      value,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: radarSettings.key,
+      set: { value, updatedAt: new Date() },
+    });
 }
 
 /**

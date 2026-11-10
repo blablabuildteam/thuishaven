@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
-import { listRadarAlerts, markRadarAlertRead } from "@/lib/radar/alerts";
+import {
+  listRadarAlerts,
+  markAllRadarAlertsRead,
+  markRadarAlertRead,
+} from "@/lib/radar/alerts";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +20,10 @@ export async function GET(request: Request) {
   return NextResponse.json({ alerts });
 }
 
-const patchSchema = z.object({
-  id: z.string().uuid(),
-  read: z.literal(true),
-});
+const patchSchema = z.union([
+  z.object({ id: z.string().uuid(), read: z.literal(true) }),
+  z.object({ all: z.literal(true) }),
+]);
 
 export async function PATCH(request: Request) {
   const session = await auth();
@@ -30,6 +34,10 @@ export async function PATCH(request: Request) {
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
+  }
+  if ("all" in parsed.data) {
+    const result = await markAllRadarAlertsRead();
+    return NextResponse.json(result);
   }
   const result = await markRadarAlertRead(parsed.data.id);
   if ("error" in result) {

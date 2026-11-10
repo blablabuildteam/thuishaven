@@ -1,26 +1,60 @@
+import { Suspense } from "react";
 import {
   RadarPageHeader,
   RadarStatStrip,
 } from "@/components/radar/radar-page-header";
 import { ArtistsWorkbench } from "@/components/radar/artists-workbench";
 import { isSpotifyConfigured } from "@/lib/integrations/spotify/client";
-import { listRadarArtists } from "@/lib/radar/artists";
+import {
+  listRadarArtists,
+  type RadarArtistListSort,
+} from "@/lib/radar/artists";
 import { loadRadarOverviewStats } from "@/lib/radar/stats";
+import type { RadarArtistStatus } from "@/lib/radar/types";
 
 export const metadata = { title: "Artiesten · Radar" };
 export const dynamic = "force-dynamic";
 
-export default async function RadarArtistsPage() {
+const PAGE_SIZE = 50;
+
+export default async function RadarArtistsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    q?: string;
+    status?: string;
+    sort?: string;
+    nieuw?: string;
+    page?: string;
+  }>;
+}) {
+  const sp = await searchParams;
+  const page = Math.max(1, Number(sp.page) || 1);
+  const sort = (sp.sort as RadarArtistListSort) || "score";
+  const status =
+    sp.status && sp.status !== "all"
+      ? (sp.status as RadarArtistStatus)
+      : "all";
+  const nieuw = sp.nieuw !== "0";
+
   const [stats, list] = await Promise.all([
     loadRadarOverviewStats(),
-    listRadarArtists({ sort: "score", limit: 50, includeTotal: false }),
+    listRadarArtists({
+      q: sp.q,
+      status,
+      sort,
+      nieuw,
+      limit: PAGE_SIZE,
+      offset: (page - 1) * PAGE_SIZE,
+      includeTotal: true,
+    }),
   ]);
 
   return (
     <div>
       <RadarPageHeader
         title="Artiesten"
-        description="Score = momentum × fit × bookability, vooral uit RA-boekingen. Redenen staan onder de naam."
+        description="Score = momentum × fit × bookability, vooral uit RA-boekingen. Standaard alleen nieuw voor Thuishaven."
       />
 
       <RadarStatStrip
@@ -33,24 +67,33 @@ export default async function RadarArtistsPage() {
         ]}
       />
 
-      <ArtistsWorkbench
-        initial={list.rows.map((a) => ({
-          id: a.id,
-          name: a.name,
-          status: a.status,
-          primaryGenre: a.primaryGenre,
-          growthScore: a.growthScore,
-          growthVelocity: a.growthVelocity,
-          momentumScore: a.momentumScore,
-          fitScore: a.fitScore,
-          bookabilityScore: a.bookabilityScore,
-          scoreReasons: (a.scoreReasons as string[] | null) ?? [],
-          discoverySource: a.discoverySource,
-          imageUrl: a.imageUrl,
-        }))}
-        total={stats.artists}
-        spotifyReady={isSpotifyConfigured()}
-      />
+      <Suspense fallback={<p className="text-sm text-text-muted">Laden…</p>}>
+        <ArtistsWorkbench
+          initial={list.rows.map((a) => ({
+            id: a.id,
+            name: a.name,
+            status: a.status,
+            primaryGenre: a.primaryGenre,
+            growthScore: a.growthScore,
+            growthVelocity: a.growthVelocity,
+            momentumScore: a.momentumScore,
+            fitScore: a.fitScore,
+            bookabilityScore: a.bookabilityScore,
+            scoreReasons: (a.scoreReasons as string[] | null) ?? [],
+            discoverySource: a.discoverySource,
+            imageUrl: a.imageUrl,
+            country: a.country,
+            residentCountry: a.residentCountry,
+            raFollowerCount: a.raFollowerCount,
+            homeGigCount: a.homeGigCount,
+            hasAgency: a.hasAgency,
+          }))}
+          total={list.total}
+          page={page}
+          pageSize={PAGE_SIZE}
+          spotifyReady={isSpotifyConfigured()}
+        />
+      </Suspense>
     </div>
   );
 }

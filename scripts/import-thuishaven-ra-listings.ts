@@ -61,7 +61,7 @@ async function main() {
             ? listing.contentUrl
             : `https://ra.co${listing.contentUrl}`
           : null,
-        externalEventId: `${listing.raEventId}:${up.artist.id}`,
+        externalEventId: listing.raEventId,
         billingIndex: i,
         isHeadliner: i === 0,
         attending: listing.attending,

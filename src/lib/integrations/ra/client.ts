@@ -48,6 +48,33 @@ export type RaArtistEvent = {
   venue: { id: string; name: string; contentUrl: string | null } | null;
 };
 
+export type RaArtistProfile = {
+  id: string;
+  name: string;
+  contentUrl: string | null;
+  instagram: string | null;
+  soundcloud: string | null;
+  facebook: string | null;
+  twitter: string | null;
+  website: string | null;
+  bandcamp: string | null;
+  discogs: string | null;
+  followerCount: number | null;
+  bookingDetails: string | null;
+  residentCountry: string | null;
+  areaName: string | null;
+  countryName: string | null;
+  firstEventDate: string | null;
+  upcomingEventsCount: number | null;
+  relatedArtists: Array<{
+    id: string;
+    name: string;
+    contentUrl: string | null;
+  }>;
+  podcasts: Array<{ id: string; title: string }>;
+  labels: Array<{ id: string; name: string }>;
+};
+
 function venueId(): string {
   return process.env.RA_VENUE_ID?.trim() || DEFAULT_VENUE_ID;
 }
@@ -209,6 +236,122 @@ export async function listRaVenueEvents(options?: {
     };
   });
   return { ok: true, events };
+}
+
+/** Full artist profile: socials, followers, agency, related. */
+export async function getRaArtistProfile(
+  artistId: string,
+): Promise<
+  | { ok: true; artist: RaArtistProfile }
+  | { ok: false; error: string; status: number }
+> {
+  const res = await raGraphql<{
+    artist: {
+      id: string;
+      name: string;
+      contentUrl?: string | null;
+      instagram?: string | null;
+      soundcloud?: string | null;
+      facebook?: string | null;
+      twitter?: string | null;
+      website?: string | null;
+      bandcamp?: string | null;
+      discogs?: string | null;
+      followerCount?: number | null;
+      bookingDetails?: string | null;
+      residentCountry?: { id?: string | null; name?: string | null; isoCode?: string | null } | null;
+      upcomingEventsCount?: number | null;
+      area?: { name?: string | null; country?: { name?: string | null } | null } | null;
+      firstEvent?: { date?: string | null } | null;
+      relatedArtists?: Array<{
+        id?: string | null;
+        name?: string | null;
+        contentUrl?: string | null;
+      } | null> | null;
+      podcasts?: Array<{ id?: string | null; title?: string | null } | null> | null;
+      labels?: Array<{ id?: string | null; name?: string | null } | null> | null;
+    } | null;
+  }>(
+    `query ArtistProfile($id: ID!) {
+      artist(id: $id) {
+        id
+        name
+        contentUrl
+        instagram
+        soundcloud
+        facebook
+        twitter
+        website
+        bandcamp
+        discogs
+        followerCount
+        bookingDetails
+        residentCountry { id name isoCode }
+        upcomingEventsCount
+        area { name country { name } }
+        firstEvent { date }
+        relatedArtists { id name contentUrl }
+        podcasts { id title }
+        labels { id name }
+      }
+    }`,
+    { id: artistId },
+  );
+  if (!res.ok) return res;
+  const a = res.data.artist;
+  if (!a?.id || !a.name) {
+    return { ok: false, error: "RA artist niet gevonden", status: 404 };
+  }
+  return {
+    ok: true,
+    artist: {
+      id: a.id,
+      name: a.name,
+      contentUrl: a.contentUrl ?? null,
+      instagram: a.instagram ?? null,
+      soundcloud: a.soundcloud ?? null,
+      facebook: a.facebook ?? null,
+      twitter: a.twitter ?? null,
+      website: a.website ?? null,
+      bandcamp: a.bandcamp ?? null,
+      discogs: a.discogs ?? null,
+      followerCount:
+        typeof a.followerCount === "number" ? a.followerCount : null,
+      bookingDetails: a.bookingDetails ?? null,
+      residentCountry: a.residentCountry?.name ?? null,
+      areaName: a.area?.name ?? null,
+      countryName: a.area?.country?.name ?? null,
+      firstEventDate: a.firstEvent?.date ?? null,
+      upcomingEventsCount:
+        typeof a.upcomingEventsCount === "number"
+          ? a.upcomingEventsCount
+          : null,
+      relatedArtists: (a.relatedArtists ?? [])
+        .map((r) => {
+          const id = r?.id?.trim();
+          const name = r?.name?.trim();
+          if (!id || !name) return null;
+          return { id, name, contentUrl: r?.contentUrl ?? null };
+        })
+        .filter((r): r is NonNullable<typeof r> => Boolean(r)),
+      podcasts: (a.podcasts ?? [])
+        .map((p) => {
+          const id = p?.id?.trim();
+          const title = p?.title?.trim();
+          if (!id || !title) return null;
+          return { id, title };
+        })
+        .filter((p): p is NonNullable<typeof p> => Boolean(p)),
+      labels: (a.labels ?? [])
+        .map((l) => {
+          const id = l?.id?.trim();
+          const name = l?.name?.trim();
+          if (!id || !name) return null;
+          return { id, name };
+        })
+        .filter((l): l is NonNullable<typeof l> => Boolean(l)),
+    },
+  };
 }
 
 /** Recent / archive gigs for one RA artist (snowball + scoring). */

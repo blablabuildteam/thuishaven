@@ -13,6 +13,9 @@
     "seed:outreach": "tsx scripts/seed-outreach.ts",
     "seed:radar-venues": "tsx --env-file=.env.local scripts/seed-radar-venues.ts",
     "radar:batch": "tsx --env-file=.env.local scripts/radar-batch-discovery.ts",
+    "radar:enrich": "tsx --env-file=.env.local scripts/radar-enrich.ts",
+    "radar:rescore": "tsx --env-file=.env.local scripts/radar-rescore-all.ts",
+    "radar:migrate-0041": "tsx --env-file=.env.local scripts/apply-radar-0041.ts",
     "env:push:weeztix": "bash scripts/push-weeztix-env-to-vercel.sh"
   },
   "dependencies": {

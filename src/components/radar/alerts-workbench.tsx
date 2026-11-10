@@ -34,6 +34,21 @@ export function AlertsWorkbench({ initial }: { initial: Alert[] }) {
     router.refresh();
   }
 
+  async function markAllRead() {
+    setError(null);
+    const res = await fetch("/api/radar/alerts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ all: true }),
+    });
+    if (!res.ok) {
+      const data = (await res.json()) as { error?: string };
+      setError(data.error ?? "Markeren mislukt");
+      return;
+    }
+    router.refresh();
+  }
+
   if (initial.length === 0) {
     return (
       <p className="border border-dashed border-border px-4 py-10 text-center text-sm text-text-muted">
@@ -43,9 +58,22 @@ export function AlertsWorkbench({ initial }: { initial: Alert[] }) {
     );
   }
 
+  const unread = initial.filter((a) => !a.readAt).length;
+
   return (
     <div className="space-y-3">
       {error ? <p className="text-sm text-warn">{error}</p> : null}
+      {unread > 0 ? (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={markAllRead}
+            className="border border-border px-3 py-1.5 text-xs hover:border-accent"
+          >
+            Alles gelezen ({unread})
+          </button>
+        </div>
+      ) : null}
       <ul className="divide-y divide-border border border-border">
         {initial.map((a) => (
           <li

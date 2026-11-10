@@ -41,6 +41,17 @@ export async function markRadarAlertRead(
   return { ok: true };
 }
 
+export async function markAllRadarAlertsRead(): Promise<{ ok: true; n: number }> {
+  if (!hasDatabase()) return { ok: true, n: 0 };
+  const db = getDb();
+  const rows = await db
+    .update(radarAlerts)
+    .set({ readAt: new Date() })
+    .where(isNull(radarAlerts.readAt))
+    .returning({ id: radarAlerts.id });
+  return { ok: true, n: rows.length };
+}
+
 export async function createRadarAlert(input: {
   kind:
     | "velocity"
@@ -89,7 +100,7 @@ async function hasUnread(
   return Boolean(existing);
 }
 
-/** Deduped alerts based on latest score v2. */
+/** Deduped alerts based on latest score v2. Quiet for home artists / closed statuses. */
 export async function maybeAlertForScore(input: {
   artistId: string;
   artistName: string;
@@ -99,11 +110,28 @@ export async function maybeAlertForScore(input: {
   momentum?: number;
   bookability?: number;
   reasons?: string[];
+  homeGigCount?: number;
+  status?: string;
 }): Promise<void> {
+  if ((input.homeGigCount ?? 0) > 0) return;
+  if (
+    input.status === "passed" ||
+    input.status === "not_relevant" ||
+    input.status === "booked"
+  ) {
+    return;
+  }
+
   const settings = await loadRadarSettings();
   const reasons = input.reasons ?? [];
+  let createdThisCall = 0;
+  const maxPerCall = 2;
 
-  if (input.created && input.score >= settings.alerts.newOnRadarMinScore) {
+  if (
+    input.created &&
+    input.score >= settings.alerts.newOnRadarMinScore &&
+    createdThisCall < maxPerCall
+  ) {
     await createRadarAlert({
       kind: "new_on_radar",
       artistId: input.artistId,
@@ -111,9 +139,13 @@ export async function maybeAlertForScore(input: {
       body: `Score ${input.score}. ${reasons[0] ?? "Genoeg signaal om te volgen."}`,
       payload: { score: input.score, velocity: input.velocity, reasons },
     });
+    createdThisCall += 1;
   }
 
-  if (input.velocity >= settings.alerts.velocityThreshold) {
+  if (
+    input.velocity >= settings.alerts.velocityThreshold &&
+    input.score >= settings.alerts.newOnRadarMinScore
+  ) {
     if (!(await hasUnread(input.artistId, "velocity"))) {
       await createRadarAlert({
         kind: "velocity",
@@ -122,11 +154,15 @@ export async function maybeAlertForScore(input: {
         body: `Velocity ${input.velocity} (drempel ${settings.alerts.velocityThreshold}). Score nu ${input.score}.`,
         payload: { score: input.score, velocity: input.velocity, reasons },
       });
+      createdThisCall += 1;
     }
   }
 
-  // Breakthrough: sterke momentum-sprong
-  if ((input.momentum ?? 0) >= 70 && input.velocity >= 25) {
+  if (
+    (input.momentum ?? 0) >= 70 &&
+    input.velocity >= 25 &&
+    createdThisCall < maxPerCall
+  ) {
     if (!(await hasUnread(input.artistId, "breakthrough"))) {
       await createRadarAlert({
         kind: "breakthrough",
@@ -145,7 +181,6 @@ export async function maybeAlertForScore(input: {
     }
   }
 
-  // Window closing: nog relevant maar bookability daalt
   const closingReason = reasons.find((r) => /venster sluit/i.test(r));
   if (
     closingReason ||

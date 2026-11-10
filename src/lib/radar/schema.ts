@@ -163,6 +163,17 @@ export const radarArtists = pgTable(
     city: text("city"),
     imageUrl: text("image_url"),
     notes: text("notes"),
+    /** Latest RA followerCount from artist profile enrich. */
+    raFollowerCount: integer("ra_follower_count"),
+    residentCountry: text("resident_country"),
+    bookingDetails: text("booking_details"),
+    hasAgency: boolean("has_agency").notNull().default(false),
+    firstEventAt: timestamp("first_event_at", { withTimezone: true }),
+    raEnrichedAt: timestamp("ra_enriched_at", { withTimezone: true }),
+    /** Gigs at Thuishaven (ra club 109027). */
+    homeGigCount: integer("home_gig_count").notNull().default(0),
+    /** Avg sell-through at Thuishaven editions (0–1), when known. */
+    homeSellThrough: numeric("home_sell_through", { precision: 6, scale: 3 }),
     statusChangedAt: timestamp("status_changed_at", { withTimezone: true }),
     statusChangedByUserId: uuid("status_changed_by_user_id"),
     firstSeenAt: timestamp("first_seen_at", { withTimezone: true })
@@ -181,6 +192,12 @@ export const radarArtists = pgTable(
     index("radar_artists_growth_score_idx").on(table.growthScore),
     index("radar_artists_momentum_idx").on(table.momentumScore),
     index("radar_artists_primary_genre_idx").on(table.primaryGenre),
+    index("radar_artists_home_score_idx").on(
+      table.homeGigCount,
+      table.growthScore,
+    ),
+    index("radar_artists_ra_enriched_idx").on(table.raEnrichedAt),
+    index("radar_artists_ra_followers_idx").on(table.raFollowerCount),
   ],
 );
 

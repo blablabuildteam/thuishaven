@@ -27,6 +27,10 @@ type Props = {
     discoverySource: string;
     imageUrl: string | null;
     growthBreakdown: Record<string, unknown> | null;
+    homeGigCount?: number;
+    hasAgency?: boolean;
+    raFollowerCount?: number | null;
+    residentCountry?: string | null;
   };
   profiles: Array<{
     platform: string;
@@ -98,6 +102,24 @@ export function ArtistDossier({
           >
             ← Artiesten
           </Link>
+          {(artist.homeGigCount ?? 0) > 0 ? (
+            <p className="mt-1 text-xs text-text-dim">
+              Al bij Thuishaven ({artist.homeGigCount}×)
+            </p>
+          ) : null}
+          {artist.residentCountry || artist.raFollowerCount != null ? (
+            <p className="mt-1 text-xs text-text-muted">
+              {[
+                artist.residentCountry,
+                artist.raFollowerCount != null
+                  ? `${artist.raFollowerCount.toLocaleString("nl-NL")} RA-volgers`
+                  : null,
+                artist.hasAgency ? "agency" : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          ) : null}
           <h1 className="mt-2 font-display text-3xl tracking-[0.03em] sm:text-4xl">
             {artist.name}
           </h1>
