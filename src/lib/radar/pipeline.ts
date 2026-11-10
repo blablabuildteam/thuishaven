@@ -7,6 +7,7 @@ import { rescoreStaleArtists } from "@/lib/radar/score-v2";
 import { syncSpotifyForRadarArtists } from "@/lib/radar/spotify-sync";
 import { syncSocialForTopArtists } from "@/lib/radar/social-sync";
 import { nextVenueBatch } from "@/lib/radar/rotation";
+import { refreshSuggestedVenueScores } from "@/lib/radar/venues";
 import { isSpotifyConfigured } from "@/lib/integrations/spotify/client";
 import {
   amsterdamIsoWeekday,
@@ -90,6 +91,13 @@ export async function runRadarPipeline(options?: {
   if (!options?.skipDiscovery && discovery.venuesScanned > 0) {
     notes.push(
       `RA: ${discovery.eventsSeen} events, ${discovery.gigsUpserted} gigs, ${discovery.artistsCreated} nieuwe artiesten, ${discovery.venuesSuggested} venue-suggesties, ${discovery.scored} gescoord.`,
+    );
+  }
+
+  if (!options?.skipDiscovery && !pastDeadline()) {
+    const venueScores = await refreshSuggestedVenueScores();
+    notes.push(
+      `Venue-suggesties: ${venueScores.scored} gescoord, ${venueScores.rejected} auto-afgewezen.`,
     );
   }
 

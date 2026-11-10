@@ -63,7 +63,10 @@ export async function buildRadarDigest(): Promise<DigestPayload> {
     .select()
     .from(radarArtists)
     .where(
-      sql`${radarArtists.status} not in ('passed', 'not_relevant', 'booked')`,
+      and(
+        eq(radarArtists.homeGigCount, 0),
+        sql`${radarArtists.status} not in ('passed', 'not_relevant', 'booked')`,
+      ),
     )
     .orderBy(desc(radarArtists.growthVelocity), desc(radarArtists.growthScore))
     .limit(40);
@@ -84,6 +87,7 @@ export async function buildRadarDigest(): Promise<DigestPayload> {
     .from(radarArtists)
     .where(
       and(
+        eq(radarArtists.homeGigCount, 0),
         gte(radarArtists.firstSeenAt, since),
         sql`${radarArtists.status} not in ('passed', 'not_relevant')`,
       ),

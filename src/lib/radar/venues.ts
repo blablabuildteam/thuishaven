@@ -198,6 +198,81 @@ export async function countVenuesByStatus(): Promise<Record<string, number>> {
   return Object.fromEntries(rows.map((r) => [r.status, r.n]));
 }
 
+/**
+ * Score suggested venues from radar artist overlap, auto-reject noise.
+ * venue_score ≈ distinct artists × share with growth_score ≥ 50.
+ */
+export async function refreshSuggestedVenueScores(): Promise<{
+  scored: number;
+  rejected: number;
+}> {
+  if (!hasDatabase()) return { scored: 0, rejected: 0 };
+  const db = getDb();
+  const rows = await db.execute(sql`
+    with stats as (
+      select
+        g.venue_id,
+        count(distinct g.artist_id)::int as artists,
+        count(distinct g.artist_id) filter (
+          where a.growth_score::float >= 50
+        )::float as strong,
+        avg(g.attending)::float as avg_attending
+      from radar_gigs g
+      join radar_artists a on a.id = g.artist_id
+      join radar_venues v on v.id = g.venue_id
+      where v.status = 'suggested'
+        and g.venue_id is not null
+      group by g.venue_id
+    )
+    select
+      venue_id as "venueId",
+      artists,
+      strong,
+      avg_attending as "avgAttending",
+      round((artists * (case when artists > 0 then strong / artists else 0 end))::numeric, 2) as score
+    from stats
+  `);
+
+  let scored = 0;
+  let rejected = 0;
+  for (const raw of rows as unknown as Array<{
+    venueId: string;
+    artists: number;
+    avgAttending: number | null;
+    score: string | number;
+  }>) {
+    const artists = Number(raw.artists) || 0;
+    const avgAttending =
+      raw.avgAttending == null ? null : Number(raw.avgAttending);
+    const score = Number(raw.score) || 0;
+    if (artists < 2 || (avgAttending != null && avgAttending > 1500)) {
+      await db
+        .update(radarVenues)
+        .set({
+          status: "rejected",
+          rejectedAt: new Date(),
+          venueScore: String(score),
+          updatedAt: new Date(),
+        })
+        .where(eq(radarVenues.id, raw.venueId));
+      rejected += 1;
+      continue;
+    }
+    const tier =
+      avgAttending != null && avgAttending < 300 ? "early" : "mid";
+    await db
+      .update(radarVenues)
+      .set({
+        venueScore: String(score),
+        tier,
+        updatedAt: new Date(),
+      })
+      .where(eq(radarVenues.id, raw.venueId));
+    scored += 1;
+  }
+  return { scored, rejected };
+}
+
 /** Upsert seed list by raExternalId (idempotent). */
 export async function upsertSeedVenue(
   input: CreateVenueInput & { raExternalId: string },

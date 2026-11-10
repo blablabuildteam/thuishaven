@@ -87,13 +87,33 @@ export function VenuesWorkbench({ initial }: { initial: Venue[] }) {
     refresh();
   }
 
-  const suggested = initial.filter((v) => v.status === "suggested");
+  const suggested = initial
+    .filter((v) => v.status === "suggested")
+    .sort(
+      (a, b) =>
+        Number(b.venueScore ?? b.curatorScore ?? 0) -
+        Number(a.venueScore ?? a.curatorScore ?? 0),
+    );
   const active = initial.filter(
     (v) => v.status === "seed" || v.status === "accepted",
   );
   const other = initial.filter(
     (v) => v.status !== "suggested" && v.status !== "seed" && v.status !== "accepted",
   );
+
+  async function acceptTop5() {
+    const top = suggested.slice(0, 5);
+    for (const v of top) {
+      await setStatus(v.id, "accepted");
+    }
+  }
+
+  async function rejectRest() {
+    const rest = suggested.slice(5);
+    for (const v of rest) {
+      await setStatus(v.id, "rejected");
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -163,9 +183,31 @@ export function VenuesWorkbench({ initial }: { initial: Venue[] }) {
 
       {suggested.length > 0 ? (
         <section>
-          <h2 className="mb-3 font-display text-xl tracking-[0.04em]">
-            Suggesties
-          </h2>
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+            <h2 className="font-display text-xl tracking-[0.04em]">
+              Suggesties
+            </h2>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={pending}
+                onClick={acceptTop5}
+                className="border border-border px-2 py-1 text-xs hover:border-accent"
+              >
+                Top 5 accepteren
+              </button>
+              {suggested.length > 5 ? (
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={rejectRest}
+                  className="border border-border px-2 py-1 text-xs hover:border-accent"
+                >
+                  Rest afwijzen
+                </button>
+              ) : null}
+            </div>
+          </div>
           <VenueTable
             rows={suggested}
             onAccept={(id) => setStatus(id, "accepted")}
