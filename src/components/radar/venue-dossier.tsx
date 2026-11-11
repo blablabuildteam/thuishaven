@@ -1,10 +1,14 @@
 import Link from "next/link";
+import { Info } from "lucide-react";
 import type { VenueParty } from "@/lib/radar/venues";
 import {
   RADAR_VENUE_STATUS_NL,
   RADAR_VENUE_TIER_NL,
   type RadarVenueTier,
 } from "@/lib/radar/types";
+
+const CURATOR_SCORE_HELP =
+  "Curator-score (0–100): onze handmatige inschatting hoe sterk deze club/festival early talent signaleert. Hoog = breakouts vroeg. Laag = grotere / latere namen. Geen RA-cijfer.";
 
 type Props = {
   venue: {
@@ -53,12 +57,25 @@ export function VenueDossier({ venue, parties }: Props) {
           {" · "}
           {RADAR_VENUE_STATUS_NL[venue.status]}
         </p>
-        <p className="mt-2 text-sm text-text-muted">
-          Curator-score {venue.curatorScore ?? "—"}
-          {venue.venueScore ? ` · overlap-score ${venue.venueScore}` : ""}
+        <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-text-muted">
+          <span className="inline-flex items-center gap-1">
+            Curator-score {venue.curatorScore ?? "—"}
+            <span
+              title={CURATOR_SCORE_HELP}
+              aria-label={CURATOR_SCORE_HELP}
+              className="text-text-dim"
+            >
+              <Info className="h-3.5 w-3.5" strokeWidth={2} />
+            </span>
+          </span>
+          {venue.venueScore ? (
+            <span title="Overlap met Radar-artiesten die hier speelden">
+              · overlap {venue.venueScore}
+            </span>
+          ) : null}
           {venue.raUrl ? (
             <>
-              {" · "}
+              <span>·</span>
               <a
                 href={
                   venue.raUrl.startsWith("http")
