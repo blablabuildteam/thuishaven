@@ -4,6 +4,7 @@ import {
   isAmsterdamSyncSlot,
   isCronAuthorized,
 } from "@/lib/integrations/cron";
+import { cronCrashResponse, runCron } from "@/lib/system/cron-run";
 import { logIntegration } from "@/lib/integrations/log";
 import { syncBrevoCampaignsReadOnly } from "@/lib/integrations/brevo/sync";
 
@@ -35,7 +36,9 @@ export async function GET(request: Request) {
     });
   }
 
-  const result = await syncBrevoCampaignsReadOnly();
+  const run = await runCron("brevo", () => syncBrevoCampaignsReadOnly());
+  if (!run.ok) return cronCrashResponse("brevo", run.outcome);
+  const result = run.result;
 
   await logIntegration({
     source: "brevo",

@@ -33,6 +33,10 @@ import {
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { UserMenu } from "@/components/auth/user-menu";
 import { OutreachOnboardingTour } from "@/components/outreach/onboarding-tour";
+import {
+  PageHealthWarning,
+  SystemStatusNotice,
+} from "@/components/system/system-health";
 import { DjFeesNavBadge, useDjFeesPendingCount } from "@/components/dashboard/dj-fees-nav-badge";
 import { OmzetNavBadge, useOmzetPendingCount } from "@/components/dashboard/omzet-nav-badge";
 import {
@@ -676,10 +680,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </button>
             </div>
           ) : null}
+          <PageHealthWarning isAdmin={showAdminNav} />
           {children}
         </main>
       </div>
       {isOutreach ? <OutreachOnboardingTour /> : null}
+      <SystemStatusNotice isAdmin={showAdminNav} />
     </div>
   );
 }

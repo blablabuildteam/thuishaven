@@ -4,6 +4,7 @@ import {
   salesDigestRecipients,
   sendSalesDigest,
 } from "@/lib/dashboard/sales-digest";
+import { cronCrashResponse, runCron } from "@/lib/system/cron-run";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -39,7 +40,19 @@ export async function GET(request: Request) {
   const to = testTo
     ? testTo.split(",").map((s) => s.trim()).filter(Boolean)
     : salesDigestRecipients();
-  const result = await sendSalesDigest({ to, now });
+  // Test sends (?to=) are not the scheduled digest: don't record them.
+  const job = () => sendSalesDigest({ to, now });
+  let result: Awaited<ReturnType<typeof sendSalesDigest>>;
+  if (testTo) {
+    result = await job();
+  } else {
+    const run = await runCron("sales-digest", job, {
+      logSource: "sales_digest",
+      logFailure: true,
+    });
+    if (!run.ok) return cronCrashResponse("sales-digest", run.outcome);
+    result = run.result;
+  }
   if (!result.ok) {
     console.error(`[sales-digest] failed: ${result.error}`);
     return NextResponse.json(result, { status: 502 });

@@ -4,6 +4,7 @@ import {
   isCronAuthorized,
   isAmsterdamSyncSlot,
 } from "@/lib/integrations/cron";
+import { cronCrashResponse, runCron } from "@/lib/system/cron-run";
 import { syncMetaAdsReadOnly } from "@/lib/integrations/meta/ads-sync";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +31,9 @@ export async function GET(request: Request) {
     });
   }
 
-  const result = await syncMetaAdsReadOnly();
+  const run = await runCron("meta-ads", () => syncMetaAdsReadOnly());
+  if (!run.ok) return cronCrashResponse("meta-ads", run.outcome);
+  const result = run.result;
   return NextResponse.json(
     {
       trigger: "vercel-cron",

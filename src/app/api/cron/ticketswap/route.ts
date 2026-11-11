@@ -4,6 +4,7 @@ import {
   isCronAuthorized,
   isTicketswapCronSlot,
 } from "@/lib/integrations/cron";
+import { cronCrashResponse, runCron } from "@/lib/system/cron-run";
 import { logIntegration } from "@/lib/integrations/log";
 import { syncTicketSwapReadOnly } from "@/lib/integrations/ticketswap/sync";
 
@@ -33,7 +34,9 @@ export async function GET(request: Request) {
     });
   }
 
-  const result = await syncTicketSwapReadOnly();
+  const run = await runCron("ticketswap", () => syncTicketSwapReadOnly());
+  if (!run.ok) return cronCrashResponse("ticketswap", run.outcome);
+  const result = run.result;
   await logIntegration({
     source: "ticketswap",
     level: result.ok ? "info" : "error",

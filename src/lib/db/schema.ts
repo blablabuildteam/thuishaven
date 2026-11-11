@@ -881,14 +881,37 @@ export const horecaRevenue = pgTable(
   (t) => [uniqueIndex("horeca_revenue_edition").on(t.editionId)],
 );
 
-export const syncJobs = pgTable("sync_jobs", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  source: text("source").notNull(),
-  status: text("status").notNull().default("pending"),
-  startedAt: timestamp("started_at", { withTimezone: true }),
-  finishedAt: timestamp("finished_at", { withTimezone: true }),
-  error: text("error"),
-  meta: jsonb("meta").$type<Record<string, unknown>>().default({}),
+/**
+ * One row per cron run (see lib/system/cron-run.ts).
+ * status: running | ok | partial | failed. A row stuck on "running" past the
+ * route's maxDuration means Vercel killed the function (timeout).
+ */
+export const syncJobs = pgTable(
+  "sync_jobs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    source: text("source").notNull(),
+    status: text("status").notNull().default("pending"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    error: text("error"),
+    meta: jsonb("meta").$type<Record<string, unknown>>().default({}),
+  },
+  (t) => [index("sync_jobs_source_started").on(t.source, t.startedAt)],
+);
+
+/**
+ * Last known state per system problem (e.g. "monitor:weeztix" → "down").
+ * Notifications go out only when the state changes, so one mail per break
+ * and one per recovery.
+ */
+export const systemAlerts = pgTable("system_alerts", {
+  key: text("key").primaryKey(),
+  state: text("state").notNull(),
+  message: text("message"),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 });
 
 /** Usage / cost events for outreach (AI tokens, KvK, Brevo, Places, …). */

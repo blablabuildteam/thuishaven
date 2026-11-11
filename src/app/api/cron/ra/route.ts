@@ -4,6 +4,7 @@ import {
   isCronAuthorized,
   isRaCronSlot,
 } from "@/lib/integrations/cron";
+import { cronCrashResponse, runCron } from "@/lib/system/cron-run";
 import { logIntegration } from "@/lib/integrations/log";
 import { syncResidentAdvisorReadOnly } from "@/lib/integrations/ra/sync";
 
@@ -33,7 +34,9 @@ export async function GET(request: Request) {
     });
   }
 
-  const result = await syncResidentAdvisorReadOnly();
+  const run = await runCron("ra", () => syncResidentAdvisorReadOnly());
+  if (!run.ok) return cronCrashResponse("ra", run.outcome);
+  const result = run.result;
   if (result.ok) {
     const { invalidateEventInsightsCache } = await import(
       "@/lib/insights/event-insights"

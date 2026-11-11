@@ -4,6 +4,7 @@ import {
   isCronAuthorized,
   isAmsterdamSyncSlot,
 } from "@/lib/integrations/cron";
+import { cronCrashResponse, runCron } from "@/lib/system/cron-run";
 import { syncYouTubeAdsReadOnly } from "@/lib/integrations/google-ads/ads-sync";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +31,9 @@ export async function GET(request: Request) {
     });
   }
 
-  const result = await syncYouTubeAdsReadOnly();
+  const run = await runCron("youtube-ads", () => syncYouTubeAdsReadOnly());
+  if (!run.ok) return cronCrashResponse("youtube-ads", run.outcome);
+  const result = run.result;
   return NextResponse.json(
     {
       trigger: "vercel-cron",

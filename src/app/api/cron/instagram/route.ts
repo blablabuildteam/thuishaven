@@ -4,6 +4,7 @@ import {
   isCronAuthorized,
   isAmsterdamSyncSlot,
 } from "@/lib/integrations/cron";
+import { cronCrashResponse, runCron } from "@/lib/system/cron-run";
 import { syncInstagramReadOnly } from "@/lib/integrations/instagram/sync";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +31,9 @@ export async function GET(request: Request) {
     });
   }
 
-  const result = await syncInstagramReadOnly({ withAnalyze: true });
+  const run = await runCron("instagram", () => syncInstagramReadOnly({ withAnalyze: true }));
+  if (!run.ok) return cronCrashResponse("instagram", run.outcome);
+  const result = run.result;
   return NextResponse.json(
     {
       trigger: "vercel-cron",

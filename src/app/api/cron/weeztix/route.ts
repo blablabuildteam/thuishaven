@@ -7,6 +7,7 @@ import {
 } from "@/lib/integrations/cron";
 import { refreshDailyTicketSales } from "@/lib/dashboard/daily-ticket-sales";
 import { logIntegration } from "@/lib/integrations/log";
+import { cronCrashResponse, runCron } from "@/lib/system/cron-run";
 import {
   syncWeeztixDailySales,
   syncWeeztixOnSaleCurves,
@@ -47,11 +48,15 @@ export async function GET(request: Request) {
   // In-between slots: refresh only the events still on sale (stats + sale-days
   // + order curve), the same light pull the dashboard's manual refresh runs.
   if (!force && !isWeeztixFullSlot(now)) {
-    const light = await refreshDailyTicketSales().catch((e) => ({
-      ok: false as const,
-      refreshedAt: null,
-      error: e instanceof Error ? e.message : "Weeztix light sync mislukt",
-    }));
+    const lightRun = await runCron("weeztix", () =>
+      refreshDailyTicketSales().catch((e) => ({
+        ok: false as const,
+        refreshedAt: null,
+        error: e instanceof Error ? e.message : "Weeztix light sync mislukt",
+      })),
+    );
+    if (!lightRun.ok) return cronCrashResponse("weeztix", lightRun.outcome);
+    const light = lightRun.result;
     await logIntegration({
       source: "weeztix",
       level: light.ok ? "info" : "error",
@@ -83,37 +88,57 @@ export async function GET(request: Request) {
     );
   }
 
-  const events = await syncWeeztixReadOnly({ includeStats: true });
-  const saleDays = await syncWeeztixSaleDays({ limit: 120 }).catch((e) => ({
-    ok: false as const,
-    attempted: 0,
-    daysUpserted: 0,
-    ticketsToday: 0,
-    failed: 1,
-    errors: [e instanceof Error ? e.message : "saleDays mislukt"],
-  }));
-  const curveFailure = (e: unknown) => ({
-    ok: false as const,
-    attempted: 0,
-    editionsWithCurve: 0,
-    daysUpserted: 0,
-    referrersUpserted: 0,
-    demographicsUpserted: 0,
-    brevoOrders: 0,
-    failed: 1,
-    errors: [e instanceof Error ? e.message : "dailySales mislukt"],
-  });
   /**
    * The full backfill (all editions, referrers, demographics) stays on the
    * morning slot. Every other slot still needs the order curve of events in
    * sale, otherwise today's sales stay frozen on the 08:00 figure.
    */
   const runDaily = force || hour === 8;
-  const daily = runDaily
-    ? await syncWeeztixDailySales({ limit: 150, daysBack: 900 }).catch(
-        curveFailure,
-      )
-    : await syncWeeztixOnSaleCurves().catch(curveFailure);
+  const fullRun = await runCron(
+    "weeztix",
+    async () => {
+      const events = await syncWeeztixReadOnly({ includeStats: true });
+      const saleDays = await syncWeeztixSaleDays({ limit: 120 }).catch((e) => ({
+        ok: false as const,
+        attempted: 0,
+        daysUpserted: 0,
+        ticketsToday: 0,
+        failed: 1,
+        errors: [e instanceof Error ? e.message : "saleDays mislukt"],
+      }));
+      const curveFailure = (e: unknown) => ({
+        ok: false as const,
+        attempted: 0,
+        editionsWithCurve: 0,
+        daysUpserted: 0,
+        referrersUpserted: 0,
+        demographicsUpserted: 0,
+        brevoOrders: 0,
+        failed: 1,
+        errors: [e instanceof Error ? e.message : "dailySales mislukt"],
+      });
+      const daily = runDaily
+        ? await syncWeeztixDailySales({ limit: 150, daysBack: 900 }).catch(
+            curveFailure,
+          )
+        : await syncWeeztixOnSaleCurves().catch(curveFailure);
+      return { events, saleDays, daily };
+    },
+    {
+      // Events failing = no fresh numbers at all. Sale-days or curves failing
+      // = most numbers fresh, some charts behind.
+      outcome: ({ events, saleDays, daily }) => {
+        const error = [events.error, ...saleDays.errors, ...daily.errors]
+          .filter(Boolean)
+          .join(" · ");
+        if (!events.ok) return { status: "failed", error };
+        if (!daily.ok || !saleDays.ok) return { status: "partial", error };
+        return { status: "ok", meta: { full: runDaily } };
+      },
+    },
+  );
+  if (!fullRun.ok) return cronCrashResponse("weeztix", fullRun.outcome);
+  const { events, saleDays, daily } = fullRun.result;
 
   const ok = events.ok && daily.ok;
   if (ok) {

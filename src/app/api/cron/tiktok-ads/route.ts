@@ -4,6 +4,7 @@ import {
   isCronAuthorized,
   isAmsterdamSyncSlot,
 } from "@/lib/integrations/cron";
+import { cronCrashResponse, runCron } from "@/lib/system/cron-run";
 import { syncTikTokAdsReadOnly } from "@/lib/integrations/tiktok/ads-sync";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +31,9 @@ export async function GET(request: Request) {
     });
   }
 
-  const result = await syncTikTokAdsReadOnly();
+  const run = await runCron("tiktok-ads", () => syncTikTokAdsReadOnly());
+  if (!run.ok) return cronCrashResponse("tiktok-ads", run.outcome);
+  const result = run.result;
   return NextResponse.json(
     {
       trigger: "vercel-cron",

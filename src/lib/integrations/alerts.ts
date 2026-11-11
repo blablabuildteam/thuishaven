@@ -14,6 +14,7 @@ import {
 import {
   listEnabledAlertRules,
 } from "@/lib/integrations/alerts/rules";
+import { logIntegration } from "@/lib/integrations/log";
 import type {
   DashboardAlertType,
   SecondaryChannel,
@@ -23,6 +24,24 @@ import type {
 } from "@/lib/integrations/alerts/types";
 import { DASHBOARD_ALERT_TYPES } from "@/lib/integrations/alerts/types";
 import { refreshUpcomingEditionForecast } from "@/lib/weather/store";
+
+
+/**
+ * Catch handler that still returns a fallback (so one broken source doesn't
+ * take down the whole alerts page) but records the failure in the log,
+ * instead of an empty list that looks like "no alerts".
+ */
+function loggedFallback<T>(event: string, fallback: T) {
+  return async (e: unknown): Promise<T> => {
+    await logIntegration({
+      source: "alerts",
+      level: "error",
+      event,
+      message: e instanceof Error ? e.message : String(e),
+    });
+    return fallback;
+  };
+}
 
 export type {
   SecondaryChannel,
@@ -55,8 +74,8 @@ export async function listOpenDashboardAlerts(): Promise<{
   conflicts: SecondarySoldOutConflict[];
 }> {
   const [snaps, rules] = await Promise.all([
-    loadEditionAlertSnapshots().catch(() => []),
-    listEnabledAlertRules().catch(() => []),
+    loadEditionAlertSnapshots().catch(loggedFallback("load_edition_snapshots", [])),
+    listEnabledAlertRules().catch(loggedFallback("load_rules", [])),
   ]);
   const matches = mergeAlertMatches(snaps, [], rules).filter(
     (m): m is EvaluatedAlertMatch & { channel: SecondaryChannel } =>
@@ -132,7 +151,7 @@ export async function listStoredDashboardAlerts(): Promise<StoredAlert[]> {
 export async function listUpcomingPlatformTakedowns(): Promise<
   GroupedPlatformTakedown[]
 > {
-  const snaps = await loadEditionAlertSnapshots().catch(() => []);
+  const snaps = await loadEditionAlertSnapshots().catch(loggedFallback("load_edition_snapshots", []));
   return groupPlatformTakedowns(findPlatformTakedowns(snaps));
 }
 
@@ -140,7 +159,7 @@ export async function upcomingPlatformTakedownStatus(): Promise<{
   takedowns: GroupedPlatformTakedown[];
   upcomingEditionCount: number;
 }> {
-  const snaps = await loadEditionAlertSnapshots().catch(() => []);
+  const snaps = await loadEditionAlertSnapshots().catch(loggedFallback("load_edition_snapshots", []));
   return {
     takedowns: groupPlatformTakedowns(findPlatformTakedowns(snaps)),
     upcomingEditionCount: snaps.length,
@@ -272,14 +291,14 @@ export async function refreshDashboardAlerts(_options?: {
   weather: number;
   notified: number;
 }> {
-  await refreshUpcomingEditionForecast().catch(() => null);
+  await refreshUpcomingEditionForecast().catch(loggedFallback("refresh_forecast", null));
   const [snaps, weatherSnaps, rules] = await Promise.all([
-    loadEditionAlertSnapshots().catch(() => []),
-    loadWeatherAlertSnapshots().catch(() => []),
-    listEnabledAlertRules().catch(() => []),
+    loadEditionAlertSnapshots().catch(loggedFallback("load_edition_snapshots", [])),
+    loadWeatherAlertSnapshots().catch(loggedFallback("load_weather_snapshots", [])),
+    listEnabledAlertRules().catch(loggedFallback("load_rules", [])),
   ]);
   const matches = mergeAlertMatches(snaps, weatherSnaps, rules);
-  await upsertRuleMatches(matches).catch(() => 0);
+  await upsertRuleMatches(matches).catch(loggedFallback("upsert_matches", 0));
 
   const { notifyUnsentDashboardAlerts } = await import(
     "@/lib/integrations/alerts/notify"

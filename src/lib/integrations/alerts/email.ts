@@ -9,7 +9,14 @@ const BORDER = "#d2cdc2";
 
 export type AlertEmailItem = {
   channel: string;
-  kind: "overbooking" | "revenue_leak" | "sales" | "weather";
+  kind:
+    | "overbooking"
+    | "revenue_leak"
+    | "sales"
+    | "weather"
+    | "system_down"
+    | "system_degraded"
+    | "system_ok";
   title: string;
   message: string;
 };
@@ -43,13 +50,17 @@ function kindLabel(kind: AlertEmailItem["kind"]): string {
   if (kind === "overbooking") return "Overboeking";
   if (kind === "revenue_leak") return "Omzetlek";
   if (kind === "sales") return "Verkoop";
+  if (kind === "system_down") return "Storing";
+  if (kind === "system_degraded") return "Waarschuwing";
+  if (kind === "system_ok") return "Hersteld";
   return "Weer";
 }
 
 function kindColor(kind: AlertEmailItem["kind"]): string {
   if (kind === "overbooking") return DANGER;
   if (kind === "weather") return "#3d6b8a";
-  if (kind === "sales") return "#2f6b3a";
+  if (kind === "sales" || kind === "system_ok") return "#2f6b3a";
+  if (kind === "system_down") return DANGER;
   return "#c9a227";
 }
 
@@ -59,8 +70,15 @@ export function renderAlertEmail(input: {
   intro: string;
   items?: AlertEmailItem[];
   ctaLabel?: string;
+  /** Absolute URL or app path (e.g. "/koppelingen"). Defaults to alerts. */
+  ctaUrl?: string;
   footer?: string;
 }): { html: string; text: string } {
+  const ctaHref = input.ctaUrl
+    ? input.ctaUrl.startsWith("http")
+      ? input.ctaUrl
+      : `${emailPublicBaseUrl()}${input.ctaUrl}`
+    : alertsUrl();
   const items = input.items ?? [];
   const cards = items
     .map((item) => {
@@ -136,7 +154,7 @@ export function renderAlertEmail(input: {
           ${cards}
           <tr>
             <td style="padding:8px 0 28px 0;">
-              <a href="${alertsUrl()}" style="display:inline-block;background:${BLACK};color:${WHITE};font-family:Arial,Helvetica,sans-serif;font-size:13px;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;padding:12px 18px;">
+              <a href="${escapeHtml(ctaHref)}" style="display:inline-block;background:${BLACK};color:${WHITE};font-family:Arial,Helvetica,sans-serif;font-size:13px;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;padding:12px 18px;">
                 ${escapeHtml(input.ctaLabel ?? "Open alerts")}
               </a>
             </td>
@@ -168,7 +186,7 @@ export function renderAlertEmail(input: {
       item.message,
       "",
     ]),
-    `${input.ctaLabel ?? "Open alerts"}: ${alertsUrl()}`,
+    `${input.ctaLabel ?? "Open alerts"}: ${ctaHref}`,
   ];
 
   return { html, text: textParts.join("\n") };
