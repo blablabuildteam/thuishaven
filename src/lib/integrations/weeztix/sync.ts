@@ -254,6 +254,7 @@ export async function syncWeeztixTicketStatsFromEditions(options?: {
   onlyMissing?: boolean;
   /** Limit to these editions. Empty list syncs nothing. */
   editionIds?: string[];
+  onProgress?: (done: number, total: number) => void;
 }): Promise<{
   ok: boolean;
   attempted: number;
@@ -327,6 +328,7 @@ export async function syncWeeztixTicketStatsFromEditions(options?: {
   return upsertTicketInventoryForEvents(mapped, {
     concurrency: options?.concurrency ?? 4,
     startsAtByEdition: startsById,
+    onProgress: options?.onProgress,
   });
 }
 
@@ -374,6 +376,8 @@ async function upsertTicketInventoryForEvents(
   options?: {
     concurrency?: number;
     startsAtByEdition?: Map<string, Date>;
+    /** Called after each event finishes, with events done and the total. */
+    onProgress?: (done: number, total: number) => void;
   },
 ): Promise<{
   ok: boolean;
@@ -499,9 +503,18 @@ async function upsertTicketInventoryForEvents(
     upserted += 1;
   }
 
+  let done = 0;
+  options?.onProgress?.(0, items.length);
   for (let i = 0; i < items.length; i += concurrency) {
     const batch = items.slice(i, i + concurrency);
-    await Promise.all(batch.map((item) => one(item)));
+    await Promise.all(
+      batch.map((item) =>
+        one(item).finally(() => {
+          done += 1;
+          options?.onProgress?.(done, items.length);
+        }),
+      ),
+    );
   }
 
   try {

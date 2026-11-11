@@ -469,6 +469,8 @@ export async function syncWeeztixDailySales(options?: {
   concurrency?: number;
   /** Alleen order-histogram, geen referrers/demo/sale-day. */
   curvesOnly?: boolean;
+  /** Called after each event finishes, with events done and the total. */
+  onProgress?: (done: number, total: number) => void;
 }): Promise<{
   ok: boolean;
   attempted: number;
@@ -655,9 +657,18 @@ export async function syncWeeztixDailySales(options?: {
     }
   }
 
+  let done = 0;
+  options?.onProgress?.(0, rows.length);
   for (let i = 0; i < rows.length; i += concurrency) {
     const batch = rows.slice(i, i + concurrency);
-    await Promise.all(batch.map((r) => one(r)));
+    await Promise.all(
+      batch.map((r) =>
+        one(r).finally(() => {
+          done += 1;
+          options?.onProgress?.(done, rows.length);
+        }),
+      ),
+    );
   }
 
   return {
@@ -720,6 +731,7 @@ export async function listOnSaleWeeztixEditions(limit = 120): Promise<
 export async function syncWeeztixOnSaleCurves(options?: {
   limit?: number;
   concurrency?: number;
+  onProgress?: (done: number, total: number) => void;
 }) {
   const rows = await listOnSaleWeeztixEditions(options?.limit ?? 120);
   return syncWeeztixDailySales({
@@ -727,12 +739,14 @@ export async function syncWeeztixOnSaleCurves(options?: {
     curvesOnly: true,
     limit: Math.max(1, rows.length),
     concurrency: options?.concurrency ?? 3,
+    onProgress: options?.onProgress,
   });
 }
 
 export async function syncWeeztixSaleDays(options?: {
   limit?: number;
   concurrency?: number;
+  onProgress?: (done: number, total: number) => void;
 }): Promise<{
   ok: boolean;
   attempted: number;
@@ -781,8 +795,17 @@ export async function syncWeeztixSaleDays(options?: {
     ticketsToday += saleDay.sold;
   }
 
+  let done = 0;
+  options?.onProgress?.(0, rows.length);
   for (let i = 0; i < rows.length; i += concurrency) {
-    await Promise.all(rows.slice(i, i + concurrency).map((row) => one(row)));
+    await Promise.all(
+      rows.slice(i, i + concurrency).map((row) =>
+        one(row).finally(() => {
+          done += 1;
+          options?.onProgress?.(done, rows.length);
+        }),
+      ),
+    );
   }
 
   const snap = await snapshotWeeztixInventoryToday(rows.map((row) => row.id));

@@ -298,11 +298,66 @@ export async function latestDailyTicketSalesRefreshAt(): Promise<string | null> 
  * and re-pull their order curve, so both this chart and the sales curve show
  * the stand of right now instead of the last cron slot.
  */
-export async function refreshDailyTicketSales(): Promise<{
+export type DailyTicketSalesRefreshStep = "inventory" | "saleDays" | "curves";
+
+export type DailyTicketSalesRefreshProgress = {
+  step: DailyTicketSalesRefreshStep;
+  /** Events finished in this step. */
+  done: number;
+  /** Events this step works through. */
+  total: number;
+  /** 0–1 across all steps, weighted by how long each step usually takes. */
+  fraction: number;
+};
+
+/**
+ * Rough share of the wall-clock time per step (measured Nov 2026 with 19
+ * events: ~8s totals, ~58s sale days, ~6s order curve), so the bar moves at
+ * an even pace instead of racing through the fast steps.
+ */
+const REFRESH_STEP_WEIGHTS: Record<DailyTicketSalesRefreshStep, number> = {
+  inventory: 1,
+  saleDays: 6,
+  curves: 1,
+};
+const REFRESH_STEP_ORDER: DailyTicketSalesRefreshStep[] = [
+  "inventory",
+  "saleDays",
+  "curves",
+];
+
+function refreshProgress(
+  step: DailyTicketSalesRefreshStep,
+  done: number,
+  total: number,
+): DailyTicketSalesRefreshProgress {
+  const sum = REFRESH_STEP_ORDER.reduce((s, k) => s + REFRESH_STEP_WEIGHTS[k], 0);
+  let before = 0;
+  for (const k of REFRESH_STEP_ORDER) {
+    if (k === step) break;
+    before += REFRESH_STEP_WEIGHTS[k];
+  }
+  const within = total > 0 ? Math.min(1, done / total) : 1;
+  return {
+    step,
+    done,
+    total,
+    fraction: (before + within * REFRESH_STEP_WEIGHTS[step]) / sum,
+  };
+}
+
+export async function refreshDailyTicketSales(options?: {
+  onProgress?: (progress: DailyTicketSalesRefreshProgress) => void;
+}): Promise<{
   ok: boolean;
   refreshedAt: string | null;
   error?: string;
 }> {
+  const report = (step: DailyTicketSalesRefreshStep) =>
+    options?.onProgress
+      ? (done: number, total: number) =>
+          options.onProgress?.(refreshProgress(step, done, total))
+      : undefined;
   const {
     listOnSaleWeeztixEditions,
     syncWeeztixOnSaleCurves,
@@ -316,9 +371,13 @@ export async function refreshDailyTicketSales(): Promise<{
   const inventory = await syncWeeztixTicketStatsFromEditions({
     editionIds: onSaleIds,
     concurrency: 4,
+    onProgress: report("inventory"),
   });
   const saleDays = inventory.ok
-    ? await syncWeeztixSaleDays({ limit: 120 }).catch((err) => ({
+    ? await syncWeeztixSaleDays({
+        limit: 120,
+        onProgress: report("saleDays"),
+      }).catch((err) => ({
         ok: false as const,
         errors: [err instanceof Error ? err.message : "Dagverkoop ophalen mislukt"],
       }))
@@ -329,12 +388,14 @@ export async function refreshDailyTicketSales(): Promise<{
    * value. Pull the curve for the same events.
    */
   const curves = inventory.ok
-    ? await syncWeeztixOnSaleCurves().catch((err) => ({
-        ok: false as const,
-        errors: [
-          err instanceof Error ? err.message : "Verkoopverloop ophalen mislukt",
-        ],
-      }))
+    ? await syncWeeztixOnSaleCurves({ onProgress: report("curves") }).catch(
+        (err) => ({
+          ok: false as const,
+          errors: [
+            err instanceof Error ? err.message : "Verkoopverloop ophalen mislukt",
+          ],
+        }),
+      )
     : null;
   const refreshedAt = await latestDailyTicketSalesRefreshAt();
   const error = !inventory.ok

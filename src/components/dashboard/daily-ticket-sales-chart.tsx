@@ -28,6 +28,8 @@ import type {
   DailyTicketSalesBreakdown,
   DailyTicketSalesDay,
   DailyTicketSalesEvent,
+  DailyTicketSalesRefreshProgress,
+  DailyTicketSalesRefreshStep,
 } from "@/lib/dashboard/daily-ticket-sales";
 import {
   amsterdamClock,
@@ -383,10 +385,67 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
 /** Open the dashboard and the stand is older than this → pull live on mount. */
 const AUTO_REFRESH_STALE_MS = 10 * 60 * 1000;
 
+const REFRESH_STEP_LABEL: Record<DailyTicketSalesRefreshStep, string> = {
+  inventory: "Tickettotalen ophalen",
+  saleDays: "Dagverkoop ophalen",
+  curves: "Verkoopverloop ophalen",
+};
+
+type RefreshResult = {
+  ok?: boolean;
+  refreshedAt?: string | null;
+  error?: string;
+};
+
+/**
+ * Read the NDJSON progress stream from the refresh route. Falls back to a
+ * single JSON body if the server answered without streaming.
+ */
+async function readRefreshResponse(
+  res: Response,
+  onProgress: (progress: DailyTicketSalesRefreshProgress) => void,
+): Promise<RefreshResult> {
+  const type = res.headers.get("content-type") ?? "";
+  if (!res.body || !type.includes("application/x-ndjson")) {
+    return (await res.json().catch(() => ({}))) as RefreshResult;
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: RefreshResult = { ok: false, error: "Verversen afgebroken" };
+  const handle = (line: string) => {
+    if (!line.trim()) return;
+    try {
+      const msg = JSON.parse(line) as
+        | ({ type: "progress" } & DailyTicketSalesRefreshProgress)
+        | ({ type: "done" } & RefreshResult);
+      if (msg.type === "progress") onProgress(msg);
+      else if (msg.type === "done") result = msg;
+    } catch {
+      // Ignore a malformed line; the final "done" line decides the outcome.
+    }
+  };
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let newline = buffer.indexOf("\n");
+    while (newline >= 0) {
+      handle(buffer.slice(0, newline));
+      buffer = buffer.slice(newline + 1);
+      newline = buffer.indexOf("\n");
+    }
+  }
+  handle(buffer + decoder.decode());
+  return result;
+}
+
 function DailySalesRefresh({ refreshedAt }: { refreshedAt: string | null }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] =
+    useState<DailyTicketSalesRefreshProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [shownAt, setShownAt] = useState(refreshedAt);
   const [now, setNow] = useState(() => new Date());
@@ -403,16 +462,17 @@ function DailySalesRefresh({ refreshedAt }: { refreshedAt: string | null }) {
 
   const onRefresh = useCallback(async () => {
     setBusy(true);
+    setProgress(null);
     setError(null);
     try {
       const res = await fetch("/api/dashboard/daily-ticket-sales/refresh", {
         method: "POST",
+        headers: { Accept: "application/x-ndjson" },
       });
-      const body = (await res.json().catch(() => ({}))) as {
-        refreshedAt?: string | null;
-        error?: string;
-      };
-      if (!res.ok) {
+      const body = res.ok
+        ? await readRefreshResponse(res, setProgress)
+        : ((await res.json().catch(() => ({}))) as RefreshResult);
+      if (!res.ok || body.ok === false) {
         setError(body.error || "Verversen mislukt");
         return;
       }
@@ -454,12 +514,54 @@ function DailySalesRefresh({ refreshedAt }: { refreshedAt: string | null }) {
       >
         <RefreshCw className={cn("size-3.5", spinning && "animate-spin")} />
       </button>
-      <p className="min-w-0 text-[11px] leading-snug text-text-muted" aria-live="polite">
-        {spinning
-          ? "Bezig met ophalen… dit kan een minuut of twee duren."
-          : `${formatRefreshedAt(shownAt)} · ${formatNextAmsterdamSync(now)}`}
-        {error ? <span className="text-warn"> · {error}</span> : null}
+      {spinning ? (
+        <RefreshProgress progress={progress} finishing={isPending && !busy} />
+      ) : (
+        <p className="min-w-0 text-[11px] leading-snug text-text-muted" aria-live="polite">
+          {`${formatRefreshedAt(shownAt)} · ${formatNextAmsterdamSync(now)}`}
+          {error ? <span className="text-warn"> · {error}</span> : null}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function RefreshProgress({
+  progress,
+  finishing,
+}: {
+  progress: DailyTicketSalesRefreshProgress | null;
+  finishing: boolean;
+}) {
+  const fraction = finishing ? 1 : (progress?.fraction ?? 0);
+  const percent = Math.round(fraction * 100);
+  const label = finishing
+    ? "Grafiek bijwerken…"
+    : progress
+      ? `${REFRESH_STEP_LABEL[progress.step]} · ${progress.done}/${progress.total}`
+      : "Events opzoeken…";
+  return (
+    <div className="min-w-0 flex-1 basis-40 max-w-72">
+      <p
+        className="flex justify-between gap-2 text-[11px] leading-snug text-text-muted"
+        aria-live="polite"
+      >
+        <span className="truncate">{label}</span>
+        <span className="shrink-0 tabular-nums">{percent}%</span>
       </p>
+      <div
+        role="progressbar"
+        aria-label="Verkoop ophalen"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        className="mt-1 h-1 w-full bg-border"
+      >
+        <div
+          className="h-full bg-text transition-[width] duration-300 ease-out motion-reduce:transition-none"
+          style={{ width: `${Math.max(2, percent)}%` }}
+        />
+      </div>
     </div>
   );
 }
