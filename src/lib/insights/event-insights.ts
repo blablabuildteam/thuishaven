@@ -600,7 +600,7 @@ export async function loadEventInsightsFresh(options?: {
   const minDay = filtered[filtered.length - 1]!.startsAt;
   const maxDay = filtered[0]!.startsAt;
 
-  const [weatherRows, camps, festivals, dailyRows, orderRows, posts, refs, appicRows, raInvRows, vriendenRows, raRows, demoRows, ads, feeArtistRows] =
+  const [weatherRows, camps, festivals, dailyRows, orderRows, posts, refs, appicRows, raInvRows, vriendenRows, wingameRows, raRows, demoRows, ads, feeArtistRows] =
     await Promise.all([
       safeQuery(
         "weather",
@@ -761,6 +761,26 @@ export async function loadEventInsightsFresh(options?: {
             .where(
               and(
                 eq(ticketInventory.platform, "vrienden"),
+                inArray(ticketInventory.editionId, editionIds),
+              ),
+            ),
+        [],
+      ),
+      safeQuery(
+        "wingame",
+        () =>
+          db
+            .select({
+              editionId: ticketInventory.editionId,
+              sold: ticketInventory.sold,
+              scanned: ticketInventory.scanned,
+              capacity: ticketInventory.capacity,
+              available: ticketInventory.available,
+            })
+            .from(ticketInventory)
+            .where(
+              and(
+                eq(ticketInventory.platform, "wingame"),
                 inArray(ticketInventory.editionId, editionIds),
               ),
             ),
@@ -947,6 +967,9 @@ export async function loadEventInsightsFresh(options?: {
     const vriendenByEdition = new Map(
       vriendenRows.map((r) => [r.editionId, r]),
     );
+    const wingameByEdition = new Map(
+      wingameRows.map((r) => [r.editionId, r]),
+    );
     const raByEdition = new Map(
       raRows
         .filter((r): r is typeof r & { editionId: string } => r.editionId != null)
@@ -1000,13 +1023,14 @@ export async function loadEventInsightsFresh(options?: {
       const appic = appicByEdition.get(e.id);
       const raInv = raInvByEdition.get(e.id);
       const vrienden = vriendenByEdition.get(e.id);
+      const wingame = wingameByEdition.get(e.id);
       const raListing = raByEdition.get(e.id);
       /**
        * Weeztix counts a barcode as sold the moment it is issued into the
-       * Appic/RA/vrienden pool. An untouched barcode is not a sale: Verkocht
+       * Appic/Wingame/RA/vrienden pool. An untouched barcode is not a sale: Verkocht
        * is shop sales plus door scans out of those pools.
        */
-      const pools = [appic, raInv, vrienden];
+      const pools = [appic, wingame, raInv, vrienden];
       const splitIssued = pools.reduce((sum, p) => sum + (p?.sold ?? 0), 0);
       const poolUsed = pools.reduce((sum, p) => sum + (p?.scanned ?? 0), 0);
       const shopSold = Math.max(0, inv.sold - splitIssued);
@@ -1042,11 +1066,14 @@ export async function loadEventInsightsFresh(options?: {
         {
           id: "wingame",
           label: "Wingame Appic",
-          sold: null,
-          reserved: null,
-          available: null,
-          status: "shell",
-          note: "Nog geen integratie",
+          sold: wingame != null ? (wingame.scanned ?? 0) : null,
+          reserved:
+            wingame != null
+              ? (wingame.capacity ?? wingame.sold ?? 0) || null
+              : null,
+          available: wingame != null ? (wingame.available ?? 0) : null,
+          status: wingame != null ? "live" : "empty",
+          note: wingame != null ? "Gescand / pool" : undefined,
         },
         {
           id: "vrienden",
@@ -1694,7 +1721,7 @@ const loadUpcomingEventInsightsCached = unstable_cache(
       // Forecast still useful for near-term upcoming
       skipWeather: false,
     }),
-  ["event-insights-upcoming-v51"],
+  ["event-insights-upcoming-v52"],
   {
     revalidate: UPCOMING_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-upcoming"],
@@ -1710,7 +1737,7 @@ const loadPastEventInsightsCached = unstable_cache(
       skipEnsure: true,
       skipWeather: true,
     }),
-  ["event-insights-past-v51"],
+  ["event-insights-past-v52"],
   {
     revalidate: PAST_REVALIDATE_SEC,
     tags: ["event-insights", "event-insights-past"],
@@ -1759,7 +1786,7 @@ export const loadEventInsights = cache(async (options?: {
   }
 
   return rememberTtl(
-    `event-insights:v51:${limit}:${asOfDay}`,
+    `event-insights:v52:${limit}:${asOfDay}`,
     DASHBOARD_TTL_MS,
     async () => {
       // Outside Next data cache: recover empty DB / schedule list refresh

@@ -70,7 +70,7 @@ const CHANNELS = [
   { key: "deurverkoop", label: "Deurverkoop", pending: false, pool: false },
   { key: "ra", label: "RA", pending: false, pool: true },
   { key: "appic", label: "Appic Game", pending: false, pool: true },
-  { key: "wingame", label: "Game Appic", pending: true, pool: true },
+  { key: "wingame", label: "Wingame Appic", pending: false, pool: true },
   { key: "vrienden", label: "Vriendentickets", pending: false, pool: true },
 ] as const;
 

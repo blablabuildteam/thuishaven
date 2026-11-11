@@ -84,6 +84,7 @@ const loadTicketsSheetRows = cache(async () => {
           inArray(ticketInventory.platform, [
             "resident_advisor",
             "appic",
+            "wingame",
             "vrienden",
             "internal",
           ]),
@@ -134,6 +135,7 @@ export default async function TicketsPage() {
     {
       ra?: PoolInventory;
       appic?: PoolInventory;
+      wingame?: PoolInventory;
       vrienden?: PoolInventory;
       internal?: number;
     }
@@ -147,6 +149,7 @@ export default async function TicketsPage() {
     };
     if (row.platform === "resident_advisor") current.ra = pool;
     if (row.platform === "appic") current.appic = pool;
+    if (row.platform === "wingame") current.wingame = pool;
     if (row.platform === "vrienden") current.vrienden = pool;
     if (row.platform === "internal") current.internal = row.sold ?? 0;
     extraByEdition.set(row.editionId, current);
@@ -155,12 +158,14 @@ export default async function TicketsPage() {
   function splitChannelIssued(extra?: {
     ra?: PoolInventory;
     appic?: PoolInventory;
+    wingame?: PoolInventory;
     vrienden?: PoolInventory;
   }): number {
     if (!extra) return 0;
     return (
       (extra.ra?.sold ?? 0) +
       (extra.appic?.sold ?? 0) +
+      (extra.wingame?.sold ?? 0) +
       (extra.vrienden?.sold ?? 0)
     );
   }
@@ -211,7 +216,7 @@ export default async function TicketsPage() {
           deurverkoop: extra?.internal ?? null,
           ra: poolCell(extra?.ra),
           appic: poolCell(extra?.appic),
-          wingame: null,
+          wingame: poolCell(extra?.wingame),
           vrienden: poolCell(extra?.vrienden),
           scanned: hasWeeztix ? (row.scanned ?? 0) : null,
         };
@@ -243,11 +248,11 @@ export default async function TicketsPage() {
       />
 
       <p className="mt-3 text-xs text-text-dim">
-        Weeztix = shop (exclusief barcode-pools). Appic Game, RA en vriendentickets tonen
+        Weeztix = shop (exclusief barcode-pools). Appic Game, Wingame Appic, RA en vriendentickets tonen
         gebruikt / gereserveerd uit Weeztix (check-ins vs poolgrootte). Deurverkoop
         is handmatig — typ het aantal van de deurlijst in de kolom. Expected is
         een handmatige forecast voor komende events. Tijd komt uit Weeztix, of
-        handmatig bij externe events. Game Appic volgt nog. Externe events zijn
+        handmatig bij externe events. Externe events zijn
         handmatig (verwachte bezoekers in Expected/Totaal). Totaal = shop +
         deurverkoop + gebruikt uit de pools, niet de gereserveerde poolgrootte.
         Gescand = Weeztix check-in. De dagcurve telt tickets die op die

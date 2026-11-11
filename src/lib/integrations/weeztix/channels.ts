@@ -23,6 +23,7 @@ export const WEEZTIX_DERIVED_PLATFORMS = [
   "appic",
   "resident_advisor",
   "vrienden",
+  "wingame",
 ] as const;
 
 export type WeeztixDerivedPlatform = (typeof WEEZTIX_DERIVED_PLATFORMS)[number];
@@ -34,6 +35,7 @@ export const DERIVED_PLATFORM_CHANNEL: Record<
   appic: "appic",
   resident_advisor: "resident_advisor",
   vrienden: "vrienden",
+  wingame: "wingame",
 };
 
 const BARCODE_POOL_CHANNELS = new Set<WeeztixSalesChannel>([

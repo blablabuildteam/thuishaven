@@ -375,6 +375,7 @@ export const ticketPlatformEnum = pgEnum("ticket_platform", [
   "vrienden",
   "ticketswap",
   "internal",
+  "wingame",
 ]);
 
 export const ticketSales = pgTable("ticket_sales", {

@@ -489,14 +489,20 @@ async function upsertTicketInventoryForEvents(
 
     for (const platform of WEEZTIX_DERIVED_PLATFORMS) {
       const channel = DERIVED_PLATFORM_CHANNEL[platform];
-      await upsertDerivedChannelInventory(
-        db,
-        item.editionId,
-        platform,
-        channels[channel],
-        channelHasTicketTypes(tickets, channel),
-        inv,
-      );
+      try {
+        await upsertDerivedChannelInventory(
+          db,
+          item.editionId,
+          platform,
+          channels[channel],
+          channelHasTicketTypes(tickets, channel),
+          inv,
+        );
+      } catch (err) {
+        // A pool row (e.g. a platform the DB enum doesn't know yet) must not
+        // fail the event's main Weeztix inventory sync.
+        console.error(`weeztix sync: ${platform} pool for ${item.editionId}`, err);
+      }
     }
 
     snappedEditionIds.push(item.editionId);
