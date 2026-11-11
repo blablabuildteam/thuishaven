@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { Info } from "lucide-react";
+import { RadarInfoTip } from "@/components/radar/radar-info-tip";
 import {
   countryLabel,
   countrySortKey,
@@ -11,9 +11,6 @@ import {
   RADAR_VENUE_TIER_NL,
   type RadarVenueTier,
 } from "@/lib/radar/types";
-
-const CURATOR_SCORE_HELP =
-  "Curator-score (0–100): onze handmatige inschatting hoe sterk deze club/festival early talent signaleert. Hoog = kleine/scherpe plekken waar breakouts vroeg spelen. Laag = grotere namen / later in de curve. Dit is géén RA-cijfer.";
 
 
 type Venue = {
@@ -260,7 +257,9 @@ export function VenuesWorkbench({ initial }: { initial: Venue[] }) {
             {clubs} clubs · {festivals} festivals — gegroepeerd per land. Klik
             door voor parties en line-ups.
           </p>
-          <ScoreHelp />
+          <div className="mt-2">
+            <RadarInfoTip topic="curator" withLabel />
+          </div>
         </div>
 
         {active.length === 0 ? (
@@ -305,9 +304,14 @@ export function VenuesWorkbench({ initial }: { initial: Venue[] }) {
       {suggested.length > 0 ? (
         <section>
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-            <h2 className="font-display text-xl tracking-[0.04em]">
-              Suggesties
-            </h2>
+            <div>
+              <h2 className="font-display text-xl tracking-[0.04em]">
+                Suggesties
+              </h2>
+              <div className="mt-1">
+                <RadarInfoTip topic="overlap" withLabel />
+              </div>
+            </div>
             <div className="flex gap-2">
               <button
                 type="button"
@@ -334,6 +338,7 @@ export function VenuesWorkbench({ initial }: { initial: Venue[] }) {
             onAccept={(id) => setStatus(id, "accepted")}
             onReject={(id) => setStatus(id, "rejected")}
             onDelete={remove}
+            scoreTopic="overlap"
           />
         </section>
       ) : null}
@@ -350,40 +355,20 @@ export function VenuesWorkbench({ initial }: { initial: Venue[] }) {
   );
 }
 
-function ScoreHelp() {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="mt-2">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 text-xs text-text-muted hover:text-text"
-        aria-expanded={open}
-      >
-        <Info className="h-3.5 w-3.5" strokeWidth={2} />
-        Wat betekent de score?
-      </button>
-      {open ? (
-        <p className="mt-2 max-w-2xl border border-border/70 bg-surface px-3 py-2 text-xs leading-relaxed text-text-muted">
-          {CURATOR_SCORE_HELP}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
 function VenueTable({
   rows,
   onAccept,
   onReject,
   onDelete,
   showCountry = true,
+  scoreTopic = "curator",
 }: {
   rows: Venue[];
   onAccept?: (id: string) => void;
   onReject?: (id: string) => void;
   onDelete: (id: string) => void;
   showCountry?: boolean;
+  scoreTopic?: "curator" | "overlap";
 }) {
   return (
     <div className="overflow-x-auto border border-border">
@@ -395,13 +380,7 @@ function VenueTable({
             <th className="px-3 py-2 font-medium">
               <span className="inline-flex items-center gap-1">
                 Score
-                <span
-                  title={CURATOR_SCORE_HELP}
-                  className="inline-flex text-text-dim"
-                  aria-label={CURATOR_SCORE_HELP}
-                >
-                  <Info className="h-3 w-3" strokeWidth={2} />
-                </span>
+                <RadarInfoTip topic={scoreTopic} />
               </span>
             </th>
             <th className="px-3 py-2 font-medium">RA</th>

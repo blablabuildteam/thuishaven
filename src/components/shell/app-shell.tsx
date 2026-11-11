@@ -252,6 +252,7 @@ const radarSections: NavSection[] = [
     items: [
       { href: "/radar/artiesten", label: "Artiesten", icon: Disc3 },
       { href: "/radar/alerts", label: "Alerts", icon: Bell },
+      { href: "/radar/uitleg", label: "Uitleg", icon: BookOpen },
     ],
   },
   {

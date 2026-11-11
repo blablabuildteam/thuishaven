@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import {
   RadarPageHeader,
@@ -54,7 +55,15 @@ export default async function RadarArtistsPage({
     <div>
       <RadarPageHeader
         title="Artiesten"
-        description="Score = momentum × fit × bookability, vooral uit RA-boekingen. Standaard alleen nieuw voor Thuishaven."
+        description="Score = momentum + fit + bookability, vooral uit RA-boekingen. Standaard alleen nieuw voor Thuishaven."
+        actions={
+          <Link
+            href="/radar/uitleg"
+            className="text-sm text-text-muted underline hover:text-text"
+          >
+            Hoe werken de scores?
+          </Link>
+        }
       />
 
       <RadarStatStrip

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
+import { RadarInfoTip } from "@/components/radar/radar-info-tip";
 import { RADAR_ARTIST_STATUS_NL, type RadarArtistStatus } from "@/lib/radar/types";
 
 type Artist = {
@@ -192,7 +193,10 @@ export function ArtistsWorkbench({
             checked={nieuw}
             onChange={(e) => setParam("nieuw", e.target.checked ? "1" : "0")}
           />
-          Nieuw voor Thuishaven
+          <span className="inline-flex items-center gap-1">
+            Nieuw voor Thuishaven
+            <RadarInfoTip topic="nieuw" />
+          </span>
         </label>
         <p className="pb-2 text-xs text-text-muted">
           {total.toLocaleString("nl-NL")} resultaten
@@ -272,9 +276,24 @@ export function ArtistsWorkbench({
           <thead>
             <tr className="border-b border-border text-left text-[10px] tracking-[0.12em] text-text-dim uppercase">
               <th className="px-3 py-2 font-medium">Artiest</th>
-              <th className="px-3 py-2 font-medium text-right">Score</th>
-              <th className="px-3 py-2 font-medium text-right">Mom.</th>
-              <th className="px-3 py-2 font-medium text-right">Book.</th>
+              <th className="px-3 py-2 font-medium text-right">
+                <span className="inline-flex items-center justify-end gap-1">
+                  Score
+                  <RadarInfoTip topic="totaal" align="end" />
+                </span>
+              </th>
+              <th className="px-3 py-2 font-medium text-right">
+                <span className="inline-flex items-center justify-end gap-1">
+                  Mom.
+                  <RadarInfoTip topic="momentum" align="end" />
+                </span>
+              </th>
+              <th className="px-3 py-2 font-medium text-right">
+                <span className="inline-flex items-center justify-end gap-1">
+                  Book.
+                  <RadarInfoTip topic="bookability" align="end" />
+                </span>
+              </th>
               <th className="px-3 py-2 font-medium text-right">RA</th>
               <th className="px-3 py-2 font-medium">Land</th>
               <th className="px-3 py-2 font-medium">Status</th>

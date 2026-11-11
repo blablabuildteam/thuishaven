@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { RadarInfoTip } from "@/components/radar/radar-info-tip";
 import {
   RADAR_ARTIST_STATUS_NL,
   RADAR_FEEDBACK_REASON_NL,
@@ -165,32 +166,36 @@ export function ArtistDossier({
         </div>
         <dl className="grid grid-cols-2 gap-px border border-border bg-border sm:grid-cols-4">
           <div className="bg-surface px-4 py-3">
-            <dt className="text-[10px] tracking-[0.12em] text-text-dim uppercase">
+            <dt className="flex items-center gap-1 text-[10px] tracking-[0.12em] text-text-dim uppercase">
               Totaal
+              <RadarInfoTip topic="totaal" />
             </dt>
             <dd className="font-display text-3xl tabular-nums">
               {artist.growthScore ?? "—"}
             </dd>
           </div>
           <div className="bg-surface px-4 py-3">
-            <dt className="text-[10px] tracking-[0.12em] text-text-dim uppercase">
+            <dt className="flex items-center gap-1 text-[10px] tracking-[0.12em] text-text-dim uppercase">
               Momentum
+              <RadarInfoTip topic="momentum" />
             </dt>
             <dd className="font-display text-3xl tabular-nums">
               {artist.momentumScore ?? "—"}
             </dd>
           </div>
           <div className="bg-surface px-4 py-3">
-            <dt className="text-[10px] tracking-[0.12em] text-text-dim uppercase">
+            <dt className="flex items-center gap-1 text-[10px] tracking-[0.12em] text-text-dim uppercase">
               Fit
+              <RadarInfoTip topic="fit" />
             </dt>
             <dd className="font-display text-3xl tabular-nums">
               {artist.fitScore ?? "—"}
             </dd>
           </div>
           <div className="bg-surface px-4 py-3">
-            <dt className="text-[10px] tracking-[0.12em] text-text-dim uppercase">
+            <dt className="flex items-center gap-1 text-[10px] tracking-[0.12em] text-text-dim uppercase">
               Bookable
+              <RadarInfoTip topic="bookability" />
             </dt>
             <dd className="font-display text-3xl tabular-nums">
               {artist.bookabilityScore ?? "—"}

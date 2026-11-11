@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { RadarInfoTip } from "@/components/radar/radar-info-tip";
 
 type Alert = {
   id: string;
@@ -51,10 +52,13 @@ export function AlertsWorkbench({ initial }: { initial: Alert[] }) {
 
   if (initial.length === 0) {
     return (
-      <p className="border border-dashed border-border px-4 py-10 text-center text-sm text-text-muted">
-        Geen alerts. Ze verschijnen bij snelle groei of nieuwe namen boven de
-        drempel.
-      </p>
+      <div className="space-y-3">
+        <RadarInfoTip topic="alerts" withLabel />
+        <p className="border border-dashed border-border px-4 py-10 text-center text-sm text-text-muted">
+          Geen alerts. Ze verschijnen bij snelle groei of nieuwe namen boven de
+          drempel.
+        </p>
+      </div>
     );
   }
 
@@ -63,8 +67,9 @@ export function AlertsWorkbench({ initial }: { initial: Alert[] }) {
   return (
     <div className="space-y-3">
       {error ? <p className="text-sm text-warn">{error}</p> : null}
-      {unread > 0 ? (
-        <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <RadarInfoTip topic="alerts" withLabel />
+        {unread > 0 ? (
           <button
             type="button"
             onClick={markAllRead}
@@ -72,8 +77,8 @@ export function AlertsWorkbench({ initial }: { initial: Alert[] }) {
           >
             Alles gelezen ({unread})
           </button>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
       <ul className="divide-y divide-border border border-border">
         {initial.map((a) => (
           <li

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { RadarInfoTip } from "@/components/radar/radar-info-tip";
 import type { RadarSettingsValue } from "@/lib/radar/settings";
 
 export function RadarSettingsForm({
@@ -118,8 +119,9 @@ export function RadarSettingsForm({
       </section>
 
       <section className="grid gap-3 border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-5">
-        <h2 className="font-display text-lg tracking-[0.04em] sm:col-span-2 lg:col-span-5">
+        <h2 className="flex flex-wrap items-center gap-2 font-display text-lg tracking-[0.04em] sm:col-span-2 lg:col-span-5">
           Scoregewichten
+          <RadarInfoTip topic="totaal" withLabel />
         </h2>
         {(
           [
@@ -154,8 +156,9 @@ export function RadarSettingsForm({
           </label>
         ))}
         <label className="text-sm sm:col-span-2 lg:col-span-2">
-          <span className="mb-1 block text-[10px] tracking-[0.12em] text-text-dim uppercase">
+          <span className="mb-1 flex items-center gap-1 text-[10px] tracking-[0.12em] text-text-dim uppercase">
             Aandeel velocity (0–1)
+            <RadarInfoTip topic="velocity" />
           </span>
           <input
             type="number"
