@@ -11,6 +11,7 @@ import {
 } from "@/lib/radar/artists";
 import { createRadarAlert } from "@/lib/radar/alerts";
 import { upsertRadarGig } from "@/lib/radar/gigs";
+import { upsertRaPartyWithLineup } from "@/lib/radar/ingest-party";
 import { loadRadarSettings } from "@/lib/radar/settings";
 import { maybeAlertForScore } from "@/lib/radar/alerts";
 import { recomputeArtistScoreV2 } from "@/lib/radar/score-v2";
@@ -186,6 +187,12 @@ export async function discoverArtistsFromSeedVenues(options?: {
             billingIndex,
           }));
 
+      const partyLineup: Array<{
+        artistId: string;
+        rawName: string;
+        billingIndex: number;
+      }> = [];
+
       for (const act of lineup) {
         const key = normalizeArtistName(act.name);
         if (!key) continue;
@@ -213,6 +220,11 @@ export async function discoverArtistsFromSeedVenues(options?: {
         result.artistsUpserted += 1;
         if (created) result.artistsCreated += 1;
         touchedArtistIds.add(artist.id);
+        partyLineup.push({
+          artistId: artist.id,
+          rawName: act.name,
+          billingIndex: act.billingIndex,
+        });
 
         if (act.id && !raProfileLinked.has(artist.id)) {
           raProfileLinked.add(artist.id);
@@ -255,6 +267,19 @@ export async function discoverArtistsFromSeedVenues(options?: {
         } else {
           result.gigsUpserted += 1;
         }
+      }
+
+      if (partyLineup.length > 0) {
+        await upsertRaPartyWithLineup({
+          venueId: venue.id,
+          title: event.title || `${venue.name} event`,
+          startsAt,
+          externalEventId: event.id,
+          externalUrl: raContentUrl(event.contentUrl),
+          city: venue.city,
+          country: venue.country,
+          lineup: partyLineup,
+        });
       }
     }
   }

@@ -24,15 +24,20 @@ export default function RadarUitlegPage() {
 
       <section className="mb-10 max-w-2xl space-y-3 text-sm leading-relaxed text-text-muted">
         <p>
-          Radar scoort artiesten vooral op{" "}
-          <strong className="text-text">Resident Advisor-boekingen</strong>{" "}
-          (gigs, line-uppositie, venues), aangevuld met RA-profiel (volgers,
-          land, agency) en later Spotify/socials.
+          Radar is{" "}
+          <strong className="text-text">multi-source</strong>: Resident
+          Advisor, club-/festivalwebsites, Instagram van venues, en handmatige
+          line-ups. Alles komt samen onder{" "}
+          <a href="/radar/feesten" className="underline hover:text-text">
+            Feesten
+          </a>
+          . Scores kijken naar boekingstraject (gigs, line-uppositie, venues);
+          socials en Spotify bevestigen groei.
         </p>
         <p>
           Doel:{" "}
           <strong className="text-text">
-            namen vinden die groeien en nog boekbaar zijn voor Thuishaven
+            talent spotten op feesten, volgen, en boeken zolang het nog kan
           </strong>
           — niet de grootste namen van de week.
         </p>

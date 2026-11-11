@@ -5,6 +5,13 @@ Algemeen: Next.js 16 (lees `node_modules/next/dist/docs/` bij twijfel), Drizzle 
 Na elke taak: `npx tsc --noEmit`, commit, push, check deploy met
 `gh api repos/blablabuildteam/thuishaven/commits/$(git rev-parse HEAD)/status --jq .state`.
 
+## Stand (11 nov 2026) — multi-source
+
+- `radar_parties` / lineup / venue source configs live (migratie 0043).
+- Handmatige intake + `/radar/feesten`, website-adapters, Apify IG (code), artist social gig-detectie.
+- **Nog nodig in Vercel:** `SPOTIFY_CLIENT_ID`/`SECRET`, `APIFY_TOKEN` (+ optioneel actor-ids).
+- Zie `docs/radar-plan.md` voor de multi-source richting.
+
 ## Stand (10 nov 2026)
 
 - 5406 artiesten, 12344 gigs, 31 van 33 seed-venues hebben gigs. Cron draait (08:00 / 20:00).

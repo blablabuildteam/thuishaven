@@ -71,6 +71,19 @@ export const RADAR_SCORE_TOPICS: RadarScoreTopic[] = [
     short: "Signalen: nieuw, velocity, doorbraak, venster sluit.",
     body: "Alerts gaan alleen over artiesten die nog niet bij Thuishaven speelden en niet in status gepasseerd/niet-relevant/geboekt. Drempels stel je in bij Instellingen. Oude ruis is opgeschoond; nieuwe alerts komen uit de cron/rescore.",
   },
+  {
+    id: "bronnen",
+    title: "Bronnen (multi-source)",
+    short:
+      "RA + clubwebsites + Instagram + handmatige line-ups → één feestenoverzicht.",
+    body: "Radar scoort niet alleen Resident Advisor. We trekken feesten uit venue-websites (programmapagina), Instagram van clubs/festivals (Apify), en handmatig geplakte line-ups. Alles landt in radar_parties met een bron-badge. Nieuwe namen uit die line-ups worden gevolgd; socials en Spotify bevestigen groei en spotten extra gigs in captions.",
+  },
+  {
+    id: "feesten",
+    title: "Feesten",
+    short: "Eersteklas parties met line-up, bron en status (live / te reviewen).",
+    body: "Onder Feesten zie je aankomende parties uit alle bronnen. IG-posts met onzekere parse gaan naar “te reviewen”. Goedkeuren publiceert ze; afwijzen verbergt ze. Klik een naam om het artiestendossier te openen.",
+  },
 ];
 
 export function radarScoreTopic(id: string): RadarScoreTopic | undefined {

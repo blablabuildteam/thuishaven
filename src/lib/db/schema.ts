@@ -1048,6 +1048,8 @@ export {
   radarPlatformEnum,
   radarDiscoverySourceEnum,
   radarAlertKindEnum,
+  radarPartySourceEnum,
+  radarPartyStatusEnum,
   radarVenues,
   radarArtists,
   radarArtistProfiles,
@@ -1055,4 +1057,7 @@ export {
   radarGigs,
   radarAlerts,
   radarSettings,
+  radarParties,
+  radarPartyLineup,
+  radarVenueSourceConfigs,
 } from "@/lib/radar/schema";

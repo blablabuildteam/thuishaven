@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { PartyIngestForm } from "@/components/radar/party-ingest-form";
 import { RadarInfoTip } from "@/components/radar/radar-info-tip";
+import { VenueSourcesForm } from "@/components/radar/venue-sources-form";
 import type { VenueParty } from "@/lib/radar/venues";
 import {
   RADAR_VENUE_STATUS_NL,
@@ -22,9 +24,15 @@ type Props = {
     notes: string | null;
   };
   parties: VenueParty[];
+  sourceConfig?: {
+    websiteProgramUrl: string | null;
+    instagramHandle: string | null;
+    enabled: boolean;
+    lastError: string | null;
+  } | null;
 };
 
-export function VenueDossier({ venue, parties }: Props) {
+export function VenueDossier({ venue, parties, sourceConfig }: Props) {
   const now = Date.now();
   const upcoming = parties.filter(
     (p) => p.startsAt && p.startsAt.getTime() >= now - 12 * 60 * 60 * 1000,
@@ -87,10 +95,18 @@ export function VenueDossier({ venue, parties }: Props) {
           <p className="mt-2 text-sm text-text-dim">{venue.notes}</p>
         ) : null}
         <p className="mt-3 max-w-xl text-sm text-text-muted">
-          Parties hieronder komen uit RA-line-ups die we al hebben opgehaald.
-          Accepteer deze club in de startlijst om hem structureel te volgen —
-          dan haalt discovery hier nieuwe namen uit.
+          Parties uit RA, website, Instagram of handmatige line-up. Accepteer
+          deze club in de startlijst om hem structureel te volgen.
         </p>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <PartyIngestForm
+          venueId={venue.id}
+          venueName={venue.name}
+          compact
+        />
+        <VenueSourcesForm venueId={venue.id} initial={sourceConfig} />
       </div>
 
       <PartySection title="Aankomend / recent" parties={upcoming} />

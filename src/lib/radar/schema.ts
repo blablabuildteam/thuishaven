@@ -93,6 +93,19 @@ export const radarFeedbackReasonEnum = pgEnum("radar_feedback_reason", [
   "other",
 ]);
 
+export const radarPartySourceEnum = pgEnum("radar_party_source", [
+  "ra",
+  "website",
+  "instagram",
+  "manual",
+]);
+
+export const radarPartyStatusEnum = pgEnum("radar_party_status", [
+  "published",
+  "needs_review",
+  "rejected",
+]);
+
 /** Clubs / festivals that seed (and grow) the discovery snowball. */
 export const radarVenues = pgTable(
   "radar_venues",
@@ -388,3 +401,110 @@ export const radarSettings = pgTable("radar_settings", {
     .notNull(),
   updatedByUserId: uuid("updated_by_user_id"),
 });
+
+/** First-class party/event from any source (RA, website, IG, manual). */
+export const radarParties = pgTable(
+  "radar_parties",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    venueId: uuid("venue_id").references(() => radarVenues.id, {
+      onDelete: "set null",
+    }),
+    title: text("title").notNull(),
+    startsAt: timestamp("starts_at", { withTimezone: true }),
+    source: radarPartySourceEnum("source").notNull().default("manual"),
+    status: radarPartyStatusEnum("status").notNull().default("published"),
+    externalUrl: text("external_url"),
+    externalId: text("external_id"),
+    city: text("city"),
+    country: text("country"),
+    raw: jsonb("raw").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("radar_parties_starts_idx").on(table.startsAt),
+    index("radar_parties_venue_starts_idx").on(table.venueId, table.startsAt),
+    index("radar_parties_status_idx").on(table.status),
+    uniqueIndex("radar_parties_source_external_uidx").on(
+      table.source,
+      table.externalId,
+    ),
+  ],
+);
+
+export const radarPartyLineup = pgTable(
+  "radar_party_lineup",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    partyId: uuid("party_id")
+      .notNull()
+      .references(() => radarParties.id, { onDelete: "cascade" }),
+    artistId: uuid("artist_id").references(() => radarArtists.id, {
+      onDelete: "set null",
+    }),
+    rawName: text("raw_name").notNull(),
+    billingIndex: integer("billing_index"),
+    source: radarPartySourceEnum("source").notNull().default("manual"),
+    matchConfidence: radarMatchConfidenceEnum("match_confidence")
+      .notNull()
+      .default("medium"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("radar_party_lineup_party_idx").on(table.partyId),
+    index("radar_party_lineup_artist_idx").on(table.artistId),
+    uniqueIndex("radar_party_lineup_party_raw_uidx").on(
+      table.partyId,
+      table.rawName,
+    ),
+  ],
+);
+
+export type WebsiteSelectors = {
+  eventBlockPattern?: string;
+  titlePattern?: string;
+  datePattern?: string;
+  lineupPattern?: string;
+  /** Extra artist-name splitters beyond defaults. */
+  nameSplitPattern?: string;
+};
+
+/** Per-venue non-RA intake config (website + Instagram). */
+export const radarVenueSourceConfigs = pgTable(
+  "radar_venue_source_configs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    venueId: uuid("venue_id")
+      .notNull()
+      .references(() => radarVenues.id, { onDelete: "cascade" }),
+    websiteProgramUrl: text("website_program_url"),
+    instagramHandle: text("instagram_handle"),
+    websiteSelectors: jsonb("website_selectors")
+      .$type<WebsiteSelectors>()
+      .default({}),
+    lastWebsiteFetchAt: timestamp("last_website_fetch_at", {
+      withTimezone: true,
+    }),
+    lastInstagramFetchAt: timestamp("last_instagram_fetch_at", {
+      withTimezone: true,
+    }),
+    lastError: text("last_error"),
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("radar_venue_source_configs_venue_uidx").on(table.venueId),
+  ],
+);

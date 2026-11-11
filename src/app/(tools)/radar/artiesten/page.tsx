@@ -55,14 +55,22 @@ export default async function RadarArtistsPage({
     <div>
       <RadarPageHeader
         title="Artiesten"
-        description="Score = momentum + fit + bookability, vooral uit RA-boekingen. Standaard alleen nieuw voor Thuishaven."
+        description="Score = momentum + fit + bookability uit alle bronnen (RA, websites, IG, handmatig). Standaard alleen nieuw voor Thuishaven."
         actions={
-          <Link
-            href="/radar/uitleg"
-            className="text-sm text-text-muted underline hover:text-text"
-          >
-            Hoe werken de scores?
-          </Link>
+          <div className="flex flex-col items-end gap-1 text-sm">
+            <Link
+              href="/radar/feesten"
+              className="text-text-muted underline hover:text-text"
+            >
+              Feesten-overzicht
+            </Link>
+            <Link
+              href="/radar/uitleg"
+              className="text-text-muted underline hover:text-text"
+            >
+              Hoe werken de scores?
+            </Link>
+          </div>
         }
       />
 

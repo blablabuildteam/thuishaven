@@ -1,11 +1,13 @@
 /**
- * Radar orchestration — RA discovery → enrich → score v2 → Spotify → social → digest.
+ * Radar orchestration — multi-source discovery → enrich → score → social → digest.
  */
 import { discoverArtistsFromSeedVenues } from "@/lib/radar/discovery";
 import { enrichArtistsFromRa } from "@/lib/radar/ra-enrich";
 import { rescoreStaleArtists } from "@/lib/radar/score-v2";
 import { syncSpotifyForRadarArtists } from "@/lib/radar/spotify-sync";
 import { syncSocialForTopArtists } from "@/lib/radar/social-sync";
+import { syncWebsiteVenues } from "@/lib/radar/sources/website";
+import { syncInstagramVenues } from "@/lib/radar/sources/instagram-venue";
 import { nextVenueBatch } from "@/lib/radar/rotation";
 import { refreshSuggestedVenueScores } from "@/lib/radar/venues";
 import { isSpotifyConfigured } from "@/lib/integrations/spotify/client";
@@ -21,6 +23,8 @@ export type RadarPipelineResult = {
   startedAt: string;
   finishedAt: string;
   discovery: Awaited<ReturnType<typeof discoverArtistsFromSeedVenues>>;
+  website: Awaited<ReturnType<typeof syncWebsiteVenues>> | null;
+  instagramVenues: Awaited<ReturnType<typeof syncInstagramVenues>> | null;
   enrich: Awaited<ReturnType<typeof enrichArtistsFromRa>> | null;
   rescore: Awaited<ReturnType<typeof rescoreStaleArtists>> | null;
   spotify: Awaited<ReturnType<typeof syncSpotifyForRadarArtists>> | null;
@@ -31,6 +35,8 @@ export type RadarPipelineResult = {
 
 export async function runRadarPipeline(options?: {
   skipDiscovery?: boolean;
+  skipWebsite?: boolean;
+  skipInstagramVenues?: boolean;
   skipEnrich?: boolean;
   skipRescore?: boolean;
   skipSpotify?: boolean;
@@ -48,8 +54,7 @@ export async function runRadarPipeline(options?: {
   const startedAt = new Date();
   const notes: string[] = [];
   const settings = await loadRadarSettings();
-  const deadline =
-    options?.deadlineMs ?? Date.now() + 240_000;
+  const deadline = options?.deadlineMs ?? Date.now() + 240_000;
 
   const pastDeadline = () => Date.now() >= deadline;
 
@@ -92,6 +97,28 @@ export async function runRadarPipeline(options?: {
     notes.push(
       `RA: ${discovery.eventsSeen} events, ${discovery.gigsUpserted} gigs, ${discovery.artistsCreated} nieuwe artiesten, ${discovery.venuesSuggested} venue-suggesties, ${discovery.scored} gescoord.`,
     );
+  }
+
+  let website: RadarPipelineResult["website"] = null;
+  if (!options?.skipWebsite && !pastDeadline()) {
+    website = await syncWebsiteVenues({ limit: 6 });
+    notes.push(
+      `Website: ${website.venuesTried} venues, ${website.partiesIngested} parties, ${website.artistsCreated} nieuwe namen.`,
+    );
+    if (website.errors.length) {
+      notes.push(`Website-fouten: ${website.errors.slice(0, 3).join(" · ")}`);
+    }
+  }
+
+  let instagramVenues: RadarPipelineResult["instagramVenues"] = null;
+  if (!options?.skipInstagramVenues && !pastDeadline()) {
+    instagramVenues = await syncInstagramVenues({ limit: 4 });
+    if (instagramVenues.note) notes.push(instagramVenues.note);
+    else {
+      notes.push(
+        `IG-venues: ${instagramVenues.venuesTried} accounts, ${instagramVenues.partiesIngested} parties (${instagramVenues.needsReview} review), ${instagramVenues.artistsCreated} nieuw.`,
+      );
+    }
   }
 
   if (!options?.skipDiscovery && !pastDeadline()) {
@@ -147,8 +174,11 @@ export async function runRadarPipeline(options?: {
     if (pastDeadline()) {
       notes.push("Social overgeslagen: tijdslimiet.");
     } else {
-      social = await syncSocialForTopArtists({ limit: 30 });
+      social = await syncSocialForTopArtists({ limit: 30, followGigs: true });
       if (social.note) notes.push(social.note);
+      if (social.gigsDetected > 0) {
+        notes.push(`Social gig-detectie: ${social.gigsDetected} kandidaten.`);
+      }
     }
   }
 
@@ -179,6 +209,7 @@ export async function runRadarPipeline(options?: {
   return {
     ok:
       discovery.errors.length === 0 &&
+      (website?.errors.length ?? 0) === 0 &&
       (enrich?.errors.length ?? 0) === 0 &&
       (rescore?.errors.length ?? 0) === 0 &&
       (spotify?.errors.length ?? 0) === 0 &&
@@ -186,6 +217,8 @@ export async function runRadarPipeline(options?: {
     startedAt: startedAt.toISOString(),
     finishedAt: new Date().toISOString(),
     discovery,
+    website,
+    instagramVenues,
     enrich,
     rescore,
     spotify,

@@ -20,7 +20,7 @@ export default async function RadarSettingsPage() {
     <div>
       <RadarPageHeader
         title="Instellingen"
-        description="Gewichten, drempels, digest en handmatige pipeline. Bronnen configureer je ook onder Koppelingen."
+        description="Gewichten, drempels, digest en multi-source pipeline. Venue-websites/IG configureer je per venue; Spotify/Apify via env."
       />
       <dl className="mb-6 grid grid-cols-2 gap-px border border-border bg-border sm:grid-cols-4">
         <div className="bg-surface px-3 py-3">

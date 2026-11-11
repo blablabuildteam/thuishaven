@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { VenueDossier } from "@/components/radar/venue-dossier";
+import { getVenueSourceConfig } from "@/lib/radar/parties";
 import { getRadarVenue, listVenueParties } from "@/lib/radar/venues";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,10 @@ export default async function RadarVenueDetailPage({
   const { id } = await params;
   const venue = await getRadarVenue(id);
   if (!venue) notFound();
-  const parties = await listVenueParties(id, { limit: 80 });
+  const [parties, sourceConfig] = await Promise.all([
+    listVenueParties(id, { limit: 80 }),
+    getVenueSourceConfig(id),
+  ]);
 
   return (
     <VenueDossier
@@ -40,6 +44,16 @@ export default async function RadarVenueDetailPage({
         notes: venue.notes,
       }}
       parties={parties}
+      sourceConfig={
+        sourceConfig
+          ? {
+              websiteProgramUrl: sourceConfig.websiteProgramUrl,
+              instagramHandle: sourceConfig.instagramHandle,
+              enabled: sourceConfig.enabled,
+              lastError: sourceConfig.lastError,
+            }
+          : null
+      }
     />
   );
 }

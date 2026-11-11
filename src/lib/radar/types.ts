@@ -72,6 +72,23 @@ export const RADAR_FEEDBACK_REASON_NL = {
 
 export type RadarFeedbackReason = keyof typeof RADAR_FEEDBACK_REASON_NL;
 
+export const RADAR_PARTY_SOURCE_NL = {
+  ra: "Resident Advisor",
+  website: "Website",
+  instagram: "Instagram",
+  manual: "Handmatig",
+} as const;
+
+export type RadarPartySource = keyof typeof RADAR_PARTY_SOURCE_NL;
+
+export const RADAR_PARTY_STATUS_NL = {
+  published: "Live",
+  needs_review: "Te reviewen",
+  rejected: "Afgewezen",
+} as const;
+
+export type RadarPartyStatus = keyof typeof RADAR_PARTY_STATUS_NL;
+
 export function normalizeArtistName(name: string): string {
   return name
     .normalize("NFKD")
