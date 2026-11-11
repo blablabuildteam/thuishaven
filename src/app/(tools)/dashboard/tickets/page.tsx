@@ -102,7 +102,6 @@ const loadTicketsSheetRows = cache(async () => {
         })
         .from(externalTicketEvents)
         .orderBy(desc(externalTicketEvents.startsAt)),
-      loadDailyTicketSales(),
     ]),
   );
 });
@@ -123,8 +122,12 @@ export default async function TicketsPage() {
     );
   }
 
-  const [editionRows, extraInv, externalRows, dailySales] =
-    await loadTicketsSheetRows();
+  // The chart has its own TTL cache for the series; its sync state (is a pull
+  // running, when did the last one finish) must not sit in this one.
+  const [[editionRows, extraInv, externalRows], dailySales] = await Promise.all([
+    loadTicketsSheetRows(),
+    loadDailyTicketSales(),
+  ]);
 
   const extraByEdition = new Map<
     string,

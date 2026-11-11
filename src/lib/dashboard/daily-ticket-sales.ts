@@ -4,6 +4,7 @@ import { DASHBOARD_TTL_MS, rememberTtl } from "@/lib/cache/ttl";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import {
   editions,
+  syncJobs,
   ticketInventory,
   ticketInventoryDaily,
   ticketSalesDaily,
@@ -80,6 +81,19 @@ export type DailyTicketSalesSeries = {
 export type DailyTicketSales = DailyTicketSalesSeries & {
   /** Last time Weeztix wrote the rows this chart reads. */
   refreshedAt: string | null;
+} & DailyTicketSalesSyncState;
+
+/**
+ * Whether a full live pull finished, and whether one is running now. Kept
+ * apart from `refreshedAt`: the stock totals land a few seconds into a pull,
+ * the order histogram (today's number) only at the end, so the newest table
+ * stamp says "fresh" long before today's bar is.
+ */
+export type DailyTicketSalesSyncState = {
+  /** End of the last full pull that succeeded. */
+  completedAt: string | null;
+  /** Start of a pull that is still running, if any. */
+  runningSince: string | null;
 };
 
 function colorForIndex(index: number): string {
@@ -271,6 +285,65 @@ function asTime(value: unknown): number | null {
   return null;
 }
 
+const SYNC_JOB_SOURCE = "weeztix:daily-ticket-sales";
+
+/**
+ * A pull never outlives the route's maxDuration (300s). A "running" row older
+ * than this is a crashed or timed-out function, not a live pull.
+ */
+const SYNC_RUNNING_MAX_MS = 5 * 60 * 1000;
+
+export async function dailyTicketSalesSyncState(): Promise<DailyTicketSalesSyncState> {
+  if (!hasDatabase()) return { completedAt: null, runningSince: null };
+  const db = getDb();
+  const runningAfter = new Date(Date.now() - SYNC_RUNNING_MAX_MS);
+  const [done, running] = await Promise.all([
+    db
+      .select({ at: max(syncJobs.finishedAt) })
+      .from(syncJobs)
+      .where(and(eq(syncJobs.source, SYNC_JOB_SOURCE), eq(syncJobs.status, "ok"))),
+    db
+      .select({ at: max(syncJobs.startedAt) })
+      .from(syncJobs)
+      .where(
+        and(
+          eq(syncJobs.source, SYNC_JOB_SOURCE),
+          eq(syncJobs.status, "running"),
+          gte(syncJobs.startedAt, runningAfter),
+        ),
+      ),
+  ]);
+  const iso = (value: unknown) => {
+    const time = asTime(value);
+    return time == null ? null : new Date(time).toISOString();
+  };
+  return { completedAt: iso(done[0]?.at), runningSince: iso(running[0]?.at) };
+}
+
+/** Marks a pull as running; the returned callback closes it. Never throws. */
+async function startSyncJob(): Promise<
+  (result: { ok: boolean; error?: string }) => Promise<string>
+> {
+  const db = getDb();
+  const id = await db
+    .insert(syncJobs)
+    .values({ source: SYNC_JOB_SOURCE, status: "running", startedAt: new Date() })
+    .returning({ id: syncJobs.id })
+    .then((rows) => rows[0]?.id ?? null)
+    .catch(() => null);
+  return async ({ ok, error }) => {
+    const finishedAt = new Date();
+    if (id) {
+      await db
+        .update(syncJobs)
+        .set({ status: ok ? "ok" : "failed", finishedAt, error: error ?? null })
+        .where(eq(syncJobs.id, id))
+        .catch(() => undefined);
+    }
+    return finishedAt.toISOString();
+  };
+}
+
 /** Newest sync stamp among the tables that feed the sales-per-day chart. */
 export async function latestDailyTicketSalesRefreshAt(): Promise<string | null> {
   if (!hasDatabase()) return null;
@@ -350,9 +423,27 @@ export async function refreshDailyTicketSales(options?: {
   onProgress?: (progress: DailyTicketSalesRefreshProgress) => void;
 }): Promise<{
   ok: boolean;
+  /** When this pull finished; what "Bijgewerkt" shows. */
   refreshedAt: string | null;
   error?: string;
 }> {
+  const finish = await startSyncJob();
+  try {
+    const result = await runDailyTicketSalesRefresh(options);
+    const finishedAt = await finish(result);
+    return { ...result, refreshedAt: result.ok ? finishedAt : null };
+  } catch (err) {
+    await finish({
+      ok: false,
+      error: err instanceof Error ? err.message : "Verversen mislukt",
+    });
+    throw err;
+  }
+}
+
+async function runDailyTicketSalesRefresh(options?: {
+  onProgress?: (progress: DailyTicketSalesRefreshProgress) => void;
+}): Promise<{ ok: boolean; error?: string }> {
   const report = (step: DailyTicketSalesRefreshStep) =>
     options?.onProgress
       ? (done: number, total: number) =>
@@ -397,7 +488,6 @@ export async function refreshDailyTicketSales(options?: {
         }),
       )
     : null;
-  const refreshedAt = await latestDailyTicketSalesRefreshAt();
   const error = !inventory.ok
     ? inventory.errors[0] ?? "Weeztix-sync mislukt"
     : saleDays && !saleDays.ok
@@ -405,7 +495,7 @@ export async function refreshDailyTicketSales(options?: {
       : curves && !curves.ok
         ? curves.errors[0] ?? "Verkoopverloop ophalen mislukt"
         : undefined;
-  return { ok: !error, refreshedAt, error };
+  return { ok: !error, error };
 }
 
 /**
@@ -474,16 +564,25 @@ export const loadDailyTicketSales = cache(
   async (windowDays = DAILY_TICKET_SALES_WINDOW): Promise<DailyTicketSales> => {
     const endDay = amsterdamDay(new Date());
     if (!hasDatabase()) {
-      return { ...emptySeries(endDay, windowDays), refreshedAt: null };
+      return {
+        ...emptySeries(endDay, windowDays),
+        refreshedAt: null,
+        completedAt: null,
+        runningSince: null,
+      };
     }
 
-    const refreshedAt = await latestDailyTicketSalesRefreshAt();
+    const [refreshedAt, syncState] = await Promise.all([
+      latestDailyTicketSalesRefreshAt(),
+      dailyTicketSalesSyncState(),
+    ]);
     const series = await rememberTtl(
       `tickets:daily:v3:${windowDays}:${endDay}:${refreshedAt ?? "none"}`,
       DASHBOARD_TTL_MS,
       () => loadDailyTicketSalesFresh(endDay, windowDays),
     );
-    return { ...series, refreshedAt };
+    // Sync state stays outside the TTL cache: it changes without the data.
+    return { ...series, refreshedAt, ...syncState };
   },
 );
 

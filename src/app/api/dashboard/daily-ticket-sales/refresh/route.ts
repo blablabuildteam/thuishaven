@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import {
+  dailyTicketSalesSyncState,
   refreshDailyTicketSales,
   type DailyTicketSalesRefreshProgress,
 } from "@/lib/dashboard/daily-ticket-sales";
@@ -8,6 +9,21 @@ import { hasDatabase } from "@/lib/db/client";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
+
+/**
+ * GET /api/dashboard/daily-ticket-sales/refresh
+ * `{ completedAt, runningSince }` — lets a page that opened mid-pull (reload,
+ * second tab, cron slot) wait for that pull instead of showing stale numbers.
+ */
+export async function GET() {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+  }
+  return NextResponse.json(await dailyTicketSalesSyncState(), {
+    headers: { "Cache-Control": "no-store" },
+  });
+}
 
 /**
  * POST /api/dashboard/daily-ticket-sales/refresh
