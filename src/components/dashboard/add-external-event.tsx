@@ -108,7 +108,7 @@ export function AddExternalEvent() {
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
-            className="insight-modal-panel relative z-10 max-h-[min(90dvh,100%)] w-full max-w-lg overflow-y-auto overscroll-contain border border-border bg-surface p-5 shadow-lg sm:p-7"
+            className="insight-modal-panel relative z-10 max-h-[min(90dvh,100%)] w-full max-w-lg overflow-y-auto overscroll-contain th-panel p-5 sm:p-7"
           >
             {success ? (
               <div className="py-4 text-center">

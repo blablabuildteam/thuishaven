@@ -34,7 +34,7 @@ export default async function LeadsPage() {
       />
 
       {rows.length === 0 ? (
-        <div className="border border-border bg-surface px-4 py-5 text-sm text-text-muted">
+        <div className="th-empty px-4 py-5 text-sm text-text-muted">
           <p className="font-medium text-text">Nog geen warme leads</p>
           <p className="mt-2">
             Komt er een positief antwoord in evenement@? Log die op{" "}

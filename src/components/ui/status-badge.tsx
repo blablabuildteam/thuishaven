@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 const tones = {
-  neutral: "bg-surface-hover text-text-muted border-border",
+  neutral: "bg-transparent text-text-muted border-border",
   accent: "bg-accent text-accent-contrast border-accent",
   success: "border-success bg-success text-white",
   warn: "bg-warn text-white border-warn",
@@ -23,7 +23,7 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 border px-2 py-0.5 text-[11px] font-medium tracking-wide",
+        "th-sticker inline-flex items-center gap-1.5 border-[1.5px] px-2 py-1 text-[11px]",
         tones[tone],
       )}
     >

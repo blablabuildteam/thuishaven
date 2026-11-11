@@ -102,11 +102,11 @@ export default async function IntegrationLogsPage({
       </div>
 
       {logs.length === 0 ? (
-        <p className="border border-border bg-surface px-4 py-8 text-sm text-text-muted">
+        <p className="th-empty px-4 py-8 text-sm text-text-muted">
           Nog geen logregels. Token-refresh en fouten verschijnen hier automatisch.
         </p>
       ) : (
-        <ul className="divide-y divide-border border border-border bg-surface">
+        <ul className="divide-y divide-border th-panel">
           {logs.map((row) => (
             <li key={row.id} className="px-4 py-3">
               <div className="flex flex-wrap items-center gap-2">

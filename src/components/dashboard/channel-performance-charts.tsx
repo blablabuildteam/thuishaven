@@ -280,7 +280,7 @@ function TopPostsPanel({
 
   return (
     <div
-      className="flex flex-1 flex-col border border-border bg-surface"
+      className="flex flex-1 flex-col th-panel"
       onMouseLeave={() => setHoveredId(null)}
     >
       <ol className="flex flex-1 flex-col gap-1 p-3">
@@ -498,7 +498,7 @@ function ChartPanelSkeleton({ label }: { label: string }) {
       <p className="mb-3 text-xs font-medium tracking-[0.12em] text-text-dim uppercase">
         {label}
       </p>
-      <div className="flex h-56 w-full flex-col justify-end gap-2 border border-border bg-surface p-3">
+      <div className="flex h-56 w-full flex-col justify-end gap-2 th-panel p-3">
         <div className="mb-2 flex items-center gap-2 text-xs text-text-dim">
           <LoaderCircle className="size-3.5 animate-spin" aria-hidden />
           <span className="animate-pulse-soft tracking-[0.08em] uppercase">
@@ -663,7 +663,7 @@ export function ChannelPerformanceCharts({
                 Geen publicatiedata om te plotten.
               </p>
             ) : (
-              <div className="relative min-h-56 w-full min-w-0 flex-1 border border-border bg-surface">
+              <div className="relative min-h-56 w-full min-w-0 flex-1 th-panel">
                 <div className="absolute inset-0 p-3">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart

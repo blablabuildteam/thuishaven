@@ -196,7 +196,7 @@ export default function OutreachJuridischPage() {
         </ol>
       </section>
 
-      <section className="border border-border bg-surface/40 px-5 py-5 dark:bg-surface">
+      <section className="th-panel px-5 py-5">
         <h2 className="font-display text-xl tracking-[0.04em]">Bronnen</h2>
         <ul className="mt-3 space-y-2 text-sm text-text-muted">
           <li>

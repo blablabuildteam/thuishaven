@@ -316,7 +316,7 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
         {formatNumber(data.windowTotal)} tickets verkocht in de laatste{" "}
         {data.windowDays} dagen. Hover een dag voor de verdeling per event.
       </p>
-      <div className="daily-sales-chart relative h-64 w-full min-w-0 border border-border bg-surface sm:h-72">
+      <div className="daily-sales-chart relative h-64 w-full min-w-0 th-panel sm:h-72">
         <div ref={chartRef} className="absolute inset-0 p-2 sm:p-3">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart

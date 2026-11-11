@@ -23,7 +23,7 @@ export function PaidAdsView({
 
   if (bundle.ads.length === 0) {
     return (
-      <p className="border border-border bg-surface px-4 py-8 text-center text-sm text-text-muted">
+      <p className="th-empty px-4 py-8 text-center text-sm text-text-muted">
         {emptyMessage}
       </p>
     );
@@ -48,7 +48,7 @@ export function PaidAdsView({
   const laterSpend = later.reduce((sum, c) => sum + c.spendCents, 0);
 
   return (
-    <div className="max-w-full overflow-x-auto border border-border">
+    <div className="max-w-full overflow-x-auto th-panel">
       <table className="w-full min-w-[980px] table-fixed text-left text-sm">
         <colgroup>
           <col className="w-[24%]" />

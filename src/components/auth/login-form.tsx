@@ -47,7 +47,7 @@ export function LoginForm() {
   return (
     <div className="relative z-0 flex min-h-screen items-center justify-center bg-bg px-4">
       <div className="hub-glow pointer-events-none absolute inset-0 opacity-70" />
-      <div className="relative w-full max-w-md border border-border bg-surface p-6 sm:p-8">
+      <div className="relative w-full max-w-md th-panel p-6 sm:p-8">
         <div className="mb-8 flex items-center gap-3">
           <Image
             src="/brand/logo-mark.png"

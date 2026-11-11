@@ -211,7 +211,7 @@ function TicketsTable({
   const colCount = leadingCols + columns.length + 2;
 
   return (
-    <div className="max-w-full overflow-x-auto border border-border">
+    <div className="max-w-full overflow-x-auto th-panel">
       <table className="w-full min-w-[1240px] text-left text-sm">
         <thead className="border-b border-border text-[11px] tracking-wider text-text-dim uppercase">
           <tr>
@@ -315,12 +315,12 @@ function MonthBlock({
 }) {
   return (
     <>
-      <tr className="border-b border-border bg-surface/60">
+      <tr className="border-b border-border">
         <td
           colSpan={colCount}
-          className="px-4 py-2 text-xs font-medium capitalize text-text-muted"
+          className="px-4 pt-4 pb-2"
         >
-          {month.label}
+          <span className="th-mark th-poster-title text-2xl">{month.label}</span>
         </td>
       </tr>
       {month.rows.map((row) => {
@@ -541,7 +541,7 @@ export function TicketsChannelsList({
 
   if (upcoming.length === 0 && past.length === 0) {
     return (
-      <div className="border border-border bg-surface p-5">
+      <div className="th-panel p-5">
         <p className="text-sm text-text-muted">
           Geen edities gevonden. Sync Weeztix via Bronnen en vernieuw de pagina.
         </p>

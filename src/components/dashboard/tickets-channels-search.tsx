@@ -102,7 +102,7 @@ export function TicketsChannelsSearch({
       </div>
 
       {query.trim() && !hasResults ? (
-        <div className="border border-border bg-surface px-4 py-8 text-sm text-text-muted">
+        <div className="th-empty px-4 py-8 text-sm text-text-muted">
           Geen events gevonden voor &ldquo;{query.trim()}&rdquo;.
         </div>
       ) : (

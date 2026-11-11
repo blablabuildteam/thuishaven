@@ -435,7 +435,7 @@ function OmzetTable({
   const djHref = rows.some(needsDjFees) ? djFeesHref() : undefined;
 
   return (
-    <div className="max-w-full overflow-x-auto border border-border">
+    <div className="max-w-full overflow-x-auto th-panel">
       <table className="w-full min-w-[1480px] border-separate border-spacing-0 text-left text-sm">
         <thead className="border-b border-border text-[11px] tracking-wider text-text-dim uppercase">
           <tr>
@@ -598,12 +598,12 @@ function MonthRows({
     : undefined;
   return (
     <>
-      <tr className="border-b border-border bg-surface/60">
+      <tr className="border-b border-border">
         <td
           colSpan={10}
-          className="px-4 py-2 text-xs font-medium text-text-muted capitalize"
+          className="px-4 pt-4 pb-2"
         >
-          {month.label}
+          <span className="th-mark th-poster-title text-2xl">{month.label}</span>
         </td>
       </tr>
       {month.rows.map((row) => {
@@ -905,17 +905,17 @@ export function OmzetBoard({ past }: { past: HorecaRevenueEvent[] }) {
       </div>
 
       {past.length === 0 ? (
-        <div className="border border-border bg-surface p-5">
+        <div className="th-panel p-5">
           <p className="text-sm text-text-muted">
             Geen edities gevonden. Sync Weeztix via Bronnen en vernieuw de pagina.
           </p>
         </div>
       ) : query.trim() && !hasResults ? (
-        <div className="border border-border bg-surface px-4 py-8 text-sm text-text-muted">
+        <div className="th-empty px-4 py-8 text-sm text-text-muted">
           Geen events gevonden voor &ldquo;{query.trim()}&rdquo;.
         </div>
       ) : !hasResults ? (
-        <div className="border border-border bg-surface px-4 py-8 text-sm text-text-muted">
+        <div className="th-empty px-4 py-8 text-sm text-text-muted">
           Alles is ingevuld.
         </div>
       ) : (

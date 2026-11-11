@@ -230,7 +230,7 @@ export function ExternalTicketEventForm({ event }: ExternalTicketEventFormProps)
         </label>
       </div>
 
-      <section className="border border-border bg-surface/40 p-5">
+      <section className="th-panel p-5">
         <h2 className="font-display text-xl tracking-[0.04em]">Verkoop &amp; check-in</h2>
         <p className="mt-1 text-sm text-text-muted">
           Vul deze velden in na afloop van het event — ze komen in de Sold- en

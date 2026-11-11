@@ -291,7 +291,7 @@ export function AdminUsersPanel() {
         </p>
       )}
 
-      <section className="mb-8 border border-border bg-surface p-4">
+      <section className="mb-8 th-panel p-4">
         <h2 className="font-display text-2xl tracking-[0.06em]">
           Medewerker uitnodigen
         </h2>
@@ -355,7 +355,7 @@ export function AdminUsersPanel() {
         </form>
       </section>
 
-      <section className="border border-border bg-surface p-4">
+      <section className="th-panel p-4">
         <h2 className="mb-4 font-display text-2xl tracking-[0.06em]">
           Alle accounts
         </h2>

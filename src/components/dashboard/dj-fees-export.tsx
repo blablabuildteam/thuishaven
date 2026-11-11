@@ -111,7 +111,7 @@ export function DjFeesExport({
             onKeyDown={(e) => {
               if (e.key === "Escape") setOpen(false);
             }}
-            className="insight-modal-panel relative z-10 flex max-h-[min(90dvh,100%)] w-full max-w-3xl flex-col border border-border bg-surface shadow-lg"
+            className="insight-modal-panel relative z-10 flex max-h-[min(90dvh,100%)] w-full max-w-3xl flex-col th-panel"
           >
             <div className="flex items-start justify-between gap-4 border-b border-border p-5 sm:px-7">
               <div>

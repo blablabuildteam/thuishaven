@@ -531,7 +531,7 @@ function InsightDetailModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="insight-modal-panel relative z-10 max-h-[min(88dvh,100%)] w-full min-w-0 max-w-md overflow-y-auto overscroll-contain border border-border bg-surface p-5"
+        className="insight-modal-panel relative z-10 max-h-[min(88dvh,100%)] w-full min-w-0 max-w-md overflow-y-auto overscroll-contain th-panel p-5"
       >
         <div className="flex items-start justify-between gap-3">
           <p className="flex min-w-0 items-center gap-1.5 text-[11px] tracking-[0.14em] text-text-dim uppercase">
@@ -3220,8 +3220,8 @@ export function EventInsightsList({
           <div className="space-y-6">
             {upcomingMonths.map((m) => (
               <div key={m.key}>
-                <p className="mb-2 text-sm font-medium capitalize text-text-muted">
-                  {m.label}
+                <p className="mb-3">
+                  <span className="th-mark th-poster-title text-2xl">{m.label}</span>
                 </p>
                 <ul className="space-y-2">
                   {m.events.map((e) => (
@@ -3262,8 +3262,8 @@ export function EventInsightsList({
           <div className="space-y-6">
             {pastMonths.map((m) => (
               <div key={m.key}>
-                <p className="mb-2 text-sm font-medium capitalize text-text-muted">
-                  {m.label}
+                <p className="mb-3">
+                  <span className="th-mark th-poster-title text-2xl">{m.label}</span>
                 </p>
                 <ul className="space-y-2">
                   {m.events.map((e) => (
@@ -3291,7 +3291,7 @@ export function EventInsightsList({
       )}
 
       {upcoming.length === 0 && past.length === 0 && (
-        <div className="border border-border bg-surface p-5">
+        <div className="th-panel p-5">
           <p className="text-sm text-text-muted">
             Geen events gevonden. We proberen Weeztix automatisch te syncen —
             vernieuw de pagina over een moment, of sync handmatig via{" "}

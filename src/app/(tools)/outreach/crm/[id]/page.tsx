@@ -261,7 +261,7 @@ export default async function CrmDossierPage({
 
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="space-y-6">
-        <section className="border border-border bg-surface p-4">
+        <section className="th-panel p-4">
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="font-display text-2xl tracking-[0.06em]">Maillog</h2>
             <p className="text-xs text-text-dim">
@@ -309,7 +309,7 @@ export default async function CrmDossierPage({
           )}
         </section>
 
-        <section className="border border-border bg-surface p-4">
+        <section className="th-panel p-4">
           <h2 className="mb-1 font-display text-2xl tracking-[0.06em]">
             Activiteit
           </h2>
@@ -364,7 +364,7 @@ export default async function CrmDossierPage({
         </div>
 
         <aside className="space-y-4">
-          <section className="border border-border bg-surface p-4">
+          <section className="th-panel p-4">
             <h2 className="mb-3 font-display text-xl tracking-[0.06em]">
               Notities
             </h2>
@@ -383,7 +383,7 @@ export default async function CrmDossierPage({
             ) : null}
           </section>
           {isAdmin ? (
-            <section className="border border-border bg-surface p-4">
+            <section className="th-panel p-4">
               <h2 className="mb-3 font-display text-xl tracking-[0.06em]">
                 Headcount override (admin)
               </h2>
@@ -399,7 +399,7 @@ export default async function CrmDossierPage({
               />
             </section>
           ) : (
-            <section className="border border-border bg-surface p-4 text-sm text-text-muted">
+            <section className="th-panel p-4 text-sm text-text-muted">
               <h2 className="mb-2 font-display text-xl tracking-[0.06em] text-text">
                 Medewerkers
               </h2>
@@ -424,7 +424,7 @@ export default async function CrmDossierPage({
               </p>
             </section>
           )}
-          <section className="border border-border bg-surface p-4 text-sm text-text-muted">
+          <section className="th-panel p-4 text-sm text-text-muted">
             <h2 className="mb-3 font-display text-xl tracking-[0.06em] text-text">
               Contactpersonen
             </h2>
@@ -473,7 +473,7 @@ export default async function CrmDossierPage({
 
 function Fact({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border border-border bg-surface px-4 py-3">
+    <div className="th-panel px-4 py-3">
       <p className="text-[11px] uppercase tracking-wider text-text-dim">{label}</p>
       <p className="mt-1 text-sm text-text">{value}</p>
     </div>

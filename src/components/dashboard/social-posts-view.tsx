@@ -47,7 +47,7 @@ function SocialPostRow({ post }: { post: MarketingPostRow }) {
   const label = viewsLabel(post);
 
   return (
-    <li className="border border-border bg-surface">
+    <li className="th-panel">
       <div className="flex gap-3 p-3 sm:items-center">
         <div
           className="size-14 shrink-0 bg-bg-elevated bg-cover bg-center sm:size-16"

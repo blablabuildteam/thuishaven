@@ -62,12 +62,15 @@ function stubParts(dayIso: string) {
   };
 }
 
-function PendingDot({ count }: { count: number }) {
+function PendingDot({ count, active }: { count: number; active: boolean }) {
   if (count <= 0) return null;
   return (
     <span
       title={`${count} event${count === 1 ? "" : "s"} zonder complete DJ-fees`}
-      className="th-sticker inline-flex h-4 min-w-4 items-center justify-center bg-highlight px-1 text-[10px] text-black tabular-nums"
+      className={cn(
+        "th-num inline-flex h-6 min-w-6 items-center justify-center bg-highlight px-1.5 text-[15px] leading-none font-bold text-highlight-fg",
+        active && "ring-1 ring-accent-contrast",
+      )}
     >
       {count}
     </span>
@@ -341,47 +344,49 @@ export function DjFeesWorkbench({
   return (
     <div className="space-y-6">
       {/* Poster band — title + the two numbers that matter */}
-      <section className="th-poster-band border-[1.5px] border-border-strong">
+      <section className="th-poster-band">
         <div className="grid gap-6 px-5 pt-6 pb-5 sm:px-8 sm:pt-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <div className="min-w-0">
-            <p className="th-sticker text-xs opacity-60">Alerts · Line-up kosten</p>
-            <h1 className="th-poster-title mt-2 text-6xl sm:text-8xl">DJ-fees</h1>
-            <p className="mt-4 max-w-lg text-sm leading-relaxed opacity-70">
+            <p className="th-sticker text-xs text-text-dim">Alerts · Line-up kosten</p>
+            <h1 className="th-poster-title mt-2 text-6xl text-text sm:text-8xl">DJ-fees</h1>
+            <p className="mt-4 max-w-lg text-sm leading-relaxed text-text-muted">
               Fee per DJ in hele euro&apos;s, plus of het een 10HRS-set was.
               Line-up komt uit Resident Advisor; voeg zelf DJs toe of haal ze
               weg. Oude ranges tellen mee tot je het bedrag invult.
             </p>
           </div>
-          <dl className="grid grid-cols-2 gap-px self-end bg-accent-contrast/20 sm:min-w-[26rem]">
-            <div className="bg-accent px-4 py-3 sm:px-5">
-              <dt className="th-sticker text-[11px] opacity-60">
+          <dl className="grid grid-cols-2 gap-px self-end bg-border sm:min-w-[26rem]">
+            <div className="bg-bg px-4 py-3 sm:px-5">
+              <dt className="th-sticker text-[11px] text-text-dim">
                 {searching
                   ? "Gevonden spend"
                   : `Spend ${activeMonth?.label ?? "maand"}`}
               </dt>
-              <dd className="th-num mt-1 text-3xl leading-none sm:text-5xl">
+              <dd className="th-num mt-1 text-3xl leading-none text-text sm:text-5xl">
                 {formatDjFeeSpend(monthSpend)}
               </dd>
-              <dd className="mt-2 text-xs opacity-60">
+              <dd className="mt-2 text-xs text-text-dim">
                 {monthSpend.priced === 0
                   ? "Nog geen fees ingevuld"
                   : `${monthSpend.priced} DJ${monthSpend.priced === 1 ? "" : "s"} met fee${monthSpend.ranged > 0 ? ` · ${monthSpend.ranged} nog als range` : ""}`}
               </dd>
             </div>
-            <div className="bg-accent px-4 py-3 sm:px-5">
-              <dt className="th-sticker text-[11px] opacity-60">Nog in te vullen</dt>
+            <div className="bg-bg px-4 py-3 sm:px-5">
+              <dt className="th-sticker text-[11px] text-text-dim">Nog in te vullen</dt>
               <dd className="mt-1 flex items-baseline gap-2">
                 <span
                   className={cn(
                     "th-num text-3xl leading-none sm:text-5xl",
-                    monthSpend.missing > 0 && "bg-highlight px-1.5 text-black",
+                    monthSpend.missing > 0
+                      ? "bg-highlight px-1.5 text-highlight-fg"
+                      : "text-text",
                   )}
                 >
                   {monthSpend.missing}
                 </span>
-                <span className="th-num text-xl opacity-50">/ {djCount}</span>
+                <span className="th-num text-xl text-text-dim">/ {djCount}</span>
               </dd>
-              <dd className="mt-2 text-xs opacity-60">
+              <dd className="mt-2 text-xs text-text-dim">
                 {monthSpend.missing === 0 && djCount > 0
                   ? "Alles ingevuld"
                   : "DJs zonder fee"}
@@ -425,7 +430,7 @@ export function DjFeesWorkbench({
                   )}
                 >
                   {year}
-                  <PendingDot count={pending} />
+                  <PendingDot count={pending} active={active} />
                 </button>
               );
             })}
@@ -483,11 +488,11 @@ export function DjFeesWorkbench({
                     <span className="th-sticker text-[10px] opacity-60">
                       {item.key.slice(5, 7)}
                     </span>
-                    <span className="th-poster-title text-2xl capitalize">
+                    <span className="th-poster-title text-2xl">
                       {item.label.slice(0, 3)}
                     </span>
                     <span className="absolute top-2 right-2">
-                      <PendingDot count={pending} />
+                      <PendingDot count={pending} active={active} />
                     </span>
                   </button>
                 );
@@ -605,7 +610,7 @@ function EventCard({
                 Compleet
               </span>
             ) : missing > 0 ? (
-              <span className="th-sticker -rotate-2 bg-highlight px-2 py-1 text-[11px] text-black">
+              <span className="th-sticker -rotate-2 bg-highlight px-2 py-1 text-[11px] text-highlight-fg">
                 {missing} open
               </span>
             ) : null}

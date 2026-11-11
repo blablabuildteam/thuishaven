@@ -48,7 +48,7 @@ export function ChannelPageSkeleton({
 
       <ul className="flex flex-col gap-2">
         {Array.from({ length: 6 }, (_, i) => (
-          <li key={i} className="border border-border bg-surface p-3">
+          <li key={i} className="th-panel p-3">
             <div className="flex gap-3 sm:items-center">
               <Skeleton className="size-14 shrink-0 sm:size-16" />
               <div className="min-w-0 flex-1 space-y-2">

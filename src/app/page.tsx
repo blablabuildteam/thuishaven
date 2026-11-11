@@ -123,15 +123,15 @@ function ToolCard({
   return (
     <Link
       href={href}
-      className="group relative flex flex-col border border-border bg-surface/80 p-6 backdrop-blur-sm transition-all hover:border-accent hover:bg-surface dark:bg-black/55 dark:hover:bg-black/70"
+      className="th-panel group relative flex flex-col p-6 transition-[transform,box-shadow] hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[6px_6px_0_0_var(--border-strong)]"
     >
       <div className="mb-8 flex items-center justify-between">
-        <span className="font-display text-sm tracking-[0.18em] text-text-muted">
+        <span className="th-sticker text-xs tracking-[0.18em] text-text-muted">
           {eyebrow}
         </span>
         <ArrowRight className="size-4 text-text-dim transition-transform group-hover:translate-x-1 group-hover:text-accent" />
       </div>
-      <h2 className="font-display text-3xl tracking-[0.04em] text-text">
+      <h2 className="th-poster-title text-5xl text-text">
         {title}
       </h2>
       <div className="mt-3 h-px w-12 bg-highlight transition-all group-hover:w-20" />

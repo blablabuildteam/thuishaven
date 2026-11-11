@@ -488,7 +488,7 @@ export function ListFillWorkbench({
 
   return (
     <div className="space-y-8">
-      <div className="border border-border bg-surface/50 p-4 text-sm text-text-muted">
+      <div className="th-empty p-4 text-sm text-text-muted">
         <p>
           Op deze pagina vullen we de lijst met bedrijven die we gaan mailen.
           Dat gaat in drie stappen:{" "}
@@ -724,7 +724,7 @@ export function ListFillWorkbench({
             {formatEmployeeBounds(empBounds.min, empBounds.max)}), hoeveel we
             al bekeken hebben en hoeveel er nieuw op de lijst kwamen.
           </p>
-          <div className="mt-3 overflow-x-auto border border-border">
+          <div className="mt-3 overflow-x-auto th-panel">
             <table className="w-full min-w-[480px] text-left text-sm">
               <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
                 <tr>

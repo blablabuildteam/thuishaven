@@ -423,7 +423,7 @@ export function AlertsWorkbench({
         </p>
       )}
 
-      <section className="mb-10 border border-border bg-surface p-5">
+      <section className="mb-10 th-panel p-5">
         <h2 className="font-display text-2xl tracking-[0.04em]">
           {editingId ? "Alert bewerken" : "Nieuwe alert"}
         </h2>
@@ -679,7 +679,7 @@ export function AlertsWorkbench({
           Jouw alerts
         </h2>
         {rules.length === 0 ? (
-          <p className="border border-border bg-surface px-4 py-3 text-sm text-text-muted">
+          <p className="th-empty px-4 py-3 text-sm text-text-muted">
             Nog geen alerts. Maak hierboven de eerste.
           </p>
         ) : (
@@ -687,7 +687,7 @@ export function AlertsWorkbench({
             {rules.map((rule) => (
               <article
                 key={rule.id}
-                className="border border-border bg-surface p-4"
+                className="th-panel p-4"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -760,7 +760,7 @@ export function AlertsWorkbench({
           Meldingen
         </h2>
         {notifications.length === 0 ? (
-          <p className="border border-border bg-surface px-4 py-3 text-sm text-text-muted">
+          <p className="th-empty px-4 py-3 text-sm text-text-muted">
             Nog geen meldingen. Die verschijnen hier na een sync, nieuwste eerst.
           </p>
         ) : (
@@ -781,7 +781,7 @@ export function AlertsWorkbench({
                           : isWeather
                             ? "border border-info/40 bg-info/5 p-5"
                             : "border border-warn/40 bg-warn/10 p-5"
-                      : "border border-border bg-surface p-5 opacity-70"
+                      : "th-panel p-5 opacity-70"
                   }
                 >
                   <div className="flex flex-wrap items-center gap-2">

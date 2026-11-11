@@ -92,7 +92,7 @@ export function DjFeeAmountInput({
               e.currentTarget.blur();
             }
           }}
-          className="th-num w-full min-w-0 bg-transparent px-1.5 text-lg outline-none placeholder:font-sans placeholder:text-xs placeholder:font-medium placeholder:text-text-muted"
+          className="th-num w-full min-w-0 bg-transparent px-1.5 text-lg outline-none placeholder:font-sans placeholder:text-xs placeholder:font-semibold placeholder:text-text"
         />
       </div>
       {invalid ? (

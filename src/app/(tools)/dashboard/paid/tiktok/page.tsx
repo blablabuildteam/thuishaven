@@ -57,7 +57,7 @@ export default async function PaidTikTokPage() {
       />
 
       {!hasToken && data.ads.length === 0 ? (
-        <div className="border border-border bg-surface p-5">
+        <div className="th-panel p-5">
           <p className="text-sm font-medium">TikTok ads nog niet gekoppeld</p>
           <p className="mt-2 max-w-xl text-sm text-text-muted">
             Organic TikTok gebruikt Login Kit. Paid data komt uit de TikTok{" "}

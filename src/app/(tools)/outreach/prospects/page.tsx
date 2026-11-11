@@ -55,7 +55,7 @@ function sourceLabel(source?: string) {
 
 function ProspectTable({ rows }: { rows: OutreachProspect[] }) {
   return (
-    <div className="max-w-full overflow-x-auto border border-border">
+    <div className="max-w-full overflow-x-auto th-panel">
       <table className="w-full min-w-[1080px] text-left text-sm">
         <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
           <tr>
@@ -257,7 +257,7 @@ export default async function ProspectsPage() {
           2–4 jaar) → algemeen feest. “Past niet” blijft zichtbaar met label.
         </p>
         {companies.length === 0 ? (
-          <p className="border border-border bg-surface px-4 py-5 text-sm text-text-muted">
+          <p className="th-empty px-4 py-5 text-sm text-text-muted">
             Nog leeg. Haal de doelgroep op via Apollo (boven).
           </p>
         ) : (
@@ -274,7 +274,7 @@ export default async function ProspectsPage() {
         </section>
       ) : null}
 
-      <section className="border border-border bg-surface p-4">
+      <section className="th-panel p-4">
         <h2 className="font-display text-2xl tracking-[0.06em]">
           Partnerbureaus · later
         </h2>

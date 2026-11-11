@@ -66,7 +66,7 @@ export function OutreachSettingsForm({ initial }: Props) {
 
   return (
     <div className="max-w-2xl space-y-8">
-      <section className="space-y-3 border border-border bg-surface p-4">
+      <section className="space-y-3 th-panel p-4">
         <h2 className="font-display text-xl tracking-[0.04em]">
           Verzendritme
         </h2>
@@ -78,7 +78,7 @@ export function OutreachSettingsForm({ initial }: Props) {
         <p className="text-xs text-text-dim">{initial.cadenceRationale}</p>
       </section>
 
-      <section className="space-y-4 border border-border bg-surface p-4">
+      <section className="space-y-4 th-panel p-4">
         <h2 className="font-display text-xl tracking-[0.04em]">
           Afzender-profielen
         </h2>
@@ -127,7 +127,7 @@ export function OutreachSettingsForm({ initial }: Props) {
         </label>
       </section>
 
-      <section className="space-y-4 border border-border bg-surface p-4">
+      <section className="space-y-4 th-panel p-4">
         <h2 className="font-display text-xl tracking-[0.04em]">Reply-to</h2>
         <p className="text-sm text-text-muted">
           Hier landen antwoorden. Zet later forwarding naar de tool aan zodat
@@ -151,7 +151,7 @@ export function OutreachSettingsForm({ initial }: Props) {
         </label>
       </section>
 
-      <section className="space-y-4 border border-border bg-surface p-4">
+      <section className="space-y-4 th-panel p-4">
         <h2 className="font-display text-xl tracking-[0.04em]">Testsend</h2>
         <label className="block text-xs text-text-dim">
           Standaard testadres

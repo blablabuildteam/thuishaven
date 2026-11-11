@@ -16,7 +16,9 @@
   --accent-dim: #333333;
   --accent-soft: rgba(0, 0, 0, 0.06);
   --accent-contrast: #ffffff;
-  --highlight: #fff201;
+  /* Attention mark: thuishaven.nl blue, always with black text on top */
+  --highlight: #79cae5;
+  --highlight-fg: #000000;
   --warn: #f1c40f;
   --warn-fg: #6e5600;
   --danger: #d22624;
@@ -52,7 +54,8 @@
   --accent-dim: #cfc9bb;
   --accent-soft: rgba(232, 228, 219, 0.14);
   --accent-contrast: #000000;
-  --highlight: #e8e4db;
+  --highlight: #79cae5;
+  --highlight-fg: #000000;
   --warn: #d4a017;
   --warn-fg: #e8c96a;
   --danger: #d22624;
@@ -85,6 +88,7 @@
   --color-accent-soft: var(--accent-soft);
   --color-accent-contrast: var(--accent-contrast);
   --color-highlight: var(--highlight);
+  --color-highlight-fg: var(--highlight-fg);
   --color-warn: var(--warn);
   --color-warn-fg: var(--warn-fg);
   --color-danger: var(--danger);
@@ -601,7 +605,7 @@ html.dark body::before {
   background: linear-gradient(165deg, #e4e4e0 0%, var(--surface) 58%);
 }
 .wx-ideal {
-  background: linear-gradient(165deg, var(--highlight) 0%, var(--surface) 62%);
+  background: linear-gradient(165deg, #fff201 0%, var(--surface) 62%);
 }
 .wx-ok {
   background: var(--surface);
@@ -741,130 +745,203 @@ html.dark .wx-ideal {
 
 
 
-/* —— DJ-fees: poster / ticket styling (pilot for the new look) —— */
-.th-poster-band {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  background: var(--accent);
-  color: var(--accent-contrast);
-}
+/* ——————————————————————————————————————————————————————————————
+   Poster / ticket look (thuishaven.nl): hard black edges, condensed
+   display type, sunburst bands, highlighter marks.
+   In @layer components so Tailwind utilities can still override.
+   —————————————————————————————————————————————————————————————— */
+@layer components {
+  /* Inverted band: swaps the colour tokens so anything inside (buttons,
+     inputs, badges) renders as if on the opposite theme. */
+  .th-poster-band {
+    --bg: #000000;
+    --bg-elevated: #0a0a0a;
+    --surface: #141414;
+    --surface-hover: #1f1f1f;
+    --border: rgba(255, 255, 255, 0.22);
+    --border-strong: #ffffff;
+    --text: #ffffff;
+    --text-muted: rgba(255, 255, 255, 0.72);
+    --text-dim: rgba(255, 255, 255, 0.5);
+    --accent: #f1eee7;
+    --accent-dim: #cfc9bb;
+    --accent-soft: rgba(241, 238, 231, 0.14);
+    --accent-contrast: #000000;
+    --highlight: #79cae5;
+    --ray: rgba(255, 255, 255, 0.07);
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    border: 1.5px solid #000;
+    background: #000;
+    color: var(--text);
+    color-scheme: dark;
+  }
 
-/* Sunburst rays like the thuishaven.nl hero, radiating from bottom-right */
-.th-poster-band::before {
-  content: "";
-  position: absolute;
-  inset: -40%;
-  z-index: -1;
-  background: repeating-conic-gradient(
-    from 0deg at 82% 78%,
-    transparent 0deg 5deg,
-    color-mix(in srgb, var(--accent-contrast) 7%, transparent) 5deg 10deg
-  );
-  mask-image: radial-gradient(circle at 82% 78%, #000 0%, transparent 70%);
-}
+  .dark .th-poster-band {
+    --bg: #e8e4db;
+    --bg-elevated: #ddd8cc;
+    --surface: #f1eee7;
+    --surface-hover: #e4dfd4;
+    --border: rgba(0, 0, 0, 0.2);
+    --border-strong: #000000;
+    --text: #000000;
+    --text-muted: rgba(0, 0, 0, 0.7);
+    --text-dim: rgba(0, 0, 0, 0.5);
+    --accent: #000000;
+    --accent-dim: #333333;
+    --accent-soft: rgba(0, 0, 0, 0.07);
+    --accent-contrast: #ffffff;
+    --highlight: #79cae5;
+    --ray: rgba(0, 0, 0, 0.06);
+    border-color: #e8e4db;
+    background: #e8e4db;
+    color-scheme: light;
+  }
 
-.th-poster-band::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background-image: var(--grain);
-  opacity: 0.08;
-  mix-blend-mode: overlay;
-  pointer-events: none;
-}
+  /* Sunburst rays like the thuishaven.nl hero, radiating from bottom-right */
+  .th-poster-band::before {
+    content: "";
+    position: absolute;
+    inset: -40%;
+    z-index: -1;
+    background: repeating-conic-gradient(
+      from 0deg at 82% 78%,
+      transparent 0deg 5deg,
+      var(--ray) 5deg 10deg
+    );
+    mask-image: radial-gradient(circle at 82% 78%, #000 0%, transparent 70%);
+    pointer-events: none;
+  }
 
-.th-poster-title {
-  font-family: var(--font-display), "Arial Narrow", sans-serif;
-  font-weight: 700;
-  text-transform: uppercase;
-  line-height: 0.82;
-  letter-spacing: -0.01em;
-}
+  .th-poster-band::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background-image: var(--grain);
+    opacity: 0.08;
+    mix-blend-mode: overlay;
+    pointer-events: none;
+  }
 
-.th-num {
-  font-family: var(--font-display), "Arial Narrow", sans-serif;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
-}
+  .th-poster-title {
+    font-family: var(--font-display), "Arial Narrow", sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    line-height: 0.82;
+    letter-spacing: -0.01em;
+  }
 
-/* Event “ticket”: hard edge + offset shadow, perforated stub */
-.th-ticket {
-  border: 1.5px solid var(--border-strong);
-  background: var(--surface);
-  box-shadow: 4px 4px 0 0 var(--border-strong);
-}
+  .th-num {
+    font-family: var(--font-display), "Arial Narrow", sans-serif;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+  }
 
-.th-ticket[data-focused="true"] {
-  box-shadow: 6px 6px 0 0 var(--highlight);
-}
+  .th-sticker {
+    font-family: var(--font-display), "Arial Narrow", sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    line-height: 1;
+  }
 
-.th-ticket-stub {
-  position: relative;
-  background: var(--accent);
-  color: var(--accent-contrast);
-}
+  /* Panel / ticket: hard edge + offset shadow */
+  .th-panel,
+  .th-ticket {
+    border: 1.5px solid var(--border-strong);
+    background: var(--surface);
+    box-shadow: 4px 4px 0 0 var(--border-strong);
+  }
 
-/* Punched holes on the stub edge */
-.th-ticket-stub::before,
-.th-ticket-stub::after {
-  content: "";
-  position: absolute;
-  right: -7px;
-  width: 12px;
-  height: 12px;
-  border-radius: 999px;
-  background: var(--bg);
-  border: 1.5px solid var(--border-strong);
-}
-.th-ticket-stub::before {
-  top: -7px;
-}
-.th-ticket-stub::after {
-  bottom: -7px;
-}
+  /* Nested panels stay quiet — only the outer one gets the poster edge */
+  :is(.th-panel, .th-ticket) :is(.th-panel, .th-ticket) {
+    border-width: 1px;
+    border-color: var(--border);
+    box-shadow: none;
+  }
 
-/* Highlighter-marker fill for fees still to fill in */
-.th-marker {
-  background: color-mix(in srgb, var(--highlight) 38%, var(--surface));
-}
-html.dark .th-marker {
-  background: color-mix(in srgb, var(--highlight) 12%, var(--surface));
-}
+  .th-ticket[data-focused="true"] {
+    box-shadow: 6px 6px 0 0 var(--highlight);
+  }
 
-.th-sticker {
-  font-family: var(--font-display), "Arial Narrow", sans-serif;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  line-height: 1;
-}
+  /* Fill for values still to fill in (a soft wash of the blue) */
+  .th-marker {
+    background: color-mix(in srgb, var(--highlight) 30%, var(--surface));
+  }
 
-@media (max-width: 639px) {
+  /* thuishaven.nl heading mark: blue block offset behind black text */
+  .th-mark {
+    background: linear-gradient(var(--highlight), var(--highlight)) no-repeat;
+    background-size: calc(100% - 0.15em) 72%;
+    background-position: 0.35em 70%;
+    color: var(--highlight-fg);
+    padding-right: 0.4em;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  /* Black text can't hang outside the block on a black page */
+  .dark .th-mark {
+    background-size: 100% 100%;
+    background-position: 0 0;
+    padding-left: 0.2em;
+    padding-right: 0.25em;
+  }
+
+  /* Empty states / quiet notes */
+  .th-empty {
+    border: 1.5px dashed var(--border);
+    background: transparent;
+  }
+
+  .th-ticket-stub {
+    position: relative;
+    background: var(--accent);
+    color: var(--accent-contrast);
+  }
+
+  /* Punched holes on the stub edge */
   .th-ticket-stub::before,
   .th-ticket-stub::after {
-    display: none;
+    content: "";
+    position: absolute;
+    right: -7px;
+    width: 12px;
+    height: 12px;
+    border-radius: 999px;
+    background: var(--bg);
+    border: 1.5px solid var(--border-strong);
+  }
+  .th-ticket-stub::before {
+    top: -7px;
+  }
+  .th-ticket-stub::after {
+    bottom: -7px;
+  }
+
+
+  @media (max-width: 639px) {
+    .th-ticket-stub::before,
+    .th-ticket-stub::after {
+      display: none;
+    }
   }
 }
 
-/* System status notice (components/system/system-health.tsx) */
-@keyframes system-notice-in {
-  from {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+/* Table headers across the tools read as poster labels */
+@layer base {
+  main thead th {
+    font-family: var(--font-display), "Arial Narrow", sans-serif;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
   }
 }
-.system-notice-in {
-  animation: system-notice-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-@media (prefers-reduced-motion: reduce) {
-  .system-notice-in {
-    animation: none;
-  }
+
+/* Tables inside a panel: strong rule under the header */
+.th-panel > table > thead {
+  border-bottom: 1.5px solid var(--border-strong);
 }

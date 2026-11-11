@@ -210,7 +210,7 @@ export default async function OutreachUitlegPage() {
             {MAIL_CAMPAIGN_ANGLES.map((a) => (
               <li
                 key={a.id}
-                className="border border-border bg-surface/60 px-4 py-4 dark:bg-surface"
+                className="th-panel px-4 py-4"
               >
                 <p className="font-display text-lg tracking-[0.06em] text-text">
                   {a.label}
@@ -307,7 +307,7 @@ export default async function OutreachUitlegPage() {
       </section>
 
       {/* Runbook */}
-      <section className="mb-8 border border-border bg-surface/50 px-5 py-6 dark:bg-surface">
+      <section className="mb-8 th-panel px-5 py-6">
         <p className="text-xs tracking-[0.16em] text-text-dim uppercase">
           Ops
         </p>

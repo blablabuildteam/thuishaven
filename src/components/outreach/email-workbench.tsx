@@ -579,7 +579,7 @@ export function OutreachEmailWorkbench({
 
       <div>
         {preselectIds.length > 0 ? (
-          <p className="mb-3 rounded-none border border-border bg-surface px-3 py-2 text-sm text-text-muted">
+          <p className="mb-3 th-empty px-3 py-2 text-sm text-text-muted">
             {selected.size} meegenomen uit Bedrijven (al aangevinkt)
             {handoffVariantName
               ? ` · template «${handoffVariantName}»`
@@ -674,7 +674,7 @@ export function OutreachEmailWorkbench({
           </div>
         </div>
 
-        <div className="overflow-x-auto border border-border">
+        <div className="overflow-x-auto th-panel">
           <table className="w-full min-w-[560px] text-left text-sm">
             <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
               <tr>
@@ -863,7 +863,7 @@ export function OutreachEmailWorkbench({
 
       {selected.size > 0 ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <div className="pointer-events-auto flex w-full max-w-3xl flex-col gap-2 border border-border bg-surface px-3 py-3 shadow-[0_-8px_30px_rgba(0,0,0,0.12)] sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+          <div className="pointer-events-auto flex w-full max-w-3xl flex-col gap-2 th-panel px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
             <p className="text-sm text-text">
               <span className="font-medium">{selected.size}</span>{" "}
               {selected.size === 1 ? "bedrijf" : "bedrijven"}

@@ -30,7 +30,7 @@ export function QueueSchedule({ cadenceLabel, cadenceRationale, items }: Props) 
   const plannedCount = days.reduce((n, d) => n + d.items.length, 0);
 
   return (
-    <section className="mb-8 border border-border bg-surface p-4">
+    <section className="mb-8 th-panel p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-display text-xl tracking-[0.04em]">Planning</h2>

@@ -36,7 +36,7 @@ export function AiChatPanel() {
   }
 
   return (
-    <div className="flex h-[min(560px,70vh)] flex-col border border-border bg-surface">
+    <div className="flex h-[min(560px,70vh)] flex-col th-panel">
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
         {messages.map((msg, i) => (
           <div

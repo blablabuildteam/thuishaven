@@ -326,7 +326,7 @@ function NavLink({
       <span
         aria-disabled="true"
         title="Nog niet beschikbaar"
-        className="flex cursor-not-allowed items-center gap-2.5 px-2.5 py-2 text-sm text-text-dim opacity-60"
+        className="th-sticker flex cursor-not-allowed items-center gap-2.5 px-2.5 py-2 text-[15px] tracking-[0.04em] text-text-dim opacity-60"
       >
         {content}
       </span>
@@ -347,12 +347,12 @@ function NavLink({
       }}
       title={item.pending ? "Nog niet gekoppeld" : undefined}
       className={cn(
-        "flex items-center gap-2.5 px-2.5 py-2 text-sm transition-colors",
+        "th-sticker flex items-center gap-2.5 px-2.5 py-2 text-[15px] tracking-[0.04em] transition-colors",
         item.pending
           ? "text-text-dim opacity-60 hover:bg-surface hover:opacity-80"
           : active
-            ? "bg-accent text-accent-contrast"
-            : "text-text-muted hover:bg-surface hover:text-text",
+            ? "bg-accent text-accent-contrast shadow-[inset_4px_0_0_0_var(--highlight)]"
+            : "text-text-muted hover:bg-surface hover:text-text hover:shadow-[inset_2px_0_0_0_var(--border-strong)]",
       )}
     >
       {content}
@@ -389,7 +389,7 @@ function ShellNav({
 }) {
   return (
     <>
-      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-4">
+      <div className="th-poster-band flex items-center justify-between gap-3 border-0 px-4 py-5">
         <Link
           href="/"
           onClick={onNavigate}
@@ -404,10 +404,10 @@ function ShellNav({
             priority
           />
           <div className="min-w-0">
-            <p className="font-display text-lg leading-none tracking-[0.04em] text-text">
-              Thuishaven
+            <p className="th-poster-title text-2xl text-text">Thuishaven</p>
+            <p className="th-sticker mt-1 text-[10px] tracking-[0.2em] text-text-dim">
+              Tools
             </p>
-            <p className="mt-1 text-[11px] text-text-dim">Tools</p>
           </div>
         </Link>
         {onClose ? (
@@ -422,9 +422,9 @@ function ShellNav({
         ) : null}
       </div>
 
-      <div className="border-b border-border px-3 py-3">
+      <div className="border-b-[1.5px] border-border-strong px-3 py-3">
         {showDashboard && showOutreach ? (
-          <div className="grid grid-cols-2 gap-1 bg-bg-elevated p-1">
+          <div className="grid grid-cols-2 gap-px border-[1.5px] border-border-strong bg-border-strong">
             <ToolSwitch
               href="/dashboard/inzichten"
               active={!isOutreach}
@@ -439,7 +439,7 @@ function ShellNav({
             />
           </div>
         ) : (
-          <p className="px-1 py-1 font-display text-xs tracking-[0.12em] text-text-dim">
+          <p className="th-sticker px-1 py-1 text-xs text-text-dim">
             {isOutreach ? "Outreach" : "Dashboard"}
           </p>
         )}
@@ -449,7 +449,7 @@ function ShellNav({
         <div className="space-y-5">
           {sections.map((section) => (
             <div key={section.id}>
-              <p className="mb-1.5 px-2 text-[11px] font-medium tracking-[0.12em] text-text-dim uppercase">
+              <p className="th-sticker mb-1.5 px-2 text-[10px] tracking-[0.16em] text-text-dim">
                 {section.label}
               </p>
               <nav className="space-y-0.5">
@@ -479,7 +479,7 @@ function ShellNav({
 
         {systemNav.length > 0 ? (
           <div className="mt-auto border-t border-border pt-4">
-            <p className="mb-1.5 px-2 text-[11px] font-medium tracking-[0.12em] text-text-dim uppercase">
+            <p className="th-sticker mb-1.5 px-2 text-[10px] tracking-[0.16em] text-text-dim">
               Systeem
             </p>
             <nav className="space-y-0.5">
@@ -498,7 +498,7 @@ function ShellNav({
         )}
       </div>
 
-      <div className="space-y-3 border-t border-border px-4 py-4">
+      <div className="space-y-3 border-t-[1.5px] border-border-strong px-4 py-4">
         {onToggleViewAsStaff ? (
           <button
             type="button"
@@ -613,7 +613,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="relative z-0 flex min-h-screen min-w-0 bg-bg">
-      <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r border-border bg-bg lg:flex">
+      <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col border-r-[1.5px] border-border-strong bg-bg lg:flex">
         <ShellNav {...navProps} />
       </aside>
 
@@ -629,7 +629,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             role="dialog"
             aria-modal="true"
             aria-label="Menu"
-            className="mobile-nav-panel absolute inset-y-0 left-0 flex w-[min(20rem,88vw)] flex-col border-r border-border bg-bg"
+            className="mobile-nav-panel absolute inset-y-0 left-0 flex w-[min(20rem,88vw)] flex-col border-r-[1.5px] border-border-strong bg-bg"
           >
             <ShellNav {...navProps} onNavigate={closeMenu} onClose={closeMenu} />
           </div>
@@ -637,7 +637,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       ) : null}
 
       <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
-        <header className="sticky top-0 z-30 flex items-center justify-between gap-2 border-b border-border bg-bg/95 px-3 py-3 backdrop-blur-md sm:px-4 lg:hidden">
+        <header className="sticky top-0 z-30 flex items-center justify-between gap-2 border-b-[1.5px] border-border-strong bg-bg/95 px-3 py-3 backdrop-blur-md sm:px-4 lg:hidden">
           <Link href="/" className="flex min-w-0 items-center gap-2">
             <Image
               src="/brand/logo-mark.png"
@@ -646,7 +646,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               height={28}
               className="size-7 shrink-0 object-contain"
             />
-            <span className="truncate font-display text-lg tracking-[0.04em]">
+            <span className="th-poster-title truncate text-2xl">
               Thuishaven
             </span>
           </Link>
@@ -706,10 +706,10 @@ function ToolSwitch({
       href={href}
       onClick={onNavigate}
       className={cn(
-        "px-2 py-1.5 text-center text-sm transition-colors",
+        "th-sticker px-2 py-2 text-center text-sm transition-colors",
         active
           ? "bg-accent text-accent-contrast"
-          : "text-text-muted hover:bg-surface hover:text-text",
+          : "bg-bg text-text-muted hover:bg-surface hover:text-text",
       )}
     >
       {label}

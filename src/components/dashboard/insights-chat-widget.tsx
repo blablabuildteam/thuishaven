@@ -28,7 +28,7 @@ export function InsightsChatWidget() {
         aria-hidden={!open}
         hidden={!open}
         className={cn(
-          "pointer-events-auto flex h-[calc(100dvh-5.75rem)] w-[min(32rem,calc(100vw-2rem))] flex-col border border-border bg-surface shadow-[0_16px_48px_rgba(0,0,0,0.18)] sm:h-[calc(100dvh-6.25rem)]",
+          "pointer-events-auto flex h-[calc(100dvh-5.75rem)] w-[min(32rem,calc(100vw-2rem))] flex-col th-panel sm:h-[calc(100dvh-6.25rem)]",
           open && "insight-modal-panel",
           !open && "hidden",
         )}

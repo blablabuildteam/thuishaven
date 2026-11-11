@@ -62,7 +62,7 @@ export function SocialPostCard({
         : null;
 
   return (
-    <li className="overflow-hidden border border-border bg-surface">
+    <li className="overflow-hidden th-panel">
       <div className={cn("relative bg-bg-elevated", aspectClass)}>
         {playing && post.videoUrl ? (
           <video

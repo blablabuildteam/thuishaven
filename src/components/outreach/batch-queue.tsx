@@ -235,7 +235,7 @@ export function BatchQueue({
         active.map((batch) => (
           <article
             key={batch.id}
-            className="border border-border bg-surface p-4"
+            className="th-panel p-4"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">

@@ -342,7 +342,7 @@ export function EventsBoard({ rows }: { rows: EventsBoardRow[] }) {
         </div>
       </div>
 
-      <div className="mb-3 border border-border bg-surface p-3">
+      <div className="mb-3 th-panel p-3">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
           <SelectField
             label="Format"

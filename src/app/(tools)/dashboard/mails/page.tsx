@@ -177,7 +177,7 @@ export default async function MailsPage() {
         </p>
       ) : (
         <>
-          <div className="max-w-full overflow-x-auto border border-border">
+          <div className="max-w-full overflow-x-auto th-panel">
             <table className="w-full min-w-[900px] text-left text-sm">
               <thead className="border-b border-border text-[11px] tracking-wider text-text-dim uppercase">
                 <tr>

@@ -46,7 +46,7 @@ export function PaidAdsComingSoon({
           ))}
         </section>
 
-        <div className="max-w-full overflow-x-auto border border-border">
+        <div className="max-w-full overflow-x-auto th-panel">
           <table className="w-full min-w-[880px] table-fixed text-left text-sm">
             <colgroup>
               <col className="w-[26%]" />

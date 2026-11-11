@@ -69,7 +69,7 @@ export default async function AssetsPage() {
             {bundle.aggregates.slice(0, 6).map((a) => (
               <li
                 key={a.key}
-                className="border border-border bg-surface px-4 py-3"
+                className="th-panel px-4 py-3"
               >
                 <p className="text-sm font-medium">{a.label}</p>
                 <p className="mt-1 font-display text-2xl tracking-[0.02em]">
@@ -97,7 +97,7 @@ export default async function AssetsPage() {
               return (
                 <article
                   key={post.id}
-                  className="overflow-hidden border border-border bg-surface"
+                  className="overflow-hidden th-panel"
                 >
                   <div
                     className="relative flex h-40 items-end bg-bg-elevated bg-cover bg-center p-4"
@@ -194,7 +194,7 @@ export default async function AssetsPage() {
           : mockPosts.map((post) => (
               <article
                 key={post.id}
-                className="overflow-hidden border border-border bg-surface"
+                className="overflow-hidden th-panel"
               >
                 <div
                   className="flex h-36 items-end p-4"

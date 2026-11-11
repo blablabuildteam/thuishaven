@@ -56,8 +56,8 @@ export function DjFeesNavBadge({
     <span
       title={`${count} event${count === 1 ? "" : "s"} met een DJ zonder fee`}
       className={cn(
-        "min-w-[1.25rem] px-1.5 text-center text-[11px] font-medium tabular-nums",
-        active ? "bg-accent-contrast/20 text-accent-contrast" : "bg-highlight text-black",
+        "th-num inline-flex h-6 min-w-6 items-center justify-center bg-highlight px-1.5 text-[15px] leading-none font-bold text-highlight-fg",
+        active && "ring-1 ring-accent-contrast",
       )}
     >
       {count}

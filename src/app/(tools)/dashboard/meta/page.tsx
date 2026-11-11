@@ -58,7 +58,7 @@ export default async function MetaPage() {
       />
 
       {!hasToken && posts.length === 0 ? (
-        <div className="border border-border bg-surface p-5">
+        <div className="th-panel p-5">
           <p className="text-sm font-medium">Meta nog niet gekoppeld</p>
           <p className="mt-2 max-w-xl text-sm text-text-muted">
             Zodra de Meta access token beschikbaar is, synct Instagram posts

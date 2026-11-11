@@ -58,7 +58,7 @@ export default async function PaidYouTubePage() {
       />
 
       {!hasCreds && data.ads.length === 0 ? (
-        <div className="border border-border bg-surface p-5">
+        <div className="th-panel p-5">
           <p className="text-sm font-medium">YouTube ads nog niet gekoppeld</p>
           <p className="mt-2 max-w-xl text-sm text-text-muted">
             Organic YouTube gebruikt de Data API. Paid data komt uit{" "}

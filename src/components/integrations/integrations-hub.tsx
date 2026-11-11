@@ -851,7 +851,7 @@ function IntegrationCard({
   return (
     <article
       className={cn(
-        "border border-border bg-surface p-4",
+        "th-panel p-4",
         isOk && !isRunning && "integration-ok",
         row.status === "error" && "border-danger/50",
         isHold && "opacity-70",

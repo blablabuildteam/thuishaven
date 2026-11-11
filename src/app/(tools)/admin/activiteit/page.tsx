@@ -39,12 +39,12 @@ export default async function AdminActivityPage() {
       </div>
 
       {rows.length === 0 ? (
-        <p className="border border-border bg-surface px-4 py-5 text-sm text-text-muted">
+        <p className="th-empty px-4 py-5 text-sm text-text-muted">
           Nog geen activiteit gelogd. Zodra iemand inlogt of een tools-pagina
           opent, verschijnt dat hier.
         </p>
       ) : (
-        <div className="max-w-full overflow-x-auto border border-border">
+        <div className="max-w-full overflow-x-auto th-panel">
           <table className="w-full min-w-[880px] text-left text-sm">
             <thead className="border-b border-border bg-surface text-[11px] uppercase tracking-wider text-text-muted">
               <tr>

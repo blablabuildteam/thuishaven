@@ -86,7 +86,7 @@ export function KvkEnrichForm({ prospects }: Props) {
   }
 
   return (
-    <section className="mb-8 border border-border bg-surface p-4">
+    <section className="mb-8 th-panel p-4">
       <h2 className="font-display text-2xl tracking-[0.06em]">
         Verrijk via KvK
       </h2>

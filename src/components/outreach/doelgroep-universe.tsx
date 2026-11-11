@@ -19,7 +19,7 @@ export function DoelgroepUniverse({ compact = false, listedCount }: Props) {
 
   if (compact) {
     return (
-      <div className="mb-8 border border-border bg-surface p-4">
+      <div className="mb-8 th-panel p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-xs font-medium uppercase tracking-[0.12em] text-text-dim">

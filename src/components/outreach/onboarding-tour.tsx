@@ -181,7 +181,7 @@ export function OutreachOnboardingTour() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="outreach-tour-title"
-        className="pointer-events-auto absolute z-[61] w-[min(100%-2rem,22rem)] border border-border bg-surface p-4 shadow-lg"
+        className="pointer-events-auto absolute z-[61] w-[min(100%-2rem,22rem)] th-panel p-4"
         style={tooltipPosition(rect)}
         onClick={(e) => e.stopPropagation()}
       >
