@@ -440,20 +440,33 @@ async function readRefreshResponse(
   return result;
 }
 
-function DailySalesRefresh({ refreshedAt }: { refreshedAt: string | null }) {
+/** How often a page that opened mid-pull checks whether that pull is done. */
+const FOLLOW_POLL_MS = 3_000;
+/** Give up waiting on someone else's pull after this (route maxDuration + slack). */
+const FOLLOW_MAX_MS = 5.5 * 60 * 1000;
+
+function DailySalesRefresh({
+  completedAt,
+  runningSince,
+}: {
+  completedAt: string | null;
+  runningSince: string | null;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] =
     useState<DailyTicketSalesRefreshProgress | null>(null);
+  /** Set while this page waits on a pull it did not start. */
+  const [followingSince, setFollowingSince] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [shownAt, setShownAt] = useState(refreshedAt);
+  const [shownAt, setShownAt] = useState(completedAt);
   const [now, setNow] = useState(() => new Date());
-  const spinning = busy || isPending;
+  const spinning = busy || isPending || followingSince != null;
 
   useEffect(() => {
-    setShownAt(refreshedAt);
-  }, [refreshedAt]);
+    setShownAt(completedAt);
+  }, [completedAt]);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 30_000);
@@ -488,19 +501,66 @@ function DailySalesRefresh({ refreshedAt }: { refreshedAt: string | null }) {
   }, [router]);
 
   /**
-   * Pull the live stand once when the dashboard opens, if the last sync is
-   * older than the window above. The cron keeps the chart fresh in the
-   * background; this closes the gap to Weeztix the moment someone looks.
+   * A pull is already running (reload mid-pull, another tab, a cron slot):
+   * its first tables are written but today's histogram is not yet. Wait for
+   * it to finish, then re-render; if it failed or vanished, pull ourselves.
+   */
+  const followRunningPull = useCallback(
+    async (since: string) => {
+      setFollowingSince(since);
+      setError(null);
+      const startedWaiting = Date.now();
+      let state: { completedAt?: string | null; runningSince?: string | null } =
+        {};
+      try {
+        while (Date.now() - startedWaiting < FOLLOW_MAX_MS) {
+          await new Promise((r) => window.setTimeout(r, FOLLOW_POLL_MS));
+          const res = await fetch("/api/dashboard/daily-ticket-sales/refresh", {
+            cache: "no-store",
+          });
+          if (!res.ok) break;
+          state = await res.json();
+          if (!state.runningSince) break;
+        }
+      } catch {
+        // Fall through: pull ourselves below.
+      } finally {
+        setFollowingSince(null);
+      }
+      const finished =
+        state.completedAt != null &&
+        new Date(state.completedAt).getTime() >= new Date(since).getTime();
+      if (finished) {
+        setShownAt(state.completedAt ?? null);
+        startTransition(() => {
+          router.refresh();
+        });
+      } else {
+        await onRefresh();
+      }
+    },
+    [router, onRefresh],
+  );
+
+  /**
+   * Once when the dashboard opens: follow a pull that is still running, or
+   * start one if the last *finished* pull is older than the window above.
+   * Judged on the finished pull, not the newest table stamp — those land
+   * seconds into a pull while today's number only lands at its end.
    */
   const didAutoRefresh = useRef(false);
   useEffect(() => {
     if (didAutoRefresh.current) return;
     didAutoRefresh.current = true;
+    if (runningSince) {
+      void followRunningPull(runningSince);
+      return;
+    }
     const stale =
-      !refreshedAt ||
-      Date.now() - new Date(refreshedAt).getTime() > AUTO_REFRESH_STALE_MS;
+      !completedAt ||
+      Date.now() - new Date(completedAt).getTime() > AUTO_REFRESH_STALE_MS;
     if (stale) void onRefresh();
-  }, [refreshedAt, onRefresh]);
+  }, [completedAt, runningSince, onRefresh, followRunningPull]);
 
   return (
     <div className="mt-2 flex items-center gap-2">
@@ -515,7 +575,12 @@ function DailySalesRefresh({ refreshedAt }: { refreshedAt: string | null }) {
         <RefreshCw className={cn("size-3.5", spinning && "animate-spin")} />
       </button>
       {spinning ? (
-        <RefreshProgress progress={progress} finishing={isPending && !busy} />
+        <RefreshProgress
+          progress={progress}
+          finishing={isPending && !busy && followingSince == null}
+          followingSince={followingSince}
+          now={now}
+        />
       ) : (
         <p className="min-w-0 text-[11px] leading-snug text-text-muted" aria-live="polite">
           {`${formatRefreshedAt(shownAt)} · ${formatNextAmsterdamSync(now)}`}
@@ -526,22 +591,47 @@ function DailySalesRefresh({ refreshedAt }: { refreshedAt: string | null }) {
   );
 }
 
+/** Typical length of a full pull; only used to estimate a followed pull's bar. */
+const TYPICAL_PULL_MS = 75_000;
+
 function RefreshProgress({
   progress,
   finishing,
+  followingSince,
+  now,
 }: {
   progress: DailyTicketSalesRefreshProgress | null;
   finishing: boolean;
+  followingSince: string | null;
+  now: Date;
 }) {
-  const fraction = finishing ? 1 : (progress?.fraction ?? 0);
-  const percent = Math.round(fraction * 100);
+  const [tick, setTick] = useState(() => now.getTime());
+  useEffect(() => {
+    if (!followingSince) return;
+    const id = window.setInterval(() => setTick(Date.now()), 1_000);
+    return () => window.clearInterval(id);
+  }, [followingSince]);
+  // A followed pull streams nothing to this page: estimate from its age.
+  const followedFraction = followingSince
+    ? Math.min(
+        0.95,
+        (Math.max(now.getTime(), tick) - new Date(followingSince).getTime()) /
+          TYPICAL_PULL_MS,
+      )
+    : null;
+  const fraction = finishing
+    ? 1
+    : (followedFraction ?? progress?.fraction ?? 0);
+  const percent = Math.round(Math.max(0, fraction) * 100);
   const label = finishing
     ? "Grafiek bijwerken…"
-    : progress
-      ? `${REFRESH_STEP_LABEL[progress.step]} · ${progress.done}/${progress.total}`
-      : "Events opzoeken…";
+    : followingSince
+      ? "Ophalen loopt al…"
+      : progress
+        ? `${REFRESH_STEP_LABEL[progress.step]} · ${progress.done}/${progress.total}`
+        : "Events opzoeken…";
   return (
-    <div className="min-w-0 flex-1 basis-40 max-w-72">
+    <div className="min-w-0 flex-1">
       <p
         className="flex justify-between gap-2 text-[11px] leading-snug text-text-muted"
         aria-live="polite"
@@ -593,7 +683,10 @@ function ChartHeading({ data }: { data: DailyTicketSales }) {
           Tickets verkocht op die kalenderdag, gestapeld per event ·{" "}
           {formatDayShort(data.startDay)} – {formatDayShort(data.endDay)}
         </p>
-        <DailySalesRefresh refreshedAt={data.refreshedAt} />
+        <DailySalesRefresh
+          completedAt={data.completedAt}
+          runningSince={data.runningSince}
+        />
       </div>
       <p className="shrink-0 text-right">
         <span className="font-display text-3xl tabular-nums leading-none">
