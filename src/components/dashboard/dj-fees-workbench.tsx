@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search, Trash2 } from "lucide-react";
+import { Check, Plus, Search, X } from "lucide-react";
 import { DjFeeAmountInput } from "@/components/dashboard/dj-fee-amount-input";
 import { DjFeesExport } from "@/components/dashboard/dj-fees-export";
-import { MetricCard } from "@/components/ui/metric-card";
-import { SectionHeader } from "@/components/ui/section-header";
 import {
   addDjFeeToSpend,
   countMissingDjFees,
@@ -21,12 +19,14 @@ import {
   type DjFeeSpend,
 } from "@/lib/dashboard/dj-fee-ranges";
 import { displayEditionName } from "@/lib/editions/lineup";
-import { formatTicketSheetDate } from "@/lib/time/amsterdam";
 import { cn } from "@/lib/utils";
 
-/** Fixed control columns — pinned to the card's right edge so they align across events. */
-const DJ_FEE_CONTROLS_W = "w-[28.25rem]"; // 14 + 9.5 + 4.75 rem
-const DJ_FEE_ROW = "flex w-full min-w-[44rem] items-center";
+/**
+ * Fixed control columns (fee · 10HRS · remove) so they line up across every
+ * event ticket. Below `sm` the row stacks: name on top, controls underneath.
+ */
+const DJ_FEE_GRID =
+  "grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-2 sm:grid-cols-[minmax(0,1fr)_12rem_5.5rem_2.25rem] sm:gap-x-4";
 
 function spendFor(artists: DjFeeArtistView[]): DjFeeSpend {
   const spend = emptyDjFeeSpend();
@@ -44,25 +44,37 @@ function eventNeedsFees(event: DjFeeEventView): boolean {
 
 function sourceLabel(source: DjFeeArtistView["source"]): string | null {
   if (source === "resident_advisor") return "RA";
-  if (source === "custom") return "handmatig";
+  if (source === "custom") return "Handmatig";
   return null;
 }
 
-function TabBadge({ count, active }: { count: number; active: boolean }) {
+function stubParts(dayIso: string) {
+  const d = new Date(`${dayIso}T12:00:00.000Z`);
+  const fmt = (opts: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat("nl-NL", { ...opts, timeZone: "UTC" })
+      .format(d)
+      .replace(".", "");
+  return {
+    weekday: fmt({ weekday: "short" }),
+    day: fmt({ day: "numeric" }),
+    month: fmt({ month: "short" }),
+    year: fmt({ year: "numeric" }),
+  };
+}
+
+function PendingDot({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
     <span
       title={`${count} event${count === 1 ? "" : "s"} zonder complete DJ-fees`}
-      className={cn(
-        "min-w-[1.15rem] px-1 text-center text-[10px] font-medium tabular-nums",
-        active ? "bg-accent-contrast/20 text-accent-contrast" : "bg-highlight text-black",
-      )}
+      className="th-sticker inline-flex h-4 min-w-4 items-center justify-center bg-highlight px-1 text-[10px] text-black tabular-nums"
     >
       {count}
     </span>
   );
 }
 
+/** Stamp-style toggle: outlined when off, filled when it was a 10-hour set. */
 function TenHourToggle({
   value,
   disabled,
@@ -77,33 +89,20 @@ function TenHourToggle({
       type="button"
       role="switch"
       aria-checked={value}
-      aria-label="10HRS"
+      aria-label="10HRS-set"
+      title={value ? "10HRS-set — klik om uit te zetten" : "Geen 10HRS-set — klik om aan te zetten"}
       disabled={disabled}
       onClick={onToggle}
       className={cn(
-        "inline-flex w-full items-center gap-2 text-xs whitespace-nowrap",
+        "th-sticker inline-flex h-8 w-full items-center justify-center gap-1 border-[1.5px] px-2 text-xs transition-colors",
+        value
+          ? "border-border-strong bg-accent text-accent-contrast"
+          : "border-dashed border-border text-text-dim hover:border-border-strong hover:text-text",
         disabled && "opacity-60",
       )}
     >
-      <span className={cn("tabular-nums", value ? "text-text-dim" : "text-text")}>
-        nee
-      </span>
-      <span
-        className={cn(
-          "relative h-5 w-9 shrink-0 rounded-full transition-colors",
-          value ? "bg-fuchsia-400" : "bg-border",
-        )}
-      >
-        <span
-          className={cn(
-            "absolute top-0.5 left-0 size-4 rounded-full bg-white shadow-sm transition-transform",
-            value ? "translate-x-[18px]" : "translate-x-0.5",
-          )}
-        />
-      </span>
-      <span className={cn("tabular-nums", value ? "text-text" : "text-text-dim")}>
-        ja
-      </span>
+      {value && <Check className="size-3" strokeWidth={3} aria-hidden />}
+      10HRS
     </button>
   );
 }
@@ -335,56 +334,71 @@ export function DjFeesWorkbench({
     }
   }
 
+  const searching = query.trim().length > 0;
+  const activeMonth = months.find((item) => item.key === month);
+  const djCount = monthSpend.priced + monthSpend.missing;
+
   return (
-    <div>
-      <SectionHeader
-        eyebrow="Alerts"
-        title="DJ-fees"
-        description="Fee per DJ in hele euro's, plus of het een 10HRS-set was. Line-up komt uit Resident Advisor; je kunt DJs zelf toevoegen of weghalen. Oude ranges tellen mee tot je het bedrag invult."
-        action={
-          <div className="flex w-full items-center gap-2 sm:w-auto">
-            <div className="relative min-w-0 flex-1 sm:w-72 sm:flex-none">
-              <Search
-                className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-text-dim"
-                aria-hidden
-              />
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Zoek op event of DJ…"
-                aria-label="Zoek op event of DJ"
-                className="w-full border border-border bg-bg py-2.5 pr-3 pl-10 text-sm outline-none focus:border-text"
-              />
-            </div>
-            <DjFeesExport events={events} initialMonth={month} />
+    <div className="space-y-6">
+      {/* Poster band — title + the two numbers that matter */}
+      <section className="th-poster-band border-[1.5px] border-border-strong">
+        <div className="grid gap-6 px-5 pt-6 pb-5 sm:px-8 sm:pt-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+          <div className="min-w-0">
+            <p className="th-sticker text-xs opacity-60">Alerts · Line-up kosten</p>
+            <h1 className="th-poster-title mt-2 text-6xl sm:text-8xl">DJ-fees</h1>
+            <p className="mt-4 max-w-lg text-sm leading-relaxed opacity-70">
+              Fee per DJ in hele euro&apos;s, plus of het een 10HRS-set was.
+              Line-up komt uit Resident Advisor; voeg zelf DJs toe of haal ze
+              weg. Oude ranges tellen mee tot je het bedrag invult.
+            </p>
           </div>
-        }
-      />
+          <dl className="grid grid-cols-2 gap-px self-end bg-accent-contrast/20 sm:min-w-[26rem]">
+            <div className="bg-accent px-4 py-3 sm:px-5">
+              <dt className="th-sticker text-[11px] opacity-60">
+                {searching
+                  ? "Gevonden spend"
+                  : `Spend ${activeMonth?.label ?? "maand"}`}
+              </dt>
+              <dd className="th-num mt-1 text-3xl leading-none sm:text-5xl">
+                {formatDjFeeSpend(monthSpend)}
+              </dd>
+              <dd className="mt-2 text-xs opacity-60">
+                {monthSpend.priced === 0
+                  ? "Nog geen fees ingevuld"
+                  : `${monthSpend.priced} DJ${monthSpend.priced === 1 ? "" : "s"} met fee${monthSpend.ranged > 0 ? ` · ${monthSpend.ranged} nog als range` : ""}`}
+              </dd>
+            </div>
+            <div className="bg-accent px-4 py-3 sm:px-5">
+              <dt className="th-sticker text-[11px] opacity-60">Nog in te vullen</dt>
+              <dd className="mt-1 flex items-baseline gap-2">
+                <span
+                  className={cn(
+                    "th-num text-3xl leading-none sm:text-5xl",
+                    monthSpend.missing > 0 && "bg-highlight px-1.5 text-black",
+                  )}
+                >
+                  {monthSpend.missing}
+                </span>
+                <span className="th-num text-xl opacity-50">/ {djCount}</span>
+              </dd>
+              <dd className="mt-2 text-xs opacity-60">
+                {monthSpend.missing === 0 && djCount > 0
+                  ? "Alles ingevuld"
+                  : "DJs zonder fee"}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </section>
 
-      <div className="mb-6 grid gap-3 sm:grid-cols-2">
-        <MetricCard
-          label={query.trim() ? "Gevonden spend" : "Spend deze maand"}
-          value={formatDjFeeSpend(monthSpend)}
-          hint={
-            monthSpend.priced === 0
-              ? "Nog geen fees ingevuld"
-              : `${monthSpend.priced} DJ${monthSpend.priced === 1 ? "" : "s"} met fee${monthSpend.ranged > 0 ? ` · ${monthSpend.ranged} nog als range` : ""}`
-          }
-        />
-        <MetricCard
-          label="Nog in te vullen"
-          value={String(monthSpend.missing)}
-          hint="DJs zonder fee"
-        />
-      </div>
-
-      {!query.trim() && months.length > 0 && (
-        <div className="mb-5 space-y-2">
+      {/* Agenda strip — year, months, search, export */}
+      <div className="border-[1.5px] border-border-strong bg-surface">
+        <div className="flex flex-col gap-3 border-b-[1.5px] border-border-strong p-3 sm:flex-row sm:items-center sm:justify-between">
           <div
-            className="flex gap-1 overflow-x-auto pb-1"
+            className="flex shrink-0 gap-px self-start border-[1.5px] border-border-strong bg-border-strong"
             role="tablist"
             aria-label="Jaar"
+            hidden={searching || months.length === 0}
           >
             {years.map((year) => {
               const pending = pendingByYear.get(year) ?? 0;
@@ -404,68 +418,107 @@ export function DjFeesWorkbench({
                     else if (first) setMonth(first.key);
                   }}
                   className={cn(
-                    "inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-sm",
+                    "th-sticker inline-flex items-center gap-1.5 px-3 py-1.5 text-sm transition-colors",
                     active
                       ? "bg-accent text-accent-contrast"
-                      : "text-text-muted hover:bg-surface hover:text-text",
+                      : "bg-surface text-text-muted hover:text-text",
                   )}
                 >
                   {year}
-                  <TabBadge count={pending} active={active} />
+                  <PendingDot count={pending} />
                 </button>
               );
             })}
           </div>
-          <div
-            className="flex gap-1 overflow-x-auto pb-1"
-            role="tablist"
-            aria-label="Maand"
-          >
-            {monthsInYear.map((item) => {
-              const pending = pendingByMonth.get(item.key) ?? 0;
-              const active = month === item.key;
-              return (
-                <button
-                  key={item.key}
-                  type="button"
-                  role="tab"
-                  data-dj-fee-month=""
-                  aria-selected={active}
-                  onClick={() => setMonth(item.key)}
-                  className={cn(
-                    "inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-sm capitalize",
-                    active
-                      ? "bg-accent text-accent-contrast"
-                      : "text-text-muted hover:bg-surface hover:text-text",
-                  )}
-                >
-                  {item.label}
-                  <TabBadge count={pending} active={active} />
-                </button>
-              );
-            })}
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <div className="relative min-w-0 flex-1 sm:w-72 sm:flex-none">
+              <Search
+                className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-text-dim"
+                aria-hidden
+              />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Zoek op event of DJ…"
+                aria-label="Zoek op event of DJ"
+                className="w-full border-[1.5px] border-border bg-bg py-2 pr-3 pl-10 text-sm outline-none focus:border-border-strong"
+              />
+            </div>
+            <DjFeesExport events={events} initialMonth={month} />
           </div>
         </div>
-      )}
+
+        {searching ? (
+          <p className="px-4 py-3 text-sm text-text-muted">
+            <span className="th-num text-base text-text">{filtered.length}</span>{" "}
+            event{filtered.length === 1 ? "" : "s"} voor “{query.trim()}” — over
+            alle maanden.
+          </p>
+        ) : (
+          months.length > 0 && (
+            <div
+              className="flex overflow-x-auto"
+              role="tablist"
+              aria-label="Maand"
+            >
+              {monthsInYear.map((item) => {
+                const pending = pendingByMonth.get(item.key) ?? 0;
+                const active = month === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    role="tab"
+                    data-dj-fee-month=""
+                    aria-selected={active}
+                    onClick={() => setMonth(item.key)}
+                    className={cn(
+                      "group relative flex min-w-[5.5rem] shrink-0 flex-1 flex-col items-start gap-1 border-r border-border px-3 pt-2.5 pb-3 text-left transition-colors last:border-r-0",
+                      active
+                        ? "bg-accent text-accent-contrast"
+                        : "text-text-muted hover:bg-surface-hover hover:text-text",
+                    )}
+                  >
+                    <span className="th-sticker text-[10px] opacity-60">
+                      {item.key.slice(5, 7)}
+                    </span>
+                    <span className="th-poster-title text-2xl capitalize">
+                      {item.label.slice(0, 3)}
+                    </span>
+                    <span className="absolute top-2 right-2">
+                      <PendingDot count={pending} />
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )
+        )}
+      </div>
 
       {error && (
-        <p className="mb-4 border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
+        <p className="border-[1.5px] border-danger bg-danger-soft px-3 py-2 text-sm text-danger">
           {error}
         </p>
       )}
 
       {filtered.length === 0 ? (
-        <div className="border border-border bg-surface px-4 py-8 text-sm text-text-muted">
-          {query.trim()
-            ? `Geen events of DJs gevonden voor “${query.trim()}”.`
-            : "Geen events in deze maand."}
+        <div className="border-[1.5px] border-dashed border-border px-4 py-10 text-center">
+          <p className="th-poster-title text-3xl text-text-dim">Leeg</p>
+          <p className="mt-2 text-sm text-text-muted">
+            {searching
+              ? `Geen events of DJs gevonden voor “${query.trim()}”.`
+              : "Geen events in deze maand."}
+          </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-5 pr-1 pb-1">
           {filtered.map((event) => (
             <EventCard
               key={event.id}
               event={event}
+              showYear={searching}
               focused={event.id === focusEditionId}
               busyId={busyId}
               onFeeChange={(artist, feeAmount) =>
@@ -488,6 +541,7 @@ export function DjFeesWorkbench({
 
 function EventCard({
   event,
+  showYear,
   focused,
   busyId,
   onFeeChange,
@@ -496,6 +550,7 @@ function EventCard({
   onAdd,
 }: {
   event: DjFeeEventView;
+  showYear?: boolean;
   focused?: boolean;
   busyId: string | null;
   onFeeChange: (artist: DjFeeArtistView, feeAmount: number | null) => void;
@@ -505,6 +560,11 @@ function EventCard({
 }) {
   const [draft, setDraft] = useState("");
   const adding = busyId === event.id;
+  const stub = stubParts(event.day);
+  const missing = eventMissingCount(event);
+  const total = event.artists.length;
+  const done = total - missing;
+  const complete = total > 0 && !eventNeedsFees(event);
   const sourceHint =
     event.artistsSource === "resident_advisor"
       ? "Line-up uit Resident Advisor"
@@ -513,147 +573,157 @@ function EventCard({
         : "Nog geen line-up — voeg DJs zelf toe";
 
   return (
-    <section
+    <article
       id={`dj-fee-${event.id}`}
-      className={cn(
-        "scroll-mt-24 border border-border bg-surface",
-        focused && "ring-1 ring-text",
-      )}
+      data-focused={focused ? "true" : undefined}
+      className="th-ticket grid scroll-mt-24 grid-cols-1 sm:grid-cols-[6.5rem_minmax(0,1fr)]"
     >
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
-        <div className="min-w-0">
-          <p className="text-xs tracking-wide text-text-dim uppercase">
-            {formatTicketSheetDate(event.day)}
-          </p>
-          <h2 className="mt-0.5 font-medium text-text">
-            {displayEditionName(event.name)}
-          </h2>
-          <p className="mt-1 text-xs text-text-dim">{sourceHint}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {eventNeedsFees(event) && (
-            <span className="bg-highlight px-2 py-0.5 text-[11px] font-medium text-black">
-              {eventMissingCount(event)} open
-            </span>
-          )}
-          <span className="text-sm tabular-nums text-text-muted">
-            {formatDjFeeSpend(event.spend)}
+      {/* Stub: the date, poster style */}
+      <div className="th-ticket-stub">
+        <div className="flex items-baseline gap-3 px-4 py-3 sm:sticky sm:top-6 sm:flex-col sm:items-center sm:gap-0 sm:px-2 sm:py-5 sm:text-center">
+          <span className="th-sticker text-xs opacity-70">{stub.weekday}</span>
+          <span className="th-poster-title text-4xl sm:mt-1 sm:text-6xl">{stub.day}</span>
+          <span className="th-sticker text-sm sm:mt-1">
+            {stub.month}
+            {showYear && <span className="opacity-60"> ’{stub.year.slice(2)}</span>}
           </span>
         </div>
-      </header>
+      </div>
 
-      <div className="max-w-full overflow-x-auto">
-        <div className="w-full min-w-[44rem]">
-          <div
-            className={cn(
-              DJ_FEE_ROW,
-              "text-[11px] tracking-wider text-text-dim uppercase",
-            )}
-          >
-            <div className="min-w-0 flex-1 px-4 py-2 font-medium">DJ</div>
-            <div
-              className={cn(
-                "flex shrink-0 items-center",
-                DJ_FEE_CONTROLS_W,
-              )}
-            >
-              <div className="w-[14rem] px-4 py-2 font-medium">Fee</div>
-              <div className="w-[9.5rem] px-4 py-2 font-medium">10HRS</div>
-              <div className="w-[4.75rem] px-4 py-2">
-                <span className="sr-only">Acties</span>
-              </div>
-            </div>
+      <div className="min-w-0">
+        <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-4 pt-4 pb-3 sm:px-5">
+          <div className="min-w-0">
+            <h2 className="th-poster-title text-2xl leading-[0.95] break-words text-text sm:text-3xl">
+              {displayEditionName(event.name)}
+            </h2>
+            <p className="mt-1.5 text-xs text-text-dim">{sourceHint}</p>
           </div>
-          {event.artists.length === 0 && (
-            <p className="border-t border-border/70 px-4 py-3 text-sm text-text-muted">
-              Nog geen DJs op dit event.
-            </p>
+          <div className="flex items-center gap-3">
+            {complete ? (
+              <span className="th-sticker inline-flex items-center gap-1 border-[1.5px] border-success px-2 py-1 text-[11px] text-success">
+                <Check className="size-3" strokeWidth={3} aria-hidden />
+                Compleet
+              </span>
+            ) : missing > 0 ? (
+              <span className="th-sticker -rotate-2 bg-highlight px-2 py-1 text-[11px] text-black">
+                {missing} open
+              </span>
+            ) : null}
+            <span className="th-num text-3xl leading-none text-text">
+              {formatDjFeeSpend(event.spend)}
+            </span>
+          </div>
+        </header>
+
+        {/* Progress: how many of the line-up have a fee */}
+        {total > 0 && (
+          <div className="flex items-center gap-3 px-4 pb-3 sm:px-5">
+            <div className="h-1 flex-1 bg-border/60" aria-hidden>
+              <div
+                className="h-full bg-text transition-[width] duration-300"
+                style={{ width: `${(done / total) * 100}%` }}
+              />
+            </div>
+            <span className="text-[11px] text-text-dim tabular-nums">
+              {done}/{total} ingevuld
+            </span>
+          </div>
+        )}
+
+        <div
+          className={cn(
+            DJ_FEE_GRID,
+            "hidden border-t-[1.5px] border-border-strong px-4 py-1.5 sm:grid sm:px-5",
           )}
+        >
+          <span className="th-sticker text-[11px] text-text-dim">DJ</span>
+          <span className="th-sticker text-[11px] text-text-dim">Fee</span>
+          <span className="th-sticker text-center text-[11px] text-text-dim">Set</span>
+          <span className="sr-only">Acties</span>
+        </div>
+
+        {total === 0 && (
+          <p className="border-t border-border px-4 py-4 text-sm text-text-muted sm:px-5">
+            Nog geen DJs op dit event.
+          </p>
+        )}
+
+        <ul>
           {event.artists.map((artist) => {
             const hint = sourceLabel(artist.source);
             const busy = busyId === artist.id;
             return (
-              <div
+              <li
                 key={artist.id}
-                className={cn(DJ_FEE_ROW, "border-t border-border/70 text-sm")}
+                className={cn(
+                  DJ_FEE_GRID,
+                  "group border-t border-border px-4 py-2.5 transition-colors hover:bg-surface-hover sm:px-5",
+                )}
               >
-                <div className="min-w-0 flex-1 px-4 py-2.5">
-                  <div className="flex min-w-0 items-baseline gap-2">
-                    <span className="truncate font-medium">{artist.name}</span>
-                    {hint && (
-                      <span className="shrink-0 text-[10px] tracking-wide text-text-dim uppercase">
-                        {hint}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div
-                  className={cn(
-                    "flex shrink-0 items-center",
-                    DJ_FEE_CONTROLS_W,
+                <div className="col-span-3 flex min-w-0 items-baseline gap-2 sm:col-span-1">
+                  <span className="th-sticker truncate text-lg tracking-[0.03em] text-text">
+                    {artist.name}
+                  </span>
+                  {hint && (
+                    <span className="shrink-0 border border-border px-1 py-px text-[9px] font-semibold tracking-[0.1em] text-text-dim uppercase">
+                      {hint}
+                    </span>
                   )}
-                >
-                  <div className="w-[14rem] px-4 py-2.5">
-                    <DjFeeAmountInput
-                      value={artist.feeAmount}
-                      legacyRange={artist.feeRange}
-                      disabled={busy}
-                      label={`Fee voor ${artist.name}`}
-                      onChange={(feeAmount) => onFeeChange(artist, feeAmount)}
-                    />
-                  </div>
-                  <div className="w-[9.5rem] px-4 py-2.5">
-                    <TenHourToggle
-                      value={artist.isTenHour}
-                      disabled={busy}
-                      onToggle={() => onTenHourToggle(artist)}
-                    />
-                  </div>
-                  <div className="w-[4.75rem] px-4 py-2.5 text-right">
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => onRemove(artist)}
-                      className="inline-flex items-center gap-1 text-xs text-text-dim hover:text-danger"
-                      aria-label={`${artist.name} verwijderen`}
-                    >
-                      <Trash2 className="size-3.5" />
-                      Weg
-                    </button>
-                  </div>
                 </div>
-              </div>
+                <DjFeeAmountInput
+                  value={artist.feeAmount}
+                  legacyRange={artist.feeRange}
+                  disabled={busy}
+                  label={`Fee voor ${artist.name}`}
+                  onChange={(feeAmount) => onFeeChange(artist, feeAmount)}
+                />
+                <TenHourToggle
+                  value={artist.isTenHour}
+                  disabled={busy}
+                  onToggle={() => onTenHourToggle(artist)}
+                />
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onRemove(artist)}
+                  title={`${artist.name} verwijderen`}
+                  aria-label={`${artist.name} verwijderen`}
+                  className="inline-flex size-8 items-center justify-center justify-self-end text-text-dim transition-[color,opacity] hover:text-danger focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                >
+                  <X className="size-4" />
+                </button>
+              </li>
             );
           })}
-        </div>
-      </div>
+        </ul>
 
-      <form
-        className="flex flex-wrap gap-2 border-t border-border px-4 py-3"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          const name = draft.trim();
-          if (!name) return;
-          const ok = await onAdd(name);
-          if (ok) setDraft("");
-        }}
-      >
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="DJ toevoegen…"
-          aria-label={`DJ toevoegen aan ${displayEditionName(event.name)}`}
-          className="min-w-[12rem] flex-1 border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-text"
-        />
-        <button
-          type="submit"
-          disabled={adding || !draft.trim()}
-          className="inline-flex items-center gap-1.5 bg-accent px-3 py-2 text-sm text-accent-contrast disabled:opacity-50"
+        <form
+          className="flex gap-2 border-t-[1.5px] border-dashed border-border px-4 py-3 sm:px-5"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const name = draft.trim();
+            if (!name) return;
+            const ok = await onAdd(name);
+            if (ok) setDraft("");
+          }}
         >
-          <Plus className="size-3.5" />
-          Toevoegen
-        </button>
-      </form>
-    </section>
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="+ DJ toevoegen…"
+            aria-label={`DJ toevoegen aan ${displayEditionName(event.name)}`}
+            className="min-w-0 flex-1 border-b-[1.5px] border-transparent bg-transparent px-1 py-1.5 text-sm outline-none placeholder:text-text-dim focus:border-border-strong"
+          />
+          <button
+            type="submit"
+            disabled={adding || !draft.trim()}
+            className="th-sticker inline-flex items-center gap-1.5 bg-accent px-3 py-2 text-xs text-accent-contrast transition-opacity disabled:opacity-30"
+          >
+            <Plus className="size-3.5" strokeWidth={2.5} />
+            Toevoegen
+          </button>
+        </form>
+      </div>
+    </article>
   );
 }

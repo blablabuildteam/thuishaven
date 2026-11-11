@@ -54,19 +54,21 @@ export function DjFeeAmountInput({
   }
 
   return (
-    <div className="w-full">
+    <div className="relative w-full">
       <div
         className={cn(
-          "flex w-full items-center border bg-bg text-sm focus-within:border-text",
+          "flex h-8 w-full items-center border-[1.5px] transition-colors focus-within:border-border-strong",
           invalid
             ? "border-danger"
-            : value == null
-              ? "border-highlight"
-              : "border-border",
+            : value != null
+              ? "border-border bg-bg"
+              : legacy
+                ? "border-dashed border-border-strong/50 bg-bg"
+                : "th-marker border-transparent",
           disabled && "opacity-60",
         )}
       >
-        <span className="pl-2.5 text-text-dim" aria-hidden>
+        <span className="th-num pl-2 text-sm text-text-dim" aria-hidden>
           €
         </span>
         <input
@@ -90,14 +92,17 @@ export function DjFeeAmountInput({
               e.currentTarget.blur();
             }
           }}
-          className="w-full min-w-0 bg-transparent px-1.5 py-1 tabular-nums outline-none placeholder:text-text-dim"
+          className="th-num w-full min-w-0 bg-transparent px-1.5 text-lg outline-none placeholder:font-sans placeholder:text-xs placeholder:font-medium placeholder:text-text-muted"
         />
       </div>
       {invalid ? (
         <p className="mt-0.5 text-[10px] text-danger">Alleen een bedrag, bv. 1.250</p>
       ) : legacy ? (
-        <p className="mt-0.5 text-[10px] text-text-dim">
-          Was range {legacy.label} — vul het bedrag in
+        <p
+          className="mt-0.5 truncate text-[10px] text-text-dim"
+          title={`Was range ${legacy.label} — vul het bedrag in`}
+        >
+          Oude range — vul exact bedrag in
         </p>
       ) : null}
     </div>

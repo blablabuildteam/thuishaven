@@ -89,7 +89,7 @@ export function DjFeesExport({
         type="button"
         onClick={openPicker}
         disabled={events.length === 0}
-        className="inline-flex shrink-0 items-center gap-2 border border-border bg-surface px-3 py-2.5 text-sm hover:bg-surface-hover disabled:opacity-50"
+        className="th-sticker inline-flex shrink-0 items-center gap-2 border-[1.5px] border-border-strong bg-surface px-3 py-2.5 text-xs transition-colors hover:bg-accent hover:text-accent-contrast disabled:opacity-50"
       >
         <Download className="size-4" aria-hidden />
         Exporteren

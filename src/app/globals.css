@@ -740,3 +740,131 @@ html.dark .wx-ideal {
 }
 
 
+
+/* —— DJ-fees: poster / ticket styling (pilot for the new look) —— */
+.th-poster-band {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+/* Sunburst rays like the thuishaven.nl hero, radiating from bottom-right */
+.th-poster-band::before {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  z-index: -1;
+  background: repeating-conic-gradient(
+    from 0deg at 82% 78%,
+    transparent 0deg 5deg,
+    color-mix(in srgb, var(--accent-contrast) 7%, transparent) 5deg 10deg
+  );
+  mask-image: radial-gradient(circle at 82% 78%, #000 0%, transparent 70%);
+}
+
+.th-poster-band::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: var(--grain);
+  opacity: 0.08;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+.th-poster-title {
+  font-family: var(--font-display), "Arial Narrow", sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  line-height: 0.82;
+  letter-spacing: -0.01em;
+}
+
+.th-num {
+  font-family: var(--font-display), "Arial Narrow", sans-serif;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+/* Event “ticket”: hard edge + offset shadow, perforated stub */
+.th-ticket {
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface);
+  box-shadow: 4px 4px 0 0 var(--border-strong);
+}
+
+.th-ticket[data-focused="true"] {
+  box-shadow: 6px 6px 0 0 var(--highlight);
+}
+
+.th-ticket-stub {
+  position: relative;
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+/* Punched holes on the stub edge */
+.th-ticket-stub::before,
+.th-ticket-stub::after {
+  content: "";
+  position: absolute;
+  right: -7px;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1.5px solid var(--border-strong);
+}
+.th-ticket-stub::before {
+  top: -7px;
+}
+.th-ticket-stub::after {
+  bottom: -7px;
+}
+
+/* Highlighter-marker fill for fees still to fill in */
+.th-marker {
+  background: color-mix(in srgb, var(--highlight) 38%, var(--surface));
+}
+html.dark .th-marker {
+  background: color-mix(in srgb, var(--highlight) 12%, var(--surface));
+}
+
+.th-sticker {
+  font-family: var(--font-display), "Arial Narrow", sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
+@media (max-width: 639px) {
+  .th-ticket-stub::before,
+  .th-ticket-stub::after {
+    display: none;
+  }
+}
+
+/* System status notice (components/system/system-health.tsx) */
+@keyframes system-notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.system-notice-in {
+  animation: system-notice-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .system-notice-in {
+    animation: none;
+  }
+}
