@@ -10,9 +10,11 @@ export const maxDuration = 120;
 
 /**
  * GET /api/cron/system-health
- * Hourly: re-check every integration (live probes, cron runs, token expiry)
- * and mail once when something breaks or recovers. Runs even when nobody has
- * the dashboard open, so a dead sync is noticed within the hour.
+ * Daily at 07:20 UTC (08:20/09:20 Amsterdam, after the morning syncs):
+ * re-check every integration (live probes, cron runs, token expiry) and mail
+ * once when something breaks or recovers. Runs even when nobody has the
+ * dashboard open. The in-app notice does not wait for this: it re-checks
+ * whenever someone has the app open.
  */
 export async function GET(request: Request) {
   if (!isCronAuthorized(request)) {

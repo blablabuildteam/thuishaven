@@ -18,6 +18,30 @@ const POLL_MS = 5 * 60 * 1000;
 /** How long the banner stays open before it folds into the "!" button. */
 const BANNER_MS = 8000;
 const SEEN_KEY = "th-system-notice-seen";
+const SIMULATE_KEY = "th-system-simulate";
+
+/**
+ * Local testing: open any page with ?simulateHealth=weeztix:down (or
+ * "weeztix,instagram:stale"); it sticks for the tab until ?simulateHealth=off.
+ * The API ignores it outside `next dev`.
+ */
+function readSimulation(): string | null {
+  try {
+    const fromUrl = new URLSearchParams(window.location.search).get("simulateHealth");
+    if (fromUrl === "off") {
+      window.sessionStorage.removeItem(SIMULATE_KEY);
+      window.sessionStorage.removeItem(SEEN_KEY);
+      return null;
+    }
+    if (fromUrl) {
+      window.sessionStorage.setItem(SIMULATE_KEY, fromUrl);
+      return fromUrl;
+    }
+    return window.sessionStorage.getItem(SIMULATE_KEY);
+  } catch {
+    return null;
+  }
+}
 
 /* ─── Data ────────────────────────────────────────────────────────────── */
 
@@ -33,7 +57,11 @@ export function SystemHealthProvider({ children }: { children: React.ReactNode }
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/system/health", { cache: "no-store" });
+      const simulate = readSimulation();
+      const url = simulate
+        ? `/api/system/health?simulate=${encodeURIComponent(simulate)}`
+        : "/api/system/health";
+      const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) return;
       setHealth((await res.json()) as SystemHealth);
     } catch {
