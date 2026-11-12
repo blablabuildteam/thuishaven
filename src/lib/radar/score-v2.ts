@@ -67,6 +67,8 @@ export function computeScoreV2(input: {
   sharedHomeVenueHits?: number;
   nlAudienceScore?: number | null;
   nlGigShare?: number | null;
+  /** Max views of a mixseries set in the last 180 days. */
+  mixseriesViews?: number | null;
 }): ScoreV2Result {
   const { recent, previous } = input;
   const reasons: string[] = [];
@@ -121,12 +123,22 @@ export function computeScoreV2(input: {
     }
   }
 
+  // Additive boost so artists without a set don't lose points: 1k views → 0, 100k+ → full.
+  const mixViews = input.mixseriesViews ?? 0;
+  const mixScore = mixViews > 0 ? clamp01((Math.log10(mixViews) - 3) / 2) : 0;
+  if (mixViews >= 20_000) {
+    reasons.push(
+      `Mixseries-set ${Math.round(mixViews / 1000).toLocaleString("nl-NL")}k views`,
+    );
+  }
+
   const momentum = round1(
     clamp01(
       volumeScore * 0.45 +
         billImprove * 0.2 +
         intlScore * 0.15 +
-        raGrowth * 0.2,
+        raGrowth * 0.2 +
+        mixScore * 0.15,
     ) * 100,
   );
 
@@ -256,6 +268,8 @@ export function computeScoreV2(input: {
       earlyShare,
       sizePenalty,
       raGrowth,
+      mixseriesViews: mixViews || null,
+      mixScore,
       raSizePenalty,
       agencyPenalty,
       followers,
@@ -509,6 +523,27 @@ async function loadLatestMetrics(
   return out;
 }
 
+async function loadMixseriesViews(
+  artistIds: string[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (artistIds.length === 0) return out;
+  const rows = await getDb().execute(sql`
+    select artist_id as "artistId", max(view_count)::int as views
+    from radar_mixseries_appearances
+    where artist_id in (${sql.join(
+      artistIds.map((id) => sql`${id}::uuid`),
+      sql`, `,
+    )})
+      and coalesce(published_at, created_at) >= now() - interval '180 days'
+    group by artist_id
+  `);
+  for (const r of rows as unknown as Array<{ artistId: string; views: number }>) {
+    if (r.views != null) out.set(r.artistId, Number(r.views));
+  }
+  return out;
+}
+
 export async function recomputeScoresBulk(
   artistIds: string[],
   options?: { persistSnapshotMinDelta?: number },
@@ -541,11 +576,12 @@ export async function recomputeScoresBulk(
     .from(radarArtists)
     .where(inArray(radarArtists.id, artistIds));
 
-  const [gigMap, homeCounts, sharedHits, metrics] = await Promise.all([
+  const [gigMap, homeCounts, sharedHits, metrics, mixViews] = await Promise.all([
     loadGigAggregates(artistIds, recentFrom, recentTo, prevFrom, prevTo),
     loadHomeGigCounts(artistIds),
     loadSharedHomeVenueHits(artistIds),
     loadLatestMetrics(artistIds),
+    loadMixseriesViews(artistIds),
   ]);
 
   let scored = 0;
@@ -576,6 +612,7 @@ export async function recomputeScoresBulk(
           sharedHomeVenueHits: sharedHits.get(artist.id) ?? 0,
           nlAudienceScore: num(artist.nlAudienceScore),
           nlGigShare: num(artist.nlGigShare),
+          mixseriesViews: mixViews.get(artist.id) ?? null,
         });
 
         const prevScore = num(artist.growthScore);

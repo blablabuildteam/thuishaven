@@ -25,11 +25,21 @@ export type RadarBadgeId =
   | "label"
   | "agency";
 
+export type RadarBadgeGroup = "groei" | "nederland" | "sets" | "profiel";
+
+export const RADAR_BADGE_GROUP_NL: Record<RadarBadgeGroup, string> = {
+  groei: "Groei",
+  nederland: "Nederland",
+  sets: "Sets",
+  profiel: "Profiel",
+};
+
 export type RadarBadgeDef = {
   id: RadarBadgeId;
   label: string;
   hint: string;
   tone: RadarBadgeTone;
+  group: RadarBadgeGroup;
 };
 
 export const RADAR_BADGES: RadarBadgeDef[] = [
@@ -38,72 +48,84 @@ export const RADAR_BADGES: RadarBadgeDef[] = [
     label: "Nieuw deze week",
     hint: "Afgelopen 7 dagen voor het eerst op de radar (na de eerste bulk-import).",
     tone: "new",
+    group: "groei",
   },
   {
     id: "debutant",
     label: "Debutant",
     hint: "Eerste RA-event minder dan 3 jaar geleden.",
     tone: "new",
+    group: "groei",
   },
   {
     id: "hot",
     label: "Momentum",
     hint: "Momentum ≥ 45 (top ±7%): meer gigs, hogere billing of meer landen dan vorig kwartaal.",
     tone: "hot",
+    group: "groei",
   },
   {
     id: "ra_groei",
     label: "RA-groei",
     hint: "RA-volgers groeien duidelijk sinds de vorige snapshot.",
     tone: "hot",
+    group: "groei",
   },
   {
     id: "venster",
     label: "Venster sluit",
     hint: "Momentum ≥ 40 maar bookability < 60: groeit hard, wordt duurder.",
     tone: "warn",
+    group: "groei",
   },
   {
     id: "groot",
     label: "Al groot",
     hint: "Bookability < 60: veel volgers/attending — waarschijnlijk duur of laat.",
     tone: "muted",
+    group: "profiel",
   },
   {
     id: "nl",
     label: "NL-crowd",
     hint: "NL-audience ≥ 55: veel NL-gigs, woont in NL of RA-regio’s in NL.",
     tone: "info",
+    group: "nederland",
   },
   {
     id: "nl_gig",
     label: "Speelt in NL",
     hint: "Aankomende gig in Nederland (komende 45 dagen).",
     tone: "info",
+    group: "nederland",
   },
   {
     id: "mixseries",
     label: "Mixseries",
     hint: "Set op Boiler Room, HÖR, Dekmantel, Cercle, Mixmag of triple j.",
     tone: "info",
+    group: "sets",
   },
   {
     id: "viral",
     label: "Viral set",
     hint: "Mixseries-set met ≥ 50.000 views.",
     tone: "hot",
+    group: "sets",
   },
   {
     id: "label",
     label: "Label",
     hint: "Heeft labels in het RA-profiel.",
     tone: "muted",
+    group: "profiel",
   },
   {
     id: "agency",
     label: "Agency",
     hint: "Boekingsbureau in RA-bio — vaak duurder / minder direct.",
     tone: "muted",
+    group: "profiel",
   },
 ];
 

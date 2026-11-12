@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { ArtistDossier } from "@/components/radar/artist-dossier";
-import { getRadarArtist } from "@/lib/radar/artists";
+import { getRadarArtist, getRadarArtistBadges } from "@/lib/radar/artists";
 
 export const dynamic = "force-dynamic";
 
@@ -22,11 +22,15 @@ export default async function RadarArtistDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const dossier = await getRadarArtist(id);
+  const [dossier, badges] = await Promise.all([
+    getRadarArtist(id),
+    getRadarArtistBadges(id),
+  ]);
   if (!dossier) notFound();
 
   return (
     <ArtistDossier
+      badges={badges}
       artist={{
         id: dossier.artist.id,
         name: dossier.artist.name,

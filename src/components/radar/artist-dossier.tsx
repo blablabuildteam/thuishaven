@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { RadarInfoTip } from "@/components/radar/radar-info-tip";
+import { RadarBadge, RadarBadgePill } from "@/components/radar/radar-badge";
+import type { RadarBadgeId } from "@/lib/radar/badge-defs";
 import {
   followerDeltas,
   formatDelta,
@@ -66,6 +68,7 @@ type Props = {
     sourceUrl: string | null;
     source?: string | null;
   }>;
+  badges?: RadarBadgeId[];
   mixseries?: Array<{
     id: string;
     channelTitle: string | null;
@@ -85,6 +88,7 @@ export function ArtistDossier({
   recentMetrics,
   recentGigs,
   mixseries = [],
+  badges = [],
 }: Props) {
   const router = useRouter();
   const [notes, setNotes] = useState(artist.notes ?? "");
@@ -136,11 +140,6 @@ export function ArtistDossier({
           >
             ← Artiesten
           </Link>
-          {(artist.homeGigCount ?? 0) > 0 ? (
-            <p className="mt-1 text-xs text-text-dim">
-              Al bij Thuishaven ({artist.homeGigCount}×)
-            </p>
-          ) : null}
           {artist.residentCountry || artist.raFollowerCount != null ? (
             <p className="mt-1 text-xs text-text-muted">
               {[
@@ -161,6 +160,20 @@ export function ArtistDossier({
             via {artist.discoverySource}
             {artist.primaryGenre ? ` · ${artist.primaryGenre}` : ""}
           </p>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+              {(artist.homeGigCount ?? 0) > 0 ? (
+                <RadarBadgePill tone="home" title="Speelde al bij Thuishaven">
+                  Al bij Thuishaven {artist.homeGigCount}×
+                </RadarBadgePill>
+              ) : (
+                <RadarBadgePill tone="new" title="Nog nooit bij Thuishaven">
+                  Nieuw voor Thuishaven
+                </RadarBadgePill>
+              )}
+              {badges.map((b) => (
+                <RadarBadge key={b} id={b} />
+              ))}
+            </div>
           {artist.scoreReasons.length > 0 ? (
             <ul className="mt-3 space-y-1 text-sm text-text-muted">
               {artist.scoreReasons.map((r) => (

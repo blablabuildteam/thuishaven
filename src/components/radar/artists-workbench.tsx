@@ -11,10 +11,12 @@ import {
 import { RadarInfoTip } from "@/components/radar/radar-info-tip";
 import {
   RADAR_BADGES,
+  RADAR_BADGE_GROUP_NL,
   parseBadgeFilter,
   parseThuishavenFilter,
   serializeBadgeFilter,
   type RadarBadgeFilter,
+  type RadarBadgeGroup,
   type RadarBadgeId,
   type RadarThuishavenFilter,
 } from "@/lib/radar/badge-defs";
@@ -163,6 +165,67 @@ function BadgeRow({ a }: { a: Artist }) {
         <RadarBadge key={b} id={b} />
       ))}
     </div>
+  );
+}
+
+function Spotlight({ artists }: { artists: Artist[] }) {
+  return (
+    <section aria-label="Top 3" className="grid gap-3 md:grid-cols-3">
+      {artists.map((a, i) => {
+        const total = num(a.growthScore);
+        return (
+          <Link
+            key={a.id}
+            href={`/radar/artiesten/${a.id}`}
+            className={cn(
+              "group relative flex flex-col justify-between overflow-hidden border bg-surface p-4 transition-colors hover:border-accent",
+              i === 0 ? "border-accent" : "border-border",
+            )}
+          >
+            <span
+              aria-hidden
+              className="pointer-events-none absolute -top-4 right-2 font-display text-[6rem] leading-none text-text/5"
+            >
+              {i + 1}
+            </span>
+            <div className="relative">
+              <p className="text-[10px] font-medium tracking-[0.14em] text-text-dim uppercase">
+                #{i + 1} in deze selectie
+              </p>
+              <p className="mt-1 font-display text-2xl tracking-[0.02em] group-hover:underline">
+                {a.name}
+              </p>
+              <p className="mt-1 line-clamp-2 text-xs text-text-muted">
+                {a.scoreReasons?.[0] ?? a.discoverySource}
+              </p>
+            </div>
+            <div className="relative mt-4 flex items-end justify-between gap-3">
+              <div className="flex min-w-0 flex-wrap gap-1">
+                <HomeLine a={a} />
+                {a.badges.slice(0, 3).map((b) => (
+                  <RadarBadge key={b} id={b} />
+                ))}
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1.5">
+                <span
+                  className={cn(
+                    "font-display text-5xl leading-none tabular-nums",
+                    scoreTone(total),
+                  )}
+                >
+                  {total != null ? Math.round(total) : "—"}
+                </span>
+                <RadarScoreBars
+                  momentum={num(a.momentumScore)}
+                  fit={num(a.fitScore)}
+                  bookability={num(a.bookabilityScore)}
+                />
+              </div>
+            </div>
+          </Link>
+        );
+      })}
+    </section>
   );
 }
 
@@ -315,155 +378,175 @@ export function ArtistsWorkbench({
 
   return (
     <div className="space-y-4">
-      {/* Thuishaven segment */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div
-          role="tablist"
-          aria-label="Thuishaven"
-          className="inline-flex border border-border"
-        >
-          {TH_OPTIONS.map((o) => (
-            <button
-              key={o.value}
-              type="button"
-              role="tab"
-              aria-selected={th === o.value}
-              onClick={() => setTh(o.value)}
-              className={cn(
-                "px-3 py-1.5 text-sm transition-colors",
-                th === o.value
-                  ? "bg-accent text-accent-contrast"
-                  : "text-text-muted hover:bg-surface-hover hover:text-text",
-              )}
-            >
-              {o.label}
-              {thCounts?.[o.value] != null ? (
-                <span className="ml-1.5 tabular-nums opacity-70">
-                  {fmtCompact(thCounts[o.value])}
-                </span>
-              ) : null}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2">
+      <section className="border border-border bg-surface">
+        {/* Row 1: Thuishaven + zoeken */}
+        <div className="flex flex-wrap items-center gap-3 border-b border-border p-3 sm:p-4">
+          <div
+            role="tablist"
+            aria-label="Thuishaven"
+            className="inline-flex border border-border-strong bg-bg"
+          >
+            {TH_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                role="tab"
+                aria-selected={th === o.value}
+                onClick={() => setTh(o.value)}
+                className={cn(
+                  "px-3.5 py-2 text-sm font-medium transition-colors",
+                  th === o.value
+                    ? "bg-accent text-accent-contrast"
+                    : "text-text-muted hover:bg-surface-hover hover:text-text",
+                )}
+              >
+                {o.label}
+                {thCounts?.[o.value] != null ? (
+                  <span className="ml-1.5 tabular-nums opacity-70">
+                    {fmtCompact(thCounts[o.value])}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
           <RadarInfoTip topic="nieuw" />
-          <button
-            type="button"
-            onClick={() => setShowAdd((v) => !v)}
-            className="border border-border px-3 py-1.5 text-sm hover:border-accent"
-          >
-            + Artiest
-          </button>
-        </div>
-      </div>
-
-      {/* Presets */}
-      <div className="flex flex-wrap gap-2">
-        {PRESETS.map((p) => {
-          const on = presetActive(p);
-          return (
-            <button
-              key={p.label}
-              type="button"
-              title={p.hint}
-              onClick={() => (on ? setBadges(EMPTY) : setBadges(p.filter, p.sort))}
-              className={cn(
-                "border px-3 py-1.5 text-sm transition-colors",
-                on
-                  ? "border-accent bg-accent-soft text-text"
-                  : "border-border bg-surface text-text-muted hover:border-accent hover:text-text",
-              )}
-            >
-              {p.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Badge chips */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {RADAR_BADGES.map((b) => {
-          const on = active.include.includes(b.id);
-          const off = active.exclude.includes(b.id);
-          const count = badgeCounts?.[b.id];
-          return (
-            <button
-              key={b.id}
-              type="button"
-              title={`${b.hint}\nKlik: alleen deze · nogmaals: uitsluiten · nogmaals: uit`}
-              onClick={() => cycleBadge(b.id)}
-              disabled={!on && !off && count === 0}
-              className={cn(
-                "inline-flex items-center gap-1.5 border px-2 py-1 text-xs transition-colors disabled:opacity-35",
-                on && "border-text bg-text text-bg",
-                off && "border-danger text-danger line-through",
-                !on &&
-                  !off &&
-                  "border-border text-text-muted hover:border-text hover:text-text",
-              )}
-            >
-              {off ? "zonder " : ""}
-              {b.label}
-              {count != null && !off ? (
-                <span className="tabular-nums opacity-60 no-underline">
-                  {fmtCompact(count)}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-        {activeCount > 0 ? (
-          <button
-            type="button"
-            onClick={() => setBadges(EMPTY)}
-            className="px-2 py-1 text-xs text-text-dim underline hover:text-text"
-          >
-            Wis filters
-          </button>
-        ) : null}
-      </div>
-
-      {/* Search / status / sort */}
-      <div className="flex flex-wrap items-end gap-3 border-t border-border pt-3">
-        <label className="min-w-[12rem] flex-1 text-sm">
-          <span className="sr-only">Zoeken</span>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Zoek artiest…"
-            className="w-full border border-border bg-surface px-2 py-2"
+            aria-label="Zoeken"
+            className="min-w-[10rem] flex-1 border border-border bg-bg px-3 py-2 text-sm"
           />
-        </label>
-        <select
-          aria-label="Status"
-          value={status}
-          onChange={(e) => setParam("status", e.target.value)}
-          className="border border-border bg-surface px-2 py-2 text-sm"
-        >
-          <option value="all">Alle statussen</option>
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {RADAR_ARTIST_STATUS_NL[s]}
-            </option>
+          <select
+            aria-label="Status"
+            value={status}
+            onChange={(e) => setParam("status", e.target.value)}
+            className="border border-border bg-bg px-2 py-2 text-sm"
+          >
+            <option value="all">Alle statussen</option>
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {RADAR_ARTIST_STATUS_NL[s]}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Sorteren"
+            value={sort}
+            onChange={(e) => setParam("sort", e.target.value)}
+            className="border border-border bg-bg px-2 py-2 text-sm"
+          >
+            {SORTS.map((s) => (
+              <option key={s.value} value={s.value}>
+                Sorteer: {s.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => setShowAdd((v) => !v)}
+            className="border border-border px-3 py-2 text-sm hover:border-accent"
+          >
+            + Artiest
+          </button>
+        </div>
+
+        {/* Row 2: snelle selecties */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-border p-3 sm:px-4">
+          <span className="mr-1 text-[10px] font-medium tracking-[0.14em] text-text-dim uppercase">
+            Snel
+          </span>
+          {PRESETS.map((p) => {
+            const on = presetActive(p);
+            return (
+              <button
+                key={p.label}
+                type="button"
+                title={p.hint}
+                onClick={() => (on ? setBadges(EMPTY) : setBadges(p.filter, p.sort))}
+                className={cn(
+                  "border px-3 py-1.5 text-sm font-medium transition-colors",
+                  on
+                    ? "border-accent bg-accent text-accent-contrast"
+                    : "border-border-strong bg-bg text-text hover:border-accent",
+                )}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Row 3: badge-filters per groep */}
+        <div className="grid gap-x-6 gap-y-3 p-3 sm:grid-cols-2 sm:px-4 xl:grid-cols-4">
+          {(Object.keys(RADAR_BADGE_GROUP_NL) as RadarBadgeGroup[]).map((g) => (
+            <div key={g}>
+              <p className="mb-1.5 text-[10px] font-medium tracking-[0.14em] text-text-dim uppercase">
+                {RADAR_BADGE_GROUP_NL[g]}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {RADAR_BADGES.filter((b) => b.group === g).map((b) => {
+                  const on = active.include.includes(b.id);
+                  const off = active.exclude.includes(b.id);
+                  const count = badgeCounts?.[b.id];
+                  return (
+                    <button
+                      key={b.id}
+                      type="button"
+                      title={`${b.hint}\nKlik: alleen deze · nogmaals: uitsluiten · nogmaals: uit`}
+                      onClick={() => cycleBadge(b.id)}
+                      disabled={!on && !off && count === 0}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 border px-2 py-1 text-xs transition-colors disabled:opacity-35",
+                        on && "border-text bg-text text-bg",
+                        off && "border-danger bg-danger-soft text-danger",
+                        !on &&
+                          !off &&
+                          "border-border bg-bg text-text-muted hover:border-text hover:text-text",
+                      )}
+                    >
+                      {on ? "✓ " : off ? "✕ " : ""}
+                      {b.label}
+                      {count != null && !off ? (
+                        <span className="tabular-nums opacity-60">
+                          {fmtCompact(count)}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           ))}
-        </select>
-        <select
-          aria-label="Sorteren"
-          value={sort}
-          onChange={(e) => setParam("sort", e.target.value)}
-          className="border border-border bg-surface px-2 py-2 text-sm"
-        >
-          {SORTS.map((s) => (
-            <option key={s.value} value={s.value}>
-              Sorteer: {s.label}
-            </option>
-          ))}
-        </select>
-        <p className="pb-2 text-xs text-text-muted">
-          {total.toLocaleString("nl-NL")} resultaten
-          {pending ? " · laden…" : ""}
-        </p>
-      </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-bg-elevated/40 px-3 py-2 text-xs sm:px-4">
+          <p className="text-text-muted">
+            <span className="font-display text-base text-text tabular-nums">
+              {total.toLocaleString("nl-NL")}
+            </span>{" "}
+            artiesten
+            {activeCount > 0 ? " met deze filters" : ""}
+            {pending ? " · laden…" : ""}
+          </p>
+          <p className="text-text-dim">
+            Klik een filter: ✓ alleen deze · nogmaals ✕ uitsluiten · nogmaals uit
+            {activeCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => setBadges(EMPTY)}
+                className="ml-3 text-text underline"
+              >
+                Wis filters
+              </button>
+            ) : null}
+          </p>
+        </div>
+      </section>
+
+      {page === 1 && initial.length >= 3 && showRank ? (
+        <Spotlight artists={initial.slice(0, 3)} />
+      ) : null}
 
       {showAdd ? (
         <form

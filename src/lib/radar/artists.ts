@@ -282,6 +282,20 @@ export async function listRadarArtists(options?: {
   };
 }
 
+export async function getRadarArtistBadges(id: string): Promise<RadarBadgeId[]> {
+  if (!hasDatabase()) return [];
+  const select = Object.fromEntries(
+    RADAR_BADGES.map((b) => [b.id, sql<boolean>`(${badgePredicate(b.id)})`]),
+  ) as Record<RadarBadgeId, SQL<boolean>>;
+  const [row] = await getDb()
+    .select(select)
+    .from(radarArtists)
+    .where(eq(radarArtists.id, id))
+    .limit(1);
+  if (!row) return [];
+  return RADAR_BADGES.filter((b) => row[b.id] === true).map((b) => b.id);
+}
+
 export async function getRadarArtist(id: string): Promise<{
   artist: RadarArtistRow;
   profiles: RadarArtistProfile[];
