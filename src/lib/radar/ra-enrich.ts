@@ -9,6 +9,7 @@ import {
   upsertArtistProfile,
   upsertRadarArtist,
 } from "@/lib/radar/artists";
+import { detectHasAgency } from "@/lib/radar/booking-parse";
 import { withRetry } from "@/lib/radar/retry";
 import {
   radarArtistProfiles,
@@ -16,7 +17,6 @@ import {
   radarGigs,
 } from "@/lib/radar/schema";
 
-const AGENCY_RE = /agency|booking|management|@|mailto:/i;
 const STALE_MS = 7 * 24 * 60 * 60 * 1000;
 
 function handleFromUrl(url: string | null | undefined): string | null {
@@ -128,7 +128,7 @@ export async function enrichArtistsFromRa(options?: {
       }
       const a = profile.artist;
       const booking = a.bookingDetails?.trim() || null;
-      const hasAgency = Boolean(booking && AGENCY_RE.test(booking));
+      const hasAgency = detectHasAgency(booking);
       const country = a.residentCountry || a.countryName || null;
       const firstEventAt = a.firstEventDate
         ? new Date(a.firstEventDate)

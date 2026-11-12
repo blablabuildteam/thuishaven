@@ -52,6 +52,7 @@ export default async function RadarArtistDetailPage({
           null,
         homeGigCount: dossier.artist.homeGigCount,
         hasAgency: dossier.artist.hasAgency,
+        bookingDetails: dossier.artist.bookingDetails,
         raFollowerCount: dossier.artist.raFollowerCount,
         residentCountry: dossier.artist.residentCountry,
         nlAudienceScore: dossier.artist.nlAudienceScore,

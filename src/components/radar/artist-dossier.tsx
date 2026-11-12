@@ -8,6 +8,7 @@ import { RadarInfoTip } from "@/components/radar/radar-info-tip";
 import { RadarBadge, RadarBadgePill } from "@/components/radar/radar-badge";
 import { SocialChannelIcon } from "@/components/ui/social-channel-icon";
 import type { RadarBadgeId } from "@/lib/radar/badge-defs";
+import { parseBookingDetails } from "@/lib/radar/booking-parse";
 import {
   followerDeltas,
   formatDelta,
@@ -48,6 +49,7 @@ type Props = {
     growthBreakdown: Record<string, unknown> | null;
     homeGigCount?: number;
     hasAgency?: boolean;
+    bookingDetails?: string | null;
     raFollowerCount?: number | null;
     residentCountry?: string | null;
     nlAudienceScore?: string | null;
@@ -125,6 +127,7 @@ export function ArtistDossier({
     artist.nlGigShare != null && artist.nlGigShare !== ""
       ? Math.round(Number(artist.nlGigShare) * 100)
       : null;
+  const booking = parseBookingDetails(artist.bookingDetails);
 
   async function save(patch: Record<string, unknown>) {
     setBusy(true);
@@ -162,7 +165,11 @@ export function ArtistDossier({
                 artist.raFollowerCount != null
                   ? `${artist.raFollowerCount.toLocaleString("nl-NL")} RA-volgers`
                   : null,
-                artist.hasAgency ? "via boekingsbureau" : null,
+                artist.hasAgency || booking?.isAgency
+                  ? booking?.agencyName
+                    ? `via ${booking.agencyName}`
+                    : "via boekingsbureau"
+                  : null,
               ]
                 .filter(Boolean)
                 .join(" · ")}
@@ -276,6 +283,71 @@ export function ArtistDossier({
           </div>
         </dl>
       </div>
+
+      {booking ? (
+        <section className="border border-border bg-surface p-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h2 className="font-display text-lg tracking-[0.04em]">
+                {booking.isAgency ? "Boekingsbureau" : "Booking-contact"}
+              </h2>
+              <p className="mt-0.5 text-xs text-text-muted">
+                {booking.isAgency
+                  ? "Uit RA. Meestal via bureau boeken — vaak duurder / minder direct."
+                  : "Contactgegevens uit RA, lijkt geen bureau."}
+              </p>
+            </div>
+            {booking.isAgency ? (
+              <RadarBadgePill tone="muted">Boekingsbureau</RadarBadgePill>
+            ) : null}
+          </div>
+          {booking.agencyName ? (
+            <p className="mt-3 font-medium">{booking.agencyName}</p>
+          ) : null}
+          {(booking.emails.length > 0 || booking.urls.length > 0) && (
+            <ul className="mt-2 flex flex-wrap gap-2 text-sm">
+              {booking.emails.map((email) => (
+                <li key={email}>
+                  <a
+                    href={`mailto:${email}`}
+                    className="border border-border px-2 py-1 underline hover:border-text"
+                  >
+                    {email}
+                  </a>
+                </li>
+              ))}
+              {booking.urls.map((url) => (
+                <li key={url}>
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="border border-border px-2 py-1 underline hover:border-text"
+                  >
+                    Website ↗
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+          {!booking.agencyName &&
+          booking.emails.length === 0 &&
+          booking.urls.length === 0 ? (
+            <pre className="mt-2 whitespace-pre-wrap font-sans text-sm text-text-muted">
+              {booking.raw}
+            </pre>
+          ) : (
+            <details className="mt-3">
+              <summary className="cursor-pointer text-xs text-text-dim hover:text-text">
+                Ruwe RA-tekst
+              </summary>
+              <pre className="mt-1 whitespace-pre-wrap font-sans text-xs text-text-muted">
+                {booking.raw}
+              </pre>
+            </details>
+          )}
+        </section>
+      ) : null}
 
       <section className="border border-border bg-surface p-4">
         <div className="flex flex-wrap items-end justify-between gap-2">

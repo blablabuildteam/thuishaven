@@ -106,6 +106,7 @@ export async function listRadarArtists(options?: {
       or(
         sql`lower(${radarArtists.name}) like ${q}`,
         sql`${radarArtists.normalizedName} like ${q}`,
+        sql`lower(coalesce(${radarArtists.bookingDetails}, '')) like ${q}`,
       )!,
     );
   }

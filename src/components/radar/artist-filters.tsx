@@ -171,7 +171,7 @@ export function ArtistFilters({
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Zoek op artiestnaam…"
+            placeholder="Zoek artiest of boekingsbureau…"
             className="w-full border border-border bg-bg py-2.5 pr-9 pl-9 text-sm focus:border-text focus:outline-none"
           />
           {q ? (
