@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { Info } from "lucide-react";
-import { useId, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { radarScoreTopic } from "@/lib/radar/score-copy";
+import { cn } from "@/lib/utils";
 
 type Props = {
   /** Key from RADAR_SCORE_TOPICS, of custom short text via `text`. */
@@ -15,9 +16,11 @@ type Props = {
   className?: string;
   /** Larger clickable “Wat is dit?” style */
   withLabel?: boolean;
-  /** Anchor popover to the right (for right-aligned table headers). */
+  /** Preferred side; flips automatically near the viewport edge. */
   align?: "start" | "end";
 };
+
+type PanelPos = { top: number; left: number; width: number };
 
 export function RadarInfoTip({
   topic,
@@ -32,12 +35,66 @@ export function RadarInfoTip({
   const anchor = hrefTopic ?? topic;
   const panelId = useId();
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLSpanElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLSpanElement>(null);
+  const [pos, setPos] = useState<PanelPos | null>(null);
+  const hasContent = Boolean(tip || entry);
 
-  if (!tip && !entry) return null;
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: PointerEvent) {
+      const t = e.target as Node;
+      if (rootRef.current?.contains(t)) return;
+      if (panelRef.current?.contains(t)) return;
+      setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open || !btnRef.current) {
+      setPos(null);
+      return;
+    }
+    function place() {
+      const btn = btnRef.current;
+      if (!btn) return;
+      const r = btn.getBoundingClientRect();
+      const width = Math.min(288, window.innerWidth - 16);
+      const gap = 6;
+      let left = align === "end" ? r.right - width : r.left;
+      left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+      let top = r.bottom + gap;
+      const estimatedHeight = 140;
+      if (top + estimatedHeight > window.innerHeight - 8) {
+        top = Math.max(8, r.top - gap - estimatedHeight);
+      }
+      setPos({ top, left, width });
+    }
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open, align]);
+
+  if (!hasContent) return null;
 
   return (
-    <span className={`relative inline-flex items-center ${className}`}>
+    <span ref={rootRef} className={cn("relative inline-flex items-center", className)}>
       <button
+        ref={btnRef}
         type="button"
         title={tip}
         aria-label={tip || entry?.title || "Uitleg"}
@@ -57,13 +114,13 @@ export function RadarInfoTip({
           </span>
         ) : null}
       </button>
-      {open ? (
+      {open && pos ? (
         <span
+          ref={panelRef}
           id={panelId}
-          role="note"
-          className={`absolute top-full z-20 mt-1 w-[min(18rem,calc(100vw-2rem))] border border-border bg-surface px-3 py-2 text-left text-xs leading-relaxed font-normal tracking-normal text-text-muted normal-case shadow-sm ${
-            align === "end" ? "right-0" : "left-0"
-          }`}
+          role="dialog"
+          className="fixed z-50 border border-border bg-surface px-3 py-2 text-left text-xs leading-relaxed font-normal tracking-normal text-text-muted normal-case shadow-md"
+          style={{ top: pos.top, left: pos.left, width: pos.width }}
         >
           {entry ? (
             <>

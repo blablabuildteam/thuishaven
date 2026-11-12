@@ -88,7 +88,7 @@ export const RADAR_BADGES: RadarBadgeDef[] = [
   {
     id: "nl",
     label: "NL-crowd",
-    hint: "NL-audience ≥ 55: veel NL-gigs, woont in NL of RA-regio’s in NL.",
+    hint: "Waarschijnlijk Nederlands publiek (score ≥ 55): speelt vaak hier, woont in NL, of heeft NL als speelregio.",
     tone: "nl",
     group: "nederland",
   },
@@ -122,8 +122,8 @@ export const RADAR_BADGES: RadarBadgeDef[] = [
   },
   {
     id: "agency",
-    label: "Agency",
-    hint: "Boekingsbureau in RA-bio — vaak duurder / minder direct.",
+    label: "Boekingsbureau",
+    hint: "Heeft een agency/manager in de RA-bio. Vaak duurder en minder direct te boeken — daarom lager op bookability.",
     tone: "muted",
     group: "profiel",
   },
@@ -174,7 +174,7 @@ export const RADAR_PRESETS: RadarPreset[] = [
   {
     id: "nu_boeken",
     label: "Nu boeken",
-    hint: "Groeit, nog niet groot, geen agency",
+    hint: "Groeit, nog niet te groot, geen boekingsbureau",
     filter: { include: ["hot"], exclude: ["groot", "agency"] },
   },
   {

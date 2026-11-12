@@ -36,8 +36,8 @@ export const RADAR_SCORE_TOPICS: RadarScoreTopic[] = [
     id: "nl-audience",
     title: "NL-audience",
     short:
-      "Proxy voor Nederlands publiek: NL-gigs + resident + RA regions.",
-    body: "YouTube geeft geen publieksgeo voor andermans video’s. Daarom meten we NL-audience via booking-geografie: aandeel recente gigs in NL, resident country, en RA “regions most played”. Hoge score = waarschijnlijk NL-crowd → hogere fit.",
+      "Kans dat deze DJ een Nederlands publiek trekt (0–100). Hoog = vaak in NL spelen en/of hier wonen.",
+    body: "We kunnen niet zien uit welk land fans YouTube kijken. Daarom schatten we NL-publiek zo: (1) welk aandeel van recente gigs in Nederland is, (2) of RA zegt dat ze in NL wonen, (3) of hun “regions most played” NL-steden zijn. Score 70+ = sterke NL-fit. 67% naast de score is het aandeel recente gigs in NL.",
   },
   {
     id: "mixseries",
@@ -50,8 +50,8 @@ export const RADAR_SCORE_TOPICS: RadarScoreTopic[] = [
     id: "bookability",
     title: "Bookable",
     short:
-      "Nog te boeken? Te groot / agency / te hoge attending → lager.",
-    body: "Bookability daalt als Spotify/RA-volgers of attending te groot worden, als er een boekingsbureau in de RA-bio staat, of als iemand al ver in de discovery-keten zit. Lage bookability + hoge momentum = “venster sluit”: interessant, maar niet te lang wachten.",
+      "Nog makkelijk te boeken? Te groot of een boekingsbureau → lager.",
+    body: "Bookability daalt als RA-volgers of attending te groot worden, of als er een boekingsbureau (agency) in de RA-bio staat — dan ga je vaak via een manager en is het duurder. Lage bookability + hoge momentum = “venster sluit”: interessant, maar niet te lang wachten.",
   },
   {
     id: "velocity",

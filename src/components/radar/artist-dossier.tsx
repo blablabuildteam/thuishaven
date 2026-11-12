@@ -153,14 +153,16 @@ export function ArtistDossier({
           >
             ← Artiesten
           </Link>
-          {artist.residentCountry || artist.raFollowerCount != null ? (
+          {artist.residentCountry ||
+          artist.raFollowerCount != null ||
+          artist.hasAgency ? (
             <p className="mt-1 text-xs text-text-muted">
               {[
                 artist.residentCountry,
                 artist.raFollowerCount != null
                   ? `${artist.raFollowerCount.toLocaleString("nl-NL")} RA-volgers`
                   : null,
-                artist.hasAgency ? "agency" : null,
+                artist.hasAgency ? "via boekingsbureau" : null,
               ]
                 .filter(Boolean)
                 .join(" · ")}
