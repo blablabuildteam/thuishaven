@@ -326,7 +326,7 @@ function NavLink({
       <span
         aria-disabled="true"
         title="Nog niet beschikbaar"
-        className="th-sticker flex cursor-not-allowed items-center gap-2.5 px-2.5 py-2 text-[15px] tracking-[0.04em] text-text-dim opacity-60"
+        className="th-sticker flex cursor-not-allowed items-center gap-2.5 px-2.5 py-2 text-[15px] font-medium tracking-[0.05em] text-text-dim opacity-60"
       >
         {content}
       </span>
@@ -347,7 +347,7 @@ function NavLink({
       }}
       title={item.pending ? "Nog niet gekoppeld" : undefined}
       className={cn(
-        "th-sticker flex items-center gap-2.5 px-2.5 py-2 text-[15px] tracking-[0.04em] transition-colors",
+        "th-sticker flex items-center gap-2.5 px-2.5 py-2 text-[15px] font-medium tracking-[0.05em] transition-colors",
         item.pending
           ? "text-text-dim opacity-60 hover:bg-surface hover:opacity-80"
           : active
