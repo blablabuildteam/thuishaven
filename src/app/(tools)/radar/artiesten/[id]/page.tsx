@@ -57,6 +57,7 @@ export default async function RadarArtistDetailPage({
         handle: p.handle,
         externalId: p.externalId,
         lastSyncedAt: p.lastSyncedAt,
+        raw: (p.raw as Record<string, unknown> | null) ?? null,
       }))}
       recentMetrics={dossier.recentMetrics.map((m) => ({
         id: m.id,
@@ -74,6 +75,7 @@ export default async function RadarArtistDetailPage({
         billingIndex: g.billingIndex,
         isHeadliner: g.isHeadliner,
         sourceUrl: g.sourceUrl,
+        source: g.source,
       }))}
     />
   );

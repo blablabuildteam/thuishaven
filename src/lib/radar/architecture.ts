@@ -12,22 +12,22 @@
  * 3. instagram     — venue IG posts via Apify → parties (needs_review if weak)
  * 4. snowball      — artist pages → venue suggestions (hop 2)
  * 5. score v2      — momentum / fit / bookability + NL reasons
- * 6. spotify       — optional match → snapshots (bevestiging)
- * 7. social        — Apify follower refresh + artist caption gig-detectie
- * 8. alerts        — velocity, new_on_radar, breakthrough, window_closing
- * 9. digest        — maandag Brevo-mail (test → team@ tot RADAR_LIVE_DIGEST)
- * 10. feedback     — reden bij gepasseerd → radar_feedback
+ * 6. social        — Apify batch IG (shortlist/watching, stale>7d) + caption gigs
+ * 7. alerts        — velocity, new_on_radar, breakthrough, window_closing
+ * 8. digest        — maandag Brevo-mail (test → team@ tot RADAR_LIVE_DIGEST)
+ * 9. feedback      — reden bij gepasseerd → radar_feedback
+ * (Spotify optioneel via ?spotify=1 — niet default voor DJ-radar)
  *
  * Manual intake: POST /api/radar/parties + UI /radar/feesten (zelfde ingest).
  *
  * Shared with the rest of Thuishaven Tools (acceptable coupling):
  * - auth / toolAccess.radar (+ @blablabuild.com preview gate)
- * - AppShell nav
+ * - AppShell nav + system health monitors
  * - Neon Postgres (radar_* tables only)
  * - RA GraphQL client (read-only)
- * - CRON_SECRET
+ * - CRON_SECRET / Apify
  *
- * Score: multi-source booking trajectory first; social/Spotify as confirmation.
+ * Score: booking trajectory first; IG growth + labels mid-layer; Spotify later.
  * See docs/radar-plan.md.
  */
 export const RADAR_MODULE = "radar" as const;

@@ -88,8 +88,8 @@ export function RadarSettingsForm({
       <section className="border border-border bg-surface p-4">
         <h2 className="font-display text-lg tracking-[0.04em]">Handmatige sync</h2>
         <p className="mt-1 text-sm text-text-muted">
-          RA + websites + Instagram-venues, daarna enrich/score/social.
-          Zet SPOTIFY_* en APIFY_TOKEN in Vercel voor volle dekking.
+          RA + websites + IG (batch, shortlist/watching). Spotify staat standaard
+          uit — Apify-token in Vercel voor social growth.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <button

@@ -237,6 +237,22 @@ export const MONITORS: MonitorDef[] = [
     impact: "De verkoopmail van 18:00 is niet verstuurd.",
     pages: ["/dashboard/tickets"],
   },
+  {
+    id: "radar",
+    label: "DJ Radar",
+    cronSource: "radar",
+    schedule: { kind: "hours", hours: [8, 20] },
+    maxDurationSec: 300,
+    impact: "Radar discovery, scores en social-signalen lopen achter.",
+    pages: ["/radar"],
+  },
+  {
+    id: "apify",
+    label: "Apify (Radar social)",
+    integrationId: "apify",
+    impact: "IG-volgersgroei en gig-hints uit posts worden niet ververst.",
+    pages: ["/radar"],
+  },
 ];
 
 export function cronSourceOf(def: MonitorDef): string {

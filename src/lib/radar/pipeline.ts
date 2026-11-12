@@ -101,7 +101,7 @@ export async function runRadarPipeline(options?: {
 
   let website: RadarPipelineResult["website"] = null;
   if (!options?.skipWebsite && !pastDeadline()) {
-    website = await syncWebsiteVenues({ limit: 6 });
+    website = await syncWebsiteVenues({ limit: 4 });
     notes.push(
       `Website: ${website.venuesTried} venues, ${website.partiesIngested} parties, ${website.artistsCreated} nieuwe namen.`,
     );
@@ -112,7 +112,8 @@ export async function runRadarPipeline(options?: {
 
   let instagramVenues: RadarPipelineResult["instagramVenues"] = null;
   if (!options?.skipInstagramVenues && !pastDeadline()) {
-    instagramVenues = await syncInstagramVenues({ limit: 4 });
+    // Budget: few venue accounts; posts → review queue
+    instagramVenues = await syncInstagramVenues({ limit: 3 });
     if (instagramVenues.note) notes.push(instagramVenues.note);
     else {
       notes.push(
@@ -156,17 +157,21 @@ export async function runRadarPipeline(options?: {
     }
   }
 
+  // Spotify = late / optional for DJ radar — off unless explicitly enabled.
   let spotify: RadarPipelineResult["spotify"] = null;
-  if (!options?.skipSpotify) {
+  const wantSpotify = options?.skipSpotify === false;
+  if (wantSpotify) {
     if (pastDeadline()) {
       notes.push("Spotify overgeslagen: tijdslimiet.");
     } else if (!isSpotifyConfigured()) {
       notes.push("Spotify overgeslagen: SPOTIFY_CLIENT_ID/SECRET ontbreekt.");
     } else {
       spotify = await syncSpotifyForRadarArtists({
-        limit: options?.spotifyLimit ?? 80,
+        limit: options?.spotifyLimit ?? 40,
       });
     }
+  } else {
+    notes.push("Spotify overgeslagen (niet prioriteit voor DJ-radar).");
   }
 
   let social: RadarPipelineResult["social"] = null;
@@ -174,7 +179,10 @@ export async function runRadarPipeline(options?: {
     if (pastDeadline()) {
       notes.push("Social overgeslagen: tijdslimiet.");
     } else {
-      social = await syncSocialForTopArtists({ limit: 30, followGigs: true });
+      social = await syncSocialForTopArtists({
+        limit: 25,
+        followGigs: true,
+      });
       if (social.note) notes.push(social.note);
       if (social.gigsDetected > 0) {
         notes.push(`Social gig-detectie: ${social.gigsDetected} kandidaten.`);

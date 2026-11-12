@@ -78,19 +78,161 @@ export async function runSocialProfileFetch(input: {
     });
   }
 
+  return runInstagramBatchFetch({
+    handles: [handle],
+    resultsLimit: input.resultsLimit ?? 12,
+  });
+}
+
+/**
+ * One Apify run for many IG handles — cheaper than 1 run per artist.
+ * Returns a map handle → fetch result (best-effort from dataset rows).
+ */
+export async function runInstagramBatchFetch(input: {
+  handles: string[];
+  resultsLimit?: number;
+}): Promise<SocialProfileFetchResult> {
+  const token = process.env.APIFY_TOKEN?.trim();
+  if (!token) return { ok: false, error: "APIFY_TOKEN ontbreekt" };
+  const handles = [
+    ...new Set(
+      input.handles.map((h) => h.replace(/^@/, "").trim()).filter(Boolean),
+    ),
+  ].slice(0, 40);
+  if (handles.length === 0) return { ok: false, error: "Geen handles" };
+
   const actorId =
     process.env.APIFY_INSTAGRAM_ACTOR_ID?.trim() || "apify/instagram-scraper";
   return runActorAndParse({
     token,
     actorId,
     body: {
-      directUrls: [`https://www.instagram.com/${handle}/`],
+      directUrls: handles.map((h) => `https://www.instagram.com/${h}/`),
       resultsType: "posts",
-      resultsLimit: input.resultsLimit ?? 12,
-      searchLimit: 1,
+      resultsLimit: input.resultsLimit ?? 5,
+      searchLimit: handles.length,
     },
     parse: parseInstagramItems,
   });
+}
+
+/** Batch that also splits posts per owner username when possible. */
+export async function runInstagramBatchByHandle(input: {
+  handles: string[];
+  resultsLimit?: number;
+}): Promise<
+  | {
+      ok: true;
+      byHandle: Record<string, SocialProfileFetch>;
+      errors: string[];
+    }
+  | { ok: false; error: string }
+> {
+  const token = process.env.APIFY_TOKEN?.trim();
+  if (!token) return { ok: false, error: "APIFY_TOKEN ontbreekt" };
+  const handles = [
+    ...new Set(
+      input.handles.map((h) => h.replace(/^@/, "").trim().toLowerCase()).filter(Boolean),
+    ),
+  ].slice(0, 40);
+  if (handles.length === 0) return { ok: false, error: "Geen handles" };
+
+  const actorId =
+    process.env.APIFY_INSTAGRAM_ACTOR_ID?.trim() || "apify/instagram-scraper";
+  const actorPath = actorId.replace(/\//g, "~");
+  try {
+    const start = await fetch(
+      `https://api.apify.com/v2/acts/${actorPath}/runs?waitForFinish=120`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          directUrls: handles.map((h) => `https://www.instagram.com/${h}/`),
+          resultsType: "posts",
+          resultsLimit: input.resultsLimit ?? 5,
+          searchLimit: handles.length,
+        }),
+        cache: "no-store",
+      },
+    );
+    if (!start.ok) {
+      const t = await start.text().catch(() => "");
+      return {
+        ok: false,
+        error: `Apify start HTTP ${start.status}${t ? `: ${t.slice(0, 160)}` : ""}`,
+      };
+    }
+    const startJson = (await start.json()) as {
+      data?: { defaultDatasetId?: string };
+    };
+    const datasetId = startJson.data?.defaultDatasetId;
+    if (!datasetId) return { ok: false, error: "Apify run zonder dataset" };
+
+    const itemsRes = await fetch(
+      `https://api.apify.com/v2/datasets/${datasetId}/items?format=json&clean=1`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      },
+    );
+    if (!itemsRes.ok) {
+      return { ok: false, error: `Apify dataset HTTP ${itemsRes.status}` };
+    }
+    const items = (await itemsRes.json()) as unknown[];
+    if (!Array.isArray(items)) return { ok: false, error: "Ongeldige dataset" };
+
+    const byHandle: Record<string, SocialProfileFetch> = {};
+    for (const h of handles) {
+      byHandle[h] = { ok: true, followers: null, posts: [] };
+    }
+
+    for (const raw of items) {
+      const item = raw as Record<string, unknown>;
+      const owner =
+        str(
+          (item.ownerUsername as string) ??
+            (item.owner as Record<string, unknown> | undefined)?.username ??
+            (item.inputUrl as string)?.match(/instagram\.com\/([^/?]+)/)?.[1],
+        )?.toLowerCase() ?? null;
+      const key =
+        owner && byHandle[owner]
+          ? owner
+          : handles.find((h) =>
+              str(item.url)?.toLowerCase().includes(`/${h}/`),
+            ) ?? handles[0];
+      if (!key || !byHandle[key]) continue;
+      const bucket = byHandle[key]!;
+      if (bucket.followers == null) {
+        bucket.followers =
+          num(item.followersCount) ??
+          num(item.followers) ??
+          num(
+            (item.owner as Record<string, unknown> | undefined)?.followersCount,
+          );
+      }
+      const caption = str(item.caption) ?? str(item.text) ?? "";
+      const id =
+        str(item.id) ?? str(item.shortCode) ?? str(item.url) ?? `ig-${bucket.posts.length}`;
+      if (caption || item.url) {
+        bucket.posts.push({
+          id,
+          caption,
+          url: str(item.url) ?? null,
+          timestamp: str(item.timestamp),
+        });
+      }
+    }
+
+    return { ok: true, byHandle, errors: [] };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Apify network error",
+    };
+  }
 }
 
 async function runActorAndParse(opts: {

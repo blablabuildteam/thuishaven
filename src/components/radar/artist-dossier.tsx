@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { RadarInfoTip } from "@/components/radar/radar-info-tip";
 import {
+  followerDeltas,
+  formatDelta,
+  labelsFromProfiles,
+} from "@/lib/radar/metric-deltas";
+import {
   RADAR_ARTIST_STATUS_NL,
   RADAR_FEEDBACK_REASON_NL,
   type RadarArtistStatus,
@@ -39,6 +44,7 @@ type Props = {
     handle: string | null;
     externalId: string | null;
     lastSyncedAt: string | Date | null;
+    raw?: Record<string, unknown> | null;
   }>;
   recentMetrics: Array<{
     id: string;
@@ -56,6 +62,7 @@ type Props = {
     billingIndex: number | null;
     isHeadliner: boolean;
     sourceUrl: string | null;
+    source?: string | null;
   }>;
 };
 
@@ -75,6 +82,15 @@ export function ArtistDossier({
     useState<RadarFeedbackReason>("no_fit");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const deltas = followerDeltas(recentMetrics, [
+    "resident_advisor",
+    "instagram",
+  ]);
+  const labels = labelsFromProfiles(profiles);
+  const upcoming = recentGigs.filter(
+    (g) => g.startsAt && new Date(g.startsAt).getTime() >= Date.now() - 6 * 3600_000,
+  );
 
   async function save(patch: Record<string, unknown>) {
     setBusy(true);
@@ -204,6 +220,75 @@ export function ArtistDossier({
         </dl>
       </div>
 
+      {(deltas.length > 0 || labels.length > 0 || upcoming.length > 0) && (
+        <section className="grid gap-3 border border-border bg-surface p-4 sm:grid-cols-3">
+          <div>
+            <h2 className="font-display text-lg tracking-[0.04em]">
+              Social growth
+            </h2>
+            {deltas.length === 0 ? (
+              <p className="mt-2 text-xs text-text-muted">
+                Nog geen snapshots — avondcron vult IG voor shortlist/watching.
+              </p>
+            ) : (
+              <ul className="mt-2 space-y-1 text-sm">
+                {deltas.map((d) => (
+                  <li key={d.platform}>
+                    <span className="text-text-dim uppercase tracking-[0.08em] text-[10px]">
+                      {d.platform === "resident_advisor" ? "RA" : "IG"}
+                    </span>{" "}
+                    {formatDelta(d)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div>
+            <h2 className="font-display text-lg tracking-[0.04em]">Labels</h2>
+            {labels.length === 0 ? (
+              <p className="mt-2 text-xs text-text-muted">
+                Geen labels uit RA-enrich.
+              </p>
+            ) : (
+              <ul className="mt-2 flex flex-wrap gap-2 text-sm">
+                {labels.map((l) => (
+                  <li
+                    key={l}
+                    className="border border-border px-2 py-0.5 text-xs"
+                  >
+                    {l}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div>
+            <h2 className="font-display text-lg tracking-[0.04em]">
+              Speelt binnenkort
+            </h2>
+            {upcoming.length === 0 ? (
+              <p className="mt-2 text-xs text-text-muted">
+                Geen aankomende gigs in Radar.
+              </p>
+            ) : (
+              <ul className="mt-2 space-y-1 text-sm">
+                {upcoming.slice(0, 5).map((g) => (
+                  <li key={g.id}>
+                    {g.eventName ?? "Event"}
+                    <span className="text-text-dim">
+                      {g.startsAt
+                        ? ` · ${new Date(g.startsAt).toLocaleDateString("nl-NL")}`
+                        : ""}
+                      {g.source ? ` · ${g.source}` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      )}
+
       {error ? <p className="text-sm text-warn">{error}</p> : null}
 
       <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
@@ -310,19 +395,11 @@ export function ArtistDossier({
             >
               Notitie opslaan
             </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void save({ syncSpotify: true })}
-              className="border border-border px-3 py-2 text-sm hover:border-accent"
-            >
-              Spotify verversen
-            </button>
           </div>
         </section>
 
         <section className="space-y-4 border border-border bg-surface p-4">
-          <h2 className="font-display text-lg tracking-[0.04em]">RA gigs</h2>
+          <h2 className="font-display text-lg tracking-[0.04em]">Gigs</h2>
           {recentGigs.length === 0 ? (
             <p className="text-sm text-text-muted">
               Nog geen gigs — run discovery zodra seed venues staan.

@@ -39,10 +39,12 @@ Alles landt in `radar_parties` + `radar_party_lineup` (+ gigs voor scoring).
 | 1b | Parties-schema + handmatige intake + Feesten-UI | live |
 | 2a | Website adapters + venue source configs | live |
 | 2b | Apify IG venues + review-queue | live (needs APIFY_TOKEN) |
-| 2c | Artist social follow + gig-detectie | live (needs APIFY_TOKEN) |
-| 3 | Spotify bevestiging | code ready — zet SPOTIFY_* in Vercel |
+| 2c | Artist social batch (shortlist/watching, stale>7d) + gig-captions | live (APIFY_TOKEN) |
+| 2d | Dossier: social Δ + labels + aankomende gigs | live |
+| 3 | Spotify | bewust bewust uit (te laat voor DJ-radar); `?spotify=1` |
 | 4 | Digest + alerts polish | deels |
-| 5 | Booker-feedback → gewichten + ticketlift | open |
+| 5 | Mixseries-watchlist + label-alerts | open |
+| 6 | Booker-feedback → gewichten + ticketlift | open |
 
 ## Extractability
 
