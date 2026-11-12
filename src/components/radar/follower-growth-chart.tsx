@@ -11,7 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { buildFollowerSeries } from "@/lib/radar/metric-series";
+import { buildFollowerSeries } from "@/lib/radar/metric-series-client";
 
 type Metric = {
   platform: string;
