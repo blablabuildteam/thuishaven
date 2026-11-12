@@ -63,6 +63,10 @@
     {
       "path": "/api/cron/sales-digest",
       "schedule": "5 16,17 * * *"
+    },
+    {
+      "path": "/api/cron/radar",
+      "schedule": "0 6,7,18,19 * * *"
     }
   ]
 }

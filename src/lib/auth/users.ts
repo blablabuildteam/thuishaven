@@ -54,7 +54,7 @@ async function readFileStore(): Promise<AppUserRecord[]> {
     const parsed = JSON.parse(raw) as AppUserRecord[];
     return parsed.map((u) => ({
       ...u,
-      toolAccess: normalizeToolAccess(u.toolAccess, u.role),
+      toolAccess: normalizeToolAccess(u.toolAccess, u.role, u.email),
       emailVerifiedAt: u.emailVerifiedAt ?? (u.active ? u.createdAt : null),
       inviteSentAt: u.inviteSentAt ?? null,
       passwordSetAt: u.passwordSetAt ?? null,
@@ -99,7 +99,7 @@ function mapDbRow(r: typeof appUsers.$inferSelect): AppUserRecord {
     passwordHash: r.passwordHash,
     role,
     active: r.active,
-    toolAccess: normalizeToolAccess(r.toolAccess, role),
+    toolAccess: normalizeToolAccess(r.toolAccess, role, r.email),
     emailVerifiedAt:
       r.emailVerifiedAt?.toISOString() ?? (r.active ? createdAt : null),
     inviteSentAt: r.inviteSentAt?.toISOString() ?? null,
@@ -149,6 +149,7 @@ function envBootstrapUsers(): AppUserRecord[] {
             toolAccess: normalizeToolAccess(
               undefined,
               u.role ?? (admins.has(email) ? "admin" : "member"),
+              email,
             ),
             emailVerifiedAt: now,
             inviteSentAt: null,
@@ -177,6 +178,7 @@ function envBootstrapUsers(): AppUserRecord[] {
     toolAccess: normalizeToolAccess(
       undefined,
       admins.has(email) ? "admin" : "member",
+      email,
     ),
     emailVerifiedAt: now,
     inviteSentAt: null,
@@ -375,7 +377,7 @@ export async function inviteUser(input: {
     passwordHash: randomPlaceholderHash(),
     role: input.role,
     active: false,
-    toolAccess: normalizeToolAccess(input.toolAccess, input.role),
+    toolAccess: normalizeToolAccess(input.toolAccess, input.role, email),
     emailVerifiedAt: null,
     inviteSentAt: null,
     passwordSetAt: null,
@@ -509,7 +511,7 @@ export async function setUserToolAccess(
 
   const updated: AppUserRecord = {
     ...user,
-    toolAccess: normalizeToolAccess(toolAccess, user.role),
+    toolAccess: normalizeToolAccess(toolAccess, user.role, user.email),
     updatedAt: new Date().toISOString(),
   };
   await persistUser(updated);
@@ -529,7 +531,7 @@ export function publicUser(user: AppUserRecord) {
     name: user.name,
     role: user.role,
     active: user.active,
-    toolAccess: normalizeToolAccess(user.toolAccess, user.role),
+    toolAccess: normalizeToolAccess(user.toolAccess, user.role, user.email),
     status: userStatus(user),
     emailVerifiedAt: user.emailVerifiedAt,
     inviteSentAt: user.inviteSentAt,
@@ -565,7 +567,7 @@ export async function createUserWithPassword(input: {
     passwordHash: await bcrypt.hash(input.password, 10),
     role: input.role,
     active: true,
-    toolAccess: normalizeToolAccess(input.toolAccess, input.role),
+    toolAccess: normalizeToolAccess(input.toolAccess, input.role, email),
     emailVerifiedAt: now,
     inviteSentAt: null,
     passwordSetAt: now,

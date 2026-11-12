@@ -25,6 +25,7 @@ export const authConfig = {
         session.user.toolAccess = normalizeToolAccess(
           token.toolAccess,
           session.user.role,
+          session.user.email ?? (token.email as string | undefined),
         );
       }
       session.sessionId =
@@ -51,7 +52,8 @@ export const authConfig = {
       if (!auth?.user) return false;
 
       const role = auth.user.role ?? "member";
-      const access = normalizeToolAccess(auth.user.toolAccess, role);
+      const email = auth.user.email;
+      const access = normalizeToolAccess(auth.user.toolAccess, role, email);
 
       const needsAdmin =
         path === "/koppelingen" ||
@@ -64,7 +66,7 @@ export const authConfig = {
         );
       }
 
-      if (!canAccessPath(path, access, role)) {
+      if (!canAccessPath(path, access, role, email)) {
         return Response.redirect(
           new URL(homePathForAccess(access), request.nextUrl),
         );

@@ -295,6 +295,50 @@ export type LiveSendQuota = {
   recentBounces: number;
 };
 
+export async function loadLiveSendQuota(): Promise<LiveSendQuota> {
+  const [cadence, sentToday, recentBounces] = await Promise.all([
+    resolveOutreachCadence(),
+    countLiveSendsToday(),
+    countRecentBounces(24),
+  ]);
+  const dailyCap = liveDailyCapFromEnvOrCadence(cadence.mailsPerDay);
+  return {
+    sentToday,
+    dailyCap,
+    remainingToday: Math.max(0, dailyCap - sentToday),
+    bouncePause: recentBounces >= BOUNCE_PAUSE_THRESHOLD,
+    recentBounces,
+  };
+}
+
+/** Send status + cadence for pages that don't need the bakjes themselves. */
+export async function loadLiveSendOverview(): Promise<{
+  liveSendBlockReason: string | null;
+  liveSendQuota: LiveSendQuota | null;
+  cadenceLabel: string;
+  cadenceRationale: string;
+}> {
+  const liveSendBlockReason = outreachLiveSendBlockReason();
+  if (!hasDatabase()) {
+    return {
+      liveSendBlockReason,
+      liveSendQuota: null,
+      cadenceLabel: "",
+      cadenceRationale: "",
+    };
+  }
+  const [settings, liveSendQuota] = await Promise.all([
+    loadOutreachSettings(),
+    loadLiveSendQuota(),
+  ]);
+  return {
+    liveSendBlockReason,
+    liveSendQuota,
+    cadenceLabel: formatCadenceSummary(settings),
+    cadenceRationale: settings.cadenceRationale,
+  };
+}
+
 export async function listBatchesWithEmails(): Promise<{
   batches: OutreachBatchSummary[];
   unbatchedDrafts: UnbatchedDraft[];
@@ -511,19 +555,7 @@ export async function listBatchesWithEmails(): Promise<{
       createdAt: d.createdAt.toISOString(),
     })),
     liveSendBlockReason: outreachLiveSendBlockReason(),
-    liveSendQuota: await (async (): Promise<LiveSendQuota> => {
-      const cadence = await resolveOutreachCadence();
-      const dailyCap = liveDailyCapFromEnvOrCadence(cadence.mailsPerDay);
-      const sentToday = await countLiveSendsToday();
-      const recentBounces = await countRecentBounces(24);
-      return {
-        sentToday,
-        dailyCap,
-        remainingToday: Math.max(0, dailyCap - sentToday),
-        bouncePause: recentBounces >= BOUNCE_PAUSE_THRESHOLD,
-        recentBounces,
-      };
-    })(),
+    liveSendQuota: await loadLiveSendQuota(),
     cadenceLabel: formatCadenceSummary(settings),
     cadenceRationale: settings.cadenceRationale,
     schedule: buildQueueSchedule(batches),

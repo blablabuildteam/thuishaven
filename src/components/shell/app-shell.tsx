@@ -3,18 +3,29 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import {
+  startTransition,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useSession } from "next-auth/react";
 import {
   BarChart3,
   Bell,
   CalendarDays,
+  ChevronDown,
+  Crosshair,
   Disc3,
   Euro,
   Home,
+  LayoutDashboard,
+  MapPin,
   Menu,
   Plug,
   ScrollText,
+  Send,
   Ticket,
   Users,
   Sparkles,
@@ -49,7 +60,12 @@ import {
   dashboardSectionAllowed,
   normalizeToolAccess,
   outreachSectionAllowed,
+  radarItemAllowed,
+  radarSectionAllowed,
+  TOOL_HOME,
+  TOOL_LABEL,
   type ToolAccess,
+  type ToolId,
 } from "@/lib/auth/tool-access";
 
 type NavItem = {
@@ -233,11 +249,55 @@ const outreachSystemNav: NavItem[] = [
   { href: "/koppelingen", label: "Bronnen", icon: Plug, adminOnly: true },
 ];
 
+const radarSections: NavSection[] = [
+  {
+    id: "scout",
+    label: "Scouten",
+    items: [
+      { href: "/radar/artiesten", label: "Artiesten", icon: Disc3 },
+      { href: "/radar/feesten", label: "Feesten", icon: CalendarDays },
+      { href: "/radar/alerts", label: "Alerts", icon: Bell },
+      { href: "/radar/uitleg", label: "Uitleg", icon: BookOpen },
+    ],
+  },
+  {
+    id: "curatie",
+    label: "Curatie",
+    items: [
+      { href: "/radar/venues", label: "Venues", icon: MapPin },
+    ],
+  },
+  {
+    id: "beheer",
+    label: "Alleen admin",
+    adminOnly: true,
+    items: [
+      {
+        href: "/radar/instellingen",
+        label: "Instellingen",
+        icon: Settings,
+        adminOnly: true,
+      },
+    ],
+  },
+];
+
+const radarSystemNav: NavItem[] = [
+  { href: "/koppelingen", label: "Bronnen", icon: Plug, adminOnly: true },
+];
+
+function toolFromPath(pathname: string): ToolId {
+  if (pathname.startsWith("/outreach")) return "outreach";
+  if (pathname.startsWith("/radar")) return "radar";
+  return "dashboard";
+}
+
 function isNavActive(pathname: string, href: string) {
   return (
     pathname === href ||
     (href !== "/dashboard" &&
       href !== "/outreach" &&
+      href !== "/radar" &&
       pathname.startsWith(href))
   );
 }
@@ -250,24 +310,37 @@ function filterSections(
   sections: NavSection[],
   isAdmin: boolean,
   access: ToolAccess,
-  isOutreach: boolean,
+  tool: ToolId,
 ) {
   return sections
     .filter((s) => isAdmin || !s.adminOnly)
-    .filter((s) =>
-      isOutreach
-        ? outreachSectionAllowed(s.id, access)
-        : dashboardSectionAllowed(s.id, access),
-    )
+    .filter((s) => {
+      if (tool === "outreach") return outreachSectionAllowed(s.id, access);
+      if (tool === "radar") return radarSectionAllowed(s.id, access);
+      return dashboardSectionAllowed(s.id, access);
+    })
     .map((s) => ({
       ...s,
-      items: filterNav(s.items, isAdmin).filter((item) =>
-        isOutreach || item.adminOnly
-          ? true
-          : dashboardItemAllowed(item.href, access),
-      ),
+      items: filterNav(s.items, isAdmin).filter((item) => {
+        if (item.adminOnly) return true;
+        if (tool === "outreach") return true;
+        if (tool === "radar") return radarItemAllowed(item.href, access);
+        return dashboardItemAllowed(item.href, access);
+      }),
     }))
     .filter((s) => s.items.length > 0);
+}
+
+function sectionsForTool(tool: ToolId): NavSection[] {
+  if (tool === "outreach") return outreachSections;
+  if (tool === "radar") return radarSections;
+  return dashboardSections;
+}
+
+function systemNavForTool(tool: ToolId): NavItem[] {
+  if (tool === "outreach") return outreachSystemNav;
+  if (tool === "radar") return radarSystemNav;
+  return dashboardSystemNav;
 }
 
 function NavItemIcon({ item, active }: { item: NavItem; active: boolean }) {
@@ -362,7 +435,7 @@ function NavLink({
 
 function ShellNav({
   pathname,
-  isOutreach,
+  activeTool,
   sections,
   systemNav,
   djFeesPending,
@@ -373,9 +446,10 @@ function ShellNav({
   onClose,
   showDashboard,
   showOutreach,
+  showRadar,
 }: {
   pathname: string;
-  isOutreach: boolean;
+  activeTool: ToolId;
   sections: NavSection[];
   systemNav: NavItem[];
   djFeesPending: number | null;
@@ -386,7 +460,42 @@ function ShellNav({
   onClose?: () => void;
   showDashboard: boolean;
   showOutreach: boolean;
+  showRadar: boolean;
 }) {
+  const toolSwitches = (
+    [
+      showDashboard
+        ? {
+            id: "dashboard" as const,
+            href: TOOL_HOME.dashboard,
+            label: TOOL_LABEL.dashboard,
+            icon: LayoutDashboard,
+          }
+        : null,
+      showOutreach
+        ? {
+            id: "outreach" as const,
+            href: TOOL_HOME.outreach,
+            label: TOOL_LABEL.outreach,
+            icon: Send,
+          }
+        : null,
+      showRadar
+        ? {
+            id: "radar" as const,
+            href: TOOL_HOME.radar,
+            label: TOOL_LABEL.radar,
+            icon: Crosshair,
+          }
+        : null,
+    ] as const
+  ).filter(Boolean) as Array<{
+    id: ToolId;
+    href: string;
+    label: string;
+    icon: LucideIcon;
+  }>;
+
   return (
     <>
       <div className="th-poster-band flex items-center justify-between gap-3 border-0 px-4 py-5">
@@ -423,24 +532,15 @@ function ShellNav({
       </div>
 
       <div className="border-b-[1.5px] border-border-strong px-3 py-3">
-        {showDashboard && showOutreach ? (
-          <div className="grid grid-cols-2 gap-px border-[1.5px] border-border-strong bg-border-strong">
-            <ToolSwitch
-              href="/dashboard/inzichten"
-              active={!isOutreach}
-              label="Dashboard"
-              onNavigate={onNavigate}
-            />
-            <ToolSwitch
-              href="/outreach/crm"
-              active={isOutreach}
-              label="Outreach"
-              onNavigate={onNavigate}
-            />
-          </div>
+        {toolSwitches.length > 1 ? (
+          <ToolPicker
+            tools={toolSwitches}
+            activeTool={activeTool}
+            onNavigate={onNavigate}
+          />
         ) : (
           <p className="th-sticker px-1 py-1 text-xs text-text-dim">
-            {isOutreach ? "Outreach" : "Dashboard"}
+            {TOOL_LABEL[activeTool]}
           </p>
         )}
       </div>
@@ -549,23 +649,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.dispatchEvent(new Event(VIEW_AS_EVENT));
   }
   const showAdminNav = Boolean(isAdmin) && !viewAsStaff;
-  const isOutreach = pathname.startsWith("/outreach");
+  const activeTool = toolFromPath(pathname);
+  const isOutreach = activeTool === "outreach";
   const toolAccess = normalizeToolAccess(
     data?.user?.toolAccess,
     data?.user?.role === "admin" ? "admin" : "member",
+    data?.user?.email,
   );
-  const djFeesPending = useDjFeesPendingCount(!isOutreach);
-  const omzetPending = useOmzetPendingCount(!isOutreach);
+  const djFeesPending = useDjFeesPendingCount(activeTool === "dashboard");
+  const omzetPending = useOmzetPendingCount(activeTool === "dashboard");
   const sections = filterSections(
-    isOutreach ? outreachSections : dashboardSections,
+    sectionsForTool(activeTool),
     showAdminNav,
     toolAccess,
-    isOutreach,
+    activeTool,
   );
-  const systemNav = filterNav(
-    isOutreach ? outreachSystemNav : dashboardSystemNav,
-    showAdminNav,
-  );
+  const systemNav = filterNav(systemNavForTool(activeTool), showAdminNav);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -600,7 +699,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const closeMenu = () => setMenuOpen(false);
   const navProps = {
     pathname,
-    isOutreach,
+    activeTool,
     sections,
     systemNav,
     djFeesPending,
@@ -609,6 +708,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     onToggleViewAsStaff: isAdmin ? toggleViewAsStaff : undefined,
     showDashboard: toolAccess.dashboard,
     showOutreach: toolAccess.outreach,
+    showRadar: toolAccess.radar,
   };
 
   return (
@@ -636,7 +736,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       ) : null}
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
+      {/* relative: absolutely positioned bits inside wide tables (sr-only) must not widen the page */}
+      <div className="relative flex min-w-0 flex-1 flex-col overflow-x-clip">
         <header className="sticky top-0 z-30 flex items-center justify-between gap-2 border-b-[1.5px] border-border-strong bg-bg/95 px-3 py-3 backdrop-blur-md sm:px-4 lg:hidden">
           <Link href="/" className="flex min-w-0 items-center gap-2">
             <Image
@@ -648,6 +749,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             />
             <span className="th-poster-title truncate text-2xl">
               Thuishaven
+            </span>
+            <span className="truncate text-xs tracking-[0.12em] text-text-dim uppercase">
+              {TOOL_LABEL[activeTool]}
             </span>
           </Link>
           <div className="flex shrink-0 items-center gap-1">
@@ -690,29 +794,109 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ToolSwitch({
-  href,
-  active,
-  label,
+function ToolPicker({
+  tools,
+  activeTool,
   onNavigate,
 }: {
-  href: string;
-  active: boolean;
-  label: string;
+  tools: Array<{ id: ToolId; href: string; label: string; icon: LucideIcon }>;
+  activeTool: ToolId;
   onNavigate?: () => void;
 }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const active = tools.find((t) => t.id === activeTool) ?? tools[0];
+
+  // Prefetch andere tools zodat switchen sneller voelt.
+  useEffect(() => {
+    for (const tool of tools) {
+      if (tool.id !== activeTool) router.prefetch(tool.href);
+    }
+  }, [tools, activeTool, router]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  if (!active) return null;
+  const ActiveIcon = active.icon;
+
   return (
-    <Link
-      href={href}
-      onClick={onNavigate}
-      className={cn(
-        "th-sticker px-2 py-2 text-center text-sm transition-colors",
-        active
-          ? "bg-accent text-accent-contrast"
-          : "bg-bg text-text-muted hover:bg-surface hover:text-text",
-      )}
-    >
-      {label}
-    </Link>
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Kies tool"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 border-[1.5px] border-border-strong bg-accent px-3 py-2 text-left text-sm text-accent-contrast transition-colors"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <ActiveIcon className="size-4 shrink-0" strokeWidth={1.75} />
+          <span className="th-sticker">{active.label}</span>
+        </span>
+        <ChevronDown
+          className={cn(
+            "size-4 shrink-0 opacity-80 transition-transform",
+            open && "rotate-180",
+          )}
+          strokeWidth={1.75}
+        />
+      </button>
+      {open ? (
+        <ul
+          role="listbox"
+          aria-label="Tools"
+          className="absolute inset-x-0 top-full z-40 mt-1 border-[1.5px] border-border-strong bg-bg py-1 shadow-sm"
+        >
+          {tools.map((tool) => {
+            const selected = tool.id === active.id;
+            const Icon = tool.icon;
+            return (
+              <li key={tool.id} role="option" aria-selected={selected}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    onNavigate?.();
+                    if (tool.id !== active.id) {
+                      startTransition(() => {
+                        router.push(tool.href);
+                      });
+                    }
+                  }}
+                  onMouseEnter={() => router.prefetch(tool.href)}
+                  onFocus={() => router.prefetch(tool.href)}
+                  className={cn(
+                    "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors",
+                    selected
+                      ? "bg-accent text-accent-contrast"
+                      : "text-text-muted hover:bg-surface hover:text-text",
+                  )}
+                >
+                  <Icon className="size-4 shrink-0" strokeWidth={1.75} />
+                  <span className="th-sticker">
+                    {tool.label}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
   );
 }

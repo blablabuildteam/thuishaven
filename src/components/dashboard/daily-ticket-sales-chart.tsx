@@ -154,39 +154,57 @@ function clampNodeToViewport(node: HTMLElement) {
   }
 }
 
-function DailySalesTooltip({
-  active,
-  payload,
-  coordinate,
+function useCoarsePointer() {
+  const [coarse, setCoarse] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(pointer: coarse)");
+    const sync = () => {
+      if (mq.matches) setCoarse(true);
+    };
+    sync();
+    mq.addEventListener("change", sync);
+    // Phones in "desktop site" mode still report a fine pointer; first touch
+    // flips us into tap-to-pin so the sticky hover flyout never sticks.
+    const onTouch = () => setCoarse(true);
+    window.addEventListener("touchstart", onTouch, { passive: true, once: true });
+    return () => {
+      mq.removeEventListener("change", sync);
+      window.removeEventListener("touchstart", onTouch);
+    };
+  }, []);
+  return coarse;
+}
+
+type TooltipColors = {
+  tooltipBg: string;
+  tooltipFg: string;
+  primary: string;
+};
+
+function DailySalesFlyout({
+  point,
+  left,
+  top,
   events,
   colors,
-  containerRef,
+  interactive,
 }: {
-  active?: boolean;
-  payload?: Array<{ payload?: ChartRow }>;
-  coordinate?: { x?: number; y?: number };
+  point: ChartRow;
+  left: number;
+  top: number;
   events: DailyTicketSalesEvent[];
-  colors: { tooltipBg: string; tooltipFg: string; primary: string };
-  containerRef: { current: HTMLDivElement | null };
+  colors: TooltipColors;
+  interactive?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const point = active && payload?.length ? payload[0]?.payload : undefined;
-  const wrapper =
-    containerRef.current?.querySelector(".recharts-wrapper") ??
-    containerRef.current;
-  const anchor = wrapper?.getBoundingClientRect();
-  const left = (anchor?.left ?? 0) + (coordinate?.x ?? 0) + 12;
-  const top = (anchor?.top ?? 0) + (coordinate?.y ?? 0) + 12;
 
   useLayoutEffect(() => {
     const node = ref.current;
-    if (!point || !node) return;
+    if (!node) return;
     clampNodeToViewport(node);
     const frame = requestAnimationFrame(() => clampNodeToViewport(node));
     return () => cancelAnimationFrame(frame);
-  }, [point?.day, left, top]);
-
-  if (!point || typeof document === "undefined") return null;
+  }, [point.day, left, top]);
 
   const eventById = new Map(events.map((event) => [event.id, event]));
   const rows = point.breakdown
@@ -206,10 +224,15 @@ function DailySalesTooltip({
   const totalPaid = rows.reduce((sum, row) => sum + row.paidSold, 0);
   const totalRevenue = rows.reduce((sum, row) => sum + row.revenueCents, 0);
 
-  return createPortal(
+  return (
     <div
       ref={ref}
-      className="pointer-events-none max-h-[calc(100dvh-2rem)] max-w-[min(58rem,calc(100vw-2rem))] overflow-y-auto border px-3 py-2 text-xs shadow-sm"
+      role="dialog"
+      aria-label={`Verkoop op ${formatDayNl(point.day)}`}
+      className={cn(
+        "max-h-[calc(100dvh-2rem)] max-w-[min(58rem,calc(100vw-2rem))] overflow-y-auto border px-3 py-2 text-xs shadow-sm",
+        interactive ? "pointer-events-auto" : "pointer-events-none",
+      )}
       style={{
         position: "fixed",
         left,
@@ -219,6 +242,8 @@ function DailySalesTooltip({
         borderColor: colors.primary,
         color: colors.tooltipFg,
       }}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
     >
       <p className="font-medium">{formatDayNl(point.day)}</p>
       {rows.length === 0 ? (
@@ -276,14 +301,69 @@ function DailySalesTooltip({
           Weeztix-prijs is inclusief 9% btw.
         </p>
       ) : null}
-    </div>,
+    </div>
+  );
+}
+
+function DailySalesTooltip({
+  active,
+  payload,
+  coordinate,
+  events,
+  colors,
+  containerRef,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: ChartRow }>;
+  coordinate?: { x?: number; y?: number };
+  events: DailyTicketSalesEvent[];
+  colors: TooltipColors;
+  containerRef: { current: HTMLDivElement | null };
+}) {
+  const point = active && payload?.length ? payload[0]?.payload : undefined;
+  const wrapper =
+    containerRef.current?.querySelector(".recharts-wrapper") ??
+    containerRef.current;
+  const anchor = wrapper?.getBoundingClientRect();
+  const left = (anchor?.left ?? 0) + (coordinate?.x ?? 0) + 12;
+  const top = (anchor?.top ?? 0) + (coordinate?.y ?? 0) + 12;
+
+  if (!point || typeof document === "undefined") return null;
+
+  return createPortal(
+    <DailySalesFlyout
+      point={point}
+      left={left}
+      top={top}
+      events={events}
+      colors={colors}
+    />,
     document.body,
   );
 }
 
+function chartAnchor(
+  container: HTMLDivElement | null,
+  coordinate: { x?: number; y?: number } | null | undefined,
+) {
+  const wrapper =
+    container?.querySelector(".recharts-wrapper") ?? container;
+  const rect = wrapper?.getBoundingClientRect();
+  return {
+    left: (rect?.left ?? 0) + (coordinate?.x ?? 0) + 12,
+    top: (rect?.top ?? 0) + (coordinate?.y ?? 0) + 12,
+  };
+}
+
 export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
   const colors = useChartColors();
+  const coarse = useCoarsePointer();
   const chartRef = useRef<HTMLDivElement>(null);
+  const [pinned, setPinned] = useState<{
+    point: ChartRow;
+    left: number;
+    top: number;
+  } | null>(null);
   const chartData = useMemo<ChartRow[]>(
     () =>
       data.days.map((day) => ({
@@ -295,6 +375,15 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
       })),
     [data.days],
   );
+
+  useEffect(() => {
+    if (!pinned) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPinned(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pinned]);
 
   if (data.windowTotal === 0) {
     return (
@@ -323,6 +412,34 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
               data={chartData}
               margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
               barCategoryGap="8%"
+              onClick={(state) => {
+                if (!coarse) return;
+                const indexRaw = state?.activeTooltipIndex ?? state?.activeIndex;
+                const index =
+                  typeof indexRaw === "number"
+                    ? indexRaw
+                    : typeof indexRaw === "string" && /^\d+$/.test(indexRaw)
+                      ? Number(indexRaw)
+                      : chartData.findIndex(
+                          (row) =>
+                            row.label === state?.activeLabel ||
+                            row.day === state?.activeLabel,
+                        );
+                const row = index >= 0 ? chartData[index] : undefined;
+                if (!row) {
+                  setPinned(null);
+                  return;
+                }
+                const { left, top } = chartAnchor(
+                  chartRef.current,
+                  state.activeCoordinate,
+                );
+                setPinned((prev) =>
+                  prev?.point.day === row.day
+                    ? null
+                    : { point: row, left, top },
+                );
+              }}
             >
               <CartesianGrid
                 stroke={colors.grid}
@@ -347,11 +464,15 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
               <Tooltip
                 cursor={{ fill: colors.primary, fillOpacity: 0.06 }}
                 content={
-                  <DailySalesTooltip
-                    events={data.events}
-                    colors={colors}
-                    containerRef={chartRef}
-                  />
+                  coarse ? (
+                    () => null
+                  ) : (
+                    <DailySalesTooltip
+                      events={data.events}
+                      colors={colors}
+                      containerRef={chartRef}
+                    />
+                  )
                 }
                 allowEscapeViewBox={{ x: true, y: true }}
                 isAnimationActive={false}
@@ -373,6 +494,27 @@ export function DailyTicketSalesChart({ data }: { data: DailyTicketSales }) {
           </ResponsiveContainer>
         </div>
       </div>
+      {pinned && typeof document !== "undefined"
+        ? createPortal(
+            <>
+              <button
+                type="button"
+                aria-label="Sluit details"
+                className="fixed inset-0 z-[79] cursor-default bg-transparent"
+                onClick={() => setPinned(null)}
+              />
+              <DailySalesFlyout
+                point={pinned.point}
+                left={pinned.left}
+                top={pinned.top}
+                events={data.events}
+                colors={colors}
+                interactive
+              />
+            </>,
+            document.body,
+          )
+        : null}
       {data.days.filter((day) => day.total > 0).length < data.windowDays ? (
         <p className="mt-2 text-[11px] text-text-muted">
           Geen staaf = geen Weeztix-verkoop op die dag.

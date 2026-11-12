@@ -11,6 +11,13 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "seed:outreach": "tsx scripts/seed-outreach.ts",
+    "seed:radar-venues": "tsx --env-file=.env.local scripts/seed-radar-venues.ts",
+    "radar:batch": "tsx --env-file=.env.local scripts/radar-batch-discovery.ts",
+    "radar:enrich": "tsx --env-file=.env.local scripts/radar-enrich.ts",
+    "radar:rescore": "tsx --env-file=.env.local scripts/radar-rescore-all.ts",
+    "radar:migrate-0041": "tsx --env-file=.env.local scripts/apply-radar-0041.ts",
+    "radar:migrate-0043": "tsx --env-file=.env.local scripts/apply-radar-0043.ts",
+    "radar:seed-sources": "tsx --env-file=.env.local scripts/seed-radar-source-configs.ts",
     "env:push:weeztix": "bash scripts/push-weeztix-env-to-vercel.sh"
   },
   "dependencies": {

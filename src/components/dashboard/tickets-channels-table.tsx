@@ -211,7 +211,20 @@ function TicketsTable({
   const colCount = leadingCols + columns.length + 2;
 
   return (
-    <div className="max-w-full overflow-x-auto th-panel">
+    <>
+    <div className="md:hidden">
+      <TicketsCards
+        months={months}
+        columns={columns}
+        showExpected={showExpected}
+        totalRows={rows}
+        onDeurverkoopChange={onDeurverkoopChange}
+        onExpectedChange={onExpectedChange}
+        onExternalSoldChange={onExternalSoldChange}
+        onExternalScannedChange={onExternalScannedChange}
+      />
+    </div>
+    <div className="hidden max-w-full overflow-x-auto th-panel md:block">
       <table className="w-full min-w-[1240px] text-left text-sm">
         <thead className="border-b border-border text-[11px] tracking-wider text-text-dim uppercase">
           <tr>
@@ -290,6 +303,167 @@ function TicketsTable({
           </tfoot>
         )}
       </table>
+    </div>
+    </>
+  );
+}
+
+function TicketsCards({
+  months,
+  columns,
+  showExpected,
+  totalRows,
+  onDeurverkoopChange,
+  onExpectedChange,
+  onExternalSoldChange,
+  onExternalScannedChange,
+}: {
+  months: ReturnType<typeof groupByMonth>;
+  columns: readonly (typeof CHANNELS)[number][];
+  showExpected: boolean;
+  totalRows: TicketChannelRow[];
+  onDeurverkoopChange?: (editionId: string, value: number | null) => void;
+  onExpectedChange?: (editionId: string, value: number | null) => void;
+  onExternalSoldChange?: (eventId: string, value: number | null) => void;
+  onExternalScannedChange?: (eventId: string, value: number | null) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      {months.map((month) => (
+        <div key={month.key}>
+          <h3 className="mb-2 text-sm font-medium capitalize text-text-muted">
+            {month.label}
+          </h3>
+          <ul className="space-y-3">
+            {month.rows.map((row) => {
+              const name = row.isExternal ? row.name : displayEditionName(row.name);
+              return (
+                <li
+                  key={row.id}
+                  className={cn(
+                    "border border-border",
+                    row.isExternal ? "bg-surface/30" : "bg-bg",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3 border-b border-border px-3 py-2.5">
+                    <div className="min-w-0">
+                      <Link
+                        href={
+                          row.isExternal
+                            ? `/dashboard/tickets/external/${row.id}`
+                            : `/dashboard/tickets/${row.id}`
+                        }
+                        className="block font-medium leading-snug hover:underline"
+                      >
+                        {name}
+                        {row.isExternal ? (
+                          <span className="ml-2 text-[10px] tracking-wide text-text-dim uppercase">
+                            Extern
+                          </span>
+                        ) : null}
+                      </Link>
+                      <p className="mt-0.5 text-xs text-text-muted">
+                        {formatTicketSheetDate(row.day)}
+                        {row.timeLabel ? ` · ${row.timeLabel}` : ""}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="font-mono text-lg font-medium leading-none">
+                        <ChannelCell value={totalTicketsSold(row)} />
+                      </p>
+                      <p className="mt-1 text-[10px] tracking-wider text-text-dim uppercase">
+                        totaal
+                      </p>
+                    </div>
+                  </div>
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-2 px-3 py-2.5 text-sm [&_label]:ml-0">
+                    {showExpected ? (
+                      <div>
+                        <dt className="text-[11px] tracking-wider text-text-dim uppercase">
+                          Expected
+                        </dt>
+                        <dd className="font-mono">
+                          {onExpectedChange ? (
+                            <ExpectedCell
+                              id={row.id}
+                              name={name}
+                              value={row.expected}
+                              isExternal={row.isExternal}
+                              onSaved={(next) => onExpectedChange(row.id, next)}
+                            />
+                          ) : (
+                            <ChannelCell value={row.expected} />
+                          )}
+                        </dd>
+                      </div>
+                    ) : null}
+                    {columns.map((col) => (
+                      <div key={col.key}>
+                        <dt className="text-[11px] tracking-wider text-text-dim uppercase">
+                          {col.label}
+                        </dt>
+                        <dd className="font-mono">
+                          {col.key === "weeztix" &&
+                          row.isExternal &&
+                          onExternalSoldChange ? (
+                            <ExternalEventCell
+                              eventId={row.id}
+                              eventName={row.name}
+                              field="sold"
+                              value={row.externalSold ?? null}
+                              onSaved={(next) => onExternalSoldChange(row.id, next)}
+                            />
+                          ) : col.key === "deurverkoop" &&
+                            !row.isExternal &&
+                            onDeurverkoopChange ? (
+                            <DeurverkoopCell
+                              editionId={row.id}
+                              editionName={name}
+                              value={row.deurverkoop}
+                              onSaved={(next) => onDeurverkoopChange(row.id, next)}
+                            />
+                          ) : (
+                            <ChannelCell value={row[col.key]} pending={col.pending} />
+                          )}
+                        </dd>
+                      </div>
+                    ))}
+                    <div>
+                      <dt className="text-[11px] tracking-wider text-text-dim uppercase">
+                        Gescand
+                      </dt>
+                      <dd className="font-mono">
+                        {row.isExternal && onExternalScannedChange ? (
+                          <ExternalEventCell
+                            eventId={row.id}
+                            eventName={row.name}
+                            field="scanned"
+                            value={row.scanned}
+                            onSaved={(next) => onExternalScannedChange(row.id, next)}
+                          />
+                        ) : (
+                          <ChannelCell value={row.scanned} />
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+      {totalRows.length > 1 ? (
+        <div className="flex items-baseline justify-between border border-text px-3 py-2.5 text-sm">
+          <span className="font-medium">Totaal ({totalRows.length} events)</span>
+          <span className="font-mono font-medium">
+            <ChannelCell value={sumChannel(totalRows, "total")} />
+            <span className="ml-2 text-xs font-normal text-text-muted">
+              gescand <ChannelCell value={sumChannel(totalRows, "scanned")} />
+            </span>
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }

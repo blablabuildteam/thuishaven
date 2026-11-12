@@ -48,7 +48,43 @@ export function PaidAdsView({
   const laterSpend = later.reduce((sum, c) => sum + c.spendCents, 0);
 
   return (
-    <div className="max-w-full overflow-x-auto th-panel">
+    <>
+    <div className="space-y-3 md:hidden">
+      {later.length > 0 ? (
+        <button
+          type="button"
+          onClick={() => setShowLater((open) => !open)}
+          aria-expanded={showLater}
+          className="flex w-full items-center gap-2 border border-border bg-surface px-3 py-2.5 text-left text-sm font-medium"
+        >
+          <ChevronRight
+            className={cn(
+              "size-3.5 shrink-0 text-text-dim transition-transform",
+              showLater && "rotate-90",
+            )}
+            aria-hidden
+          />
+          <span className="min-w-0 flex-1">
+            Komende events
+            <span className="block text-[11px] font-normal text-text-dim">
+              {laterEvents} {laterEvents === 1 ? "event" : "events"} · {later.length}{" "}
+              {later.length === 1 ? "campagne" : "campagnes"}
+            </span>
+          </span>
+          <span className="font-mono text-sm">
+            {formatEuroFromCents(laterSpend, currency)}
+          </span>
+        </button>
+      ) : null}
+      {(showLater ? [...later, ...rest] : rest).map((campaign) => (
+        <CampaignCard
+          key={campaign.campaignId ?? campaign.campaignName}
+          campaign={campaign}
+          currency={currency}
+        />
+      ))}
+    </div>
+    <div className="hidden max-w-full overflow-x-auto th-panel md:block">
       <table className="w-full min-w-[980px] table-fixed text-left text-sm">
         <colgroup>
           <col className="w-[24%]" />
@@ -124,6 +160,74 @@ export function PaidAdsView({
           ))}
         </tbody>
       </table>
+    </div>
+    </>
+  );
+}
+
+function CampaignCard({
+  campaign,
+  currency,
+}: {
+  campaign: MarketingAdsCampaignGroup;
+  currency: string;
+}) {
+  const ctr = ctrPercent(campaign.clicks, campaign.impressions);
+  return (
+    <div className="border border-border">
+      <div className="bg-surface px-3 py-2.5">
+        <p className="text-sm font-medium leading-snug">{campaign.campaignName}</p>
+        <p className="text-[11px] text-text-dim">
+          {campaign.startsAt ? `${formatCampaignDay(campaign.startsAt)} · ` : ""}
+          {campaign.ads} {campaign.ads === 1 ? "ad" : "ads"}
+        </p>
+        <dl className="mt-2 grid grid-cols-4 gap-2 text-sm">
+          {(
+            [
+              ["Spend", formatEuroFromCents(campaign.spendCents, currency)],
+              ["Aankopen", campaign.purchases > 0 ? formatNumber(campaign.purchases) : "—"],
+              ["Clicks", formatNumber(campaign.clicks)],
+              ["CTR", ctr != null ? formatPercent(ctr, 2) : "—"],
+            ] as const
+          ).map(([label, value]) => (
+            <div key={label} className="min-w-0">
+              <dt className="text-[10px] tracking-wider text-text-dim uppercase">{label}</dt>
+              <dd className="truncate font-mono tabular-nums">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      {campaign.rows.length > 0 ? (
+        <ul className="divide-y divide-border/70">
+          {campaign.rows.map((ad) => (
+            <li key={ad.id} className="flex items-center gap-2 px-3 py-2 text-xs text-text-muted">
+              {ad.thumbnailUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={ad.thumbnailUrl} alt="" className="size-8 shrink-0 object-cover" />
+              ) : null}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm text-text">
+                  {ad.adName || "Zonder naam"}
+                </span>
+                {ad.editionId ? (
+                  <Link
+                    href={`/dashboard/tickets/${ad.editionId}`}
+                    className="block truncate underline underline-offset-2"
+                  >
+                    {ad.editionName ?? "Gekoppeld"}
+                  </Link>
+                ) : null}
+              </span>
+              <span className="shrink-0 text-right font-mono tabular-nums">
+                {formatEuroFromCents(ad.spendCents, currency)}
+                <span className="block text-text-dim">
+                  {formatNumber(ad.clicks)} clicks
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

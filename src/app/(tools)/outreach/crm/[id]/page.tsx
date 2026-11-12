@@ -12,7 +12,7 @@ import { CrmContactsEditor } from "@/components/outreach/crm-contacts-editor";
 import { LinkedinEstimateForm } from "@/components/outreach/linkedin-estimate-form";
 import { getCrmDossier, statusLabels } from "@/lib/outreach/crm";
 import { mailAngleFor, mailAngleTone } from "@/lib/outreach/mail-angle";
-import { leadScore, leadTierTone } from "@/lib/outreach/lead-score";
+import { leadScoreForRecord, leadTierTone } from "@/lib/outreach/lead-score";
 import { OUTREACH_VARIANTS } from "@/lib/outreach/tone";
 import {
   linkedinCompanySearchUrl,
@@ -56,17 +56,7 @@ export default async function CrmDossierPage({
     anniversaryYears: dossier.anniversaryYears,
     nonMailing: dossier.nonMailing,
   });
-  const score = leadScore({
-    doelgroepFit: dossier.doelgroepFit,
-    angleId: angle.id,
-    jubileeYearsAway: angle.jubileeYearsAway,
-    hasEmail: Boolean(dossier.email),
-    hasContact: Boolean(dossier.decisionMakerName),
-    openCount: dossier.openCount,
-    clickCount: dossier.clickCount,
-    replyCount: dossier.replyCount,
-    status: dossier.status,
-  });
+  const score = leadScoreForRecord(dossier, angle);
   const templateName = (key: string | null) =>
     key ? (OUTREACH_VARIANTS.find((v) => v.id === key)?.name ?? key) : "—";
 

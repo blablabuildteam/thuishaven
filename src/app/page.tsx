@@ -19,6 +19,7 @@ export default async function HubPage() {
   const access = normalizeToolAccess(
     session.user.toolAccess,
     session.user.role,
+    session.user.email,
   );
   const tools = [
     access.dashboard
@@ -35,6 +36,14 @@ export default async function HubPage() {
           eyebrow: "Outreach",
           title: "Bedrijfsevent Outreach",
           description: "Bedrijven mailen en resultaten volgen.",
+        }
+      : null,
+    access.radar
+      ? {
+          href: "/radar/artiesten",
+          eyebrow: "Radar",
+          title: "DJ Talenten Radar",
+          description: "Opkomend talent scoren, volgen en boeken.",
         }
       : null,
   ].filter(Boolean) as Array<{
@@ -99,7 +108,9 @@ export default async function HubPage() {
           </div>
         </header>
 
-        <div className="stagger grid gap-3 sm:grid-cols-2">
+        <div
+          className={`stagger grid gap-3 ${tools.length >= 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}
+        >
           {tools.map((t) => (
             <ToolCard key={t.href} {...t} />
           ))}

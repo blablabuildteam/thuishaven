@@ -1098,6 +1098,41 @@ export async function verifyIntegration(id: string): Promise<VerifyResult> {
       return verifyWeeztix();
     case "resident_advisor":
       return verifyResidentAdvisor();
+    case "spotify": {
+      const { verifySpotify, isSpotifyConfigured } = await import(
+        "@/lib/integrations/spotify/client"
+      );
+      if (!isSpotifyConfigured()) {
+        return base(
+          "spotify",
+          "Spotify (Radar)",
+          "missing",
+          "Ontbreekt: SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET",
+        );
+      }
+      const probe = await verifySpotify();
+      return base(
+        "spotify",
+        "Spotify (Radar)",
+        probe.ok ? "verified" : "error",
+        probe.detail,
+      );
+    }
+    case "apify": {
+      const { verifyApify, isApifyConfigured } = await import(
+        "@/lib/integrations/apify/client"
+      );
+      if (!isApifyConfigured()) {
+        return base("apify", "Apify (Radar social)", "missing", "Ontbreekt: APIFY_TOKEN");
+      }
+      const probe = await verifyApify();
+      return base(
+        "apify",
+        "Apify (Radar social)",
+        probe.ok ? "verified" : "error",
+        probe.detail,
+      );
+    }
     case "ticketswap":
       return verifyTicketSwap();
     case "google_places":
@@ -1157,11 +1192,11 @@ export async function probeConfiguredIntegrations(): Promise<VerifyResult[]> {
       (row.status !== "manual" &&
         row.status !== "on_hold" &&
         row.status !== "missing" &&
-        ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "kvk", "apollo", "hunter", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "meta_ads", "tiktok", "tiktok_ads", "youtube_ads", "google_ads", "alert_notify"].includes(
+        ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "kvk", "apollo", "hunter", "resident_advisor", "spotify", "apify", "ticketswap", "google_places", "youtube", "instagram", "meta_ads", "tiktok", "tiktok_ads", "youtube_ads", "google_ads", "alert_notify"].includes(
           row.id,
         )),
   );
-  const always = ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "apollo", "hunter", "resident_advisor", "ticketswap", "google_places", "youtube", "instagram", "meta_ads", "tiktok", "tiktok_ads", "youtube_ads", "google_ads", "alert_notify"];
+  const always = ["brevo", "auth", "weeztix", "database", "open_meteo", "ai", "apollo", "hunter", "resident_advisor", "spotify", "apify", "ticketswap", "google_places", "youtube", "instagram", "meta_ads", "tiktok", "tiktok_ads", "youtube_ads", "google_ads", "alert_notify"];
   const ids = new Set([
     ...toProbe.map((r) => r.id),
     ...always.filter((id) => {
