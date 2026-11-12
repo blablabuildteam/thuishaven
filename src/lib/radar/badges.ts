@@ -31,7 +31,13 @@ export function badgePredicate(id: RadarBadgeId): SQL {
     case "nl":
       return sql`coalesce(${a.nlAudienceScore}, 0) >= 55`;
     case "nl_gig":
-      return sql`exists (
+      return sql`(
+        case
+          when nullif(trim(${a.residentCountry}), '') is not null
+            then lower(${a.residentCountry}) not in ('nl', 'netherlands', 'nederland', 'the netherlands')
+          else coalesce(${a.nlGigShare}, 0) < 0.5
+        end
+      ) and exists (
         select 1 from radar_gigs g
         where g.artist_id = ${a.id}
           and g.starts_at >= now() - interval '6 hours'

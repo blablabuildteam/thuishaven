@@ -94,8 +94,8 @@ export const RADAR_BADGES: RadarBadgeDef[] = [
   },
   {
     id: "nl_gig",
-    label: "Speelt in NL",
-    hint: "Aankomende gig in Nederland (komende 45 dagen).",
+    label: "Komt naar NL",
+    hint: "Woont buiten Nederland en speelt hier in de komende 45 dagen. Onbekende woonplaats telt alleen mee als ze vooral buiten NL draaien.",
     tone: "nl",
     group: "nederland",
   },
@@ -179,8 +179,8 @@ export const RADAR_PRESETS: RadarPreset[] = [
   },
   {
     id: "nl_binnenkort",
-    label: "Speelt binnenkort in NL",
-    hint: "NL-gig in de komende 45 dagen",
+    label: "Buitenlands, komt naar NL",
+    hint: "Woont buiten NL, speelt hier binnen 45 dagen",
     filter: { include: ["nl_gig"], exclude: ["groot"] },
   },
   {
