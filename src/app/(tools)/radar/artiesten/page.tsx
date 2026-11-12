@@ -10,6 +10,10 @@ import {
   listRadarArtists,
   type RadarArtistListSort,
 } from "@/lib/radar/artists";
+import {
+  parseBadgeFilter,
+  parseThuishavenFilter,
+} from "@/lib/radar/badges";
 import { loadRadarOverviewStats } from "@/lib/radar/stats";
 import type { RadarArtistStatus } from "@/lib/radar/types";
 
@@ -26,6 +30,8 @@ export default async function RadarArtistsPage({
     status?: string;
     sort?: string;
     nieuw?: string;
+    th?: string;
+    f?: string;
     page?: string;
   }>;
 }) {
@@ -36,7 +42,8 @@ export default async function RadarArtistsPage({
     sp.status && sp.status !== "all"
       ? (sp.status as RadarArtistStatus)
       : "all";
-  const nieuw = sp.nieuw !== "0";
+  const th = parseThuishavenFilter(sp.th, sp.nieuw);
+  const badges = parseBadgeFilter(sp.f);
 
   const [stats, list] = await Promise.all([
     loadRadarOverviewStats(),
@@ -44,10 +51,12 @@ export default async function RadarArtistsPage({
       q: sp.q,
       status,
       sort,
-      nieuw,
+      th,
+      badges,
       limit: PAGE_SIZE,
       offset: (page - 1) * PAGE_SIZE,
       includeTotal: true,
+      includeBadgeCounts: true,
     }),
   ]);
 
@@ -55,7 +64,7 @@ export default async function RadarArtistsPage({
     <div>
       <RadarPageHeader
         title="Artiesten"
-        description="Score = momentum + fit + bookability uit alle bronnen (RA, websites, IG, handmatig). Standaard alleen nieuw voor Thuishaven."
+        description="Ranking op momentum + fit + bookability uit alle bronnen. Badges laten zien waarom iemand opvalt; filters combineren (EN)."
         actions={
           <div className="flex flex-col items-end gap-1 text-sm">
             <Link
@@ -77,9 +86,15 @@ export default async function RadarArtistsPage({
       <RadarStatStrip
         items={[
           { label: "Op de radar", value: stats.artists },
+          {
+            label: "Nieuw deze week",
+            value: list.badgeCounts?.nieuw7 ?? "—",
+          },
           { label: "Shortlist", value: stats.shortlist },
-          { label: "Startvenues", value: stats.venuesSeed },
-          { label: "Venue-suggesties", value: stats.venuesSuggested },
+          {
+            label: "Al bij Thuishaven",
+            value: list.thCounts?.gespeeld ?? "—",
+          },
           { label: "Alerts open", value: stats.unreadAlerts },
         ]}
       />
@@ -92,23 +107,27 @@ export default async function RadarArtistsPage({
             status: a.status,
             primaryGenre: a.primaryGenre,
             growthScore: a.growthScore,
-            growthVelocity: a.growthVelocity,
             momentumScore: a.momentumScore,
             fitScore: a.fitScore,
             bookabilityScore: a.bookabilityScore,
             scoreReasons: (a.scoreReasons as string[] | null) ?? [],
             discoverySource: a.discoverySource,
-            imageUrl: a.imageUrl,
             country: a.country,
             residentCountry: a.residentCountry,
             raFollowerCount: a.raFollowerCount,
             homeGigCount: a.homeGigCount,
-            hasAgency: a.hasAgency,
+            nlAudienceScore: a.nlAudienceScore,
+            lastHomeGigAt: a.lastHomeGigAt,
+            nextHomeGigAt: a.nextHomeGigAt,
+            topMixseriesViews: a.topMixseriesViews,
+            badges: a.badges,
           }))}
           total={list.total}
           page={page}
           pageSize={PAGE_SIZE}
           spotifyReady={isSpotifyConfigured()}
+          badgeCounts={list.badgeCounts}
+          thCounts={list.thCounts}
         />
       </Suspense>
     </div>

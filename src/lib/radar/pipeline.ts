@@ -167,8 +167,12 @@ export async function runRadarPipeline(options?: {
 
   let nlAudience: RadarPipelineResult["nlAudience"] = null;
   if (!options?.skipNlAudience && !pastDeadline()) {
-    nlAudience = await refreshNlAudienceScores({ limit: 600 });
-    notes.push(`NL-audience: ${nlAudience.updated} scores bijgewerkt.`);
+    nlAudience = await refreshNlAudienceScores();
+    notes.push(
+      nlAudience.errors.length
+        ? `NL-audience mislukt: ${nlAudience.errors[0]}`
+        : `NL-audience: ${nlAudience.updated} scores bijgewerkt.`,
+    );
   }
 
   let rescore: RadarPipelineResult["rescore"] = null;

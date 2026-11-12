@@ -1,4 +1,12 @@
-import { and, asc, desc, eq, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, or, sql, type SQL } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import {
+  RADAR_BADGES,
+  badgePredicate,
+  type RadarBadgeFilter,
+  type RadarBadgeId,
+  type RadarThuishavenFilter,
+} from "@/lib/radar/badges";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import {
   radarArtistProfiles,
@@ -31,15 +39,29 @@ export type RadarArtistListItem = Pick<
   | "raFollowerCount"
   | "homeGigCount"
   | "hasAgency"
->;
+  | "nlAudienceScore"
+  | "firstSeenAt"
+> & {
+  badges: RadarBadgeId[];
+  lastHomeGigAt: string | null;
+  nextHomeGigAt: string | null;
+  topMixseriesViews: number | null;
+};
 
 export type RadarArtistListSort =
   | "score"
   | "momentum"
+  | "fit"
   | "bookability"
+  | "nl"
   | "ra_followers"
   | "newest"
   | "name";
+
+const HOME_GIG_SQL = sql`
+  select g.starts_at from radar_gigs g
+  join radar_venues v on v.id = g.venue_id
+  where g.artist_id = ${radarArtists.id} and v.ra_external_id = '109027'`;
 
 export async function listRadarArtists(options?: {
   q?: string;
@@ -48,71 +70,101 @@ export async function listRadarArtists(options?: {
   country?: string;
   /** Default true: only artists never booked at Thuishaven. */
   nieuw?: boolean;
+  /** Overrides `nieuw` when set. */
+  th?: RadarThuishavenFilter;
+  /** AND-filter on badges (include) and NOT-filter (exclude). */
+  badges?: RadarBadgeFilter;
   sort?: RadarArtistListSort;
   limit?: number;
   offset?: number;
   /** Skip expensive count(*) when the UI already has an overview total. */
   includeTotal?: boolean;
-}): Promise<{ rows: RadarArtistListItem[]; total: number }> {
+  /** Count per badge within the base filter (q/status/th), for chips. */
+  includeBadgeCounts?: boolean;
+}): Promise<{
+  rows: RadarArtistListItem[];
+  total: number;
+  badgeCounts?: Record<RadarBadgeId, number>;
+  thCounts?: Record<RadarThuishavenFilter, number>;
+}> {
   if (!hasDatabase()) return { rows: [], total: 0 };
   const db = getDb();
   const limit = Math.min(options?.limit ?? 50, 120);
   const offset = options?.offset ?? 0;
-  const filters = [];
+  const th: RadarThuishavenFilter =
+    options?.th ?? (options?.nieuw === false ? "alle" : "nieuw");
+  const baseFilters: SQL[] = [];
+  const filters: SQL[] = [];
   if (options?.q?.trim()) {
     const q = `%${options.q.trim().toLowerCase()}%`;
-    filters.push(
+    baseFilters.push(
       or(
         sql`lower(${radarArtists.name}) like ${q}`,
         sql`${radarArtists.normalizedName} like ${q}`,
-      ),
+      )!,
     );
   }
   if (options?.status && options.status !== "all") {
-    filters.push(eq(radarArtists.status, options.status));
+    baseFilters.push(eq(radarArtists.status, options.status));
   }
   if (options?.genre?.trim()) {
-    filters.push(eq(radarArtists.primaryGenre, options.genre.trim()));
+    baseFilters.push(eq(radarArtists.primaryGenre, options.genre.trim()));
   }
   if (options?.country?.trim()) {
     const c = options.country.trim();
-    filters.push(
+    baseFilters.push(
       or(
         eq(radarArtists.residentCountry, c),
         eq(radarArtists.country, c),
-      ),
+      )!,
     );
   }
-  if (options?.nieuw !== false) {
-    filters.push(eq(radarArtists.homeGigCount, 0));
+  const thFilter =
+    th === "nieuw"
+      ? eq(radarArtists.homeGigCount, 0)
+      : th === "gespeeld"
+        ? sql`${radarArtists.homeGigCount} > 0`
+        : null;
+  if (thFilter) filters.push(thFilter);
+  for (const b of options?.badges?.include ?? []) {
+    filters.push(badgePredicate(b));
   }
-  const where = filters.length ? and(...filters) : undefined;
+  for (const b of options?.badges?.exclude ?? []) {
+    filters.push(sql`not (${badgePredicate(b)})`);
+  }
+
+  const baseWhere = baseFilters.length ? and(...baseFilters) : undefined;
+  const chipWhere = and(...baseFilters, ...(thFilter ? [thFilter] : []));
+  const where = and(...baseFilters, ...filters);
   const needsCount = options?.includeTotal !== false;
 
+  const desc2 = (col: AnyPgColumn) => [
+    sql`${col} desc nulls last`,
+    asc(radarArtists.name),
+  ];
   const orderBy =
     options?.sort === "name"
       ? [asc(radarArtists.name)]
       : options?.sort === "newest"
         ? [desc(radarArtists.firstSeenAt), asc(radarArtists.name)]
         : options?.sort === "momentum"
-          ? [
-              sql`${radarArtists.momentumScore} desc nulls last`,
-              asc(radarArtists.name),
-            ]
-          : options?.sort === "bookability"
-            ? [
-                sql`${radarArtists.bookabilityScore} desc nulls last`,
-                asc(radarArtists.name),
-              ]
-            : options?.sort === "ra_followers"
-              ? [
-                  sql`${radarArtists.raFollowerCount} desc nulls last`,
-                  asc(radarArtists.name),
-                ]
-              : [
-                  sql`${radarArtists.growthScore} desc nulls last`,
-                  asc(radarArtists.name),
-                ];
+          ? desc2(radarArtists.momentumScore)
+          : options?.sort === "fit"
+            ? desc2(radarArtists.fitScore)
+            : options?.sort === "bookability"
+              ? desc2(radarArtists.bookabilityScore)
+              : options?.sort === "nl"
+                ? desc2(radarArtists.nlAudienceScore)
+                : options?.sort === "ra_followers"
+                  ? desc2(radarArtists.raFollowerCount)
+                  : desc2(radarArtists.growthScore);
+
+  const badgeSelect = Object.fromEntries(
+    RADAR_BADGES.map((b) => [
+      `b_${b.id}`,
+      sql<boolean>`(${badgePredicate(b.id)})`,
+    ]),
+  ) as Record<`b_${RadarBadgeId}`, SQL<boolean>>;
 
   const listQuery = db
     .select({
@@ -133,6 +185,19 @@ export async function listRadarArtists(options?: {
       raFollowerCount: radarArtists.raFollowerCount,
       homeGigCount: radarArtists.homeGigCount,
       hasAgency: radarArtists.hasAgency,
+      nlAudienceScore: radarArtists.nlAudienceScore,
+      firstSeenAt: radarArtists.firstSeenAt,
+      lastHomeGigAt: sql<string | null>`(
+        select max(x.starts_at)::text from (${HOME_GIG_SQL} and g.starts_at < now()) x
+      )`,
+      nextHomeGigAt: sql<string | null>`(
+        select min(x.starts_at)::text from (${HOME_GIG_SQL} and g.starts_at >= now()) x
+      )`,
+      topMixseriesViews: sql<number | null>`(
+        select max(m.view_count) from radar_mixseries_appearances m
+        where m.artist_id = ${radarArtists.id}
+      )`,
+      ...badgeSelect,
     })
     .from(radarArtists)
     .where(where)
@@ -140,17 +205,81 @@ export async function listRadarArtists(options?: {
     .limit(limit)
     .offset(offset);
 
-  if (!needsCount) {
-    const rows = await listQuery;
-    return { rows, total: rows.length };
-  }
+  const badgeCountsQuery = options?.includeBadgeCounts
+    ? db
+        .select({
+          ...(Object.fromEntries(
+            RADAR_BADGES.map((b) => [
+              b.id,
+              sql<number>`count(*) filter (where ${badgePredicate(b.id)})::int`,
+            ]),
+          ) as Record<RadarBadgeId, SQL<number>>),
+        })
+        .from(radarArtists)
+        .where(chipWhere)
+    : null;
 
-  const [countRow] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(radarArtists)
-    .where(where);
-  const rows = await listQuery;
-  return { rows, total: countRow?.n ?? 0 };
+  const thCountsQuery = options?.includeBadgeCounts
+    ? db
+        .select({
+          alle: sql<number>`count(*)::int`,
+          nieuw: sql<number>`count(*) filter (where ${radarArtists.homeGigCount} = 0)::int`,
+          gespeeld: sql<number>`count(*) filter (where ${radarArtists.homeGigCount} > 0)::int`,
+        })
+        .from(radarArtists)
+        .where(baseWhere)
+    : null;
+
+  const [raw, countRows, badgeRows, thRows] = await Promise.all([
+    listQuery,
+    needsCount
+      ? db
+          .select({ n: sql<number>`count(*)::int` })
+          .from(radarArtists)
+          .where(where)
+      : Promise.resolve(null),
+    badgeCountsQuery ?? Promise.resolve(null),
+    thCountsQuery ?? Promise.resolve(null),
+  ]);
+
+  const rows: RadarArtistListItem[] = raw.map((r) => {
+    const badges = RADAR_BADGES.filter(
+      (b) => (r as Record<string, unknown>)[`b_${b.id}`] === true,
+    ).map((b) => b.id);
+    return {
+      id: r.id,
+      name: r.name,
+      status: r.status,
+      primaryGenre: r.primaryGenre,
+      growthScore: r.growthScore,
+      growthVelocity: r.growthVelocity,
+      momentumScore: r.momentumScore,
+      fitScore: r.fitScore,
+      bookabilityScore: r.bookabilityScore,
+      scoreReasons: r.scoreReasons,
+      discoverySource: r.discoverySource,
+      imageUrl: r.imageUrl,
+      country: r.country,
+      residentCountry: r.residentCountry,
+      raFollowerCount: r.raFollowerCount,
+      homeGigCount: r.homeGigCount,
+      hasAgency: r.hasAgency,
+      nlAudienceScore: r.nlAudienceScore,
+      firstSeenAt: r.firstSeenAt,
+      lastHomeGigAt: r.lastHomeGigAt,
+      nextHomeGigAt: r.nextHomeGigAt,
+      topMixseriesViews:
+        r.topMixseriesViews != null ? Number(r.topMixseriesViews) : null,
+      badges,
+    };
+  });
+
+  return {
+    rows,
+    total: countRows?.[0]?.n ?? rows.length,
+    badgeCounts: badgeRows?.[0] as Record<RadarBadgeId, number> | undefined,
+    thCounts: thRows?.[0] as Record<RadarThuishavenFilter, number> | undefined,
+  };
 }
 
 export async function getRadarArtist(id: string): Promise<{
