@@ -324,6 +324,26 @@ export function ArtistsWorkbench({
                 </div>
                 <ScoreCell a={a} />
               </div>
+              {a.status === "new" ? (
+                <div className="mt-2 flex gap-1">
+                  <button
+                    type="button"
+                    disabled={busyId === a.id}
+                    onClick={() => setArtistStatus(a.id, "watching")}
+                    className="border border-text bg-text px-2 py-1 text-[10px] tracking-[0.06em] text-bg uppercase"
+                  >
+                    Volgen
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busyId === a.id}
+                    onClick={() => setArtistStatus(a.id, "shortlist")}
+                    className="border border-border px-2 py-1 text-[10px] tracking-[0.06em] uppercase"
+                  >
+                    Shortlist
+                  </button>
+                </div>
+              ) : null}
             </li>
           ))
         )}
@@ -401,18 +421,41 @@ export function ArtistsWorkbench({
                     {a.residentCountry ?? a.country ?? "—"}
                   </td>
                   <td className="px-3 py-3">
-                    <select
-                      value={a.status}
-                      disabled={busyId === a.id}
-                      onChange={(e) => setArtistStatus(a.id, e.target.value as RadarArtistStatus)}
-                      className="max-w-[9rem] border border-border bg-bg px-1.5 py-1 text-xs"
-                    >
-                      {STATUSES.map((s) => (
-                        <option key={s} value={s}>
-                          {RADAR_ARTIST_STATUS_NL[s]}
-                        </option>
-                      ))}
-                    </select>
+                    {a.status === "new" ? (
+                      <div className="flex flex-wrap gap-1">
+                        <button
+                          type="button"
+                          disabled={busyId === a.id}
+                          onClick={() => setArtistStatus(a.id, "watching")}
+                          className="border border-text bg-text px-2 py-1 text-[10px] tracking-[0.06em] text-bg uppercase disabled:opacity-50"
+                        >
+                          Volgen
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyId === a.id}
+                          onClick={() => setArtistStatus(a.id, "shortlist")}
+                          className="border border-border px-2 py-1 text-[10px] tracking-[0.06em] uppercase hover:border-text disabled:opacity-50"
+                        >
+                          Shortlist
+                        </button>
+                      </div>
+                    ) : (
+                      <select
+                        value={a.status}
+                        disabled={busyId === a.id}
+                        onChange={(e) =>
+                          setArtistStatus(a.id, e.target.value as RadarArtistStatus)
+                        }
+                        className="max-w-[9rem] border border-border bg-bg px-1.5 py-1 text-xs"
+                      >
+                        {STATUSES.map((s) => (
+                          <option key={s} value={s}>
+                            {RADAR_ARTIST_STATUS_NL[s]}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </td>
                 </tr>
               ))

@@ -91,8 +91,24 @@ export async function enrichArtistsFromRa(options?: {
         ),
       ),
     )
-    .groupBy(radarArtists.id, radarArtistProfiles.externalId)
-    .orderBy(desc(sql`count(${radarGigs.id})`), asc(radarArtists.name))
+    .groupBy(
+      radarArtists.id,
+      radarArtistProfiles.externalId,
+      radarArtists.status,
+      radarArtists.growthScore,
+      radarArtists.name,
+    )
+    .orderBy(
+      // Watchlist first — woonplaats + followers for people we actually follow
+      sql`case when ${radarArtists.status} = 'shortlist' then 0
+               when ${radarArtists.status} = 'watching' then 1
+               when ${radarArtists.status} = 'contacted' then 2
+               when ${radarArtists.status} = 'new' and coalesce(${radarArtists.growthScore}, 0)::numeric >= 55 then 3
+               else 4 end`,
+      desc(radarArtists.growthScore),
+      desc(sql`count(${radarGigs.id})`),
+      asc(radarArtists.name),
+    )
     .limit(limit);
 
   for (const row of candidates) {

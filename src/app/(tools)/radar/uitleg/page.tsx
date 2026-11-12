@@ -49,7 +49,12 @@ const PAGES = [
   {
     href: "/radar/artiesten",
     title: "Artiesten",
-    use: "Je werklijst. Start met een snelfilter zoals “Nu boeken” en klik door naar het dossier.",
+    use: "Ontdekken. Start met een snelfilter en zet kansrijke namen op Volgen.",
+  },
+  {
+    href: "/radar/watchlist",
+    title: "Watchlist",
+    use: "Jouw Volgen/Shortlist. Hier meten we groei en sturen we Lanceert-alerts.",
   },
   {
     href: "/radar/alerts",
@@ -254,7 +259,7 @@ export default function RadarUitlegPage() {
 
       <section>
         <SectionTitle eyebrow="Waar vind je wat" title="De pagina’s" />
-        <div className="grid gap-px border border-border bg-border sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-px border border-border bg-border sm:grid-cols-2 lg:grid-cols-3">
           {PAGES.map((p) => (
             <Link
               key={p.href}

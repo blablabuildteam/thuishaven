@@ -23,6 +23,7 @@ import {
   LayoutDashboard,
   MapPin,
   Tent,
+  Eye,
   Menu,
   Plug,
   ScrollText,
@@ -256,6 +257,7 @@ const radarSections: NavSection[] = [
     label: "Scouten",
     items: [
       { href: "/radar/artiesten", label: "Artiesten", icon: Disc3 },
+      { href: "/radar/watchlist", label: "Watchlist", icon: Eye },
       { href: "/radar/alerts", label: "Alerts", icon: Bell },
       { href: "/radar/uitleg", label: "Uitleg", icon: BookOpen },
     ],

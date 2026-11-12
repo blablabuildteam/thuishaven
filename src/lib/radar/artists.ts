@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   RADAR_BADGES,
@@ -68,6 +68,8 @@ const HOME_GIG_SQL = sql`
 export async function listRadarArtists(options?: {
   q?: string;
   status?: RadarArtistStatus | "all";
+  /** Multiple statuses (e.g. watchlist = watching + shortlist). */
+  statuses?: RadarArtistStatus[];
   genre?: string;
   country?: string;
   /** Default true: only artists never booked at Thuishaven. */
@@ -107,7 +109,9 @@ export async function listRadarArtists(options?: {
       )!,
     );
   }
-  if (options?.status && options.status !== "all") {
+  if (options?.statuses?.length) {
+    baseFilters.push(inArray(radarArtists.status, options.statuses));
+  } else if (options?.status && options.status !== "all") {
     baseFilters.push(eq(radarArtists.status, options.status));
   }
   if (options?.genre?.trim()) {
@@ -349,7 +353,7 @@ export async function getRadarArtist(id: string): Promise<{
       .from(radarMetricSnapshots)
       .where(eq(radarMetricSnapshots.artistId, id))
       .orderBy(desc(radarMetricSnapshots.capturedAt))
-      .limit(40),
+      .limit(120),
     db
       .select()
       .from(radarGigs)

@@ -8,6 +8,7 @@ export type RadarAlertKind =
   | "velocity"
   | "breakthrough"
   | "window_closing"
+  | "launch"
   | "mixseries"
   | "lineup"
   | "venue_suggestion"
@@ -59,9 +60,17 @@ export const RADAR_ALERT_DEFS: RadarAlertDef[] = [
     group: "artiest",
   },
   {
+    kind: "launch",
+    label: "Lanceert",
+    meaning: "Volgers op RA/IG/SC knikken omhoog — iemand gaat hard.",
+    action: "Open de groei-grafiek. Shortlist als het bij Thuishaven past.",
+    tone: "growth",
+    group: "artiest",
+  },
+  {
     kind: "mixseries",
     label: "Set gaat hard",
-    meaning: "Set op Boiler Room, HÖR, Dekmantel e.a. met veel views.",
+    meaning: "Set op Boiler Room, HÖR, Dekmantel, NTS, Rinse e.a. met veel views.",
     action: "Bekijk de set — vaak het eerste signaal vóór de clubtour.",
     tone: "sets",
     group: "sets",

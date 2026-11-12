@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { FollowerGrowthChart } from "@/components/radar/follower-growth-chart";
 import { RadarInfoTip } from "@/components/radar/radar-info-tip";
 import { RadarBadge, RadarBadgePill } from "@/components/radar/radar-badge";
 import type { RadarBadgeId } from "@/lib/radar/badge-defs";
@@ -105,8 +106,10 @@ export function ArtistDossier({
     "soundcloud",
   ]);
   const labels = labelsFromProfiles(profiles);
+  // Compare against a fixed "now" for this mount (avoids impure Date.now in render).
+  const [nowMs] = useState(() => Date.now());
   const upcoming = recentGigs.filter(
-    (g) => g.startsAt && new Date(g.startsAt).getTime() >= Date.now() - 6 * 3600_000,
+    (g) => g.startsAt && new Date(g.startsAt).getTime() >= nowMs - 6 * 3600_000,
   );
   const nlSharePct =
     artist.nlGigShare != null && artist.nlGigShare !== ""
@@ -250,37 +253,50 @@ export function ArtistDossier({
         </dl>
       </div>
 
-      {(deltas.length > 0 ||
-        labels.length > 0 ||
+      <section className="border border-border bg-surface p-4">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="font-display text-lg tracking-[0.04em]">
+              Volgersgroei
+            </h2>
+            <p className="mt-0.5 text-xs text-text-muted">
+              RA, Instagram en SoundCloud over tijd — zo zie je wanneer iemand
+              lanceert.
+            </p>
+          </div>
+          {deltas.length > 0 ? (
+            <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+              {deltas.map((d) => (
+                <li key={d.platform}>
+                  <span className="text-text-dim uppercase tracking-[0.08em]">
+                    {d.platform === "resident_advisor"
+                      ? "RA"
+                      : d.platform === "soundcloud"
+                        ? "SC"
+                        : "IG"}
+                  </span>{" "}
+                  {formatDelta(d)}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+        <div className="mt-3">
+          <FollowerGrowthChart metrics={recentMetrics} />
+        </div>
+        {status === "new" ? (
+          <p className="mt-2 text-xs text-text-dim">
+            Tip: zet op <strong className="text-text">Volgen</strong> zodat we
+            vaker snapshots nemen en de lijn gevuld blijft.
+          </p>
+        ) : null}
+      </section>
+
+      {(labels.length > 0 ||
         upcoming.length > 0 ||
         artist.nlAudienceScore != null ||
         mixseries.length > 0) && (
-        <section className="grid gap-3 border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <h2 className="flex items-center gap-1 font-display text-lg tracking-[0.04em]">
-              Social growth
-            </h2>
-            {deltas.length === 0 ? (
-              <p className="mt-2 text-xs text-text-muted">
-                Nog geen snapshots — avondcron vult IG/SC voor shortlist.
-              </p>
-            ) : (
-              <ul className="mt-2 space-y-1 text-sm">
-                {deltas.map((d) => (
-                  <li key={d.platform}>
-                    <span className="text-text-dim uppercase tracking-[0.08em] text-[10px]">
-                      {d.platform === "resident_advisor"
-                        ? "RA"
-                        : d.platform === "soundcloud"
-                          ? "SC"
-                          : "IG"}
-                    </span>{" "}
-                    {formatDelta(d)}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+        <section className="grid gap-3 border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <h2 className="flex items-center gap-1 font-display text-lg tracking-[0.04em]">
               NL-audience
@@ -386,9 +402,39 @@ export function ArtistDossier({
       <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
         <section className="space-y-4 border border-border bg-surface p-4">
           <h2 className="font-display text-lg tracking-[0.04em]">Workflow</h2>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                ["watching", "Volgen"],
+                ["shortlist", "Shortlist"],
+                ["passed", "Gepasseerd"],
+              ] as const
+            ).map(([s, label]) => (
+              <button
+                key={s}
+                type="button"
+                disabled={busy || status === s}
+                onClick={() => {
+                  setStatus(s);
+                  if (s === "passed") {
+                    void save({ status: s, feedbackReason });
+                    return;
+                  }
+                  void save({ status: s });
+                }}
+                className={
+                  status === s
+                    ? "border border-text bg-text px-3 py-1.5 text-xs text-bg"
+                    : "border border-border px-3 py-1.5 text-xs hover:border-text"
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <label className="block text-sm">
             <span className="mb-1 block text-[10px] tracking-[0.12em] text-text-dim uppercase">
-              Status
+              Status (alle)
             </span>
             <select
               value={status}

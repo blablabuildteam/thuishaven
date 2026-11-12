@@ -13,6 +13,7 @@ import { syncSoundCloudForShortlist } from "@/lib/radar/sources/soundcloud-sync"
 import { refreshNlAudienceScores } from "@/lib/radar/nl-audience";
 import { nextVenueBatch } from "@/lib/radar/rotation";
 import { refreshSuggestedVenueScores } from "@/lib/radar/venues";
+import { detectLaunchAlerts } from "@/lib/radar/launch-detect";
 import { isSpotifyConfigured } from "@/lib/integrations/spotify/client";
 import {
   amsterdamIsoWeekday,
@@ -35,6 +36,7 @@ export type RadarPipelineResult = {
   rescore: Awaited<ReturnType<typeof rescoreStaleArtists>> | null;
   spotify: Awaited<ReturnType<typeof syncSpotifyForRadarArtists>> | null;
   social: Awaited<ReturnType<typeof syncSocialForTopArtists>> | null;
+  launch: Awaited<ReturnType<typeof detectLaunchAlerts>> | null;
   digest: Awaited<ReturnType<typeof sendRadarDigest>> | null;
   notes: string[];
 };
@@ -127,7 +129,8 @@ export async function runRadarPipeline(options?: {
 
   let mixseries: RadarPipelineResult["mixseries"] = null;
   if (!options?.skipMixseries && !pastDeadline()) {
-    mixseries = await syncMixseriesChannels({ videosPerChannel: 10 });
+    // Meer kanalen → iets minder video's per kanaal (YouTube-quota)
+    mixseries = await syncMixseriesChannels({ videosPerChannel: 8 });
     if (mixseries.note) notes.push(mixseries.note);
     else {
       notes.push(
@@ -208,6 +211,16 @@ export async function runRadarPipeline(options?: {
     if (social.note) notes.push(social.note);
   }
 
+  let launch: RadarPipelineResult["launch"] = null;
+  if (!pastDeadline()) {
+    launch = await detectLaunchAlerts({ limit: 200 });
+    if (launch.alerts > 0 || launch.checked > 0) {
+      notes.push(
+        `Lanceert: ${launch.alerts} alerts op ${launch.checked} watchlist-artiesten.`,
+      );
+    }
+  }
+
   let digest: RadarPipelineResult["digest"] = null;
   if (!options?.skipDigest) {
     const now = new Date();
@@ -248,6 +261,7 @@ export async function runRadarPipeline(options?: {
     rescore,
     spotify,
     social,
+    launch,
     digest,
     notes,
   };
