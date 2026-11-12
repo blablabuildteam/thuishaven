@@ -10,7 +10,9 @@ export type SocialBrandChannel =
   | "google_ads"
   | "mail"
   | "brevo"
-  | "email";
+  | "email"
+  | "soundcloud"
+  | "resident_advisor";
 
 const ICON_SRC: Record<SocialBrandChannel, string> = {
   instagram: "/social-icons/insta.webp",
@@ -22,6 +24,8 @@ const ICON_SRC: Record<SocialBrandChannel, string> = {
   mail: "/social-icons/mail.png",
   brevo: "/social-icons/mail.png",
   email: "/social-icons/mail.png",
+  soundcloud: "/social-icons/soundcloud.svg",
+  resident_advisor: "/social-icons/resident-advisor.svg",
 };
 
 const ICON_ALT: Record<SocialBrandChannel, string> = {
@@ -34,6 +38,8 @@ const ICON_ALT: Record<SocialBrandChannel, string> = {
   mail: "Mail",
   brevo: "Brevo",
   email: "E-mail",
+  soundcloud: "SoundCloud",
+  resident_advisor: "Resident Advisor",
 };
 
 export function resolveSocialBrandChannel(
@@ -42,6 +48,9 @@ export function resolveSocialBrandChannel(
   if (!channel) return null;
   const key = channel.toLowerCase().trim().replace(/[\s-]+/g, "_");
   if (key === "google" || key === "googleads") return "google_ads";
+  if (key === "ra" || key === "residentadvisor") return "resident_advisor";
+  if (key === "sc" || key === "sound_cloud") return "soundcloud";
+  if (key === "ig") return "instagram";
   if (key in ICON_SRC) return key as SocialBrandChannel;
   return null;
 }

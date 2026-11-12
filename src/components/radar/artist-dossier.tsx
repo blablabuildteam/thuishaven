@@ -6,12 +6,22 @@ import { useState } from "react";
 import { FollowerGrowthChart } from "@/components/radar/follower-growth-chart";
 import { RadarInfoTip } from "@/components/radar/radar-info-tip";
 import { RadarBadge, RadarBadgePill } from "@/components/radar/radar-badge";
+import { SocialChannelIcon } from "@/components/ui/social-channel-icon";
 import type { RadarBadgeId } from "@/lib/radar/badge-defs";
 import {
   followerDeltas,
   formatDelta,
   labelsFromProfiles,
 } from "@/lib/radar/metric-deltas";
+
+const PLATFORM_LABEL: Record<string, string> = {
+  resident_advisor: "Resident Advisor",
+  instagram: "Instagram",
+  soundcloud: "SoundCloud",
+  spotify: "Spotify",
+  youtube: "YouTube",
+  tiktok: "TikTok",
+};
 import {
   RADAR_ARTIST_STATUS_NL,
   RADAR_FEEDBACK_REASON_NL,
@@ -185,27 +195,39 @@ export function ArtistDossier({
             </ul>
           ) : null}
           {profiles.length > 0 ? (
-            <ul className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-sm">
-              {profiles.map((p) => (
-                <li key={`${p.platform}-${p.handle ?? p.url}`}>
-                  {p.url ? (
-                    <a
-                      href={p.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="underline hover:text-text"
-                    >
-                      {p.platform}
-                      {p.handle ? ` @${p.handle}` : ""}
-                    </a>
-                  ) : (
-                    <span className="text-text-muted">
-                      {p.platform}
-                      {p.handle ? ` @${p.handle}` : ""}
+            <ul className="mt-3 flex flex-wrap gap-2 text-sm">
+              {profiles.map((p) => {
+                const label = PLATFORM_LABEL[p.platform] ?? p.platform;
+                const inner = (
+                  <>
+                    <SocialChannelIcon channel={p.platform} size={14} />
+                    <span>
+                      {label}
+                      {p.handle ? (
+                        <span className="text-text-muted"> @{p.handle}</span>
+                      ) : null}
                     </span>
-                  )}
-                </li>
-              ))}
+                  </>
+                );
+                return (
+                  <li key={`${p.platform}-${p.handle ?? p.url}`}>
+                    {p.url ? (
+                      <a
+                        href={p.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 border border-border px-2 py-1 hover:border-text"
+                      >
+                        {inner}
+                      </a>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 border border-border px-2 py-1 text-text-muted">
+                        {inner}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <p className="mt-3 text-xs text-text-dim">
@@ -267,15 +289,13 @@ export function ArtistDossier({
           {deltas.length > 0 ? (
             <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
               {deltas.map((d) => (
-                <li key={d.platform}>
-                  <span className="text-text-dim uppercase tracking-[0.08em]">
-                    {d.platform === "resident_advisor"
-                      ? "RA"
-                      : d.platform === "soundcloud"
-                        ? "SC"
-                        : "IG"}
-                  </span>{" "}
-                  {formatDelta(d)}
+                <li key={d.platform} className="inline-flex items-center gap-1.5">
+                  <SocialChannelIcon channel={d.platform} size={12} />
+                  <span>
+                    {PLATFORM_LABEL[d.platform] ?? d.platform}
+                    {": "}
+                    {formatDelta(d)}
+                  </span>
                 </li>
               ))}
             </ul>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { RadarInfoTip } from "@/components/radar/radar-info-tip";
+import { SocialChannelIcon } from "@/components/ui/social-channel-icon";
 import type { RadarSettingsValue } from "@/lib/radar/settings";
 
 export function RadarSettingsForm({
@@ -134,7 +135,8 @@ export function RadarSettingsForm({
           ] as const
         ).map(([key, label]) => (
           <label key={key} className="text-sm">
-            <span className="mb-1 block text-[10px] tracking-[0.12em] text-text-dim uppercase">
+            <span className="mb-1 flex items-center gap-1.5 text-[10px] tracking-[0.12em] text-text-dim uppercase">
+              <SocialChannelIcon channel={key} size={12} />
               {label}
             </span>
             <input

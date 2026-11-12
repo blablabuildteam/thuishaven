@@ -77,12 +77,12 @@ export function followerDeltas(
 
 export function formatDelta(d: FollowerDelta): string {
   if (d.delta == null) {
-    return `${d.latest.toLocaleString("nl-NL")} volgers`;
+    return `${d.latest.toLocaleString("nl-NL")} volgers (nog geen trend)`;
   }
   const sign = d.delta > 0 ? "+" : "";
   const pct =
     d.deltaPct != null ? ` (${sign}${d.deltaPct.toFixed(1)}%)` : "";
-  return `${d.latest.toLocaleString("nl-NL")} · ${sign}${d.delta.toLocaleString("nl-NL")}${pct}`;
+  return `${d.latest.toLocaleString("nl-NL")} volgers · ${sign}${d.delta.toLocaleString("nl-NL")}${pct}`;
 }
 
 export function labelsFromProfiles(

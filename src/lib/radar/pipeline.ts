@@ -207,8 +207,30 @@ export async function runRadarPipeline(options?: {
 
   let social: RadarPipelineResult["social"] = null;
   if (!options?.skipSocial && !pastDeadline()) {
-    social = await syncSocialForTopArtists({ limit: 25, followGigs: true });
-    if (social.note) notes.push(social.note);
+    try {
+      social = await syncSocialForTopArtists({ limit: 25, followGigs: true });
+      if (social.note) notes.push(social.note);
+      else {
+        notes.push(
+          `IG-social: ${social.synced}/${social.attempted} ververst` +
+            (social.gigsDetected ? `, ${social.gigsDetected} gig-hints` : ""),
+        );
+      }
+      if (social.errors.length) {
+        notes.push(`IG-social errors: ${social.errors.slice(0, 2).join("; ")}`);
+      }
+    } catch (e) {
+      notes.push(
+        `IG-social crash: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      social = {
+        attempted: 0,
+        synced: 0,
+        skipped: 0,
+        gigsDetected: 0,
+        errors: [e instanceof Error ? e.message : String(e)],
+      };
+    }
   }
 
   let launch: RadarPipelineResult["launch"] = null;

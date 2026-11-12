@@ -5,7 +5,7 @@
  * - Batch many handles in ONE actor run
  * - Posts (gig-detectie) alleen voor shortlist
  */
-import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
 import {
   isApifyConfigured,
@@ -88,8 +88,8 @@ export async function syncSocialForTopArtists(options?: {
         ),
         sql`${radarArtistProfiles.handle} is not null`,
         or(
-          sql`${radarArtistProfiles.lastSyncedAt} is null`,
-          sql`${radarArtistProfiles.lastSyncedAt} < ${staleBefore}`,
+          isNull(radarArtistProfiles.lastSyncedAt),
+          lt(radarArtistProfiles.lastSyncedAt, staleBefore),
         ),
       ),
     )
