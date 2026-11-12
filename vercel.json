@@ -57,6 +57,10 @@
       "schedule": "20 7 * * *"
     },
     {
+      "path": "/api/cron/dj-fees-sheet",
+      "schedule": "0 4 * * *"
+    },
+    {
       "path": "/api/cron/sales-digest",
       "schedule": "5 16,17 * * *"
     }

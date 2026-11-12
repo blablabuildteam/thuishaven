@@ -53,7 +53,9 @@ export const updateDjFeeArtistSchema = z
 export type { DjFeeArtistView, DjFeeEventView } from "@/lib/dashboard/dj-fee-ranges";
 
 function asSource(value: string): DjFeeArtistSource {
-  if (value === "edition_name" || value === "custom") return value;
+  if (value === "edition_name" || value === "custom" || value === "sheet") {
+    return value;
+  }
   return "resident_advisor";
 }
 
@@ -88,6 +90,8 @@ function artistView(row: {
   feeRange: string | null;
   isTenHour: boolean;
   source: string;
+  sheetSyncedAt: Date | null;
+  sheetNote: string | null;
 }): DjFeeArtistView {
   return {
     id: row.id,
@@ -96,6 +100,8 @@ function artistView(row: {
     feeRange: asRange(row.feeRange),
     isTenHour: row.isTenHour,
     source: asSource(row.source),
+    fromSheet: row.sheetSyncedAt != null,
+    sheetNote: row.sheetNote,
   };
 }
 
@@ -210,6 +216,8 @@ async function loadDjFeeBoardFresh(): Promise<DjFeeEventView[]> {
         isTenHour: djFeeArtists.isTenHour,
         source: djFeeArtists.source,
         sortOrder: djFeeArtists.sortOrder,
+        sheetSyncedAt: djFeeArtists.sheetSyncedAt,
+        sheetNote: djFeeArtists.sheetNote,
         createdAt: djFeeArtists.createdAt,
         removedAt: djFeeArtists.removedAt,
       })
@@ -504,15 +512,16 @@ export async function updateDjFeeArtist(
   patch: { feeAmount?: number | null; isTenHour?: boolean },
 ): Promise<
   | { ok: true; artist: DjFeeArtistView }
-  | { ok: false; error: "not_found" }
+  | { ok: false; error: "not_found" | "from_sheet" }
 > {
   const db = getDb();
   const existing = await db
-    .select({ id: djFeeArtists.id })
+    .select({ id: djFeeArtists.id, sheetSyncedAt: djFeeArtists.sheetSyncedAt })
     .from(djFeeArtists)
     .where(and(eq(djFeeArtists.id, id), isNull(djFeeArtists.removedAt)))
     .limit(1);
   if (!existing[0]) return { ok: false, error: "not_found" };
+  if (existing[0].sheetSyncedAt) return { ok: false, error: "from_sheet" };
 
   const [updated] = await db
     .update(djFeeArtists)
@@ -534,14 +543,15 @@ export async function updateDjFeeArtist(
 
 export async function removeDjFeeArtist(
   id: string,
-): Promise<{ ok: true } | { ok: false; error: "not_found" }> {
+): Promise<{ ok: true } | { ok: false; error: "not_found" | "from_sheet" }> {
   const db = getDb();
   const existing = await db
-    .select({ id: djFeeArtists.id })
+    .select({ id: djFeeArtists.id, sheetSyncedAt: djFeeArtists.sheetSyncedAt })
     .from(djFeeArtists)
     .where(and(eq(djFeeArtists.id, id), isNull(djFeeArtists.removedAt)))
     .limit(1);
   if (!existing[0]) return { ok: false, error: "not_found" };
+  if (existing[0].sheetSyncedAt) return { ok: false, error: "from_sheet" };
 
   await db
     .update(djFeeArtists)

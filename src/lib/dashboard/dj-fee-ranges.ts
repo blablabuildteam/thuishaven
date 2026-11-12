@@ -15,7 +15,8 @@ export type DjFeeRangeId = (typeof DJ_FEE_RANGE_IDS)[number];
 export type DjFeeArtistSource =
   | "resident_advisor"
   | "edition_name"
-  | "custom";
+  | "custom"
+  | "sheet";
 
 export type DjFeeRangeDef = {
   id: DjFeeRangeId;
@@ -268,6 +269,10 @@ export type DjFeeArtistView = {
   feeRange: DjFeeRangeId | null;
   isTenHour: boolean;
   source: DjFeeArtistSource;
+  /** Fee comes from the client's Google Sheet: read-only in the dashboard. */
+  fromSheet: boolean;
+  /** Soort Fee / Bijzonderheid / notes from the sheet. */
+  sheetNote: string | null;
 };
 
 export type DjFeeEventView = {
@@ -301,6 +306,7 @@ export function djFeesCsv(
     resident_advisor: "Resident Advisor",
     edition_name: "Eventnaam",
     custom: "Handmatig",
+    sheet: "Google Sheet",
   };
   const rows: Array<Array<string | number>> = [];
   for (const event of [...events].sort((a, b) => a.startsAt.localeCompare(b.startsAt))) {
@@ -316,7 +322,7 @@ export function djFeesCsv(
         artist.name,
         artist.feeAmount ?? "",
         artist.isTenHour ? "ja" : "nee",
-        source[artist.source],
+        artist.fromSheet ? "Google Sheet" : source[artist.source],
       ]);
     }
   }

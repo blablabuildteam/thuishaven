@@ -10,6 +10,10 @@ import { hasDatabase } from "@/lib/db/client";
 
 export const dynamic = "force-dynamic";
 
+const FROM_SHEET_ERROR = {
+  error: "Deze fee komt uit de Google Sheet. Pas hem daar aan.",
+};
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -47,7 +51,9 @@ export async function PATCH(
 
   const result = await updateDjFeeArtist(id, parsed.data);
   if (!result.ok) {
-    return NextResponse.json({ error: "DJ niet gevonden" }, { status: 404 });
+    return result.error === "from_sheet"
+      ? NextResponse.json(FROM_SHEET_ERROR, { status: 409 })
+      : NextResponse.json({ error: "DJ niet gevonden" }, { status: 404 });
   }
 
   await logSessionActivity(session, {
@@ -91,7 +97,9 @@ export async function DELETE(
 
   const result = await removeDjFeeArtist(id);
   if (!result.ok) {
-    return NextResponse.json({ error: "DJ niet gevonden" }, { status: 404 });
+    return result.error === "from_sheet"
+      ? NextResponse.json(FROM_SHEET_ERROR, { status: 409 })
+      : NextResponse.json({ error: "DJ niet gevonden" }, { status: 404 });
   }
 
   await logSessionActivity(session, {

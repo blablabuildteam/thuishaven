@@ -841,6 +841,10 @@ export const djFeeArtists = pgTable(
     isTenHour: boolean("is_ten_hour").notNull().default(false),
     source: text("source").notNull().default("resident_advisor"),
     sortOrder: integer("sort_order").notNull().default(0),
+    /** Set when the fee comes from the client's Google Sheet (read-only here). */
+    sheetSyncedAt: timestamp("sheet_synced_at", { withTimezone: true }),
+    /** Soort Fee / Bijzonderheid / notes from the sheet, joined. */
+    sheetNote: text("sheet_note"),
     removedAt: timestamp("removed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

@@ -2,6 +2,7 @@ import { DjFeesWorkbench } from "@/components/dashboard/dj-fees-workbench";
 import { SectionHeader } from "@/components/ui/section-header";
 import { monthKeyFromDay } from "@/lib/dashboard/dj-fee-ranges";
 import { loadDjFeeBoard } from "@/lib/dashboard/dj-fees";
+import { loadDjFeesSheetStatus } from "@/lib/dashboard/dj-fees-sheet-sync";
 import { hasDatabase } from "@/lib/db/client";
 import { amsterdamDay } from "@/lib/time/amsterdam";
 
@@ -34,7 +35,10 @@ export default async function DjFeesPage({
     );
   }
 
-  const events = await loadDjFeeBoard();
+  const [events, sheetStatus] = await Promise.all([
+    loadDjFeeBoard(),
+    loadDjFeesSheetStatus(),
+  ]);
   const today = amsterdamDay(new Date());
   const editionId = sp.edition?.trim();
   const focused = editionId
@@ -60,6 +64,7 @@ export default async function DjFeesPage({
       initialEvents={events}
       initialMonth={initialMonth}
       focusEditionId={focused?.id}
+      sheetStatus={sheetStatus}
     />
   );
 }

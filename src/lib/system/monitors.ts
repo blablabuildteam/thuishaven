@@ -220,6 +220,15 @@ export const MONITORS: MonitorDef[] = [
     pages: ["/outreach"],
   },
   {
+    id: "dj_fees_sheet",
+    label: "DJ-fees Google Sheet",
+    cronSource: "dj-fees-sheet",
+    schedule: { kind: "interval", minutes: 24 * 60 },
+    maxDurationSec: 300,
+    impact: "DJ-fees lopen achter op de Google Sheet van de klant.",
+    pages: ["/dashboard/dj-fees"],
+  },
+  {
     id: "sales_digest",
     label: "Dagelijkse verkoopmail",
     cronSource: "sales-digest",

@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, Plus, Search, X } from "lucide-react";
+import { Check, Lock, Plus, Search, X } from "lucide-react";
 import { DjFeeAmountInput } from "@/components/dashboard/dj-fee-amount-input";
 import { DjFeesExport } from "@/components/dashboard/dj-fees-export";
+import { DjFeesSheetSyncBar } from "@/components/dashboard/dj-fees-sheet-sync-bar";
 import {
   addDjFeeToSpend,
   countMissingDjFees,
   emptyDjFeeSpend,
   eventNeedsDjFees,
   formatDjFeeSpend,
+  formatEuroAmount,
   monthKeyFromDay,
   monthLabelFromDay,
   monthNameFromDay,
@@ -18,6 +20,7 @@ import {
   type DjFeeEventView,
   type DjFeeSpend,
 } from "@/lib/dashboard/dj-fee-ranges";
+import type { DjFeesSheetStatus } from "@/lib/dashboard/dj-fees-sheet-sync";
 import { displayEditionName } from "@/lib/editions/lineup";
 import { cn } from "@/lib/utils";
 
@@ -42,9 +45,10 @@ function eventNeedsFees(event: DjFeeEventView): boolean {
   return eventNeedsDjFees(event.artists);
 }
 
-function sourceLabel(source: DjFeeArtistView["source"]): string | null {
-  if (source === "resident_advisor") return "RA";
-  if (source === "custom") return "Handmatig";
+function sourceLabel(artist: DjFeeArtistView): string | null {
+  if (artist.fromSheet) return "Sheet";
+  if (artist.source === "resident_advisor") return "RA";
+  if (artist.source === "custom") return "Handmatig";
   return null;
 }
 
@@ -114,12 +118,20 @@ export function DjFeesWorkbench({
   initialEvents,
   initialMonth,
   focusEditionId,
+  sheetStatus,
 }: {
   initialEvents: DjFeeEventView[];
   initialMonth: string;
   focusEditionId?: string;
+  sheetStatus?: DjFeesSheetStatus;
 }) {
   const [events, setEvents] = useState(initialEvents);
+  // A sheet sync refreshes the page: take the fresh server data.
+  const [serverEvents, setServerEvents] = useState(initialEvents);
+  if (serverEvents !== initialEvents) {
+    setServerEvents(initialEvents);
+    setEvents(initialEvents);
+  }
   const [month, setMonth] = useState(initialMonth);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -351,8 +363,9 @@ export function DjFeesWorkbench({
             <h1 className="th-poster-title mt-2 text-6xl text-text sm:text-8xl">DJ-fees</h1>
             <p className="mt-4 max-w-lg text-sm leading-relaxed text-text-muted">
               Fee per DJ in hele euro&apos;s, plus of het een 10HRS-set was.
-              Line-up komt uit Resident Advisor; voeg zelf DJs toe of haal ze
-              weg. Oude ranges tellen mee tot je het bedrag invult.
+              Line-up komt uit Resident Advisor. Fees uit de Google Sheet van
+              de klant zijn vergrendeld — pas die in de sheet aan. Andere DJs
+              vul je hier zelf in.
             </p>
           </div>
           <dl className="grid grid-cols-2 gap-px self-end bg-border sm:min-w-[26rem]">
@@ -395,6 +408,8 @@ export function DjFeesWorkbench({
           </dl>
         </div>
       </section>
+
+      {sheetStatus && <DjFeesSheetSyncBar status={sheetStatus} />}
 
       {/* Agenda strip — year, months, search, export */}
       <div className="border-[1.5px] border-border-strong bg-surface">
@@ -655,8 +670,9 @@ function EventCard({
 
         <ul>
           {event.artists.map((artist) => {
-            const hint = sourceLabel(artist.source);
+            const hint = sourceLabel(artist);
             const busy = busyId === artist.id;
+            const locked = artist.fromSheet;
             return (
               <li
                 key={artist.id}
@@ -665,38 +681,68 @@ function EventCard({
                   "group border-t border-border px-4 py-2.5 transition-colors hover:bg-surface-hover sm:px-5",
                 )}
               >
-                <div className="col-span-3 flex min-w-0 items-baseline gap-2 sm:col-span-1">
-                  <span className="th-sticker truncate text-lg tracking-[0.03em] text-text">
-                    {artist.name}
-                  </span>
-                  {hint && (
-                    <span className="shrink-0 border border-border px-1 py-px text-[9px] font-semibold tracking-[0.1em] text-text-dim uppercase">
-                      {hint}
+                <div className="col-span-3 min-w-0 sm:col-span-1">
+                  <div className="flex min-w-0 items-baseline gap-2">
+                    <span className="th-sticker truncate text-lg tracking-[0.03em] text-text">
+                      {artist.name}
                     </span>
+                    {hint && (
+                      <span
+                        className={cn(
+                          "shrink-0 border px-1 py-px text-[9px] font-semibold tracking-[0.1em] uppercase",
+                          locked ? "border-success text-success" : "border-border text-text-dim",
+                        )}
+                      >
+                        {hint}
+                      </span>
+                    )}
+                  </div>
+                  {locked && artist.sheetNote && (
+                    <p className="mt-0.5 truncate text-xs text-text-dim" title={artist.sheetNote}>
+                      {artist.sheetNote}
+                    </p>
                   )}
                 </div>
-                <DjFeeAmountInput
-                  value={artist.feeAmount}
-                  legacyRange={artist.feeRange}
-                  disabled={busy}
-                  label={`Fee voor ${artist.name}`}
-                  onChange={(feeAmount) => onFeeChange(artist, feeAmount)}
-                />
+                {locked ? (
+                  <div
+                    className="flex h-8 items-center gap-1.5 px-1 text-text"
+                    title="Uit de Google Sheet — pas het bedrag daar aan"
+                  >
+                    <Lock className="size-3 shrink-0 text-text-dim" aria-hidden />
+                    {artist.feeAmount != null ? (
+                      <span className="th-num text-lg">{formatEuroAmount(artist.feeAmount)}</span>
+                    ) : (
+                      <span className="text-sm text-text-dim">Leeg in sheet</span>
+                    )}
+                  </div>
+                ) : (
+                  <DjFeeAmountInput
+                    value={artist.feeAmount}
+                    legacyRange={artist.feeRange}
+                    disabled={busy}
+                    label={`Fee voor ${artist.name}`}
+                    onChange={(feeAmount) => onFeeChange(artist, feeAmount)}
+                  />
+                )}
                 <TenHourToggle
                   value={artist.isTenHour}
-                  disabled={busy}
+                  disabled={busy || locked}
                   onToggle={() => onTenHourToggle(artist)}
                 />
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => onRemove(artist)}
-                  title={`${artist.name} verwijderen`}
-                  aria-label={`${artist.name} verwijderen`}
-                  className="inline-flex size-8 items-center justify-center justify-self-end text-text-dim transition-[color,opacity] hover:text-danger focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                >
-                  <X className="size-4" />
-                </button>
+                {locked ? (
+                  <span aria-hidden />
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onRemove(artist)}
+                    title={`${artist.name} verwijderen`}
+                    aria-label={`${artist.name} verwijderen`}
+                    className="inline-flex size-8 items-center justify-center justify-self-end text-text-dim transition-[color,opacity] hover:text-danger focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                  >
+                    <X className="size-4" />
+                  </button>
+                )}
               </li>
             );
           })}
