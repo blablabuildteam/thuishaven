@@ -19,6 +19,8 @@
     "radar:migrate-0043": "tsx --env-file=.env.local scripts/apply-radar-0043.ts",
     "radar:migrate-0044": "tsx --env-file=.env.local scripts/apply-radar-0044.ts",
     "radar:migrate-0045": "tsx --env-file=.env.local scripts/apply-radar-0045.ts",
+    "radar:migrate-0046": "tsx --env-file=.env.local scripts/apply-radar-0046.ts",
+    "radar:discover-festivals": "tsx --env-file=.env.local scripts/radar-discover-festivals.ts",
     "radar:seed-sources": "tsx --env-file=.env.local scripts/seed-radar-source-configs.ts",
     "env:push:weeztix": "bash scripts/push-weeztix-env-to-vercel.sh"
   },

@@ -9,6 +9,7 @@ export type RadarAlertKind =
   | "breakthrough"
   | "window_closing"
   | "launch"
+  | "label_watch"
   | "mixseries"
   | "lineup"
   | "venue_suggestion"
@@ -65,6 +66,14 @@ export const RADAR_ALERT_DEFS: RadarAlertDef[] = [
     meaning: "Volgers op RA/IG/SC knikken omhoog — iemand gaat hard.",
     action: "Open de groei-grafiek. Shortlist als het bij Thuishaven past.",
     tone: "growth",
+    group: "artiest",
+  },
+  {
+    kind: "label_watch",
+    label: "Label-watch",
+    meaning: "Artiest op een label dat je volgt, met genoeg score.",
+    action: "Open dossier. Zet op Volgen als het past bij Thuishaven.",
+    tone: "sets",
     group: "artiest",
   },
   {

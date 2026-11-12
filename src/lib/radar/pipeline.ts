@@ -14,6 +14,7 @@ import { refreshNlAudienceScores } from "@/lib/radar/nl-audience";
 import { nextVenueBatch } from "@/lib/radar/rotation";
 import { refreshSuggestedVenueScores } from "@/lib/radar/venues";
 import { detectLaunchAlerts } from "@/lib/radar/launch-detect";
+import { detectLabelWatchAlerts } from "@/lib/radar/label-watch";
 import { isSpotifyConfigured } from "@/lib/integrations/spotify/client";
 import {
   amsterdamIsoWeekday,
@@ -37,6 +38,7 @@ export type RadarPipelineResult = {
   spotify: Awaited<ReturnType<typeof syncSpotifyForRadarArtists>> | null;
   social: Awaited<ReturnType<typeof syncSocialForTopArtists>> | null;
   launch: Awaited<ReturnType<typeof detectLaunchAlerts>> | null;
+  labelWatch: Awaited<ReturnType<typeof detectLabelWatchAlerts>> | null;
   digest: Awaited<ReturnType<typeof sendRadarDigest>> | null;
   notes: string[];
 };
@@ -85,7 +87,7 @@ export async function runRadarPipeline(options?: {
     } else {
       const batch = await nextVenueBatch(options?.venueLimit ?? 12);
       notes.push(
-        `Venue-rotatie: offset ${batch.offset}/${batch.total} → ${batch.venueIds.length} venues.`,
+        `Venue-rotatie: ${batch.festivalCount} festivals + ${batch.clubCount} clubs (cursor ${batch.offset}/${batch.total}).`,
       );
       discovery = await discoverArtistsFromSeedVenues({
         historyYears: options?.historyYears ?? 2,
@@ -243,6 +245,16 @@ export async function runRadarPipeline(options?: {
     }
   }
 
+  let labelWatch: RadarPipelineResult["labelWatch"] = null;
+  if (!pastDeadline()) {
+    labelWatch = await detectLabelWatchAlerts({ limit: 300 });
+    if (labelWatch.watched > 0) {
+      notes.push(
+        `Label-watch (${labelWatch.watched}): ${labelWatch.alerts} alerts / ${labelWatch.checked} gecheckt.`,
+      );
+    }
+  }
+
   let digest: RadarPipelineResult["digest"] = null;
   if (!options?.skipDigest) {
     const now = new Date();
@@ -284,6 +296,7 @@ export async function runRadarPipeline(options?: {
     spotify,
     social,
     launch,
+    labelWatch,
     digest,
     notes,
   };

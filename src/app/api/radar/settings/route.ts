@@ -54,6 +54,7 @@ const settingsSchema = z.object({
     maxHops: z.number().int().min(0).max(3),
     venueSuggestMinScore: z.number(),
   }),
+  labelWatchlist: z.array(z.string().min(1).max(80)).max(40).default([]),
 });
 
 export async function PUT(request: Request) {

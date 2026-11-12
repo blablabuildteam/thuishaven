@@ -14,6 +14,9 @@ export function RadarSettingsForm({
   const [recipientsText, setRecipientsText] = useState(
     initial.digest.recipients.join(", "),
   );
+  const [labelWatchText, setLabelWatchText] = useState(
+    (initial.labelWatchlist ?? []).join(", "),
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -28,9 +31,15 @@ export function RadarSettingsForm({
       .split(/[,;\s]+/)
       .map((s) => s.trim())
       .filter(Boolean);
+    const labelWatchlist = labelWatchText
+      .split(/[,;\n]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 40);
     const payload: RadarSettingsValue = {
       ...settings,
       digest: { ...settings.digest, recipients },
+      labelWatchlist,
     };
     const res = await fetch("/api/radar/settings", {
       method: "PUT",
@@ -246,6 +255,29 @@ export function RadarSettingsForm({
           />
           Wekelijkse e-maildigest aan (maandagochtend; zonder RADAR_LIVE_DIGEST
           alleen team@)
+        </label>
+      </section>
+
+      <section className="border border-border bg-surface p-4">
+        <h2 className="font-display text-lg tracking-[0.04em]">
+          Label-watchlist
+        </h2>
+        <p className="mt-1 text-sm text-text-muted">
+          RA-labels die je volgt. Als een sterke artiest op zo’n label staat,
+          krijg je een alert “Label-watch”. Voorbeelden: Innervisions, Ilian Tape,
+          Dekmantel, Nous’klaer.
+        </p>
+        <label className="mt-3 block text-sm">
+          <span className="mb-1 block text-[10px] tracking-[0.12em] text-text-dim uppercase">
+            Labels (komma-gescheiden)
+          </span>
+          <textarea
+            value={labelWatchText}
+            onChange={(e) => setLabelWatchText(e.target.value)}
+            rows={3}
+            placeholder="Innervisions, Ilian Tape, Dekmantel, …"
+            className="w-full border border-border bg-bg px-2 py-2"
+          />
         </label>
       </section>
 

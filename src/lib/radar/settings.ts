@@ -43,6 +43,11 @@ export type RadarSettingsValue = {
     maxHops: number;
     venueSuggestMinScore: number;
   };
+  /**
+   * Labels we watch (RA label name, case-insensitive).
+   * Alert when a strong / new artist on a watched label appears.
+   */
+  labelWatchlist: string[];
 };
 
 export const DEFAULT_RADAR_SETTINGS: RadarSettingsValue = {
@@ -83,6 +88,7 @@ export const DEFAULT_RADAR_SETTINGS: RadarSettingsValue = {
     maxHops: 2,
     venueSuggestMinScore: 40,
   },
+  labelWatchlist: [],
 };
 
 const SETTINGS_KEY = "defaults";
@@ -116,6 +122,13 @@ function mergeSettings(raw: unknown): RadarSettingsValue {
     ...DEFAULT_RADAR_SETTINGS.discovery,
     ...((src.discovery as object) ?? {}),
   } as RadarSettingsValue["discovery"];
+  const labelWatchlist = Array.isArray(src.labelWatchlist)
+    ? src.labelWatchlist
+        .filter((x): x is string => typeof x === "string")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .slice(0, 40)
+    : DEFAULT_RADAR_SETTINGS.labelWatchlist;
 
   return {
     weights,
@@ -133,6 +146,7 @@ function mergeSettings(raw: unknown): RadarSettingsValue {
     },
     refresh,
     discovery,
+    labelWatchlist,
   };
 }
 

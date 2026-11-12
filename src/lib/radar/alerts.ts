@@ -104,7 +104,8 @@ export async function createRadarAlert(input: {
     | "breakthrough"
     | "window_closing"
     | "mixseries"
-    | "launch";
+    | "launch"
+    | "label_watch";
   title: string;
   body?: string | null;
   artistId?: string | null;

@@ -79,6 +79,7 @@ export const radarAlertKindEnum = pgEnum("radar_alert_kind", [
   "window_closing",
   "mixseries",
   "launch",
+  "label_watch",
 ]);
 
 export const radarMatchConfidenceEnum = pgEnum("radar_match_confidence", [
