@@ -60,7 +60,8 @@ export async function createRadarAlert(input: {
     | "lineup"
     | "digest"
     | "breakthrough"
-    | "window_closing";
+    | "window_closing"
+    | "mixseries";
   title: string;
   body?: string | null;
   artistId?: string | null;

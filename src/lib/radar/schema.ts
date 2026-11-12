@@ -56,6 +56,7 @@ export const radarPlatformEnum = pgEnum("radar_platform", [
   "tiktok",
   "soundcloud",
   "resident_advisor",
+  "youtube",
 ]);
 
 export const radarDiscoverySourceEnum = pgEnum("radar_discovery_source", [
@@ -76,6 +77,7 @@ export const radarAlertKindEnum = pgEnum("radar_alert_kind", [
   "digest",
   "breakthrough",
   "window_closing",
+  "mixseries",
 ]);
 
 export const radarMatchConfidenceEnum = pgEnum("radar_match_confidence", [
@@ -190,6 +192,13 @@ export const radarArtists = pgTable(
     homeGigCount: integer("home_gig_count").notNull().default(0),
     /** Avg sell-through at Thuishaven editions (0–1), when known. */
     homeSellThrough: numeric("home_sell_through", { precision: 6, scale: 3 }),
+    /** 0–100: proxy voor NL-publiek (gigs + regions + resident). */
+    nlAudienceScore: numeric("nl_audience_score", { precision: 6, scale: 2 }),
+    /** Share of recent gigs in NL (0–1). */
+    nlGigShare: numeric("nl_gig_share", { precision: 6, scale: 3 }),
+    regionsMostPlayed: jsonb("regions_most_played")
+      .$type<Array<{ name: string; country?: string | null }>>()
+      .default([]),
     statusChangedAt: timestamp("status_changed_at", { withTimezone: true }),
     statusChangedByUserId: uuid("status_changed_by_user_id"),
     firstSeenAt: timestamp("first_seen_at", { withTimezone: true })
@@ -475,6 +484,42 @@ export type WebsiteSelectors = {
   /** Extra artist-name splitters beyond defaults. */
   nameSplitPattern?: string;
 };
+
+/** Boiler Room / HÖR / etc. appearances matched to Radar artists. */
+export const radarMixseriesAppearances = pgTable(
+  "radar_mixseries_appearances",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    artistId: uuid("artist_id").references(() => radarArtists.id, {
+      onDelete: "set null",
+    }),
+    channelKey: text("channel_key").notNull(),
+    channelTitle: text("channel_title"),
+    platform: text("platform").notNull().default("youtube"),
+    externalId: text("external_id").notNull(),
+    title: text("title").notNull(),
+    url: text("url"),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    viewCount: integer("view_count"),
+    likeCount: integer("like_count"),
+    matchedName: text("matched_name"),
+    raw: jsonb("raw").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("radar_mixseries_platform_external_uidx").on(
+      table.platform,
+      table.externalId,
+    ),
+    index("radar_mixseries_artist_idx").on(table.artistId),
+    index("radar_mixseries_views_idx").on(table.viewCount),
+  ],
+);
 
 /** Per-venue non-RA intake config (website + Instagram). */
 export const radarVenueSourceConfigs = pgTable(

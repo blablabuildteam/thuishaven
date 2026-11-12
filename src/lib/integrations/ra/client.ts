@@ -73,6 +73,7 @@ export type RaArtistProfile = {
   }>;
   podcasts: Array<{ id: string; title: string }>;
   labels: Array<{ id: string; name: string }>;
+  regionsMostPlayed: Array<{ name: string }>;
 };
 
 function venueId(): string {
@@ -424,6 +425,7 @@ export async function getRaArtistProfile(
       } | null> | null;
       podcasts?: Array<{ id?: string | null; title?: string | null } | null> | null;
       labels?: Array<{ id?: string | null; name?: string | null } | null> | null;
+      regionsMostPlayed?: Array<{ name?: string | null } | null> | null;
     } | null;
   }>(
     `query ArtistProfile($id: ID!) {
@@ -447,6 +449,7 @@ export async function getRaArtistProfile(
         relatedArtists { id name contentUrl }
         podcasts { id title }
         labels { id name }
+        regionsMostPlayed { name }
       }
     }`,
     { id: artistId },
@@ -504,6 +507,13 @@ export async function getRaArtistProfile(
           return { id, name };
         })
         .filter((l): l is NonNullable<typeof l> => Boolean(l)),
+      regionsMostPlayed: (a.regionsMostPlayed ?? [])
+        .map((r) => {
+          const name = r?.name?.trim();
+          if (!name) return null;
+          return { name };
+        })
+        .filter((r): r is NonNullable<typeof r> => Boolean(r)),
     },
   };
 }

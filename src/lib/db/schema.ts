@@ -1088,4 +1088,5 @@ export {
   radarParties,
   radarPartyLineup,
   radarVenueSourceConfigs,
+  radarMixseriesAppearances,
 } from "@/lib/radar/schema";

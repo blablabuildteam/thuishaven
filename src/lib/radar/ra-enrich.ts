@@ -118,6 +118,8 @@ export async function enrichArtistsFromRa(options?: {
         ? new Date(a.firstEventDate)
         : null;
 
+      const regions = (a.regionsMostPlayed ?? []).slice(0, 12);
+
       await withRetry(async () => {
         await db
           .update(radarArtists)
@@ -132,6 +134,7 @@ export async function enrichArtistsFromRa(options?: {
                 : null,
             country: country ?? undefined,
             city: a.areaName ?? undefined,
+            regionsMostPlayed: regions,
             raEnrichedAt: new Date(),
             updatedAt: new Date(),
           })
@@ -156,6 +159,7 @@ export async function enrichArtistsFromRa(options?: {
           discogs: a.discogs,
           podcasts: a.podcasts.slice(0, 10),
           labels: a.labels.slice(0, 10),
+          regionsMostPlayed: regions,
           upcomingEventsCount: a.upcomingEventsCount,
         },
       });

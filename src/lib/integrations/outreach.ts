@@ -268,18 +268,17 @@ async function callOpenAiJson(
   return { ok: true, text: out };
 }
 
-/** Claude eerst (als key er is), daarna Gemini, daarna OpenAI. */
+/** Claude eerst; OpenAI alleen als Claude ontbreekt/faalt. Geen Gemini voor outreach. */
 async function callLlmJson(prompt: string): Promise<
   { ok: true; text: string; vendor: LlmVendor } | { ok: false; error: string }
 > {
   const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
-  const geminiKey = process.env.GEMINI_API_KEY?.trim();
   const openaiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!anthropicKey && !geminiKey && !openaiKey) {
+  if (!anthropicKey && !openaiKey) {
     return {
       ok: false,
       error:
-        "Geen AI-key. Zet ANTHROPIC_API_KEY (aanbevolen), GEMINI_API_KEY of OPENAI_API_KEY in .env.local / Vercel.",
+        "Geen AI-key. Zet ANTHROPIC_API_KEY in .env.local / Vercel (Claude Sonnet voor outreach-mails).",
     };
   }
 
@@ -288,12 +287,6 @@ async function callLlmJson(prompt: string): Promise<
   if (anthropicKey) {
     const result = await callAnthropicJson(prompt, anthropicKey);
     if (result.ok) return { ok: true, text: result.text, vendor: "anthropic" };
-    errors.push(result.error);
-  }
-
-  if (geminiKey) {
-    const result = await callGeminiJson(prompt, geminiKey);
-    if (result.ok) return { ok: true, text: result.text, vendor: "gemini" };
     errors.push(result.error);
   }
 
@@ -373,7 +366,7 @@ export async function generateOutreachEmail(input: {
   if (!hasOutreachAiConfigured()) {
     return {
       error:
-        "Geen AI-key — zet ANTHROPIC_API_KEY (aanbevolen) of GEMINI_API_KEY op Vercel / in .env.local. Geen template-mails meer.",
+        "Geen AI-key — zet ANTHROPIC_API_KEY op Vercel / in .env.local. Geen template-mails meer.",
     };
   }
 

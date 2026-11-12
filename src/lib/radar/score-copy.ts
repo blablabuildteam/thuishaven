@@ -29,8 +29,22 @@ export const RADAR_SCORE_TOPICS: RadarScoreTopic[] = [
     id: "fit",
     title: "Fit",
     short:
-      "Past bij Thuishaven? Early clubs, NL, overlap met TH-artiesten.",
-    body: "Fit meet of de speelplekken en context bij Thuishaven horen: aandeel early-tier venues, recente clubs, woonland NL, en overlap met venues waar Thuishaven-artiesten ook speelden. Iemand die alleen mega-festivals doet scoort lager op fit.",
+      "Past bij Thuishaven? Early clubs, NL-audience, overlap met TH-artiesten.",
+    body: "Fit meet of de speelplekken en context bij Thuishaven horen: aandeel early-tier venues, recente clubs, woonland NL, NL-audience (aandeel NL-gigs + RA regions), en overlap met venues waar Thuishaven-artiesten ook speelden. Iemand die alleen mega-festivals doet scoort lager op fit.",
+  },
+  {
+    id: "nl-audience",
+    title: "NL-audience",
+    short:
+      "Proxy voor Nederlands publiek: NL-gigs + resident + RA regions.",
+    body: "YouTube geeft geen publieksgeo voor andermans video’s. Daarom meten we NL-audience via booking-geografie: aandeel recente gigs in NL, resident country, en RA “regions most played”. Hoge score = waarschijnlijk NL-crowd → hogere fit.",
+  },
+  {
+    id: "mixseries",
+    title: "Mixseries / sets",
+    short:
+      "Boiler Room, HÖR, … YouTube-views op sets als early viral signaal.",
+    body: "We watchen curated YouTube-kanalen (Boiler Room, HÖR, e.a.). Matches op artiestennaam + view-spikes geven mixseries-alerts. Geen ranking in de hoofdscore (nog), wel zichtbaar in dossier en alerts — handig als een set “vliegt” vóór de clubtour.",
   },
   {
     id: "bookability",
@@ -68,15 +82,15 @@ export const RADAR_SCORE_TOPICS: RadarScoreTopic[] = [
   {
     id: "alerts",
     title: "Alerts",
-    short: "Signalen: nieuw, velocity, doorbraak, venster sluit.",
-    body: "Alerts gaan alleen over artiesten die nog niet bij Thuishaven speelden en niet in status gepasseerd/niet-relevant/geboekt. Drempels stel je in bij Instellingen. Oude ruis is opgeschoond; nieuwe alerts komen uit de cron/rescore.",
+    short: "Signalen: nieuw, velocity, doorbraak, venster sluit, mixseries.",
+    body: "Alerts gaan alleen over artiesten die nog niet bij Thuishaven speelden en niet in status gepasseerd/niet-relevant/geboekt. Drempels stel je in bij Instellingen. Mixseries-alerts komen uit YouTube-set views. Oude ruis is opgeschoond; nieuwe alerts komen uit de cron/rescore.",
   },
   {
     id: "bronnen",
     title: "Bronnen (multi-source)",
     short:
-      "RA + clubwebsites + Instagram + handmatige line-ups → één feestenoverzicht.",
-    body: "Radar scoort niet alleen Resident Advisor. We trekken feesten uit venue-websites (programmapagina), Instagram van clubs/festivals (Apify), en handmatig geplakte line-ups. Alles landt in radar_parties met een bron-badge. Nieuwe namen uit die line-ups worden gevolgd; socials en Spotify bevestigen groei en spotten extra gigs in captions.",
+      "RA + websites + IG + mixseries YT + SoundCloud + handmatige line-ups.",
+    body: "Radar scoort niet alleen Resident Advisor. We trekken feesten uit venue-websites, Instagram (Apify), handmatige line-ups, mixseries-YouTube en SoundCloud-plays voor de shortlist. Alles landt in parties/metrics met bron. Social Δ (RA/IG/SC) + labels + NL-audience voeden scores en alerts.",
   },
   {
     id: "feesten",

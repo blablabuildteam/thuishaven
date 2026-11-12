@@ -39,8 +39,13 @@ export async function GET(request: Request) {
     () =>
       runRadarPipeline({
         skipDiscovery: eveningOnly,
+        skipWebsite: eveningOnly,
         skipSocial: !eveningOnly && !force,
         skipInstagramVenues: !eveningOnly && !force,
+        // Mixseries + SC + NL: evening priority (more time); morning light pass OK
+        skipMixseries: false,
+        skipSoundcloud: !eveningOnly && !force,
+        skipNlAudience: false,
         skipSpotify: !withSpotify,
         enrichLimit: eveningOnly ? 250 : 150,
         rescoreLimit: eveningOnly ? 2000 : 1500,

@@ -37,6 +37,8 @@ type Props = {
     hasAgency?: boolean;
     raFollowerCount?: number | null;
     residentCountry?: string | null;
+    nlAudienceScore?: string | null;
+    nlGigShare?: string | null;
   };
   profiles: Array<{
     platform: string;
@@ -64,6 +66,15 @@ type Props = {
     sourceUrl: string | null;
     source?: string | null;
   }>;
+  mixseries?: Array<{
+    id: string;
+    channelTitle: string | null;
+    channelKey: string;
+    title: string;
+    url: string | null;
+    publishedAt: string | Date | null;
+    viewCount: number | null;
+  }>;
 };
 
 const STATUSES = Object.keys(RADAR_ARTIST_STATUS_NL) as RadarArtistStatus[];
@@ -73,6 +84,7 @@ export function ArtistDossier({
   profiles,
   recentMetrics,
   recentGigs,
+  mixseries = [],
 }: Props) {
   const router = useRouter();
   const [notes, setNotes] = useState(artist.notes ?? "");
@@ -86,11 +98,16 @@ export function ArtistDossier({
   const deltas = followerDeltas(recentMetrics, [
     "resident_advisor",
     "instagram",
+    "soundcloud",
   ]);
   const labels = labelsFromProfiles(profiles);
   const upcoming = recentGigs.filter(
     (g) => g.startsAt && new Date(g.startsAt).getTime() >= Date.now() - 6 * 3600_000,
   );
+  const nlSharePct =
+    artist.nlGigShare != null && artist.nlGigShare !== ""
+      ? Math.round(Number(artist.nlGigShare) * 100)
+      : null;
 
   async function save(patch: Record<string, unknown>) {
     setBusy(true);
@@ -220,27 +237,58 @@ export function ArtistDossier({
         </dl>
       </div>
 
-      {(deltas.length > 0 || labels.length > 0 || upcoming.length > 0) && (
-        <section className="grid gap-3 border border-border bg-surface p-4 sm:grid-cols-3">
+      {(deltas.length > 0 ||
+        labels.length > 0 ||
+        upcoming.length > 0 ||
+        artist.nlAudienceScore != null ||
+        mixseries.length > 0) && (
+        <section className="grid gap-3 border border-border bg-surface p-4 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <h2 className="font-display text-lg tracking-[0.04em]">
+            <h2 className="flex items-center gap-1 font-display text-lg tracking-[0.04em]">
               Social growth
             </h2>
             {deltas.length === 0 ? (
               <p className="mt-2 text-xs text-text-muted">
-                Nog geen snapshots — avondcron vult IG voor shortlist/watching.
+                Nog geen snapshots — avondcron vult IG/SC voor shortlist.
               </p>
             ) : (
               <ul className="mt-2 space-y-1 text-sm">
                 {deltas.map((d) => (
                   <li key={d.platform}>
                     <span className="text-text-dim uppercase tracking-[0.08em] text-[10px]">
-                      {d.platform === "resident_advisor" ? "RA" : "IG"}
+                      {d.platform === "resident_advisor"
+                        ? "RA"
+                        : d.platform === "soundcloud"
+                          ? "SC"
+                          : "IG"}
                     </span>{" "}
                     {formatDelta(d)}
                   </li>
                 ))}
               </ul>
+            )}
+          </div>
+          <div>
+            <h2 className="flex items-center gap-1 font-display text-lg tracking-[0.04em]">
+              NL-audience
+              <RadarInfoTip topic="nl-audience" />
+            </h2>
+            {artist.nlAudienceScore == null ? (
+              <p className="mt-2 text-xs text-text-muted">
+                Nog niet berekend — komt mee in de pipeline.
+              </p>
+            ) : (
+              <p className="mt-2 text-sm">
+                <span className="font-display text-2xl tabular-nums">
+                  {artist.nlAudienceScore}
+                </span>
+                {nlSharePct != null ? (
+                  <span className="text-text-dim">
+                    {" "}
+                    · {nlSharePct}% recente gigs NL
+                  </span>
+                ) : null}
+              </p>
             )}
           </div>
           <div>
@@ -261,26 +309,57 @@ export function ArtistDossier({
                 ))}
               </ul>
             )}
-          </div>
-          <div>
-            <h2 className="font-display text-lg tracking-[0.04em]">
-              Speelt binnenkort
-            </h2>
-            {upcoming.length === 0 ? (
-              <p className="mt-2 text-xs text-text-muted">
-                Geen aankomende gigs in Radar.
-              </p>
-            ) : (
-              <ul className="mt-2 space-y-1 text-sm">
-                {upcoming.slice(0, 5).map((g) => (
+            {upcoming.length > 0 ? (
+              <ul className="mt-3 space-y-1 text-sm">
+                <li className="text-[10px] tracking-[0.12em] text-text-dim uppercase">
+                  Speelt binnenkort
+                </li>
+                {upcoming.slice(0, 3).map((g) => (
                   <li key={g.id}>
                     {g.eventName ?? "Event"}
                     <span className="text-text-dim">
                       {g.startsAt
                         ? ` · ${new Date(g.startsAt).toLocaleDateString("nl-NL")}`
                         : ""}
-                      {g.source ? ` · ${g.source}` : ""}
                     </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+          <div>
+            <h2 className="flex items-center gap-1 font-display text-lg tracking-[0.04em]">
+              Mixseries
+              <RadarInfoTip topic="mixseries" />
+            </h2>
+            {mixseries.length === 0 ? (
+              <p className="mt-2 text-xs text-text-muted">
+                Geen Boiler Room / HÖR / … matches.
+              </p>
+            ) : (
+              <ul className="mt-2 space-y-2 text-sm">
+                {mixseries.slice(0, 4).map((m) => (
+                  <li key={m.id}>
+                    {m.url ? (
+                      <a
+                        href={m.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline hover:text-text"
+                      >
+                        {m.channelTitle ?? m.channelKey}
+                      </a>
+                    ) : (
+                      <span>{m.channelTitle ?? m.channelKey}</span>
+                    )}
+                    <span className="text-text-dim">
+                      {m.viewCount != null
+                        ? ` · ${m.viewCount.toLocaleString("nl-NL")} views`
+                        : ""}
+                    </span>
+                    <p className="text-xs text-text-muted line-clamp-1">
+                      {m.title}
+                    </p>
                   </li>
                 ))}
               </ul>

@@ -253,6 +253,13 @@ export const MONITORS: MonitorDef[] = [
     impact: "IG-volgersgroei en gig-hints uit posts worden niet ververst.",
     pages: ["/radar"],
   },
+  {
+    id: "radar_youtube",
+    label: "YouTube (Radar mixseries)",
+    integrationId: "youtube",
+    impact: "Boiler Room / HÖR set-views en viral mixseries-alerts lopen achter.",
+    pages: ["/radar"],
+  },
 ];
 
 export function cronSourceOf(def: MonitorDef): string {

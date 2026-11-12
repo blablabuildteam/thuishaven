@@ -8,6 +8,11 @@ export const maxDuration = 300;
 
 const bodySchema = z.object({
   skipDiscovery: z.boolean().optional(),
+  skipWebsite: z.boolean().optional(),
+  skipInstagramVenues: z.boolean().optional(),
+  skipMixseries: z.boolean().optional(),
+  skipSoundcloud: z.boolean().optional(),
+  skipNlAudience: z.boolean().optional(),
   skipSpotify: z.boolean().optional(),
   skipSocial: z.boolean().optional(),
   skipDigest: z.boolean().optional(),

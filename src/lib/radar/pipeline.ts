@@ -1,5 +1,5 @@
 /**
- * Radar orchestration — multi-source discovery → enrich → score → social → digest.
+ * Radar orchestration — multi-source discovery → enrich → mixseries/SC → score → social → digest.
  */
 import { discoverArtistsFromSeedVenues } from "@/lib/radar/discovery";
 import { enrichArtistsFromRa } from "@/lib/radar/ra-enrich";
@@ -8,6 +8,9 @@ import { syncSpotifyForRadarArtists } from "@/lib/radar/spotify-sync";
 import { syncSocialForTopArtists } from "@/lib/radar/social-sync";
 import { syncWebsiteVenues } from "@/lib/radar/sources/website";
 import { syncInstagramVenues } from "@/lib/radar/sources/instagram-venue";
+import { syncMixseriesChannels } from "@/lib/radar/sources/mixseries-sync";
+import { syncSoundCloudForShortlist } from "@/lib/radar/sources/soundcloud-sync";
+import { refreshNlAudienceScores } from "@/lib/radar/nl-audience";
 import { nextVenueBatch } from "@/lib/radar/rotation";
 import { refreshSuggestedVenueScores } from "@/lib/radar/venues";
 import { isSpotifyConfigured } from "@/lib/integrations/spotify/client";
@@ -25,6 +28,9 @@ export type RadarPipelineResult = {
   discovery: Awaited<ReturnType<typeof discoverArtistsFromSeedVenues>>;
   website: Awaited<ReturnType<typeof syncWebsiteVenues>> | null;
   instagramVenues: Awaited<ReturnType<typeof syncInstagramVenues>> | null;
+  mixseries: Awaited<ReturnType<typeof syncMixseriesChannels>> | null;
+  soundcloud: Awaited<ReturnType<typeof syncSoundCloudForShortlist>> | null;
+  nlAudience: Awaited<ReturnType<typeof refreshNlAudienceScores>> | null;
   enrich: Awaited<ReturnType<typeof enrichArtistsFromRa>> | null;
   rescore: Awaited<ReturnType<typeof rescoreStaleArtists>> | null;
   spotify: Awaited<ReturnType<typeof syncSpotifyForRadarArtists>> | null;
@@ -37,6 +43,9 @@ export async function runRadarPipeline(options?: {
   skipDiscovery?: boolean;
   skipWebsite?: boolean;
   skipInstagramVenues?: boolean;
+  skipMixseries?: boolean;
+  skipSoundcloud?: boolean;
+  skipNlAudience?: boolean;
   skipEnrich?: boolean;
   skipRescore?: boolean;
   skipSpotify?: boolean;
@@ -48,14 +57,12 @@ export async function runRadarPipeline(options?: {
   enrichLimit?: number;
   rescoreLimit?: number;
   forceDigest?: boolean;
-  /** Soft deadline — stop starting new heavy steps after this. */
   deadlineMs?: number;
 }): Promise<RadarPipelineResult> {
   const startedAt = new Date();
   const notes: string[] = [];
   const settings = await loadRadarSettings();
   const deadline = options?.deadlineMs ?? Date.now() + 240_000;
-
   const pastDeadline = () => Date.now() >= deadline;
 
   let discovery: RadarPipelineResult["discovery"] = {
@@ -105,21 +112,36 @@ export async function runRadarPipeline(options?: {
     notes.push(
       `Website: ${website.venuesTried} venues, ${website.partiesIngested} parties, ${website.artistsCreated} nieuwe namen.`,
     );
-    if (website.errors.length) {
-      notes.push(`Website-fouten: ${website.errors.slice(0, 3).join(" · ")}`);
-    }
   }
 
   let instagramVenues: RadarPipelineResult["instagramVenues"] = null;
   if (!options?.skipInstagramVenues && !pastDeadline()) {
-    // Budget: few venue accounts; posts → review queue
     instagramVenues = await syncInstagramVenues({ limit: 3 });
     if (instagramVenues.note) notes.push(instagramVenues.note);
     else {
       notes.push(
-        `IG-venues: ${instagramVenues.venuesTried} accounts, ${instagramVenues.partiesIngested} parties (${instagramVenues.needsReview} review), ${instagramVenues.artistsCreated} nieuw.`,
+        `IG-venues: ${instagramVenues.venuesTried} accounts, ${instagramVenues.partiesIngested} parties.`,
       );
     }
+  }
+
+  let mixseries: RadarPipelineResult["mixseries"] = null;
+  if (!options?.skipMixseries && !pastDeadline()) {
+    mixseries = await syncMixseriesChannels({ videosPerChannel: 10 });
+    if (mixseries.note) notes.push(mixseries.note);
+    else {
+      notes.push(
+        `Mixseries: ${mixseries.channelsTried} kanalen, ${mixseries.matched} matches, ${mixseries.viralAlerts} viral alerts.`,
+      );
+    }
+  }
+
+  let soundcloud: RadarPipelineResult["soundcloud"] = null;
+  if (!options?.skipSoundcloud && !pastDeadline()) {
+    soundcloud = await syncSoundCloudForShortlist({ limit: 25 });
+    notes.push(
+      `SoundCloud: ${soundcloud.synced}/${soundcloud.attempted} profiles.`,
+    );
   }
 
   if (!options?.skipDiscovery && !pastDeadline()) {
@@ -138,9 +160,15 @@ export async function runRadarPipeline(options?: {
         limit: options?.enrichLimit ?? 150,
       });
       notes.push(
-        `RA-enrich: ${enrich.enriched}/${enrich.attempted} verrijkt, ${enrich.relatedCreated} related, ${enrich.errors.length} fouten.`,
+        `RA-enrich: ${enrich.enriched}/${enrich.attempted} verrijkt, ${enrich.relatedCreated} related.`,
       );
     }
+  }
+
+  let nlAudience: RadarPipelineResult["nlAudience"] = null;
+  if (!options?.skipNlAudience && !pastDeadline()) {
+    nlAudience = await refreshNlAudienceScores({ limit: 600 });
+    notes.push(`NL-audience: ${nlAudience.updated} scores bijgewerkt.`);
   }
 
   let rescore: RadarPipelineResult["rescore"] = null;
@@ -157,37 +185,23 @@ export async function runRadarPipeline(options?: {
     }
   }
 
-  // Spotify = late / optional for DJ radar — off unless explicitly enabled.
   let spotify: RadarPipelineResult["spotify"] = null;
-  const wantSpotify = options?.skipSpotify === false;
-  if (wantSpotify) {
-    if (pastDeadline()) {
-      notes.push("Spotify overgeslagen: tijdslimiet.");
-    } else if (!isSpotifyConfigured()) {
-      notes.push("Spotify overgeslagen: SPOTIFY_CLIENT_ID/SECRET ontbreekt.");
-    } else {
+  if (options?.skipSpotify === false) {
+    if (!pastDeadline() && isSpotifyConfigured()) {
       spotify = await syncSpotifyForRadarArtists({
         limit: options?.spotifyLimit ?? 40,
       });
+    } else {
+      notes.push("Spotify overgeslagen.");
     }
   } else {
     notes.push("Spotify overgeslagen (niet prioriteit voor DJ-radar).");
   }
 
   let social: RadarPipelineResult["social"] = null;
-  if (!options?.skipSocial) {
-    if (pastDeadline()) {
-      notes.push("Social overgeslagen: tijdslimiet.");
-    } else {
-      social = await syncSocialForTopArtists({
-        limit: 25,
-        followGigs: true,
-      });
-      if (social.note) notes.push(social.note);
-      if (social.gigsDetected > 0) {
-        notes.push(`Social gig-detectie: ${social.gigsDetected} kandidaten.`);
-      }
-    }
+  if (!options?.skipSocial && !pastDeadline()) {
+    social = await syncSocialForTopArtists({ limit: 25, followGigs: true });
+    if (social.note) notes.push(social.note);
   }
 
   let digest: RadarPipelineResult["digest"] = null;
@@ -202,15 +216,12 @@ export async function runRadarPipeline(options?: {
         hour === settings.digest.hourAmsterdam);
     if (due) {
       digest = await sendRadarDigest({ force: options?.forceDigest });
-      if (digest.skipped) {
-        notes.push(`Digest overgeslagen: ${digest.reason}`);
-      } else if (digest.ok) {
+      if (digest.skipped) notes.push(`Digest overgeslagen: ${digest.reason}`);
+      else if (digest.ok) {
         notes.push(
           `Digest verstuurd naar ${(digest.recipients ?? []).join(", ") || "—"}.`,
         );
-      } else {
-        notes.push(`Digest mislukt: ${digest.error}`);
-      }
+      } else notes.push(`Digest mislukt: ${digest.error}`);
     }
   }
 
@@ -220,13 +231,15 @@ export async function runRadarPipeline(options?: {
       (website?.errors.length ?? 0) === 0 &&
       (enrich?.errors.length ?? 0) === 0 &&
       (rescore?.errors.length ?? 0) === 0 &&
-      (spotify?.errors.length ?? 0) === 0 &&
       (digest?.ok !== false),
     startedAt: startedAt.toISOString(),
     finishedAt: new Date().toISOString(),
     discovery,
     website,
     instagramVenues,
+    mixseries,
+    soundcloud,
+    nlAudience,
     enrich,
     rescore,
     spotify,

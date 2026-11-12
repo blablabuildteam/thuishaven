@@ -50,6 +50,8 @@ export default async function RadarArtistDetailPage({
         hasAgency: dossier.artist.hasAgency,
         raFollowerCount: dossier.artist.raFollowerCount,
         residentCountry: dossier.artist.residentCountry,
+        nlAudienceScore: dossier.artist.nlAudienceScore,
+        nlGigShare: dossier.artist.nlGigShare,
       }}
       profiles={dossier.profiles.map((p) => ({
         platform: p.platform,
@@ -76,6 +78,15 @@ export default async function RadarArtistDetailPage({
         isHeadliner: g.isHeadliner,
         sourceUrl: g.sourceUrl,
         source: g.source,
+      }))}
+      mixseries={dossier.mixseries.map((m) => ({
+        id: m.id,
+        channelTitle: m.channelTitle,
+        channelKey: m.channelKey,
+        title: m.title,
+        url: m.url,
+        publishedAt: m.publishedAt,
+        viewCount: m.viewCount,
       }))}
     />
   );

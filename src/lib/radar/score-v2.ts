@@ -65,6 +65,8 @@ export function computeScoreV2(input: {
   residentCountry?: string | null;
   homeGigCount?: number;
   sharedHomeVenueHits?: number;
+  nlAudienceScore?: number | null;
+  nlGigShare?: number | null;
 }): ScoreV2Result {
   const { recent, previous } = input;
   const reasons: string[] = [];
@@ -131,9 +133,20 @@ export function computeScoreV2(input: {
   const earlyShare =
     recent.count > 0 ? recent.earlyVenueCount / recent.count : 0;
   const nlBoost =
-    /netherlands|nederland|nl/i.test(input.residentCountry ?? "") ? 0.12 : 0;
+    /netherlands|nederland|nl/i.test(input.residentCountry ?? "") ? 0.1 : 0;
   if (nlBoost > 0) reasons.push("Woont in NL");
-  const homeOverlap = clamp01((input.sharedHomeVenueHits ?? 0) / 4) * 0.15;
+  const nlAud =
+    input.nlAudienceScore != null
+      ? clamp01(input.nlAudienceScore / 100) * 0.18
+      : (input.nlGigShare ?? 0) * 0.18;
+  if ((input.nlGigShare ?? 0) >= 0.35) {
+    reasons.push(
+      `${Math.round((input.nlGigShare ?? 0) * 100)}% recente gigs in NL`,
+    );
+  } else if ((input.nlAudienceScore ?? 0) >= 55) {
+    reasons.push(`NL-audience score ${input.nlAudienceScore}`);
+  }
+  const homeOverlap = clamp01((input.sharedHomeVenueHits ?? 0) / 4) * 0.12;
   if ((input.sharedHomeVenueHits ?? 0) >= 2) {
     reasons.push(
       `Deelt ${input.sharedHomeVenueHits} clubs met Thuishaven-artiesten`,
@@ -142,11 +155,12 @@ export function computeScoreV2(input: {
 
   const fit = round1(
     clamp01(
-      earlyShare * 0.55 +
-        (recent.topVenueNames.length > 0 ? 0.15 : 0) +
+      earlyShare * 0.45 +
+        (recent.topVenueNames.length > 0 ? 0.12 : 0) +
         nlBoost +
+        nlAud +
         homeOverlap +
-        0.1,
+        0.08,
     ) * 100,
   );
   if (recent.topVenueNames.length > 0 && earlyShare >= 0.4) {
@@ -521,6 +535,8 @@ export async function recomputeScoresBulk(
       residentCountry: radarArtists.residentCountry,
       growthScore: radarArtists.growthScore,
       raFollowerCount: radarArtists.raFollowerCount,
+      nlAudienceScore: radarArtists.nlAudienceScore,
+      nlGigShare: radarArtists.nlGigShare,
     })
     .from(radarArtists)
     .where(inArray(radarArtists.id, artistIds));
@@ -558,6 +574,8 @@ export async function recomputeScoresBulk(
           residentCountry: artist.residentCountry,
           homeGigCount,
           sharedHomeVenueHits: sharedHits.get(artist.id) ?? 0,
+          nlAudienceScore: num(artist.nlAudienceScore),
+          nlGigShare: num(artist.nlGigShare),
         });
 
         const prevScore = num(artist.growthScore);

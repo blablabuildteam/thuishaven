@@ -104,10 +104,12 @@ function pickThumb(
   );
 }
 
-export async function getChannelStats(): Promise<
+export async function getChannelStats(options?: {
+  channelId?: string;
+}): Promise<
   { ok: true; channel: YouTubeChannelStats } | { ok: false; error: string }
 > {
-  const channelId = youtubeChannelId();
+  const channelId = options?.channelId?.trim() || youtubeChannelId();
   const result = await ytGet<{
     items?: Array<{
       id?: string;
@@ -156,6 +158,53 @@ export async function getChannelStats(): Promise<
         item.contentDetails?.relatedPlaylists?.uploads ?? null,
     },
   };
+}
+
+/** Recent uploads for an arbitrary channel id (mixseries watchlist). */
+export async function listChannelVideosById(options: {
+  channelId: string;
+  limit?: number;
+}): Promise<
+  | { ok: true; channel: YouTubeChannelStats; videos: YouTubeVideo[] }
+  | { ok: false; error: string }
+> {
+  const limit = Math.min(Math.max(options.limit ?? 15, 1), 40);
+  const channelResult = await getChannelStats({ channelId: options.channelId });
+  if (!channelResult.ok) return channelResult;
+  const uploadsId = channelResult.channel.uploadsPlaylistId;
+  if (!uploadsId) {
+    return { ok: false, error: "Geen uploads-playlist op dit kanaal" };
+  }
+  const idsResult = await listUploadVideoIds(uploadsId, limit);
+  if (!idsResult.ok) return idsResult;
+  const details = await getVideoDetails(idsResult.ids);
+  if (!details.ok) return details;
+  return {
+    ok: true,
+    channel: channelResult.channel,
+    videos: details.videos,
+  };
+}
+
+export async function searchYouTubeVideos(options: {
+  query: string;
+  maxResults?: number;
+}): Promise<{ ok: true; videos: YouTubeVideo[] } | { ok: false; error: string }> {
+  const maxResults = Math.min(Math.max(options.maxResults ?? 5, 1), 15);
+  const result = await ytGet<{
+    items?: Array<{ id?: { videoId?: string } }>;
+  }>("search", {
+    part: "snippet",
+    type: "video",
+    q: options.query,
+    maxResults: String(maxResults),
+    order: "viewCount",
+  });
+  if (!result.ok) return result;
+  const ids = (result.data.items ?? [])
+    .map((i) => i.id?.videoId)
+    .filter((id): id is string => Boolean(id));
+  return getVideoDetails(ids);
 }
 
 async function listUploadVideoIds(

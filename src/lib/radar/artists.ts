@@ -5,6 +5,7 @@ import {
   radarArtists,
   radarGigs,
   radarMetricSnapshots,
+  radarMixseriesAppearances,
 } from "@/lib/radar/schema";
 import { normalizeArtistName, type RadarArtistStatus } from "@/lib/radar/types";
 
@@ -157,6 +158,7 @@ export async function getRadarArtist(id: string): Promise<{
   profiles: RadarArtistProfile[];
   recentMetrics: Array<typeof radarMetricSnapshots.$inferSelect>;
   recentGigs: Array<typeof radarGigs.$inferSelect>;
+  mixseries: Array<typeof radarMixseriesAppearances.$inferSelect>;
 } | null> {
   if (!hasDatabase()) return null;
   const db = getDb();
@@ -166,23 +168,31 @@ export async function getRadarArtist(id: string): Promise<{
     .where(eq(radarArtists.id, id))
     .limit(1);
   if (!artist) return null;
-  const profiles = await db
-    .select()
-    .from(radarArtistProfiles)
-    .where(eq(radarArtistProfiles.artistId, id));
-  const recentMetrics = await db
-    .select()
-    .from(radarMetricSnapshots)
-    .where(eq(radarMetricSnapshots.artistId, id))
-    .orderBy(desc(radarMetricSnapshots.capturedAt))
-    .limit(40);
-  const recentGigs = await db
-    .select()
-    .from(radarGigs)
-    .where(eq(radarGigs.artistId, id))
-    .orderBy(desc(radarGigs.startsAt))
-    .limit(30);
-  return { artist, profiles, recentMetrics, recentGigs };
+  const [profiles, recentMetrics, recentGigs, mixseries] = await Promise.all([
+    db
+      .select()
+      .from(radarArtistProfiles)
+      .where(eq(radarArtistProfiles.artistId, id)),
+    db
+      .select()
+      .from(radarMetricSnapshots)
+      .where(eq(radarMetricSnapshots.artistId, id))
+      .orderBy(desc(radarMetricSnapshots.capturedAt))
+      .limit(40),
+    db
+      .select()
+      .from(radarGigs)
+      .where(eq(radarGigs.artistId, id))
+      .orderBy(desc(radarGigs.startsAt))
+      .limit(30),
+    db
+      .select()
+      .from(radarMixseriesAppearances)
+      .where(eq(radarMixseriesAppearances.artistId, id))
+      .orderBy(desc(radarMixseriesAppearances.publishedAt))
+      .limit(12),
+  ]);
+  return { artist, profiles, recentMetrics, recentGigs, mixseries };
 }
 
 export async function upsertRadarArtist(input: {
@@ -311,7 +321,8 @@ export async function upsertArtistProfile(input: {
     | "instagram"
     | "tiktok"
     | "soundcloud"
-    | "resident_advisor";
+    | "resident_advisor"
+    | "youtube";
   externalId?: string | null;
   url?: string | null;
   handle?: string | null;
@@ -354,7 +365,8 @@ export async function insertMetricSnapshot(input: {
     | "instagram"
     | "tiktok"
     | "soundcloud"
-    | "resident_advisor";
+    | "resident_advisor"
+    | "youtube";
   metrics: Record<string, number | string | null>;
 }): Promise<void> {
   if (!hasDatabase()) return;
