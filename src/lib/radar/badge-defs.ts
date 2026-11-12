@@ -4,10 +4,10 @@
 
 export type RadarBadgeTone =
   | "home"
-  | "hot"
   | "new"
-  | "good"
-  | "info"
+  | "growth"
+  | "nl"
+  | "sets"
   | "warn"
   | "muted";
 
@@ -61,14 +61,14 @@ export const RADAR_BADGES: RadarBadgeDef[] = [
     id: "hot",
     label: "Momentum",
     hint: "Momentum ≥ 45 (top ±7%): meer gigs, hogere billing of meer landen dan vorig kwartaal.",
-    tone: "hot",
+    tone: "growth",
     group: "groei",
   },
   {
     id: "ra_groei",
     label: "RA-groei",
     hint: "RA-volgers groeien duidelijk sinds de vorige snapshot.",
-    tone: "hot",
+    tone: "growth",
     group: "groei",
   },
   {
@@ -89,28 +89,28 @@ export const RADAR_BADGES: RadarBadgeDef[] = [
     id: "nl",
     label: "NL-crowd",
     hint: "NL-audience ≥ 55: veel NL-gigs, woont in NL of RA-regio’s in NL.",
-    tone: "info",
+    tone: "nl",
     group: "nederland",
   },
   {
     id: "nl_gig",
     label: "Speelt in NL",
     hint: "Aankomende gig in Nederland (komende 45 dagen).",
-    tone: "info",
+    tone: "nl",
     group: "nederland",
   },
   {
     id: "mixseries",
     label: "Mixseries",
     hint: "Set op Boiler Room, HÖR, Dekmantel, Cercle, Mixmag of triple j.",
-    tone: "info",
+    tone: "sets",
     group: "sets",
   },
   {
     id: "viral",
     label: "Viral set",
     hint: "Mixseries-set met ≥ 50.000 views.",
-    tone: "hot",
+    tone: "sets",
     group: "sets",
   },
   {
@@ -152,6 +152,68 @@ export function parseBadgeFilter(raw: string | undefined | null): RadarBadgeFilt
 
 export function serializeBadgeFilter(f: RadarBadgeFilter): string {
   return [...f.include, ...f.exclude.map((id) => `-${id}`)].join(",");
+}
+
+export type RadarPresetId =
+  | "nu_boeken"
+  | "nl_binnenkort"
+  | "venster"
+  | "viral"
+  | "vers"
+  | "debutanten";
+
+export type RadarPreset = {
+  id: RadarPresetId;
+  label: string;
+  hint: string;
+  filter: RadarBadgeFilter;
+  sort?: string;
+};
+
+export const RADAR_PRESETS: RadarPreset[] = [
+  {
+    id: "nu_boeken",
+    label: "Nu boeken",
+    hint: "Groeit, nog niet groot, geen agency",
+    filter: { include: ["hot"], exclude: ["groot", "agency"] },
+  },
+  {
+    id: "nl_binnenkort",
+    label: "Speelt binnenkort in NL",
+    hint: "NL-gig in de komende 45 dagen",
+    filter: { include: ["nl_gig"], exclude: ["groot"] },
+  },
+  {
+    id: "venster",
+    label: "Venster sluit",
+    hint: "Groeit hard, wordt duurder",
+    filter: { include: ["venster"], exclude: [] },
+    sort: "momentum",
+  },
+  {
+    id: "viral",
+    label: "Viral sets",
+    hint: "Mixseries-set met 50k+ views",
+    filter: { include: ["viral"], exclude: [] },
+  },
+  {
+    id: "vers",
+    label: "Vers binnen",
+    hint: "Deze week op de radar",
+    filter: { include: ["nieuw7"], exclude: [] },
+  },
+  {
+    id: "debutanten",
+    label: "Debutanten",
+    hint: "Eerste RA-event < 3 jaar",
+    filter: { include: ["debutant"], exclude: ["groot"] },
+  },
+];
+
+export function sameBadgeFilter(a: RadarBadgeFilter, b: RadarBadgeFilter) {
+  const key = (f: RadarBadgeFilter) =>
+    [...f.include].sort().join(",") + "|" + [...f.exclude].sort().join(",");
+  return key(a) === key(b);
 }
 
 export type RadarThuishavenFilter = "nieuw" | "gespeeld" | "alle";

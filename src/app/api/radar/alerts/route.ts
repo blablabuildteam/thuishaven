@@ -20,9 +20,20 @@ export async function GET(request: Request) {
   return NextResponse.json({ alerts });
 }
 
+const kindSchema = z.enum([
+  "velocity",
+  "new_on_radar",
+  "venue_suggestion",
+  "lineup",
+  "digest",
+  "breakthrough",
+  "window_closing",
+  "mixseries",
+]);
+
 const patchSchema = z.union([
   z.object({ id: z.string().uuid(), read: z.literal(true) }),
-  z.object({ all: z.literal(true) }),
+  z.object({ all: z.literal(true), kinds: z.array(kindSchema).optional() }),
 ]);
 
 export async function PATCH(request: Request) {
@@ -36,7 +47,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Ongeldige invoer" }, { status: 400 });
   }
   if ("all" in parsed.data) {
-    const result = await markAllRadarAlertsRead();
+    const result = await markAllRadarAlertsRead(parsed.data.kinds);
     return NextResponse.json(result);
   }
   const result = await markRadarAlertRead(parsed.data.id);

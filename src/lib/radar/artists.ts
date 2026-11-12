@@ -2,7 +2,9 @@ import { and, asc, desc, eq, or, sql, type SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   RADAR_BADGES,
+  RADAR_PRESETS,
   badgePredicate,
+  type RadarPresetId,
   type RadarBadgeFilter,
   type RadarBadgeId,
   type RadarThuishavenFilter,
@@ -85,6 +87,7 @@ export async function listRadarArtists(options?: {
   rows: RadarArtistListItem[];
   total: number;
   badgeCounts?: Record<RadarBadgeId, number>;
+  presetCounts?: Record<RadarPresetId, number>;
   thCounts?: Record<RadarThuishavenFilter, number>;
 }> {
   if (!hasDatabase()) return { rows: [], total: 0 };
@@ -205,6 +208,15 @@ export async function listRadarArtists(options?: {
     .limit(limit)
     .offset(offset);
 
+  const filterSql = (f: RadarBadgeFilter) =>
+    sql.join(
+      [
+        ...f.include.map((b) => badgePredicate(b)),
+        ...f.exclude.map((b) => sql`not (${badgePredicate(b)})`),
+      ],
+      sql` and `,
+    );
+
   const badgeCountsQuery = options?.includeBadgeCounts
     ? db
         .select({
@@ -214,6 +226,12 @@ export async function listRadarArtists(options?: {
               sql<number>`count(*) filter (where ${badgePredicate(b.id)})::int`,
             ]),
           ) as Record<RadarBadgeId, SQL<number>>),
+          ...(Object.fromEntries(
+            RADAR_PRESETS.map((p) => [
+              `p_${p.id}`,
+              sql<number>`count(*) filter (where ${filterSql(p.filter)})::int`,
+            ]),
+          ) as Record<`p_${RadarPresetId}`, SQL<number>>),
         })
         .from(radarArtists)
         .where(chipWhere)
@@ -274,10 +292,20 @@ export async function listRadarArtists(options?: {
     };
   });
 
+  const counts = badgeRows?.[0] as Record<string, number> | undefined;
   return {
     rows,
     total: countRows?.[0]?.n ?? rows.length,
-    badgeCounts: badgeRows?.[0] as Record<RadarBadgeId, number> | undefined,
+    badgeCounts: counts
+      ? (Object.fromEntries(
+          RADAR_BADGES.map((b) => [b.id, counts[b.id] ?? 0]),
+        ) as Record<RadarBadgeId, number>)
+      : undefined,
+    presetCounts: counts
+      ? (Object.fromEntries(
+          RADAR_PRESETS.map((p) => [p.id, counts[`p_${p.id}`] ?? 0]),
+        ) as Record<RadarPresetId, number>)
+      : undefined,
     thCounts: thRows?.[0] as Record<RadarThuishavenFilter, number> | undefined,
   };
 }

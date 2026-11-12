@@ -233,7 +233,12 @@ export function radarSectionAllowed(
 
 export function radarItemAllowed(href: string, access: ToolAccess): boolean {
   if (!access.radar) return false;
-  if (href.startsWith("/radar/venues") || href.startsWith("/radar/startlijst")) {
+  if (
+    href.startsWith("/radar/venues") ||
+    href.startsWith("/radar/festivals") ||
+    href.startsWith("/radar/feesten") ||
+    href.startsWith("/radar/startlijst")
+  ) {
     return access.radarAreas.curatie;
   }
   if (href.startsWith("/radar/instellingen")) return false; // admin-only

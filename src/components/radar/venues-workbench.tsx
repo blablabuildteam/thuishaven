@@ -56,12 +56,19 @@ function groupByCountry(rows: Venue[]) {
   );
 }
 
-export function VenuesWorkbench({ initial }: { initial: Venue[] }) {
+export function VenuesWorkbench({
+  initial,
+  kind: pageKind,
+}: {
+  initial: Venue[];
+  kind: "club" | "festival";
+}) {
+  const isFestival = pageKind === "festival";
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<"club" | "festival" | "other">("club");
+  const kind = pageKind;
   const [city, setCity] = useState("");
   const [country, setCountry] = useState("NL");
   const [raUrl, setRaUrl] = useState("");
@@ -184,22 +191,6 @@ export function VenuesWorkbench({ initial }: { initial: Venue[] }) {
         </label>
         <label className="text-sm">
           <span className="mb-1 block text-[10px] tracking-[0.12em] text-text-dim uppercase">
-            Type
-          </span>
-          <select
-            value={kind}
-            onChange={(e) =>
-              setKind(e.target.value as "club" | "festival" | "other")
-            }
-            className="w-full border border-border bg-bg px-2 py-2"
-          >
-            <option value="club">Club</option>
-            <option value="festival">Festival</option>
-            <option value="other">Overig</option>
-          </select>
-        </label>
-        <label className="text-sm">
-          <span className="mb-1 block text-[10px] tracking-[0.12em] text-text-dim uppercase">
             Stad
           </span>
           <input
@@ -228,12 +219,12 @@ export function VenuesWorkbench({ initial }: { initial: Venue[] }) {
         </label>
         <label className="text-sm lg:col-span-2">
           <span className="mb-1 block text-[10px] tracking-[0.12em] text-text-dim uppercase">
-            RA-link (club of promoter)
+            {isFestival ? "RA-promoter-link" : "RA-clublink"}
           </span>
           <input
             value={raUrl}
             onChange={(e) => setRaUrl(e.target.value)}
-            placeholder="https://ra.co/clubs/… of /promoters/…"
+            placeholder={isFestival ? "https://ra.co/promoters/…" : "https://ra.co/clubs/…"}
             className="w-full border border-border bg-bg px-2 py-2"
           />
         </label>
@@ -243,7 +234,7 @@ export function VenuesWorkbench({ initial }: { initial: Venue[] }) {
             disabled={pending}
             className="border border-accent bg-accent px-3 py-2 text-sm text-accent-contrast disabled:opacity-60"
           >
-            Toevoegen aan startlijst
+            {isFestival ? "Festival toevoegen" : "Club toevoegen"}
           </button>
         </div>
       </form>
@@ -252,10 +243,13 @@ export function VenuesWorkbench({ initial }: { initial: Venue[] }) {
 
       <section className="space-y-6">
         <div>
-          <h2 className="font-display text-xl tracking-[0.04em]">Startlijst</h2>
+          <h2 className="font-display text-xl tracking-[0.04em]">
+            {isFestival ? "Festivals die we volgen" : "Clubs die we volgen"}
+          </h2>
           <p className="mt-1 text-sm text-text-muted">
-            {clubs} clubs · {festivals} festivals — gegroepeerd per land. Klik
-            door voor parties en line-ups.
+            {isFestival
+              ? `${festivals} festivals, per land. Line-ups komen binnen via de RA-promoter.`
+              : `${clubs} clubs, per land. Elke sync halen we de line-ups op en ontdekken we nieuwe namen.`}
           </p>
           <div className="mt-2">
             <RadarInfoTip topic="curator" withLabel />
@@ -264,37 +258,18 @@ export function VenuesWorkbench({ initial }: { initial: Venue[] }) {
 
         {active.length === 0 ? (
           <p className="border border-dashed border-border px-4 py-8 text-sm text-text-muted">
-            Nog geen venues. Voeg clubs/festivals toe met een RA-link.
+            {isFestival
+              ? "Nog geen festivals. Voeg er een toe met de RA-promoter-link."
+              : "Nog geen clubs. Voeg er een toe met de RA-clublink."}
           </p>
         ) : (
           activeByCountry.map(([code, rows]) => {
-            const fest = rows.filter((v) => v.kind === "festival");
-            const clubRows = rows.filter((v) => v.kind !== "festival");
             return (
-              <div key={code} className="space-y-3">
+              <div key={code} className="space-y-2">
                 <h3 className="text-[11px] tracking-[0.14em] text-text-dim uppercase">
                   {countryLabel(code)} · {rows.length}
                 </h3>
-                {fest.length > 0 ? (
-                  <div className="space-y-2">
-                    <p className="text-xs text-text-muted">Festivals</p>
-                    <VenueTable
-                      rows={fest}
-                      onDelete={remove}
-                      showCountry={false}
-                    />
-                  </div>
-                ) : null}
-                {clubRows.length > 0 ? (
-                  <div className="space-y-2">
-                    <p className="text-xs text-text-muted">Clubs</p>
-                    <VenueTable
-                      rows={clubRows}
-                      onDelete={remove}
-                      showCountry={false}
-                    />
-                  </div>
-                ) : null}
+                <VenueTable rows={rows} onDelete={remove} showCountry={false} />
               </div>
             );
           })

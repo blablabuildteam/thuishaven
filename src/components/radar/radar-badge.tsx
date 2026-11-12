@@ -5,14 +5,20 @@ import {
 } from "@/lib/radar/badge-defs";
 import { cn } from "@/lib/utils";
 
-const TONE: Record<RadarBadgeTone, string> = {
-  home: "bg-accent text-accent-contrast",
-  hot: "bg-danger-soft text-danger",
+/** Readable on cream (light) and black (dark): tinted fills always carry text-text. */
+export const RADAR_TONE_CLASS: Record<RadarBadgeTone, string> = {
+  home: "bg-text text-bg",
   new: "bg-highlight text-highlight-fg",
-  good: "bg-success-soft text-success",
-  info: "bg-info-soft text-info",
-  warn: "bg-warn/15 text-warn",
+  growth: "bg-success-soft text-success",
+  nl: "bg-info-soft text-text",
+  sets: "border border-text/25 text-text",
+  warn: "bg-warn text-black",
   muted: "border border-border text-text-muted",
+};
+
+const TONE_ICON: Partial<Record<RadarBadgeTone, string>> = {
+  growth: "▲",
+  sets: "▶",
 };
 
 export function RadarBadgePill({
@@ -31,10 +37,15 @@ export function RadarBadgePill({
       title={title}
       className={cn(
         "inline-flex items-center gap-1 whitespace-nowrap px-1.5 py-0.5 text-[10px] font-medium tracking-[0.06em] uppercase",
-        TONE[tone],
+        RADAR_TONE_CLASS[tone],
         className,
       )}
     >
+      {TONE_ICON[tone] ? (
+        <span aria-hidden className="text-[8px]">
+          {TONE_ICON[tone]}
+        </span>
+      ) : null}
       {children}
     </span>
   );
@@ -61,7 +72,7 @@ export function RadarScoreBars({
   bookability: number | null;
 }) {
   const rows = [
-    { key: "M", label: "Momentum", v: momentum, color: "bg-danger" },
+    { key: "M", label: "Momentum", v: momentum, color: "bg-text" },
     { key: "F", label: "Fit", v: fit, color: "bg-info" },
     { key: "B", label: "Bookable", v: bookability, color: "bg-success" },
   ];
@@ -84,4 +95,12 @@ export function RadarScoreBars({
       ))}
     </div>
   );
+}
+
+/** Score number: no red (red reads as “bad”); weight + dimming carries the rank. */
+export function radarScoreClass(total: number | null) {
+  if (total == null) return "text-text-dim";
+  if (total >= 60) return "text-text";
+  if (total >= 45) return "text-text-muted";
+  return "text-text-dim";
 }

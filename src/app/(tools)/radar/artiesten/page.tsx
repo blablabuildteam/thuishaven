@@ -127,6 +127,7 @@ export default async function RadarArtistsPage({
           pageSize={PAGE_SIZE}
           spotifyReady={isSpotifyConfigured()}
           badgeCounts={list.badgeCounts}
+          presetCounts={list.presetCounts}
           thCounts={list.thCounts}
         />
       </Suspense>

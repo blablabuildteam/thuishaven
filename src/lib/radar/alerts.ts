@@ -1,30 +1,66 @@
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb, hasDatabase } from "@/lib/db/client";
-import { radarAlerts } from "@/lib/radar/schema";
+import { radarAlerts, radarArtists, radarVenues } from "@/lib/radar/schema";
 import { loadRadarSettings } from "@/lib/radar/settings";
 
 export type RadarAlertRow = typeof radarAlerts.$inferSelect;
 
 export async function listRadarAlerts(options?: {
   unreadOnly?: boolean;
+  kinds?: RadarAlertRow["kind"][];
   limit?: number;
-}): Promise<RadarAlertRow[]> {
+}): Promise<
+  Array<
+    RadarAlertRow & {
+      artistName: string | null;
+      artistHomeGigCount: number | null;
+      venueName: string | null;
+    }
+  >
+> {
   if (!hasDatabase()) return [];
   const db = getDb();
   const limit = Math.min(options?.limit ?? 50, 200);
-  if (options?.unreadOnly) {
-    return db
-      .select()
-      .from(radarAlerts)
-      .where(isNull(radarAlerts.readAt))
-      .orderBy(desc(radarAlerts.triggeredAt))
-      .limit(limit);
-  }
-  return db
-    .select()
+  const conditions = [];
+  if (options?.unreadOnly) conditions.push(isNull(radarAlerts.readAt));
+  if (options?.kinds?.length) conditions.push(inArray(radarAlerts.kind, options.kinds));
+  const rows = await db
+    .select({
+      alert: radarAlerts,
+      artistName: radarArtists.name,
+      artistHomeGigCount: radarArtists.homeGigCount,
+      venueName: radarVenues.name,
+    })
     .from(radarAlerts)
+    .leftJoin(radarArtists, eq(radarAlerts.artistId, radarArtists.id))
+    .leftJoin(radarVenues, eq(radarAlerts.venueId, radarVenues.id))
+    .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(radarAlerts.triggeredAt))
     .limit(limit);
+  return rows.map((r) => ({
+    ...r.alert,
+    artistName: r.artistName,
+    artistHomeGigCount: r.artistHomeGigCount,
+    venueName: r.venueName,
+  }));
+}
+
+/** Unread + total per kind, for the filter tabs. */
+export async function radarAlertCounts(): Promise<
+  Record<string, { unread: number; total: number }>
+> {
+  if (!hasDatabase()) return {};
+  const rows = await getDb()
+    .select({
+      kind: radarAlerts.kind,
+      total: sql<number>`count(*)::int`,
+      unread: sql<number>`count(*) filter (where ${radarAlerts.readAt} is null)::int`,
+    })
+    .from(radarAlerts)
+    .groupBy(radarAlerts.kind);
+  return Object.fromEntries(
+    rows.map((r) => [r.kind, { unread: r.unread, total: r.total }]),
+  );
 }
 
 export async function markRadarAlertRead(
@@ -41,13 +77,19 @@ export async function markRadarAlertRead(
   return { ok: true };
 }
 
-export async function markAllRadarAlertsRead(): Promise<{ ok: true; n: number }> {
+export async function markAllRadarAlertsRead(
+  kinds?: RadarAlertRow["kind"][],
+): Promise<{ ok: true; n: number }> {
   if (!hasDatabase()) return { ok: true, n: 0 };
   const db = getDb();
   const rows = await db
     .update(radarAlerts)
     .set({ readAt: new Date() })
-    .where(isNull(radarAlerts.readAt))
+    .where(
+      kinds?.length
+        ? and(isNull(radarAlerts.readAt), inArray(radarAlerts.kind, kinds))
+        : isNull(radarAlerts.readAt),
+    )
     .returning({ id: radarAlerts.id });
   return { ok: true, n: rows.length };
 }

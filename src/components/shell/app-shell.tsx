@@ -22,6 +22,7 @@ import {
   Home,
   LayoutDashboard,
   MapPin,
+  Tent,
   Menu,
   Plug,
   ScrollText,
@@ -255,7 +256,6 @@ const radarSections: NavSection[] = [
     label: "Scouten",
     items: [
       { href: "/radar/artiesten", label: "Artiesten", icon: Disc3 },
-      { href: "/radar/feesten", label: "Feesten", icon: CalendarDays },
       { href: "/radar/alerts", label: "Alerts", icon: Bell },
       { href: "/radar/uitleg", label: "Uitleg", icon: BookOpen },
     ],
@@ -264,7 +264,9 @@ const radarSections: NavSection[] = [
     id: "curatie",
     label: "Curatie",
     items: [
-      { href: "/radar/venues", label: "Venues", icon: MapPin },
+      { href: "/radar/venues", label: "Clubs", icon: MapPin },
+      { href: "/radar/festivals", label: "Festivals", icon: Tent },
+      { href: "/radar/feesten", label: "Feesten", icon: CalendarDays },
     ],
   },
   {

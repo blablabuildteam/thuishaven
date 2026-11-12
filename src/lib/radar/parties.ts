@@ -23,10 +23,13 @@ export type PartyListItem = {
   externalUrl: string | null;
   venueId: string | null;
   venueName: string | null;
+  venueKind: string | null;
   city: string | null;
   country: string | null;
   artistCount: number;
   newArtistCount: number;
+  talentCount: number;
+  homeArtistCount: number;
   artists: Array<{
     id: string | null;
     name: string;
@@ -36,17 +39,27 @@ export type PartyListItem = {
   }>;
 };
 
+/** Score from which an artist new to Thuishaven is flagged as a booking chance (~top 15%). */
+export const PARTY_TALENT_MIN_SCORE = 60;
+
 export async function listRadarParties(options?: {
   upcomingOnly?: boolean;
+  when?: "upcoming" | "past";
   status?: RadarPartyStatus | "all";
   venueId?: string;
   limit?: number;
 }): Promise<PartyListItem[]> {
   if (!hasDatabase()) return [];
   const db = getDb();
-  const limit = Math.min(options?.limit ?? 80, 200);
+  const limit = Math.min(options?.limit ?? 80, 400);
   const conditions = [];
-  if (options?.upcomingOnly) {
+  if (options?.when === "upcoming") {
+    conditions.push(gte(radarParties.startsAt, sql`date_trunc('day', now())`));
+  } else if (options?.when === "past") {
+    conditions.push(
+      sql`${radarParties.startsAt} < date_trunc('day', now()) and ${radarParties.startsAt} >= now() - interval '30 days'`,
+    );
+  } else if (options?.upcomingOnly) {
     conditions.push(gte(radarParties.startsAt, sql`now() - interval '14 days'`));
   }
   if (options?.status && options.status !== "all") {
@@ -66,13 +79,19 @@ export async function listRadarParties(options?: {
       externalUrl: radarParties.externalUrl,
       venueId: radarParties.venueId,
       venueName: radarVenues.name,
+      venueKind: radarVenues.kind,
       city: radarParties.city,
       country: radarParties.country,
     })
     .from(radarParties)
     .leftJoin(radarVenues, eq(radarParties.venueId, radarVenues.id))
     .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(desc(radarParties.startsAt), asc(radarParties.title))
+    .orderBy(
+      options?.when === "upcoming"
+        ? asc(radarParties.startsAt)
+        : desc(radarParties.startsAt),
+      asc(radarParties.title),
+    )
     .limit(limit);
 
   if (parties.length === 0) return [];
@@ -126,10 +145,17 @@ export async function listRadarParties(options?: {
       externalUrl: p.externalUrl,
       venueId: p.venueId,
       venueName: p.venueName,
+      venueKind: p.venueKind,
       city: p.city,
       country: p.country,
       artistCount: artists.length,
       newArtistCount: artists.filter((a) => a.isNew).length,
+      talentCount: artists.filter(
+        (a) =>
+          a.homeGigCount === 0 &&
+          Number(a.growthScore ?? 0) >= PARTY_TALENT_MIN_SCORE,
+      ).length,
+      homeArtistCount: artists.filter((a) => a.homeGigCount > 0).length,
       artists,
     };
   });

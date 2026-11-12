@@ -45,10 +45,10 @@ export function VenueDossier({ venue, parties, sourceConfig }: Props) {
     <div className="space-y-6">
       <div>
         <Link
-          href="/radar/venues"
+          href={venue.kind === "festival" ? "/radar/festivals" : "/radar/venues"}
           className="text-xs text-text-muted hover:text-text"
         >
-          ← Venues
+          ← {venue.kind === "festival" ? "Festivals" : "Clubs"}
         </Link>
         <h1 className="mt-2 font-display text-3xl tracking-[0.04em]">
           {venue.name}
